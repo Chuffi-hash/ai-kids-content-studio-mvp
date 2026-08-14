@@ -1,0 +1,62 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model Story {
+  id        String   @id @default(cuid())
+  storyId   String   @unique
+  title     String
+  logline   String
+  lesson    String
+  scenes    Scene[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([storyId])
+}
+
+model Scene {
+  id         String   @id @default(cuid())
+  sceneId    String   @unique
+  storyId    String
+  story      Story    @relation(fields: [storyId], references: [storyId])
+  title      String
+  number     Int
+  narration  String
+  images     Image[]
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([sceneId])
+  @@index([storyId])
+}
+
+model Image {
+  id         String   @id @default(cuid())
+  sceneId    String
+  scene      Scene    @relation(fields: [sceneId], references: [sceneId])
+  provider   String
+  model      String
+  prompt     String
+  storageKey String
+  imageUrl   String
+  width      Int
+  height     Int
+  status     String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([sceneId])
+  @@index([status])
+}

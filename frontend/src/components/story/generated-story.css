@@ -1,0 +1,250 @@
+.story-header {
+  margin-bottom: 32px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.story-header h2 {
+  margin: 0 0 8px 0;
+  font-size: 24px;
+  font-weight: 700;
+  color: #1e293b;
+  letter-spacing: -0.02em;
+}
+
+.story-logline {
+  margin: 0;
+  font-size: 15px;
+  color: #64748b;
+  line-height: 1.6;
+}
+
+.story-section {
+  margin-bottom: 32px;
+}
+
+.section-label {
+  margin: 0 0 16px 0;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: #94a3b8;
+}
+
+.characters {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.character {
+  padding: 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.character:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.character strong {
+  display: block;
+  font-size: 15px;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 6px;
+}
+
+.character p {
+  margin: 4px 0;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.character small {
+  display: block;
+  margin-top: 8px;
+  color: #94a3b8;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.story-scene-card {
+  display: grid;
+  grid-template-columns: 32px 220px minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+  padding: 16px;
+  margin-bottom: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #fff;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.story-scene-card:hover {
+  border-color: #bfdbfe;
+  box-shadow: 0 8px 20px rgba(30, 64, 175, 0.07);
+}
+
+.story-scene-number {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: #eff6ff;
+  color: #2563eb;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.story-scene-image-wrap,
+.story-scene-image-placeholder {
+  width: 220px;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 10px;
+  background: #eef6ff;
+}
+
+.story-scene-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.story-scene-image-placeholder {
+  display: grid;
+  place-content: center;
+  gap: 5px;
+  color: #94a3b8;
+  text-align: center;
+}
+
+.story-scene-image-placeholder span {
+  color: #60a5fa;
+  font-size: 22px;
+}
+
+.story-scene-image-placeholder small {
+  font-size: 11px;
+}
+
+.story-scene-content {
+  min-width: 0;
+}
+
+.story-scene-label {
+  display: block;
+  margin-bottom: 3px;
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.story-scene-content h3 {
+  margin: 0 0 6px;
+  color: #1e293b;
+  font-size: 15px;
+  line-height: 1.35;
+}
+
+.story-scene-description,
+.story-scene-narration {
+  margin: 0 0 6px;
+  color: #475569;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.story-scene-narration {
+  color: #64748b;
+}
+
+.story-scene-error {
+  margin: 6px 0;
+  color: #dc2626;
+  font-size: 12px;
+}
+
+.scene-image-action {
+  width: auto;
+  margin-top: 7px;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  padding: 7px 10px;
+  background: #eff6ff;
+  color: #2563eb;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.scene-image-action:hover:not(:disabled) {
+  background: #dbeafe;
+}
+
+.scene-image-action:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.lesson {
+  margin-bottom: 32px;
+  padding: 20px;
+  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+  border: 1px solid #bbf7d0;
+  border-radius: 10px;
+}
+
+.lesson strong {
+  display: block;
+  margin-bottom: 8px;
+  color: #166534;
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.lesson p {
+  margin: 0;
+  color: #15803d;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+@media (max-width: 640px) {
+  .characters {
+    grid-template-columns: 1fr;
+  }
+  
+  .story-scene-card {
+    grid-template-columns: 28px 1fr;
+    gap: 12px;
+  }
+
+  .story-scene-number {
+    width: 28px;
+    height: 28px;
+    font-size: 12px;
+  }
+
+  .story-scene-image-wrap,
+  .story-scene-image-placeholder {
+    grid-column: 2;
+    width: 100%;
+  }
+
+  .story-scene-content {
+    grid-column: 2;
+  }
+}
