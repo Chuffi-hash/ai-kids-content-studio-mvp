@@ -5,23 +5,26 @@
 
 generator client {
   provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  output   = "../src/generated"
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = "file:./dev.db"
+  provider = "postgresql"
 }
 
 model Story {
-  id        String   @id @default(cuid())
-  storyId   String   @unique
-  title     String
-  logline   String
-  lesson    String
-  scenes    Scene[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id             String           @id @default(cuid())
+  storyId        String           @unique
+  title          String
+  logline        String
+  lesson         String
+  audience       String?
+  genre          String?
+  visualStyle    String?
+  scenes         Scene[]
+  storyCharacters StoryCharacter[]
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
 
   @@index([storyId])
 }
@@ -59,4 +62,31 @@ model Image {
 
   @@index([sceneId])
   @@index([status])
+}
+
+model Character {
+  id                  String   @id @default(cuid())
+  name                String
+  species             String
+  personality         String
+  visualDescription   String
+  distinctiveFeatures String
+  storyCharacters     StoryCharacter[]
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([name])
+}
+
+model StoryCharacter {
+  id          String     @id @default(cuid())
+  storyId     String
+  characterId String
+  story       Story      @relation(fields: [storyId], references: [storyId])
+  character   Character  @relation(fields: [characterId], references: [id])
+  createdAt   DateTime   @default(now())
+
+  @@unique([storyId, characterId])
+  @@index([storyId])
+  @@index([characterId])
 }

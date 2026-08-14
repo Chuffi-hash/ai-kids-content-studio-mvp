@@ -13,51 +13,66 @@ interface GeneratedStoryProps {
 
 export default function GeneratedStory({ story, scenes, onGenerateScenes, isGeneratingScenes = false }: GeneratedStoryProps) {
   return (
-    <>
-      <div className="story-header">
-        <h2>{story.title}</h2>
-        <p className="story-logline">{story.logline}</p>
-      </div>
-
-      <div className="story-section">
-        <p className="section-label">Characters</p>
-        <div className="characters">
-          {story.characters.map((character) => (
-            <CharacterCard
-              key={character.name}
-              character={character}
-            />
-          ))}
+    <div className="story-workspace">
+      <div className="story-workspace-header">
+        <div className="story-title-section">
+          <h2>{story.title}</h2>
+          <p className="story-logline">{story.logline}</p>
+        </div>
+        <div className="story-workspace-actions">
+          {!scenes || scenes.length === 0 ? (
+            <button
+              className="primary story-generate-scenes-btn"
+              onClick={onGenerateScenes}
+              disabled={isGeneratingScenes}
+            >
+              {isGeneratingScenes ? 'Generating Scenes...' : 'Generate Scenes'}
+            </button>
+          ) : (
+            <div className="story-status">
+              <span className="story-status-dot"></span>
+              {scenes.length} scenes generated
+            </div>
+          )}
         </div>
       </div>
 
-      <div className="story-section">
-        <LessonCard lesson={story.lesson} />
-      </div>
+      <div className="story-workspace-content">
+        <div className="story-workspace-section">
+          <h3>Story Summary</h3>
+          <div className="story-summary">
+            <LessonCard lesson={story.lesson} />
+          </div>
+        </div>
 
-      {!scenes || scenes.length === 0 ? (
-        <div className="story-section">
-          <button
-            className="primary"
-            onClick={onGenerateScenes}
-            disabled={isGeneratingScenes}
-          >
-            {isGeneratingScenes ? 'Generating Scenes...' : '✨ Generate Scenes'}
-          </button>
+        <div className="story-workspace-section">
+          <h3>Characters</h3>
+          <div className="story-characters">
+            {story.characters.map((character) => (
+              <CharacterCard
+                key={character.name}
+                character={character}
+              />
+            ))}
+          </div>
         </div>
-      ) : (
-        <div className="story-section">
-          <p className="section-label">Scenes</p>
-          {scenes.map((scene) => (
-            <SceneCard
-              key={scene.sceneNumber}
-              scene={scene}
-              storyId={story.id}
-              characters={story.characters}
-            />
-          ))}
-        </div>
-      )}
-    </>
+
+        {scenes && scenes.length > 0 && (
+          <div className="story-workspace-section">
+            <h3>Scenes</h3>
+            <div className="story-scenes">
+              {scenes.map((scene) => (
+                <SceneCard
+                  key={scene.sceneNumber}
+                  scene={scene}
+                  storyId={story.id}
+                  characters={story.characters}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }

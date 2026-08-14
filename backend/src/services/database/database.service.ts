@@ -1,112 +1,64 @@
-import Database from "better-sqlite3";
-import * as path from "path";
+import { PrismaClient } from '../../generated/client';
+import { PrismaPg } from '@prisma/adapter-pg';
 
-const dbPath = path.join(process.cwd(), "prisma", "dev.db");
-const db = new Database(dbPath);
+const adapter = new PrismaPg({
+  connectionString: process.env.DATABASE_URL,
+});
 
-// Enable WAL mode for better performance
-db.pragma("journal_mode = WAL");
+const prisma = new PrismaClient({ adapter });
 
-// Initialize tables
 export function initializeDatabase() {
-  // Create stories table
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS stories (
-      id TEXT PRIMARY KEY,
-      story_id TEXT UNIQUE NOT NULL,
-      title TEXT NOT NULL,
-      logline TEXT NOT NULL,
-      lesson TEXT NOT NULL,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )
-  `);
-
-  // Create indexes for stories
-  db.exec(
-    `CREATE INDEX IF NOT EXISTS idx_stories_story_id ON stories(story_id)`,
-  );
-
-  // Create scenes table
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS scenes (
-      id TEXT PRIMARY KEY,
-      scene_id TEXT UNIQUE NOT NULL,
-      story_id TEXT NOT NULL,
-      title TEXT NOT NULL,
-      number INTEGER NOT NULL,
-      narration TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (story_id) REFERENCES stories(story_id)
-    )
-  `);
-
-  // Ensure narration column exists (fixes schema drift on existing DBs)
-  const sceneColumns = db.prepare("PRAGMA table_info(scenes)").all() as Array<{
-    name: string;
-  }>;
-  if (!sceneColumns.some((col) => col.name === "narration")) {
-    db.exec("ALTER TABLE scenes ADD COLUMN narration TEXT");
-  }
-
-  // Create indexes for scenes
-  db.exec(`CREATE INDEX IF NOT EXISTS idx_scenes_scene_id ON scenes(scene_id)`);
-  db.exec(`CREATE INDEX IF NOT EXISTS idx_scenes_story_id ON scenes(story_id)`);
-
-  // Create images table
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS images (
-      id TEXT PRIMARY KEY,
-      scene_id TEXT NOT NULL,
-      provider TEXT NOT NULL,
-      model TEXT NOT NULL,
-      prompt TEXT NOT NULL,
-      storage_key TEXT NOT NULL,
-      image_url TEXT NOT NULL,
-      width INTEGER NOT NULL,
-      height INTEGER NOT NULL,
-      status TEXT NOT NULL,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (scene_id) REFERENCES scenes(scene_id)
-    )
-  `);
-
-  // Create indexes for images
-  db.exec(`CREATE INDEX IF NOT EXISTS idx_images_scene_id ON images(scene_id)`);
-  db.exec(`CREATE INDEX IF NOT EXISTS idx_images_status ON images(status)`);
-
-  console.log("[Database] Database initialized");
+  console.log('[Database] Database initialized with Prisma (PostgreSQL)');
 }
 
 // Story operations
-export function createStory(data: {
+export async function createStory(data: {
   id: string;
   storyId: string;
   title: string;
   logline: string;
   lesson: string;
+  audience?: string | null;
+  genre?: string | null;
+  visualStyle?: string | null;
 }) {
-  const stmt = db.prepare(`
-    INSERT INTO stories (id, story_id, title, logline, lesson)
-    VALUES (?, ?, ?, ?, ?)
-    ON CONFLICT(story_id) DO UPDATE SET
-      title = excluded.title,
-      logline = excluded.logline,
-      lesson = excluded.lesson,
-      updated_at = CURRENT_TIMESTAMP
-  `);
-  return stmt.run(data.id, data.storyId, data.title, data.logline, data.lesson);
+  return await prisma.story.upsert({
+    where: { storyId: data.storyId },
+    update: {
+      title: data.title,
+      logline: data.logline,
+      lesson: data.lesson,
+      audience: data.audience,
+      genre: data.genre,
+      visualStyle: data.visualStyle,
+    },
+    create: {
+      id: data.id,
+      storyId: data.storyId,
+      title: data.title,
+      logline: data.logline,
+      lesson: data.lesson,
+      audience: data.audience,
+      genre: data.genre,
+      visualStyle: data.visualStyle,
+    },
+  });
 }
 
-export function getStoryByStoryId(storyId: string) {
-  const stmt = db.prepare("SELECT * FROM stories WHERE story_id = ?");
-  return stmt.get(storyId) as any;
+export async function getStoryByStoryId(storyId: string) {
+  return await prisma.story.findUnique({
+    where: { storyId },
+  });
+}
+
+export async function getAllStories() {
+  return await prisma.story.findMany({
+    orderBy: { createdAt: 'desc' },
+  });
 }
 
 // Scene operations
-export function createScene(data: {
+export async function createScene(data: {
   id: string;
   sceneId: string;
   storyId: string;
@@ -114,38 +66,38 @@ export function createScene(data: {
   number: number;
   narration?: string;
 }) {
-  const stmt = db.prepare(`
-    INSERT INTO scenes (id, scene_id, story_id, title, number, narration)
-    VALUES (?, ?, ?, ?, ?, ?)
-    ON CONFLICT(scene_id) DO UPDATE SET
-      title = excluded.title,
-      narration = excluded.narration,
-      updated_at = CURRENT_TIMESTAMP
-  `);
-  return stmt.run(
-    data.id,
-    data.sceneId,
-    data.storyId,
-    data.title,
-    data.number,
-    data.narration || null,
-  );
+  return await prisma.scene.upsert({
+    where: { sceneId: data.sceneId },
+    update: {
+      title: data.title,
+      narration: data.narration,
+    },
+    create: {
+      id: data.id,
+      sceneId: data.sceneId,
+      storyId: data.storyId,
+      title: data.title,
+      number: data.number,
+      narration: data.narration || '',
+    },
+  });
 }
 
-export function getSceneBySceneId(sceneId: string) {
-  const stmt = db.prepare("SELECT * FROM scenes WHERE scene_id = ?");
-  return stmt.get(sceneId) as any;
+export async function getSceneBySceneId(sceneId: string) {
+  return await prisma.scene.findUnique({
+    where: { sceneId },
+  });
 }
 
-export function getScenesByStoryId(storyId: string) {
-  const stmt = db.prepare(
-    "SELECT * FROM scenes WHERE story_id = ? ORDER BY number ASC",
-  );
-  return stmt.all(storyId) as any[];
+export async function getScenesByStoryId(storyId: string) {
+  return await prisma.scene.findMany({
+    where: { storyId },
+    orderBy: { number: 'asc' },
+  });
 }
 
 // Image operations
-export function createImage(data: {
+export async function createImage(data: {
   id: string;
   sceneId: string;
   provider: string;
@@ -157,43 +109,146 @@ export function createImage(data: {
   height: number;
   status: string;
 }) {
-  const stmt = db.prepare(`
-    INSERT INTO images (id, scene_id, provider, model, prompt, storage_key, image_url, width, height, status)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-  return stmt.run(
-    data.id,
-    data.sceneId,
-    data.provider,
-    data.model,
-    data.prompt,
-    data.storageKey,
-    data.imageUrl,
-    data.width,
-    data.height,
-    data.status,
-  );
+  return await prisma.image.create({
+    data: {
+      id: data.id,
+      sceneId: data.sceneId,
+      provider: data.provider,
+      model: data.model,
+      prompt: data.prompt,
+      storageKey: data.storageKey,
+      imageUrl: data.imageUrl,
+      width: data.width,
+      height: data.height,
+      status: data.status,
+    },
+  });
 }
 
-export function getImagesBySceneId(sceneId: string) {
-  const stmt = db.prepare(
-    "SELECT * FROM images WHERE scene_id = ? ORDER BY created_at DESC",
-  );
-  return stmt.all(sceneId) as any[];
+export async function getImagesBySceneId(sceneId: string) {
+  return await prisma.image.findMany({
+    where: { sceneId },
+    orderBy: { createdAt: 'desc' },
+  });
 }
 
-export function getImageById(id: string) {
-  const stmt = db.prepare("SELECT * FROM images WHERE id = ?");
-  return stmt.get(id) as any;
+export async function getImageById(id: string) {
+  return await prisma.image.findUnique({
+    where: { id },
+  });
 }
 
-export function updateImageStatus(id: string, status: string) {
-  const stmt = db.prepare(`
-    UPDATE images
-    SET status = ?, updated_at = CURRENT_TIMESTAMP
-    WHERE id = ?
-  `);
-  return stmt.run(status, id);
+export async function updateImageStatus(id: string, status: string) {
+  return await prisma.image.update({
+    where: { id },
+    data: { status },
+  });
 }
 
-export default db;
+// Character operations
+export async function createCharacter(data: {
+  id: string;
+  name: string;
+  species: string;
+  personality: string;
+  visualDescription: string;
+  distinctiveFeatures: string;
+}) {
+  // Check if character exists by name
+  const existing = await prisma.character.findFirst({
+    where: { name: data.name },
+  });
+
+  if (existing) {
+    // Update existing character
+    return await prisma.character.update({
+      where: { id: existing.id },
+      data: {
+        species: data.species,
+        personality: data.personality,
+        visualDescription: data.visualDescription,
+        distinctiveFeatures: data.distinctiveFeatures,
+      },
+    });
+  }
+
+  // Create new character
+  return await prisma.character.create({
+    data: {
+      id: data.id,
+      name: data.name,
+      species: data.species,
+      personality: data.personality,
+      visualDescription: data.visualDescription,
+      distinctiveFeatures: data.distinctiveFeatures,
+    },
+  });
+}
+
+export async function getCharacterByName(name: string) {
+  return await prisma.character.findFirst({
+    where: { name },
+  });
+}
+
+export async function getCharacterById(id: string) {
+  return await prisma.character.findUnique({
+    where: { id },
+  });
+}
+
+export async function getAllCharacters() {
+  return await prisma.character.findMany();
+}
+
+export async function deleteCharacter(id: string) {
+  return await prisma.character.delete({
+    where: { id },
+  });
+}
+
+// StoryCharacter operations
+export async function linkStoryCharacter(data: {
+  id: string;
+  storyId: string;
+  characterId: string;
+}) {
+  return await prisma.storyCharacter.upsert({
+    where: {
+      storyId_characterId: {
+        storyId: data.storyId,
+        characterId: data.characterId,
+      },
+    },
+    update: {},
+    create: {
+      id: data.id,
+      storyId: data.storyId,
+      characterId: data.characterId,
+    },
+  });
+}
+
+export async function getCharactersByStoryId(storyId: string) {
+  const storyCharacters = await prisma.storyCharacter.findMany({
+    where: { storyId },
+    include: {
+      character: true,
+    },
+  });
+
+  return storyCharacters.map((sc) => sc.character);
+}
+
+export async function getStoriesByCharacterId(characterId: string) {
+  const storyCharacters = await prisma.storyCharacter.findMany({
+    where: { characterId },
+    include: {
+      story: true,
+    },
+  });
+
+  return storyCharacters.map((sc) => sc.story);
+}
+
+export default prisma;

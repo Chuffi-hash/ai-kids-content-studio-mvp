@@ -67,7 +67,7 @@ productionRouter.post('/scenes/:sceneId/image', async (req, res) => {
 
     // Create or update story record in database if provided
     if (storyId && storyTitle && storyLogline && storyLesson) {
-      createStory({
+      await createStory({
         id: randomUUID(),
         storyId,
         title: storyTitle,
@@ -77,9 +77,9 @@ productionRouter.post('/scenes/:sceneId/image', async (req, res) => {
     }
 
     // Create or update scene record in database
-    const existingScene = getSceneBySceneId(sceneId);
+    const existingScene = await getSceneBySceneId(sceneId);
     if (!existingScene) {
-      createScene({
+      await createScene({
         id: randomUUID(),
         sceneId,
         storyId: storyId || 'default-story',
@@ -94,7 +94,7 @@ productionRouter.post('/scenes/:sceneId/image', async (req, res) => {
     const storageKey = result.url.replace('/storage/', '');
     const model = process.env.HF_IMAGE_MODEL || 'black-forest-labs/FLUX.1-schnell';
 
-    createImage({
+    await createImage({
       id: imageId,
       sceneId,
       provider,

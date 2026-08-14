@@ -3,6 +3,7 @@ import cors from "cors";
 import path from "path";
 import { contentRouter } from "./routes/content.js";
 import { productionRouter } from "./routes/production.js";
+import { characterRouter } from "./routes/characters.js";
 import { initializeDatabase } from "./services/database/database.service.js";
 
 // Initialize database
@@ -27,6 +28,7 @@ app.get("/api/health", (_req, res) => {
 
 app.use("/api/content", contentRouter);
 app.use("/api/production", productionRouter);
+app.use("/api/characters", characterRouter);
 
 app.listen(port, () => {
   console.log(`API running on http://localhost:${port}`);

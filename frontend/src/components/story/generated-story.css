@@ -1,10 +1,22 @@
-.story-header {
-  margin-bottom: 32px;
+/* Story Workspace Styles */
+.story-workspace {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 28px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.story-workspace-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 28px;
   padding-bottom: 20px;
   border-bottom: 1px solid #f1f5f9;
 }
 
-.story-header h2 {
+.story-title-section h2 {
   margin: 0 0 8px 0;
   font-size: 24px;
   font-weight: 700;
@@ -17,6 +29,83 @@
   font-size: 15px;
   color: #64748b;
   line-height: 1.6;
+}
+
+.story-workspace-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.story-generate-scenes-btn {
+  width: auto;
+  padding: 10px 20px;
+  font-size: 14px;
+}
+
+.story-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.story-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #10b981;
+}
+
+.story-workspace-content {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.story-workspace-section h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: #475569;
+  margin-bottom: 16px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.story-summary {
+  padding: 20px;
+  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+  border: 1px solid #bbf7d0;
+  border-radius: 10px;
+}
+
+.story-characters {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.story-scenes {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Legacy styles for compatibility */
+.story-header {
+  margin-bottom: 32px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.story-header h2 {
+  margin: 0 0 8px 0;
+  font-size: 24px;
+  font-weight: 700;
+  color: #1e293b;
+  letter-spacing: -0.02em;
 }
 
 .story-section {
@@ -223,6 +312,19 @@
 }
 
 @media (max-width: 640px) {
+  .story-workspace-header {
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .story-workspace-actions {
+    width: 100%;
+  }
+
+  .story-generate-scenes-btn {
+    width: 100%;
+  }
+
   .characters {
     grid-template-columns: 1fr;
   }

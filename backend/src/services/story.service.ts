@@ -9,6 +9,9 @@ export interface StoryRequest {
   topic: string;
   ageGroup: string;
   lesson?: string;
+  audience?: string;
+  genre?: string;
+  visualStyle?: string;
 }
 
 export async function generateStory(
@@ -16,13 +19,17 @@ export async function generateStory(
 ): Promise<Story & { id: string }> {
 
   const prompt = `
-Create an original children's story concept.
+Create an original story concept.
 
 Topic:
 ${input.topic}
 
 Age group:
 ${input.ageGroup}
+
+${input.audience ? `Audience:\n${input.audience}\n` : ''}
+${input.genre ? `Genre:\n${input.genre}\n` : ''}
+${input.visualStyle ? `Visual Style:\n${input.visualStyle}\n` : ''}
 
 Lesson:
 ${input.lesson ?? "Make the story positive and educational."}
@@ -35,10 +42,10 @@ Create:
 - 2-3 original characters
 
 Rules:
-- Use simple language.
-- Characters must be suitable for children.
-- No violence.
-- No scary content.
+- Use language appropriate for the specified audience.
+- Characters must be suitable for the target audience.
+- No violence unless appropriate for the genre.
+- No scary content unless appropriate for the genre.
 - Do not use copyrighted characters.
 - Keep characters consistent.
 - Do NOT create scenes.

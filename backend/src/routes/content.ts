@@ -8,6 +8,10 @@ import {
   createScene,
   createImage,
   getSceneBySceneId,
+  createStory,
+  createCharacter,
+  linkStoryCharacter,
+  getAllStories,
 } from "../services/database/database.service.js";
 import { ImageGenerationService } from "../services/image-generation/image-generation.service.js";
 import { getImageGenerationProvider } from "../services/image-generation/provider.factory.js";
@@ -29,9 +33,19 @@ contentRouter.get("/modules", (_req, res) => {
   ]);
 });
 
+contentRouter.get("/stories", async (_req, res) => {
+  try {
+    const stories = await getAllStories();
+    return res.json(stories);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "Failed to fetch stories" });
+  }
+});
+
 contentRouter.post("/story/generate", async (req, res) => {
   try {
-    const { topic, ageGroup, lesson } = req.body;
+    const { topic, ageGroup, lesson, audience, genre, visualStyle } = req.body;
 
     if (!topic || !ageGroup) {
       return res.status(400).json({
@@ -43,9 +57,43 @@ contentRouter.post("/story/generate", async (req, res) => {
       topic,
       ageGroup,
       lesson,
+      audience,
+      genre,
+      visualStyle,
     });
 
-    return res.json(story);
+    // Persist the story
+    const storyId = `story-${randomUUID()}`;
+    await createStory({
+      id: story.id,
+      storyId,
+      title: story.title,
+      logline: story.logline,
+      lesson: story.lesson,
+      audience: audience || null,
+      genre: genre || null,
+      visualStyle: visualStyle || null,
+    });
+
+    // Create/reuse characters and link them to the story
+    for (const character of story.characters) {
+      const characterRecord = await createCharacter({
+        id: randomUUID(),
+        name: character.name,
+        species: character.species,
+        personality: character.personality,
+        visualDescription: character.description,
+        distinctiveFeatures: character.description.split(',')[0] || '',
+      });
+
+      await linkStoryCharacter({
+        id: randomUUID(),
+        storyId,
+        characterId: characterRecord.id,
+      });
+    }
+
+    return res.json({ ...story, storyId });
   } catch (error) {
     console.error(error);
     return res.status(500).json({ message: "Failed to generate story" });
@@ -84,43 +132,43 @@ contentRouter.get("/story/:storyId", async (req, res) => {
   try {
     const { storyId } = req.params;
 
-    const story = getStoryByStoryId(storyId);
+    const story = await getStoryByStoryId(storyId);
     if (!story) {
       return res.status(404).json({ message: "Story not found" });
     }
 
-    const scenes = getScenesByStoryId(storyId);
+    const scenes = await getScenesByStoryId(storyId);
 
-    const scenesWithImages = scenes.map((scene: any) => {
-      const images = getImagesBySceneId(scene.scene_id);
+    const scenesWithImages = await Promise.all(scenes.map(async (scene: any) => {
+      const images = await getImagesBySceneId(scene.sceneId);
       const latestImage = images.length > 0 ? images[0] : null;
       return {
         id: scene.id,
-        sceneId: scene.scene_id,
-        storyId: scene.story_id,
+        sceneId: scene.sceneId,
+        storyId: scene.storyId,
         title: scene.title,
         number: scene.number,
         narration: scene.narration,
         image: latestImage
           ? {
               id: latestImage.id,
-              sceneId: latestImage.scene_id,
+              sceneId: latestImage.sceneId,
               provider: latestImage.provider,
               model: latestImage.model,
               prompt: latestImage.prompt,
-              storageKey: latestImage.storage_key,
-              imageUrl: latestImage.image_url,
+              storageKey: latestImage.storageKey,
+              imageUrl: latestImage.imageUrl,
               width: latestImage.width,
               height: latestImage.height,
               status: latestImage.status,
             }
           : null,
       };
-    });
+    }));
 
     return res.json({
       id: story.id,
-      storyId: story.story_id,
+      storyId: story.storyId,
       title: story.title,
       logline: story.logline,
       lesson: story.lesson,
@@ -155,8 +203,8 @@ const imageGenerationService = new ImageGenerationService(
 const storageService = new LocalStorageService();
 const providerType = process.env.IMAGE_PROVIDER || "mock";
 
-contentRouter.get("/scenes/:sceneId/image", (req, res) => {
-  const images = getImagesBySceneId(req.params.sceneId);
+contentRouter.get("/scenes/:sceneId/image", async (req, res) => {
+  const images = await getImagesBySceneId(req.params.sceneId);
   const latestImage = images[0];
 
   if (!latestImage) {
@@ -167,9 +215,8 @@ contentRouter.get("/scenes/:sceneId/image", (req, res) => {
     success: true,
     image: {
       id: latestImage.id,
-      sceneId: latestImage.scene_id,
-      url: latestImage.image_url,
-      mimeType: latestImage.mime_type,
+      sceneId: latestImage.sceneId,
+      url: latestImage.imageUrl,
       width: latestImage.width,
       height: latestImage.height,
     },
@@ -197,7 +244,7 @@ contentRouter.post("/scenes/:sceneId/image", async (req, res) => {
     }
 
     // Find the scene; fall back to request body if not persisted yet
-    const scene = getSceneBySceneId(sceneId);
+    const scene = await getSceneBySceneId(sceneId);
     const sceneDescription = scene
       ? scene.narration || scene.title
       : description;
@@ -212,10 +259,23 @@ contentRouter.post("/scenes/:sceneId/image", async (req, res) => {
 
     // Persist the scene if it doesn't exist yet (frontend scenes live in state)
     if (!scene) {
-      createScene({
+      // Ensure the story exists first
+      const targetStoryId = storyId || "default-story";
+      const existingStory = await getStoryByStoryId(targetStoryId);
+      if (!existingStory) {
+        await createStory({
+          id: randomUUID(),
+          storyId: targetStoryId,
+          title: "Default Story",
+          logline: "Default story for scenes",
+          lesson: "Default lesson",
+        });
+      }
+
+      await createScene({
         id: randomUUID(),
         sceneId,
-        storyId: storyId || "default-story",
+        storyId: targetStoryId,
         title: sceneTitle,
         number: 0,
         narration: description,
@@ -262,7 +322,7 @@ contentRouter.post("/scenes/:sceneId/image", async (req, res) => {
 
     // Create image record in database
     const imageId = randomUUID();
-    createImage({
+    await createImage({
       id: imageId,
       sceneId,
       provider: providerType,
