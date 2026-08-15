@@ -1,4 +1,5 @@
-import { Character } from '../../services/character.service';
+import { Character } from "../../services/character.service";
+import { DeleteButton } from '../common/DeleteButton';
 
 interface CharacterCardProps {
   character: Character;
@@ -6,7 +7,11 @@ interface CharacterCardProps {
   onDelete?: () => void;
 }
 
-export default function CharacterCard({ character, onEdit, onDelete }: CharacterCardProps) {
+export default function CharacterCard({
+  character,
+  onEdit,
+  onDelete,
+}: CharacterCardProps) {
   return (
     <div className="character-card">
       <div className="character-card-avatar">
@@ -19,35 +24,37 @@ export default function CharacterCard({ character, onEdit, onDelete }: Character
           <h3>{character.name}</h3>
           <div className="character-card-actions">
             {onEdit && (
-              <button className="character-action-btn" onClick={onEdit} title="Edit">
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={onEdit}
+                title="Edit"
+              >
                 Edit
               </button>
             )}
             {onDelete && (
-              <button className="character-action-btn character-action-btn-delete" onClick={onDelete} title="Delete">
-                Delete
-              </button>
+              <DeleteButton
+                onClick={onDelete}
+                title="Delete character"
+                aria-label="Delete character"
+              />
             )}
           </div>
         </div>
-        <div className="character-card-body">
-          <div className="character-card-field">
-            <span className="character-field-label">Species</span>
-            <span className="character-field-value">{character.species}</span>
-          </div>
-          <div className="character-card-field">
-            <span className="character-field-label">Personality</span>
-            <span className="character-field-value">{character.personality}</span>
-          </div>
-          <div className="character-card-description">
-            {character.visualDescription}
-          </div>
-          {character.distinctiveFeatures && (
-            <div className="character-card-features">
-              {character.distinctiveFeatures}
-            </div>
-          )}
+        <div className="character-card-meta">
+          <span className="character-tag">{character.species}</span>
+          <span className="character-tag">{character.personality}</span>
         </div>
+        {character.visualDescription && (
+          <p className="character-card-description">
+            {character.visualDescription}
+          </p>
+        )}
+        {character.distinctiveFeatures && (
+          <div className="character-card-features">
+            {character.distinctiveFeatures}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -23,3 +23,14 @@ export async function getAllStories(): Promise<Story[]> {
   
   return response.json();
 }
+
+export async function deleteStory(storyId: string): Promise<void> {
+  const API_URL = getApiUrl();
+  const response = await fetch(`${API_URL}/api/content/story/${storyId}`, {
+    method: 'DELETE',
+  });
+  
+  if (!response.ok) {
+    throw new Error('Failed to delete story');
+  }
+}

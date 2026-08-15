@@ -4,7 +4,7 @@ import CharacterCard from './CharacterCard';
 interface CharacterGridProps {
   characters: Character[];
   onEdit: (character: Character) => void;
-  onDelete: (id: string) => void;
+  onDelete: (id: string, name: string) => void;
 }
 
 export default function CharacterGrid({ characters, onEdit, onDelete }: CharacterGridProps) {
@@ -15,7 +15,7 @@ export default function CharacterGrid({ characters, onEdit, onDelete }: Characte
           key={character.id}
           character={character}
           onEdit={() => onEdit(character)}
-          onDelete={() => onDelete(character.id)}
+          onDelete={() => onDelete(character.id, character.name)}
         />
       ))}
     </div>

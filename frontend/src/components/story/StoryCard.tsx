@@ -1,3 +1,5 @@
+import { DeleteButton } from '../common/DeleteButton';
+
 interface Story {
   id: string;
   storyId: string;
@@ -14,9 +16,10 @@ interface Story {
 interface StoryCardProps {
   story: Story;
   onOpen: (storyId: string) => void;
+  onDelete?: (storyId: string, title: string) => void;
 }
 
-export default function StoryCard({ story, onOpen }: StoryCardProps) {
+export default function StoryCard({ story, onOpen, onDelete }: StoryCardProps) {
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -35,9 +38,18 @@ export default function StoryCard({ story, onOpen }: StoryCardProps) {
       <p className="story-card-logline">{story.logline}</p>
       <div className="story-card-footer">
         <span className="story-card-date">{formatDate(story.createdAt)}</span>
-        <button className="story-card-open-btn" onClick={() => onOpen(story.storyId)}>
-          Open
-        </button>
+        <div className="story-card-actions">
+          {onDelete && (
+            <DeleteButton
+              onClick={() => onDelete(story.storyId, story.title)}
+              title="Delete story"
+              aria-label="Delete story"
+            />
+          )}
+          <button className="story-card-open-btn" onClick={() => onOpen(story.storyId)}>
+            Open
+          </button>
+        </div>
       </div>
     </div>
   );

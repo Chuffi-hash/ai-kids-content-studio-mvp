@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { fetchStory, StorybookStory, StorybookScene } from '../../services/storybook.service';
 import { resolveAssetUrl } from '../../utils/urlHelper';
+import { PageHeader } from '../common/PageHeader';
+import { BackButton } from '../common/BackButton';
 import './storybook-viewer.css';
 
 interface StorybookViewerProps {
@@ -12,6 +14,7 @@ type LoadingState = 'loading' | 'loaded' | 'error' | 'not-found' | 'empty';
 
 export default function StorybookViewer({ storyId: propStoryId }: StorybookViewerProps) {
   const { storyId: paramStoryId } = useParams<{ storyId: string }>();
+  const navigate = useNavigate();
   const storyId = propStoryId || paramStoryId || '';
   const [story, setStory] = useState<StorybookStory | null>(null);
   const [currentSceneIndex, setCurrentSceneIndex] = useState(0);
@@ -79,7 +82,7 @@ export default function StorybookViewer({ storyId: propStoryId }: StorybookViewe
 
   if (loadingState === 'loading') {
     return (
-      <div className="storybook-viewer">
+      <div className="page">
         <div className="storybook-loading">
           <div className="spinner"></div>
           <p>Loading story...</p>
@@ -90,7 +93,8 @@ export default function StorybookViewer({ storyId: propStoryId }: StorybookViewe
 
   if (loadingState === 'error') {
     return (
-      <div className="storybook-viewer">
+      <div className="page">
+        <PageHeader title="Error" />
         <div className="storybook-error">
           <h2>Unable to Load Story</h2>
           <p>There was an error loading this story. Please try again later.</p>
@@ -102,7 +106,8 @@ export default function StorybookViewer({ storyId: propStoryId }: StorybookViewe
 
   if (loadingState === 'not-found') {
     return (
-      <div className="storybook-viewer">
+      <div className="page">
+        <PageHeader title="Not Found" />
         <div className="storybook-error">
           <h2>Story Not Found</h2>
           <p>This story could not be found. It may have been deleted or the ID is incorrect.</p>
@@ -113,7 +118,16 @@ export default function StorybookViewer({ storyId: propStoryId }: StorybookViewe
 
   if (loadingState === 'empty' || !story || story.scenes.length === 0) {
     return (
-      <div className="storybook-viewer">
+      <div className="page">
+        <PageHeader
+          title={story?.title || 'Story'}
+          subtitle={story?.logline}
+          actions={
+            <div className="page-actions">
+              <BackButton to={`/stories/${story?.storyId}`} label="← Back to Story" />
+            </div>
+          }
+        />
         <div className="storybook-empty">
           <h2>No Scenes Available</h2>
           <p>This story doesn't have any scenes yet.</p>
@@ -178,14 +192,21 @@ export default function StorybookViewer({ storyId: propStoryId }: StorybookViewe
   };
 
   return (
-    <div className="storybook-viewer">
-      <div className="storybook-container">
-        <header className="storybook-header">
-          <h1 className="storybook-title">{story.title}</h1>
-          <div className="scene-counter">
-            Scene {currentScene.number} of {story.scenes.length}
+    <div className="page">
+      <PageHeader
+        title={story.title}
+        subtitle={story.logline}
+        actions={
+          <div className="page-actions">
+            <BackButton to={`/stories/${story.storyId}`} label="← Back to Story" />
           </div>
-        </header>
+        }
+      />
+
+      <div className="storybook-container">
+        <div className="scene-counter">
+          Scene {currentScene.number} of {story.scenes.length}
+        </div>
 
         <div className="scene-display">
           <div className="scene-image-container">

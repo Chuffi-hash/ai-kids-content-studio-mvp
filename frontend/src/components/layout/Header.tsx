@@ -1,22 +1,13 @@
-interface HeaderProps {
-  view: 'generator' | 'production' | 'characters';
-}
-
-export default function Header({ view }: HeaderProps) {
+export default function Header() {
   return (
-    <header>
-      {view === 'characters' ? (
-        <div>
-          <p className="eyebrow">AI CONTENT STUDIO</p>
-        </div>
-      ) : (
-        <div>
-          <p className="eyebrow">AI CONTENT STUDIO</p>
-          <h1>Create a new episode</h1>
-          <p className="muted">Build an original children's story from idea to YouTube.</p>
-          <div className="status">● MVP</div>
-        </div>
-      )}
-    </header>
+    <div className="topbar">
+      <div className="topbar-title">
+        <h1>AI Content Studio</h1>
+        <span className="muted">AI Story Content Studio</span>
+      </div>
+      <div className="topbar-actions">
+        <span className="status">MVP</span>
+      </div>
+    </div>
   );
 }

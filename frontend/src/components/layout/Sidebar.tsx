@@ -1,35 +1,46 @@
-interface SidebarProps {
-  currentView: 'generator' | 'production' | 'characters';
-  onNavigate: (view: 'generator' | 'characters') => void;
+import { useNavigate, useLocation } from "react-router-dom";
+
+interface NavItem {
+  label: string;
+  icon: string;
+  path: string;
 }
 
-export default function Sidebar({ currentView, onNavigate }: SidebarProps) {
+const navItems: NavItem[] = [
+  { label: "Create Story", icon: "✦", path: "/" },
+  { label: "Stories", icon: "▤", path: "/stories" },
+  { label: "Characters", icon: "◉", path: "/characters" },
+  { label: "Production", icon: "▶", path: "/production" },
+];
+
+export default function Sidebar() {
+  const navigate = useNavigate();
+  const location = useLocation();
+
   return (
     <aside className="sidebar">
       <div className="brand">
         <div className="brand-mark">AI</div>
-        <div>
-          <strong>Kids Studio</strong>
-          <span>Content Factory</span>
+        <div className="brand-text">
+          <strong>Content Studio</strong>
+          <span>Story Studio</span>
         </div>
       </div>
 
       <nav>
-        <button 
-          className={`nav-item ${currentView === 'generator' ? 'active' : ''}`}
-          onClick={() => onNavigate('generator')}
-        >
-          🏠 Dashboard
-        </button>
-        <button className="nav-item">📚 Projects</button>
-        <button 
-          className={`nav-item ${currentView === 'characters' ? 'active' : ''}`}
-          onClick={() => onNavigate('characters')}
-        >
-          🧸 Characters
-        </button>
-        <button className="nav-item">🎞️ Videos</button>
-        <button className="nav-item">⚙️ Settings</button>
+        {navItems.map((item) => {
+          const isActive = location.pathname === item.path;
+          return (
+            <button
+              key={item.path}
+              className={`nav-item ${isActive ? "active" : ""}`}
+              onClick={() => navigate(item.path)}
+            >
+              <span className="nav-icon">{item.icon}</span>
+              {item.label}
+            </button>
+          );
+        })}
       </nav>
     </aside>
   );

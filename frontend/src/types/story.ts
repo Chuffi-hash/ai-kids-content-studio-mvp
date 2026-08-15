@@ -7,6 +7,7 @@ export interface Character {
 
 export interface Scene {
   sceneNumber: number;
+  title: string;
   description: string;
   narration: string;
 }

@@ -1,0 +1,166 @@
+/* ============================================================
+   Story Builder feature styles
+   ============================================================ */
+
+/* ---------------------- Builder workspace ---------------------- */
+.story-builder {
+  max-width: 880px;
+  margin: 0 auto;
+}
+
+.story-builder-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.story-builder-header h1 {
+  margin-bottom: 4px;
+}
+
+.story-builder-header .muted {
+  margin: 0;
+}
+
+.story-builder-section {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 20px;
+  margin-bottom: 16px;
+}
+
+.story-builder-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.story-builder-section-header h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.story-builder-section-header .muted {
+  margin: 0;
+  font-size: 13px;
+}
+
+/* ---------------------- Story settings (compact row) ---------------------- */
+.story-settings {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.story-settings label {
+  gap: 5px;
+  font-size: 12px;
+}
+
+/* ---------------------- Story idea ---------------------- */
+.story-idea-input {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.story-idea-input textarea {
+  font-size: 15px;
+  line-height: 1.6;
+  padding: 14px;
+  min-height: 140px;
+}
+
+.story-idea-input .hint {
+  font-size: 12px;
+  color: var(--color-text-faint);
+  margin: 0;
+}
+
+/* ---------------------- Optional purpose ---------------------- */
+.story-purpose-input textarea {
+  min-height: 72px;
+}
+
+/* ---------------------- Character selector ---------------------- */
+.character-selector {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.character-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px 5px 5px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  background: var(--color-surface);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+
+.character-chip-initial {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--color-accent-soft);
+  color: var(--color-accent-strong);
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.character-chip-remove {
+  border: 0;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 2px;
+  border-radius: 50%;
+}
+
+.character-chip-remove:hover {
+  color: var(--color-danger);
+  background: var(--color-danger-soft);
+}
+
+.character-chip-empty {
+  color: var(--color-text-muted);
+  font-size: 13px;
+  margin: 0;
+}
+
+.page-section {
+  margin-top: 28px;
+}
+
+.story-result-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+/* ---------------------- Responsive ---------------------- */
+@media (max-width: 640px) {
+  .story-builder-header {
+    flex-direction: column;
+  }
+
+  .story-settings {
+    grid-template-columns: 1fr;
+  }
+}

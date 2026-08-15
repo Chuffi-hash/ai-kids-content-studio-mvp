@@ -23,11 +23,54 @@
   color: white;
 }
 
+.storybook-header-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.storybook-title-section {
+  flex: 1;
+}
+
 .storybook-title {
   margin: 0 0 8px 0;
   font-size: 24px;
   font-weight: 700;
   letter-spacing: -0.02em;
+}
+
+.storybook-logline {
+  margin: 0;
+  font-size: 14px;
+  color: #cbd5e1;
+  line-height: 1.4;
+}
+
+.storybook-metadata {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.metadata-tag {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #e2e8f0;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.metadata-visual {
+  background: rgba(59, 130, 246, 0.2);
+  border-color: rgba(59, 130, 246, 0.4);
+  color: #93c5fd;
 }
 
 .scene-counter {
@@ -174,21 +217,6 @@
   margin: 0;
 }
 
-.spinner {
-  width: 40px;
-  height: 40px;
-  border: 3px solid #e2e8f0;
-  border-top-color: #3b82f6;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
 /* Responsive design */
 @media (max-width: 768px) {
   .storybook-viewer {
@@ -197,6 +225,11 @@
 
   .storybook-header {
     padding: 20px 24px;
+  }
+
+  .storybook-header-top {
+    flex-direction: column;
+    gap: 12px;
   }
 
   .storybook-title {

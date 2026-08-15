@@ -1,15 +1,22 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import ProductionPipeline from '../components/production/ProductionPipeline';
-import { ProductionState } from '../types/production';
-import { Scene } from '../types/story';
+import { useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import ProductionPipeline from "../components/production/ProductionPipeline";
+import { ProductionState } from "../types/production";
+import "../components/production/production-pipeline.css";
+
+type LocationState = {
+  productionState?: ProductionState;
+};
 
 export default function ProductionPage() {
   const navigate = useNavigate();
-  const [productionState, setProductionState] = useState<ProductionState | null>(null);
+  const location = useLocation();
+  const locationState = location.state as LocationState | null;
+  const [productionState, setProductionState] =
+    useState<ProductionState | null>(locationState?.productionState ?? null);
 
   function goToGenerator() {
-    navigate('/');
+    navigate("/");
   }
 
   function handleProductionStateChange(newState: ProductionState) {
@@ -18,28 +25,18 @@ export default function ProductionPage() {
 
   return (
     <div className="production-page">
-      <div className="production-page-header">
-        <button
-          className="production-back-btn"
-          onClick={goToGenerator}
-        >
-          ← Back to Story Generator
-        </button>
-      </div>
       {productionState ? (
-        <ProductionPipeline 
-          productionState={productionState} 
+        <ProductionPipeline
+          productionState={productionState}
           onProductionStateChange={handleProductionStateChange}
         />
       ) : (
         <div className="production-empty-state">
-          <div className="production-empty-icon">🎬</div>
           <h3>No production in progress</h3>
-          <p className="muted">Generate a story and scenes first to start production.</p>
-          <button
-            className="primary"
-            onClick={goToGenerator}
-          >
+          <p className="muted">
+            Generate a story and scenes first to start production.
+          </p>
+          <button className="btn btn-primary" onClick={goToGenerator}>
             Go to Story Generator
           </button>
         </div>

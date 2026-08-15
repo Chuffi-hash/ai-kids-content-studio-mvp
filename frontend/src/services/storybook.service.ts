@@ -1,4 +1,4 @@
-import { getApiUrl } from '../utils/urlHelper';
+import { getApiUrl } from "../utils/urlHelper";
 
 export interface StorybookImage {
   id: string;
@@ -10,7 +10,7 @@ export interface StorybookImage {
   imageUrl: string;
   width: number;
   height: number;
-  status: 'completed' | 'generating' | 'pending' | 'failed';
+  status: "completed" | "generating" | "pending" | "failed";
 }
 
 export interface StorybookScene {
@@ -29,6 +29,18 @@ export interface StorybookStory {
   title: string;
   logline: string;
   lesson: string;
+  topic?: string | null;
+  ageGroup?: string | null;
+  audience?: string | null;
+  genre?: string | null;
+  visualStyle?: string | null;
+  characters?: Array<{
+    id: string;
+    name: string;
+    species: string;
+    personality: string;
+    description: string;
+  }>;
   scenes: StorybookScene[];
 }
 
@@ -38,9 +50,9 @@ export async function fetchStory(storyId: string): Promise<StorybookStory> {
 
   if (!response.ok) {
     if (response.status === 404) {
-      throw new Error('Story not found');
+      throw new Error("Story not found");
     }
-    throw new Error('Failed to fetch story');
+    throw new Error("Failed to fetch story");
   }
 
   return response.json();
