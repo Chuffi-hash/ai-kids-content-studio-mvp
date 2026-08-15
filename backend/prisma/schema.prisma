@@ -18,6 +18,8 @@ model Story {
   title          String
   logline        String
   lesson         String
+  topic          String?
+  ageGroup       String?
   audience       String?
   genre          String?
   visualStyle    String?

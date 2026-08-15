@@ -7,7 +7,7 @@ import {
 
 export interface StoryRequest {
   topic: string;
-  ageGroup: string;
+  ageGroup?: string;
   lesson?: string;
   audience?: string;
   genre?: string;

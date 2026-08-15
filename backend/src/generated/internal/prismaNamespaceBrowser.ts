@@ -80,6 +80,10 @@ export const StoryScalarFieldEnum = {
   title: 'title',
   logline: 'logline',
   lesson: 'lesson',
+  topic: 'topic',
+  ageGroup: 'ageGroup',
+  audience: 'audience',
+  genre: 'genre',
   visualStyle: 'visualStyle',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'

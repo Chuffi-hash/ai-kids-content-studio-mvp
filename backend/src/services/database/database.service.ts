@@ -18,6 +18,8 @@ export async function createStory(data: {
   title: string;
   logline: string;
   lesson: string;
+  topic?: string | null;
+  ageGroup?: string | null;
   audience?: string | null;
   genre?: string | null;
   visualStyle?: string | null;
@@ -28,6 +30,8 @@ export async function createStory(data: {
       title: data.title,
       logline: data.logline,
       lesson: data.lesson,
+      topic: data.topic,
+      ageGroup: data.ageGroup,
       audience: data.audience,
       genre: data.genre,
       visualStyle: data.visualStyle,
@@ -38,6 +42,8 @@ export async function createStory(data: {
       title: data.title,
       logline: data.logline,
       lesson: data.lesson,
+      topic: data.topic,
+      ageGroup: data.ageGroup,
       audience: data.audience,
       genre: data.genre,
       visualStyle: data.visualStyle,
@@ -54,6 +60,12 @@ export async function getStoryByStoryId(storyId: string) {
 export async function getAllStories() {
   return await prisma.story.findMany({
     orderBy: { createdAt: 'desc' },
+  });
+}
+
+export async function deleteStory(storyId: string) {
+  return await prisma.story.delete({
+    where: { storyId },
   });
 }
 

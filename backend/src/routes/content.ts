@@ -10,8 +10,11 @@ import {
   getSceneBySceneId,
   createStory,
   createCharacter,
+  getCharacterById,
+  getCharactersByStoryId,
   linkStoryCharacter,
   getAllStories,
+  deleteStory,
 } from "../services/database/database.service.js";
 import { ImageGenerationService } from "../services/image-generation/image-generation.service.js";
 import { getImageGenerationProvider } from "../services/image-generation/provider.factory.js";
@@ -45,11 +48,19 @@ contentRouter.get("/stories", async (_req, res) => {
 
 contentRouter.post("/story/generate", async (req, res) => {
   try {
-    const { topic, ageGroup, lesson, audience, genre, visualStyle } = req.body;
+    const {
+      topic,
+      ageGroup,
+      lesson,
+      audience,
+      genre,
+      visualStyle,
+      characterIds,
+    } = req.body;
 
-    if (!topic || !ageGroup) {
+    if (!topic) {
       return res.status(400).json({
-        message: "topic and ageGroup are required",
+        message: "topic is required",
       });
     }
 
@@ -70,6 +81,8 @@ contentRouter.post("/story/generate", async (req, res) => {
       title: story.title,
       logline: story.logline,
       lesson: story.lesson,
+      topic: topic || null,
+      ageGroup: ageGroup || null,
       audience: audience || null,
       genre: genre || null,
       visualStyle: visualStyle || null,
@@ -83,7 +96,7 @@ contentRouter.post("/story/generate", async (req, res) => {
         species: character.species,
         personality: character.personality,
         visualDescription: character.description,
-        distinctiveFeatures: character.description.split(',')[0] || '',
+        distinctiveFeatures: character.description.split(",")[0] || "",
       });
 
       await linkStoryCharacter({
@@ -91,6 +104,20 @@ contentRouter.post("/story/generate", async (req, res) => {
         storyId,
         characterId: characterRecord.id,
       });
+    }
+
+    // Link any user-selected library characters to the story
+    if (Array.isArray(characterIds) && characterIds.length > 0) {
+      for (const characterId of characterIds) {
+        const character = await getCharacterById(characterId);
+        if (!character) continue;
+
+        await linkStoryCharacter({
+          id: randomUUID(),
+          storyId,
+          characterId: character.id,
+        });
+      }
     }
 
     return res.json({ ...story, storyId });
@@ -102,22 +129,62 @@ contentRouter.post("/story/generate", async (req, res) => {
 
 contentRouter.post("/story/:storyId/scenes/generate", async (req, res) => {
   try {
-    const { story, characters, sceneCount } = req.body;
+    const { storyId } = req.params;
 
-    if (!story || !characters) {
+    // Fetch the story to get title/logline/lesson
+    const story = await getStoryByStoryId(storyId);
+    if (!story) {
+      return res.status(404).json({ message: "Story not found" });
+    }
+
+    // Fetch characters linked to this story through StoryCharacter
+    const linkedCharacters = await getCharactersByStoryId(storyId);
+
+    if (!linkedCharacters || linkedCharacters.length === 0) {
       return res.status(400).json({
-        message: "story and characters are required",
+        message:
+          "No characters linked to this story. Please add characters first.",
       });
     }
 
+    // Transform character data for the scene generation service
+    // getCharactersByStoryId returns Character objects directly
+    const charactersForService = linkedCharacters.map((c) => ({
+      name: c.name,
+      species: c.species,
+      personality: c.personality,
+      description: c.visualDescription,
+    }));
+
     const scenes = await generateScenes({
-      story,
-      characters,
-      sceneCount,
+      story: {
+        title: story.title,
+        logline: story.logline,
+        lesson: story.lesson,
+      },
+      characters: charactersForService,
+      sceneCount: 5,
     });
 
+    // Save scenes to PostgreSQL immediately (do not wait for image generation)
+    const savedScenes = await Promise.all(
+      scenes.map((scene) => {
+        const sceneData = {
+          id: randomUUID(),
+          sceneId: scene.sceneNumber
+            ? `scene-${scene.sceneNumber}`
+            : `scene-${Date.now()}`,
+          storyId,
+          title: `Scene ${scene.sceneNumber}`,
+          number: scene.sceneNumber ?? 0,
+          narration: scene.narration,
+        };
+        return createScene(sceneData);
+      }),
+    );
+
     return res.json({
-      scenes,
+      scenes: savedScenes,
     });
   } catch (error) {
     console.error(error);
@@ -138,33 +205,36 @@ contentRouter.get("/story/:storyId", async (req, res) => {
     }
 
     const scenes = await getScenesByStoryId(storyId);
+    const characters = await getCharactersByStoryId(storyId);
 
-    const scenesWithImages = await Promise.all(scenes.map(async (scene: any) => {
-      const images = await getImagesBySceneId(scene.sceneId);
-      const latestImage = images.length > 0 ? images[0] : null;
-      return {
-        id: scene.id,
-        sceneId: scene.sceneId,
-        storyId: scene.storyId,
-        title: scene.title,
-        number: scene.number,
-        narration: scene.narration,
-        image: latestImage
-          ? {
-              id: latestImage.id,
-              sceneId: latestImage.sceneId,
-              provider: latestImage.provider,
-              model: latestImage.model,
-              prompt: latestImage.prompt,
-              storageKey: latestImage.storageKey,
-              imageUrl: latestImage.imageUrl,
-              width: latestImage.width,
-              height: latestImage.height,
-              status: latestImage.status,
-            }
-          : null,
-      };
-    }));
+    const scenesWithImages = await Promise.all(
+      scenes.map(async (scene: any) => {
+        const images = await getImagesBySceneId(scene.sceneId);
+        const latestImage = images.length > 0 ? images[0] : null;
+        return {
+          id: scene.id,
+          sceneId: scene.sceneId,
+          storyId: scene.storyId,
+          title: scene.title,
+          number: scene.number,
+          narration: scene.narration,
+          image: latestImage
+            ? {
+                id: latestImage.id,
+                sceneId: latestImage.sceneId,
+                provider: latestImage.provider,
+                model: latestImage.model,
+                prompt: latestImage.prompt,
+                storageKey: latestImage.storageKey,
+                imageUrl: latestImage.imageUrl,
+                width: latestImage.width,
+                height: latestImage.height,
+                status: latestImage.status,
+              }
+            : null,
+        };
+      }),
+    );
 
     return res.json({
       id: story.id,
@@ -172,11 +242,110 @@ contentRouter.get("/story/:storyId", async (req, res) => {
       title: story.title,
       logline: story.logline,
       lesson: story.lesson,
+      topic: story.topic,
+      ageGroup: story.ageGroup,
+      audience: story.audience,
+      genre: story.genre,
+      visualStyle: story.visualStyle,
+      characters: characters.map((character) => ({
+        id: character.id,
+        name: character.name,
+        species: character.species,
+        personality: character.personality,
+        description: character.visualDescription,
+      })),
       scenes: scenesWithImages,
     });
   } catch (error) {
     console.error(error);
     return res.status(500).json({ message: "Failed to fetch story" });
+  }
+});
+
+contentRouter.put("/story/:storyId", async (req, res) => {
+  try {
+    const { storyId } = req.params;
+    const {
+      topic,
+      audience,
+      genre,
+      visualStyle,
+      lesson,
+      characterIds,
+    } = req.body;
+
+    if (!topic) {
+      return res.status(400).json({
+        message: "topic is required",
+      });
+    }
+
+    // Fetch existing story to get ageGroup for backward compatibility
+    const existingStory = await getStoryByStoryId(storyId);
+    if (!existingStory) {
+      return res.status(404).json({ message: "Story not found" });
+    }
+
+    // Regenerate story with new parameters
+    const story = await generateStory({
+      topic,
+      ageGroup: existingStory.ageGroup || undefined,
+      lesson,
+      audience,
+      genre,
+      visualStyle,
+    });
+
+    // Update story in database
+    await createStory({
+      id: story.id,
+      storyId,
+      title: story.title,
+      logline: story.logline,
+      lesson: story.lesson,
+      topic: topic || null,
+      ageGroup: existingStory.ageGroup || null,
+      audience: audience || null,
+      genre: genre || null,
+      visualStyle: visualStyle || null,
+    });
+
+    // Handle character associations
+    // First, remove existing StoryCharacter links for this story
+    // (Note: This would require a deleteStoryCharacter function, for now we'll just add new ones)
+    // For MVP, we'll add new character links without removing old ones to avoid complexity
+    
+    // Link user-selected library characters to the story
+    if (Array.isArray(characterIds) && characterIds.length > 0) {
+      for (const characterId of characterIds) {
+        const character = await getCharacterById(characterId);
+        if (!character) continue;
+
+        await linkStoryCharacter({
+          id: randomUUID(),
+          storyId,
+          characterId: character.id,
+        });
+      }
+    }
+
+    return res.json({ ...story, storyId });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "Failed to regenerate story" });
+  }
+});
+
+contentRouter.delete("/story/:storyId", async (req, res) => {
+  try {
+    const { storyId } = req.params;
+
+    await deleteStory(storyId);
+
+    return res.json({ success: true });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "Failed to delete story" });
   }
 });
 
@@ -208,7 +377,9 @@ contentRouter.get("/scenes/:sceneId/image", async (req, res) => {
   const latestImage = images[0];
 
   if (!latestImage) {
-    return res.status(404).json({ success: false, message: "No saved image for this scene" });
+    return res
+      .status(404)
+      .json({ success: false, message: "No saved image for this scene" });
   }
 
   return res.json({
@@ -254,31 +425,6 @@ contentRouter.post("/scenes/:sceneId/image", async (req, res) => {
       return res.status(400).json({
         success: false,
         message: "description is required",
-      });
-    }
-
-    // Persist the scene if it doesn't exist yet (frontend scenes live in state)
-    if (!scene) {
-      // Ensure the story exists first
-      const targetStoryId = storyId || "default-story";
-      const existingStory = await getStoryByStoryId(targetStoryId);
-      if (!existingStory) {
-        await createStory({
-          id: randomUUID(),
-          storyId: targetStoryId,
-          title: "Default Story",
-          logline: "Default story for scenes",
-          lesson: "Default lesson",
-        });
-      }
-
-      await createScene({
-        id: randomUUID(),
-        sceneId,
-        storyId: targetStoryId,
-        title: sceneTitle,
-        number: 0,
-        narration: description,
       });
     }
 
