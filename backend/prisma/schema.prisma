@@ -32,19 +32,21 @@ model Story {
 }
 
 model Scene {
-  id         String   @id @default(cuid())
-  sceneId    String   @unique
+  id         String    @id @default(cuid())
+  sceneId    String    @unique
   storyId    String
-  story      Story    @relation(fields: [storyId], references: [storyId])
+  story      Story     @relation(fields: [storyId], references: [storyId])
   title      String
   number     Int
   narration  String
   images     Image[]
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  deletedAt  DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
   @@index([sceneId])
   @@index([storyId])
+  @@index([deletedAt])
 }
 
 model Image {
@@ -73,6 +75,9 @@ model Character {
   personality         String
   visualDescription   String
   distinctiveFeatures String
+  canonicalAppearance Json?
+  referenceImageUrl   String?
+  referenceImagePrompt String?
   storyCharacters     StoryCharacter[]
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt

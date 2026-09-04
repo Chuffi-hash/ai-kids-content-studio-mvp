@@ -41,6 +41,7 @@ export type SceneMinAggregateOutputType = {
   title: string | null
   number: number | null
   narration: string | null
+  deletedAt: Date | null
   createdAt: Date | null
   updatedAt: Date | null
 }
@@ -52,6 +53,7 @@ export type SceneMaxAggregateOutputType = {
   title: string | null
   number: number | null
   narration: string | null
+  deletedAt: Date | null
   createdAt: Date | null
   updatedAt: Date | null
 }
@@ -63,6 +65,7 @@ export type SceneCountAggregateOutputType = {
   title: number
   number: number
   narration: number
+  deletedAt: number
   createdAt: number
   updatedAt: number
   _all: number
@@ -84,6 +87,7 @@ export type SceneMinAggregateInputType = {
   title?: true
   number?: true
   narration?: true
+  deletedAt?: true
   createdAt?: true
   updatedAt?: true
 }
@@ -95,6 +99,7 @@ export type SceneMaxAggregateInputType = {
   title?: true
   number?: true
   narration?: true
+  deletedAt?: true
   createdAt?: true
   updatedAt?: true
 }
@@ -106,6 +111,7 @@ export type SceneCountAggregateInputType = {
   title?: true
   number?: true
   narration?: true
+  deletedAt?: true
   createdAt?: true
   updatedAt?: true
   _all?: true
@@ -204,6 +210,7 @@ export type SceneGroupByOutputType = {
   title: string
   number: number
   narration: string
+  deletedAt: Date | null
   createdAt: Date
   updatedAt: Date
   _count: SceneCountAggregateOutputType | null
@@ -238,6 +245,7 @@ export type SceneWhereInput = {
   title?: Prisma.StringFilter<"Scene"> | string
   number?: Prisma.IntFilter<"Scene"> | number
   narration?: Prisma.StringFilter<"Scene"> | string
+  deletedAt?: Prisma.DateTimeNullableFilter<"Scene"> | Date | string | null
   createdAt?: Prisma.DateTimeFilter<"Scene"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"Scene"> | Date | string
   story?: Prisma.XOR<Prisma.StoryScalarRelationFilter, Prisma.StoryWhereInput>
@@ -251,6 +259,7 @@ export type SceneOrderByWithRelationInput = {
   title?: Prisma.SortOrder
   number?: Prisma.SortOrder
   narration?: Prisma.SortOrder
+  deletedAt?: Prisma.SortOrderInput | Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
   story?: Prisma.StoryOrderByWithRelationInput
@@ -267,6 +276,7 @@ export type SceneWhereUniqueInput = Prisma.AtLeast<{
   title?: Prisma.StringFilter<"Scene"> | string
   number?: Prisma.IntFilter<"Scene"> | number
   narration?: Prisma.StringFilter<"Scene"> | string
+  deletedAt?: Prisma.DateTimeNullableFilter<"Scene"> | Date | string | null
   createdAt?: Prisma.DateTimeFilter<"Scene"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"Scene"> | Date | string
   story?: Prisma.XOR<Prisma.StoryScalarRelationFilter, Prisma.StoryWhereInput>
@@ -280,6 +290,7 @@ export type SceneOrderByWithAggregationInput = {
   title?: Prisma.SortOrder
   number?: Prisma.SortOrder
   narration?: Prisma.SortOrder
+  deletedAt?: Prisma.SortOrderInput | Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
   _count?: Prisma.SceneCountOrderByAggregateInput
@@ -299,6 +310,7 @@ export type SceneScalarWhereWithAggregatesInput = {
   title?: Prisma.StringWithAggregatesFilter<"Scene"> | string
   number?: Prisma.IntWithAggregatesFilter<"Scene"> | number
   narration?: Prisma.StringWithAggregatesFilter<"Scene"> | string
+  deletedAt?: Prisma.DateTimeNullableWithAggregatesFilter<"Scene"> | Date | string | null
   createdAt?: Prisma.DateTimeWithAggregatesFilter<"Scene"> | Date | string
   updatedAt?: Prisma.DateTimeWithAggregatesFilter<"Scene"> | Date | string
 }
@@ -309,6 +321,7 @@ export type SceneCreateInput = {
   title: string
   number: number
   narration: string
+  deletedAt?: Date | string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   story: Prisma.StoryCreateNestedOneWithoutScenesInput
@@ -322,6 +335,7 @@ export type SceneUncheckedCreateInput = {
   title: string
   number: number
   narration: string
+  deletedAt?: Date | string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   images?: Prisma.ImageUncheckedCreateNestedManyWithoutSceneInput
@@ -333,6 +347,7 @@ export type SceneUpdateInput = {
   title?: Prisma.StringFieldUpdateOperationsInput | string
   number?: Prisma.IntFieldUpdateOperationsInput | number
   narration?: Prisma.StringFieldUpdateOperationsInput | string
+  deletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   story?: Prisma.StoryUpdateOneRequiredWithoutScenesNestedInput
@@ -346,6 +361,7 @@ export type SceneUncheckedUpdateInput = {
   title?: Prisma.StringFieldUpdateOperationsInput | string
   number?: Prisma.IntFieldUpdateOperationsInput | number
   narration?: Prisma.StringFieldUpdateOperationsInput | string
+  deletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   images?: Prisma.ImageUncheckedUpdateManyWithoutSceneNestedInput
@@ -358,6 +374,7 @@ export type SceneCreateManyInput = {
   title: string
   number: number
   narration: string
+  deletedAt?: Date | string | null
   createdAt?: Date | string
   updatedAt?: Date | string
 }
@@ -368,6 +385,7 @@ export type SceneUpdateManyMutationInput = {
   title?: Prisma.StringFieldUpdateOperationsInput | string
   number?: Prisma.IntFieldUpdateOperationsInput | number
   narration?: Prisma.StringFieldUpdateOperationsInput | string
+  deletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -379,6 +397,7 @@ export type SceneUncheckedUpdateManyInput = {
   title?: Prisma.StringFieldUpdateOperationsInput | string
   number?: Prisma.IntFieldUpdateOperationsInput | number
   narration?: Prisma.StringFieldUpdateOperationsInput | string
+  deletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -400,6 +419,7 @@ export type SceneCountOrderByAggregateInput = {
   title?: Prisma.SortOrder
   number?: Prisma.SortOrder
   narration?: Prisma.SortOrder
+  deletedAt?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
 }
@@ -415,6 +435,7 @@ export type SceneMaxOrderByAggregateInput = {
   title?: Prisma.SortOrder
   number?: Prisma.SortOrder
   narration?: Prisma.SortOrder
+  deletedAt?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
 }
@@ -426,6 +447,7 @@ export type SceneMinOrderByAggregateInput = {
   title?: Prisma.SortOrder
   number?: Prisma.SortOrder
   narration?: Prisma.SortOrder
+  deletedAt?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
 }
@@ -489,6 +511,10 @@ export type IntFieldUpdateOperationsInput = {
   divide?: number
 }
 
+export type NullableDateTimeFieldUpdateOperationsInput = {
+  set?: Date | string | null
+}
+
 export type SceneCreateNestedOneWithoutImagesInput = {
   create?: Prisma.XOR<Prisma.SceneCreateWithoutImagesInput, Prisma.SceneUncheckedCreateWithoutImagesInput>
   connectOrCreate?: Prisma.SceneCreateOrConnectWithoutImagesInput
@@ -509,6 +535,7 @@ export type SceneCreateWithoutStoryInput = {
   title: string
   number: number
   narration: string
+  deletedAt?: Date | string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   images?: Prisma.ImageCreateNestedManyWithoutSceneInput
@@ -520,6 +547,7 @@ export type SceneUncheckedCreateWithoutStoryInput = {
   title: string
   number: number
   narration: string
+  deletedAt?: Date | string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   images?: Prisma.ImageUncheckedCreateNestedManyWithoutSceneInput
@@ -561,6 +589,7 @@ export type SceneScalarWhereInput = {
   title?: Prisma.StringFilter<"Scene"> | string
   number?: Prisma.IntFilter<"Scene"> | number
   narration?: Prisma.StringFilter<"Scene"> | string
+  deletedAt?: Prisma.DateTimeNullableFilter<"Scene"> | Date | string | null
   createdAt?: Prisma.DateTimeFilter<"Scene"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"Scene"> | Date | string
 }
@@ -571,6 +600,7 @@ export type SceneCreateWithoutImagesInput = {
   title: string
   number: number
   narration: string
+  deletedAt?: Date | string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   story: Prisma.StoryCreateNestedOneWithoutScenesInput
@@ -583,6 +613,7 @@ export type SceneUncheckedCreateWithoutImagesInput = {
   title: string
   number: number
   narration: string
+  deletedAt?: Date | string | null
   createdAt?: Date | string
   updatedAt?: Date | string
 }
@@ -609,6 +640,7 @@ export type SceneUpdateWithoutImagesInput = {
   title?: Prisma.StringFieldUpdateOperationsInput | string
   number?: Prisma.IntFieldUpdateOperationsInput | number
   narration?: Prisma.StringFieldUpdateOperationsInput | string
+  deletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   story?: Prisma.StoryUpdateOneRequiredWithoutScenesNestedInput
@@ -621,6 +653,7 @@ export type SceneUncheckedUpdateWithoutImagesInput = {
   title?: Prisma.StringFieldUpdateOperationsInput | string
   number?: Prisma.IntFieldUpdateOperationsInput | number
   narration?: Prisma.StringFieldUpdateOperationsInput | string
+  deletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -631,6 +664,7 @@ export type SceneCreateManyStoryInput = {
   title: string
   number: number
   narration: string
+  deletedAt?: Date | string | null
   createdAt?: Date | string
   updatedAt?: Date | string
 }
@@ -641,6 +675,7 @@ export type SceneUpdateWithoutStoryInput = {
   title?: Prisma.StringFieldUpdateOperationsInput | string
   number?: Prisma.IntFieldUpdateOperationsInput | number
   narration?: Prisma.StringFieldUpdateOperationsInput | string
+  deletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   images?: Prisma.ImageUpdateManyWithoutSceneNestedInput
@@ -652,6 +687,7 @@ export type SceneUncheckedUpdateWithoutStoryInput = {
   title?: Prisma.StringFieldUpdateOperationsInput | string
   number?: Prisma.IntFieldUpdateOperationsInput | number
   narration?: Prisma.StringFieldUpdateOperationsInput | string
+  deletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   images?: Prisma.ImageUncheckedUpdateManyWithoutSceneNestedInput
@@ -663,6 +699,7 @@ export type SceneUncheckedUpdateManyWithoutStoryInput = {
   title?: Prisma.StringFieldUpdateOperationsInput | string
   number?: Prisma.IntFieldUpdateOperationsInput | number
   narration?: Prisma.StringFieldUpdateOperationsInput | string
+  deletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -705,6 +742,7 @@ export type SceneSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = 
   title?: boolean
   number?: boolean
   narration?: boolean
+  deletedAt?: boolean
   createdAt?: boolean
   updatedAt?: boolean
   story?: boolean | Prisma.StoryDefaultArgs<ExtArgs>
@@ -719,6 +757,7 @@ export type SceneSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Extensi
   title?: boolean
   number?: boolean
   narration?: boolean
+  deletedAt?: boolean
   createdAt?: boolean
   updatedAt?: boolean
   story?: boolean | Prisma.StoryDefaultArgs<ExtArgs>
@@ -731,6 +770,7 @@ export type SceneSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensi
   title?: boolean
   number?: boolean
   narration?: boolean
+  deletedAt?: boolean
   createdAt?: boolean
   updatedAt?: boolean
   story?: boolean | Prisma.StoryDefaultArgs<ExtArgs>
@@ -743,11 +783,12 @@ export type SceneSelectScalar = {
   title?: boolean
   number?: boolean
   narration?: boolean
+  deletedAt?: boolean
   createdAt?: boolean
   updatedAt?: boolean
 }
 
-export type SceneOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "sceneId" | "storyId" | "title" | "number" | "narration" | "createdAt" | "updatedAt", ExtArgs["result"]["scene"]>
+export type SceneOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "sceneId" | "storyId" | "title" | "number" | "narration" | "deletedAt" | "createdAt" | "updatedAt", ExtArgs["result"]["scene"]>
 export type SceneInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   story?: boolean | Prisma.StoryDefaultArgs<ExtArgs>
   images?: boolean | Prisma.Scene$imagesArgs<ExtArgs>
@@ -773,6 +814,7 @@ export type $ScenePayload<ExtArgs extends runtime.Types.Extensions.InternalArgs 
     title: string
     number: number
     narration: string
+    deletedAt: Date | null
     createdAt: Date
     updatedAt: Date
   }, ExtArgs["result"]["scene"]>
@@ -1206,6 +1248,7 @@ export interface SceneFieldRefs {
   readonly title: Prisma.FieldRef<"Scene", 'String'>
   readonly number: Prisma.FieldRef<"Scene", 'Int'>
   readonly narration: Prisma.FieldRef<"Scene", 'String'>
+  readonly deletedAt: Prisma.FieldRef<"Scene", 'DateTime'>
   readonly createdAt: Prisma.FieldRef<"Scene", 'DateTime'>
   readonly updatedAt: Prisma.FieldRef<"Scene", 'DateTime'>
 }

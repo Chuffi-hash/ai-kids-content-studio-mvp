@@ -15,6 +15,10 @@ import {
   linkStoryCharacter,
   getAllStories,
   deleteStory,
+  updateScene,
+  deleteScene,
+  restoreScene,
+  updateCharacter,
 } from "../services/database/database.service.js";
 import { ImageGenerationService } from "../services/image-generation/image-generation.service.js";
 import { getImageGenerationProvider } from "../services/image-generation/provider.factory.js";
@@ -148,12 +152,14 @@ contentRouter.post("/story/:storyId/scenes/generate", async (req, res) => {
     }
 
     // Transform character data for the scene generation service
-    // getCharactersByStoryId returns Character objects directly
+    // Include canonical appearance and reference image if available
     const charactersForService = linkedCharacters.map((c) => ({
       name: c.name,
       species: c.species,
       personality: c.personality,
       description: c.visualDescription,
+      canonicalAppearance: c.canonicalAppearance,
+      referenceImageUrl: c.referenceImageUrl,
     }));
 
     const scenes = await generateScenes({
@@ -171,9 +177,7 @@ contentRouter.post("/story/:storyId/scenes/generate", async (req, res) => {
       scenes.map((scene) => {
         const sceneData = {
           id: randomUUID(),
-          sceneId: scene.sceneNumber
-            ? `scene-${scene.sceneNumber}`
-            : `scene-${Date.now()}`,
+          sceneId: `${storyId}-scene-${scene.sceneNumber}`,
           storyId,
           title: `Scene ${scene.sceneNumber}`,
           number: scene.sceneNumber ?? 0,
@@ -198,13 +202,14 @@ contentRouter.post("/story/:storyId/scenes/generate", async (req, res) => {
 contentRouter.get("/story/:storyId", async (req, res) => {
   try {
     const { storyId } = req.params;
+    const includeDeleted = req.query.includeDeleted === 'true';
 
     const story = await getStoryByStoryId(storyId);
     if (!story) {
       return res.status(404).json({ message: "Story not found" });
     }
 
-    const scenes = await getScenesByStoryId(storyId);
+    const scenes = await getScenesByStoryId(storyId, includeDeleted);
     const characters = await getCharactersByStoryId(storyId);
 
     const scenesWithImages = await Promise.all(
@@ -253,6 +258,8 @@ contentRouter.get("/story/:storyId", async (req, res) => {
         species: character.species,
         personality: character.personality,
         description: character.visualDescription,
+        referenceImageUrl: character.referenceImageUrl,
+        canonicalAppearance: character.canonicalAppearance,
       })),
       scenes: scenesWithImages,
     });
@@ -349,6 +356,50 @@ contentRouter.delete("/story/:storyId", async (req, res) => {
   }
 });
 
+contentRouter.put("/scenes/:sceneId", async (req, res) => {
+  try {
+    const { sceneId } = req.params;
+    const { title, narration, number } = req.body;
+
+    const updatedScene = await updateScene(sceneId, {
+      title,
+      narration,
+      number,
+    });
+
+    return res.json(updatedScene);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "Failed to update scene" });
+  }
+});
+
+contentRouter.delete("/scenes/:sceneId", async (req, res) => {
+  try {
+    const { sceneId } = req.params;
+
+    await deleteScene(sceneId);
+
+    return res.json({ success: true });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "Failed to delete scene" });
+  }
+});
+
+contentRouter.post("/scenes/:sceneId/restore", async (req, res) => {
+  try {
+    const { sceneId } = req.params;
+
+    const restoredScene = await restoreScene(sceneId);
+
+    return res.json(restoredScene);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "Failed to restore scene" });
+  }
+});
+
 function getExtensionFromMimeType(mimeType: string): string {
   switch (mimeType) {
     case "image/jpeg":
@@ -428,6 +479,31 @@ contentRouter.post("/scenes/:sceneId/image", async (req, res) => {
       });
     }
 
+    // Fetch characters with full details including canonical appearance and reference image
+    let enhancedCharacters = characters;
+    if (storyId && characters.length > 0) {
+      const linkedCharacters = await getCharactersByStoryId(storyId);
+      enhancedCharacters = characters.map((char: any) => {
+        const fullCharacter = linkedCharacters.find((c: any) => c.id === char.id);
+        if (fullCharacter) {
+          return {
+            name: fullCharacter.name,
+            species: fullCharacter.species,
+            personality: fullCharacter.personality,
+            description: fullCharacter.visualDescription,
+            canonicalAppearance: fullCharacter.canonicalAppearance,
+            referenceImageUrl: fullCharacter.referenceImageUrl,
+          };
+        }
+        return char;
+      });
+    }
+
+    console.log(`[Content] Using ${enhancedCharacters.length} characters for scene generation`);
+    enhancedCharacters.forEach((char: any) => {
+      console.log(`[Content] Character: ${char.name}, hasReferenceImage: ${!!char.referenceImageUrl}, hasCanonicalAppearance: ${!!char.canonicalAppearance}`);
+    });
+
     // Build image prompt from the scene's existing data
     const prompt = buildSceneImagePrompt(
       {
@@ -435,10 +511,11 @@ contentRouter.post("/scenes/:sceneId/image", async (req, res) => {
         title: sceneTitle,
         narration: scene ? scene.narration : description,
       },
-      characters,
+      enhancedCharacters,
     );
 
-    console.log(`[Content] Generated prompt for scene ${sceneId}`);
+    console.log(`[Content] Generated prompt for scene ${sceneId}:`);
+    console.log(prompt);
 
     // Generate image (16:9 aspect ratio - 1024x576)
     const { imageBuffer, mimeType } =

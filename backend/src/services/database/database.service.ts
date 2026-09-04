@@ -52,9 +52,14 @@ export async function createStory(data: {
 }
 
 export async function getStoryByStoryId(storyId: string) {
-  return await prisma.story.findUnique({
-    where: { storyId },
-  });
+  try {
+    return await prisma.story.findUnique({
+      where: { storyId },
+    });
+  } catch (error) {
+    console.error('[Database] Error fetching story by storyId:', storyId, error);
+    throw error;
+  }
 }
 
 export async function getAllStories() {
@@ -81,7 +86,9 @@ export async function createScene(data: {
   return await prisma.scene.upsert({
     where: { sceneId: data.sceneId },
     update: {
+      storyId: data.storyId,
       title: data.title,
+      number: data.number,
       narration: data.narration,
     },
     create: {
@@ -101,10 +108,38 @@ export async function getSceneBySceneId(sceneId: string) {
   });
 }
 
-export async function getScenesByStoryId(storyId: string) {
+export async function getScenesByStoryId(storyId: string, includeDeleted: boolean = false) {
   return await prisma.scene.findMany({
-    where: { storyId },
+    where: { 
+      storyId,
+      ...(includeDeleted ? {} : { deletedAt: null })
+    },
     orderBy: { number: 'asc' },
+  });
+}
+
+export async function updateScene(sceneId: string, data: {
+  title?: string;
+  narration?: string;
+  number?: number;
+}) {
+  return await prisma.scene.update({
+    where: { sceneId },
+    data,
+  });
+}
+
+export async function deleteScene(sceneId: string) {
+  return await prisma.scene.update({
+    where: { sceneId },
+    data: { deletedAt: new Date() },
+  });
+}
+
+export async function restoreScene(sceneId: string) {
+  return await prisma.scene.update({
+    where: { sceneId },
+    data: { deletedAt: null },
   });
 }
 
@@ -165,6 +200,9 @@ export async function createCharacter(data: {
   personality: string;
   visualDescription: string;
   distinctiveFeatures: string;
+  canonicalAppearance?: any;
+  referenceImageUrl?: string;
+  referenceImagePrompt?: string;
 }) {
   // Check if character exists by name
   const existing = await prisma.character.findFirst({
@@ -180,6 +218,9 @@ export async function createCharacter(data: {
         personality: data.personality,
         visualDescription: data.visualDescription,
         distinctiveFeatures: data.distinctiveFeatures,
+        canonicalAppearance: data.canonicalAppearance,
+        referenceImageUrl: data.referenceImageUrl,
+        referenceImagePrompt: data.referenceImagePrompt,
       },
     });
   }
@@ -193,6 +234,9 @@ export async function createCharacter(data: {
       personality: data.personality,
       visualDescription: data.visualDescription,
       distinctiveFeatures: data.distinctiveFeatures,
+      canonicalAppearance: data.canonicalAppearance,
+      referenceImageUrl: data.referenceImageUrl,
+      referenceImagePrompt: data.referenceImagePrompt,
     },
   });
 }
@@ -216,6 +260,22 @@ export async function getAllCharacters() {
 export async function deleteCharacter(id: string) {
   return await prisma.character.delete({
     where: { id },
+  });
+}
+
+export async function updateCharacter(id: string, data: {
+  name?: string;
+  species?: string;
+  personality?: string;
+  visualDescription?: string;
+  distinctiveFeatures?: string;
+  canonicalAppearance?: any;
+  referenceImageUrl?: string;
+  referenceImagePrompt?: string;
+}) {
+  return await prisma.character.update({
+    where: { id },
+    data,
   });
 }
 
