@@ -5,19 +5,31 @@ interface CharacterCardProps {
   character: Character;
   onEdit?: () => void;
   onDelete?: () => void;
+  onGenerateReference?: () => void;
 }
 
 export default function CharacterCard({
   character,
   onEdit,
   onDelete,
+  onGenerateReference,
 }: CharacterCardProps) {
   return (
     <div className="character-card">
-      <div className="character-card-avatar">
-        <div className="character-avatar-placeholder">
-          {character.name.charAt(0).toUpperCase()}
-        </div>
+      <div className="character-card-image">
+        {character.referenceImageUrl ? (
+          <img 
+            src={character.referenceImageUrl} 
+            alt={character.name}
+            className="character-reference-image"
+          />
+        ) : (
+          <div className="character-image-placeholder">
+            <div className="placeholder-icon">🖼️</div>
+            <div className="placeholder-text">Character Reference</div>
+            <div className="placeholder-subtext">Generate an image to use this character as a visual reference in scenes</div>
+          </div>
+        )}
       </div>
       <div className="character-card-content">
         <div className="character-card-header">
@@ -46,15 +58,31 @@ export default function CharacterCard({
           <span className="character-tag">{character.personality}</span>
         </div>
         {character.visualDescription && (
-          <p className="character-card-description">
-            {character.visualDescription}
-          </p>
-        )}
-        {character.distinctiveFeatures && (
-          <div className="character-card-features">
-            {character.distinctiveFeatures}
+          <div className="character-card-description-section">
+            <label>Visual Description</label>
+            <p className="character-card-description">
+              {character.visualDescription}
+            </p>
           </div>
         )}
+        <div className="character-card-footer">
+          {onGenerateReference && !character.referenceImageUrl && (
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={onGenerateReference}
+            >
+              Generate Image
+            </button>
+          )}
+          {onGenerateReference && character.referenceImageUrl && (
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={onGenerateReference}
+            >
+              Regenerate Image
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

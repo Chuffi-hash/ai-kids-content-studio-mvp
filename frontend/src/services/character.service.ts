@@ -7,6 +7,9 @@ export interface Character {
   personality: string;
   visualDescription: string;
   distinctiveFeatures: string;
+  canonicalAppearance?: any;
+  referenceImageUrl?: string;
+  referenceImagePrompt?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -82,4 +85,19 @@ export async function deleteCharacter(id: string): Promise<void> {
   if (!response.ok) {
     throw new Error('Failed to delete character');
   }
+}
+
+export async function generateCharacterReferenceImage(id: string): Promise<{
+  success: boolean;
+  referenceImageUrl: string;
+  referenceImagePrompt: string;
+}> {
+  const API_URL = getApiUrl();
+  const response = await fetch(`${API_URL}/api/characters/${id}/reference-image`, {
+    method: 'POST',
+  });
+  if (!response.ok) {
+    throw new Error('Failed to generate character reference image');
+  }
+  return response.json();
 }

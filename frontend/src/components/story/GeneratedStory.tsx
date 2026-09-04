@@ -10,7 +10,6 @@ interface GeneratedStoryProps {
   onGenerateScenes: () => void;
   isGeneratingScenes?: boolean;
   onOpenProduction?: () => void;
-  onOpenStorybook?: () => void;
 }
 
 type StoryTab = "overview" | "characters" | "scenes" | "production";
@@ -21,7 +20,6 @@ export default function GeneratedStory({
   onGenerateScenes,
   isGeneratingScenes = false,
   onOpenProduction,
-  onOpenStorybook,
 }: GeneratedStoryProps) {
   const [activeTab, setActiveTab] = useState<StoryTab>("overview");
 
@@ -168,14 +166,6 @@ export default function GeneratedStory({
                       onClick={onOpenProduction}
                     >
                       Continue to Production
-                    </button>
-                  )}
-                  {onOpenStorybook && (
-                    <button
-                      className="btn btn-secondary"
-                      onClick={onOpenStorybook}
-                    >
-                      Read Story
                     </button>
                   )}
                 </div>

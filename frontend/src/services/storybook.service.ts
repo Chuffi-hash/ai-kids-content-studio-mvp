@@ -21,6 +21,7 @@ export interface StorybookScene {
   number: number;
   narration: string;
   image: StorybookImage | null;
+  deletedAt?: string | null;
 }
 
 export interface StorybookStory {
@@ -40,13 +41,18 @@ export interface StorybookStory {
     species: string;
     personality: string;
     description: string;
+    referenceImageUrl?: string | null;
+    canonicalAppearance?: any;
   }>;
   scenes: StorybookScene[];
 }
 
-export async function fetchStory(storyId: string): Promise<StorybookStory> {
+export async function fetchStory(storyId: string, includeDeleted: boolean = false): Promise<StorybookStory> {
   const API_URL = getApiUrl();
-  const response = await fetch(`${API_URL}/api/content/story/${storyId}`);
+  const url = includeDeleted 
+    ? `${API_URL}/api/content/story/${storyId}?includeDeleted=true`
+    : `${API_URL}/api/content/story/${storyId}`;
+  const response = await fetch(url);
 
   if (!response.ok) {
     if (response.status === 404) {

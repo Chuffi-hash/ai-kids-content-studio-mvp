@@ -9,6 +9,7 @@ interface CharacterFormProps {
     personality: string;
     visualDescription: string;
     distinctiveFeatures?: string;
+    canonicalAppearance?: any;
   }) => void;
   onCancel: () => void;
 }
@@ -27,6 +28,13 @@ export default function CharacterForm({
   const [distinctiveFeatures, setDistinctiveFeatures] = useState(
     character?.distinctiveFeatures || "",
   );
+  const [gender, setGender] = useState(character?.canonicalAppearance?.gender || "");
+  const [age, setAge] = useState(character?.canonicalAppearance?.age || "");
+  const [body, setBody] = useState(character?.canonicalAppearance?.body || "");
+  const [skinOrFur, setSkinOrFur] = useState(character?.canonicalAppearance?.skinOrFur || "");
+  const [hair, setHair] = useState(character?.canonicalAppearance?.hair || "");
+  const [eyes, setEyes] = useState(character?.canonicalAppearance?.eyes || "");
+  const [clothing, setClothing] = useState(character?.canonicalAppearance?.clothing || "");
   const [errors, setErrors] = useState<{
     name?: string;
     species?: string;
@@ -63,12 +71,22 @@ export default function CharacterForm({
       return;
     }
 
+    const canonicalAppearance: any = {};
+    if (gender) canonicalAppearance.gender = gender;
+    if (age) canonicalAppearance.age = age;
+    if (body) canonicalAppearance.body = body;
+    if (skinOrFur) canonicalAppearance.skinOrFur = skinOrFur;
+    if (hair) canonicalAppearance.hair = hair;
+    if (eyes) canonicalAppearance.eyes = eyes;
+    if (clothing) canonicalAppearance.clothing = clothing;
+
     onSubmit({
       name,
       species,
       personality,
       visualDescription,
       distinctiveFeatures,
+      canonicalAppearance: Object.keys(canonicalAppearance).length > 0 ? canonicalAppearance : undefined,
     });
   }
 
@@ -87,8 +105,8 @@ export default function CharacterForm({
 
       <form onSubmit={handleSubmit} className="character-form-layout">
         <div className="character-form-section">
-          <h3>Character Identity</h3>
-          <div className="form-stack">
+          <h3>Basic Identity</h3>
+          <div className="form-grid">
             <label>
               Name *
               <input
@@ -118,52 +136,123 @@ export default function CharacterForm({
               />
               {errors.species && <div className="field-error">{errors.species}</div>}
             </label>
-
-            <label>
-              Personality *
-              <input
-                type="text"
-                value={personality}
-                onChange={(e) => {
-                  setPersonality(e.target.value);
-                  setErrors((prev) => ({ ...prev, personality: undefined }));
-                }}
-                placeholder="e.g., Gentle, clever, curious"
-                required
-              />
-              {errors.personality && <div className="field-error">{errors.personality}</div>}
-            </label>
           </div>
+          <label>
+            Personality *
+            <input
+              type="text"
+              value={personality}
+              onChange={(e) => {
+                setPersonality(e.target.value);
+                setErrors((prev) => ({ ...prev, personality: undefined }));
+              }}
+              placeholder="e.g., Gentle, clever, curious"
+              required
+            />
+            {errors.personality && <div className="field-error">{errors.personality}</div>}
+          </label>
         </div>
 
         <div className="character-form-section">
           <h3>Visual Identity</h3>
-          <div className="form-stack">
+          <div className="form-grid">
             <label>
-              Visual Description *
-              <textarea
-                value={visualDescription}
-                onChange={(e) => {
-                  setVisualDescription(e.target.value);
-                  setErrors((prev) => ({ ...prev, visualDescription: undefined }));
-                }}
-                placeholder="e.g., Small white rabbit with long ears, blue eyes, green scarf and pink nose"
-                rows={3}
-                required
+              Gender
+              <input
+                type="text"
+                value={gender}
+                onChange={(e) => setGender(e.target.value)}
+                placeholder="e.g., Female, Male, Non-binary"
               />
-              {errors.visualDescription && <div className="field-error">{errors.visualDescription}</div>}
             </label>
 
             <label>
-              Distinctive Features
+              Age
               <input
                 type="text"
-                value={distinctiveFeatures}
-                onChange={(e) => setDistinctiveFeatures(e.target.value)}
-                placeholder="e.g., Green scarf"
+                value={age}
+                onChange={(e) => setAge(e.target.value)}
+                placeholder="e.g., Young child, Teenager, Adult"
+              />
+            </label>
+
+            <label>
+              Body Type
+              <input
+                type="text"
+                value={body}
+                onChange={(e) => setBody(e.target.value)}
+                placeholder="e.g., Small and round, Tall and slender"
+              />
+            </label>
+
+            <label>
+              Skin/Fur Color
+              <input
+                type="text"
+                value={skinOrFur}
+                onChange={(e) => setSkinOrFur(e.target.value)}
+                placeholder="e.g., White fur, Brown skin, Green scales"
+              />
+            </label>
+
+            <label>
+              Hair
+              <input
+                type="text"
+                value={hair}
+                onChange={(e) => setHair(e.target.value)}
+                placeholder="e.g., Long brown hair, Short red hair, No hair"
+              />
+            </label>
+
+            <label>
+              Eyes
+              <input
+                type="text"
+                value={eyes}
+                onChange={(e) => setEyes(e.target.value)}
+                placeholder="e.g., Large blue eyes, Small green eyes"
               />
             </label>
           </div>
+          <label>
+            Clothing
+            <input
+              type="text"
+              value={clothing}
+              onChange={(e) => setClothing(e.target.value)}
+              placeholder="e.g., Blue dress, Red shirt and pants"
+            />
+          </label>
+        </div>
+
+        <div className="character-form-section">
+          <h3>Visual Description</h3>
+          <label>
+            Visual Description *
+            <textarea
+              value={visualDescription}
+              onChange={(e) => {
+                setVisualDescription(e.target.value);
+                setErrors((prev) => ({ ...prev, visualDescription: undefined }));
+              }}
+              placeholder="e.g., Small white rabbit with long ears, blue eyes, green scarf and pink nose"
+              rows={3}
+              required
+            />
+            {errors.visualDescription && <div className="field-error">{errors.visualDescription}</div>}
+          </label>
+
+          <label>
+            Distinctive Features
+            <input
+              type="text"
+              value={distinctiveFeatures}
+              onChange={(e) => setDistinctiveFeatures(e.target.value)}
+              placeholder="e.g., Green scarf"
+            />
+          </label>
         </div>
 
         <div className="character-form-footer">

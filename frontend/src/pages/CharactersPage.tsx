@@ -5,6 +5,7 @@ import {
   createCharacter,
   updateCharacter,
   deleteCharacter,
+  generateCharacterReferenceImage,
 } from "../services/character.service";
 import CharacterLibraryHeader from "../components/characters/CharacterLibraryHeader";
 import CharacterToolbar from "../components/characters/CharacterToolbar";
@@ -49,6 +50,7 @@ export default function CharactersPage() {
     personality: string;
     visualDescription: string;
     distinctiveFeatures?: string;
+    canonicalAppearance?: any;
   }) {
     try {
       setApiError(null);
@@ -68,6 +70,7 @@ export default function CharactersPage() {
     personality: string;
     visualDescription: string;
     distinctiveFeatures?: string;
+    canonicalAppearance?: any;
   }) {
     if (!editingCharacter) return;
     try {
@@ -79,6 +82,17 @@ export default function CharactersPage() {
     } catch (error) {
       console.error("Failed to update character:", error);
       setApiError("Failed to update character. Please try again.");
+    }
+  }
+
+  async function handleGenerateReference(characterId: string) {
+    try {
+      setApiError(null);
+      await generateCharacterReferenceImage(characterId);
+      loadCharacters();
+    } catch (error) {
+      console.error("Failed to generate reference image:", error);
+      setApiError("Failed to generate reference image. Please try again.");
     }
   }
 
@@ -200,6 +214,7 @@ export default function CharactersPage() {
           characters={filteredCharacters}
           onEdit={handleEditCharacter}
           onDelete={handleDeleteCharacter}
+          onGenerateReference={handleGenerateReference}
         />
       )}
 

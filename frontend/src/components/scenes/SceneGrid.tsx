@@ -8,6 +8,8 @@ interface SceneGridProps {
   onSceneClick: (scene: Scene) => void;
   onGenerateImage: (scene: Scene) => void;
   generatingImage?: boolean;
+  onRestoreScene?: (sceneId: string) => void;
+  onDeleteScene?: (sceneId: string) => void;
 }
 
 export function SceneGrid({ 
@@ -16,7 +18,9 @@ export function SceneGrid({
   characters, 
   onSceneClick, 
   onGenerateImage,
-  generatingImage 
+  generatingImage,
+  onRestoreScene,
+  onDeleteScene
 }: SceneGridProps) {
   if (scenes.length === 0) {
     return (
@@ -37,6 +41,8 @@ export function SceneGrid({
           onClick={() => onSceneClick(scene)}
           onGenerateImage={() => onGenerateImage(scene)}
           generatingImage={generatingImage}
+          onRestoreScene={scene.deletedAt && onRestoreScene ? () => onRestoreScene(scene.sceneId) : undefined}
+          onDeleteScene={!scene.deletedAt && onDeleteScene ? () => onDeleteScene(scene.sceneId) : undefined}
         />
       ))}
     </div>

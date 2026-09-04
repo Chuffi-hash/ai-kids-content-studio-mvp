@@ -153,12 +153,6 @@ export default function StoryCreatePage() {
     });
   }
 
-  function goToStorybook() {
-    if (story) {
-      navigate(`/story/${story.id}/read`);
-    }
-  }
-
   return (
     <div className="page">
       <PageHeader
@@ -168,7 +162,9 @@ export default function StoryCreatePage() {
       {apiError && (
         <div className="api-error">
           {apiError}
-          <button onClick={() => setApiError(null)} className="error-close">✕</button>
+          <button onClick={() => setApiError(null)} className="error-close">
+            ✕
+          </button>
         </div>
       )}
       <StoryBuilder

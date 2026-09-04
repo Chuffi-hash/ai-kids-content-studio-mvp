@@ -1,9 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { fetchStory, StorybookStory, StorybookScene } from '../services/storybook.service';
-import { generateSceneImage, Scene } from '../services/scene.service';
+import { generateSceneImage, updateScene, deleteScene } from '../services/scene.service';
 import { PageHeader } from '../components/common/PageHeader';
 import { BackButton } from '../components/common/BackButton';
+import { ConfirmModal } from '../components/common/ConfirmModal';
+import { SceneAssetCard, AssetStatus } from '../components/scenes/SceneAssetCard';
+import SceneModal from '../components/scenes/SceneModal';
 import '../components/scenes/scenes.css';
 
 export default function SceneDetailPage() {
@@ -14,6 +17,8 @@ export default function SceneDetailPage() {
   const [loading, setLoading] = useState(true);
   const [generatingImage, setGeneratingImage] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
 
   useEffect(() => {
     if (storyId) {
@@ -50,27 +55,61 @@ export default function SceneDetailPage() {
         story.characters || []
       );
       
-      // Update scene with new image
-      setScene({
-        ...scene,
-        image: {
-          id: image.id,
-          sceneId: image.sceneId,
-          provider: image.provider,
-          model: image.model,
-          prompt: image.prompt,
-          storageKey: image.storageKey,
-          imageUrl: image.imageUrl,
-          width: image.width,
-          height: image.height,
-          status: image.status,
-        },
-      });
+      // Reload story to get updated scene data
+      const data = await fetchStory(storyId!);
+      setStory(data);
+      const foundScene = data.scenes.find(s => s.sceneId === sceneId);
+      setScene(foundScene || null);
     } catch (error) {
       console.error('Failed to generate image:', error);
       setApiError('Failed to generate image. Please try again.');
     } finally {
       setGeneratingImage(false);
+    }
+  }
+
+  function handleEditScene() {
+    setIsEditing(true);
+  }
+
+  async function handleUpdateScene(data: {
+    title?: string;
+    narration?: string;
+    number?: number;
+  }) {
+    if (!scene) return;
+
+    try {
+      setApiError(null);
+      await updateScene(scene.sceneId, data);
+      setIsEditing(false);
+      
+      // Reload story to get updated scene data
+      const updatedStory = await fetchStory(storyId!);
+      setStory(updatedStory);
+      const foundScene = updatedStory.scenes.find(s => s.sceneId === sceneId);
+      setScene(foundScene || null);
+    } catch (error) {
+      console.error('Failed to update scene:', error);
+      setApiError('Failed to update scene. Please try again.');
+    }
+  }
+
+  function handleDeleteScene() {
+    setDeleteConfirm(true);
+  }
+
+  async function confirmDeleteScene() {
+    if (!scene) return;
+
+    try {
+      setApiError(null);
+      await deleteScene(scene.sceneId);
+      setDeleteConfirm(false);
+      navigate(`/stories/${storyId}`);
+    } catch (error) {
+      console.error('Failed to delete scene:', error);
+      setApiError('Failed to delete scene. Please try again.');
     }
   }
 
@@ -89,7 +128,13 @@ export default function SceneDetailPage() {
         subtitle={story.logline}
         actions={
           <div className="page-actions">
-            <BackButton to={`/stories/${story.storyId}`} label="← Back to Story" />
+            <BackButton to={`/stories/${story.storyId}?tab=scenes`} label="← Back to Scenes" />
+            <button className="btn btn-secondary btn-sm" onClick={handleEditScene}>
+              Edit Scene
+            </button>
+            <button className="btn btn-danger btn-sm" onClick={handleDeleteScene}>
+              Delete Scene
+            </button>
           </div>
         }
       />
@@ -113,48 +158,58 @@ export default function SceneDetailPage() {
         </div>
 
         <div className="scene-detail-section">
-          <h2>Image</h2>
-          <div className="scene-image-section">
-            {scene.image && scene.image.status === 'completed' ? (
-              <div className="scene-image-display">
-                <img
-                  src={scene.image.imageUrl}
-                  alt={`Scene ${scene.number}`}
-                  className="scene-full-image"
-                />
-              </div>
-            ) : (
-              <div className="scene-image-placeholder">
-                <span className="placeholder-icon">🖼️</span>
-                <p>No image generated yet</p>
-              </div>
-            )}
-
-            <button
-              className="primary"
-              onClick={handleGenerateImage}
+          <h2>Production Assets</h2>
+          <div className="scene-assets-grid">
+            <SceneAssetCard
+              type="image"
+              asset={scene.image ? {
+                status: scene.image.status as any,
+                url: scene.image.imageUrl,
+              } : null}
+              onGenerate={handleGenerateImage}
+              onRegenerate={handleGenerateImage}
               disabled={generatingImage}
-            >
-              {generatingImage ? 'Generating...' : (scene.image ? 'Regenerate Image' : 'Generate Image')}
-            </button>
+            />
+            <SceneAssetCard
+              type="voice"
+              asset={null}
+            />
+            <SceneAssetCard
+              type="animation"
+              asset={null}
+            />
+            <SceneAssetCard
+              type="video"
+              asset={null}
+            />
           </div>
         </div>
-
-        <div className="scene-detail-section">
-          <h2>Voice</h2>
-          <p className="muted">Voice generation coming soon.</p>
-        </div>
-
-        <div className="scene-detail-section">
-          <h2>Animation</h2>
-          <p className="muted">Animation features coming soon.</p>
-        </div>
-
-        <div className="scene-detail-section">
-          <h2>Video</h2>
-          <p className="muted">Video generation coming soon.</p>
-        </div>
       </div>
+
+      <SceneModal
+        isOpen={isEditing}
+        scene={scene ? {
+          id: scene.id,
+          sceneId: scene.sceneId,
+          storyId: scene.storyId,
+          title: scene.title,
+          number: scene.number,
+          narration: scene.narration,
+          image: null,
+        } : null}
+        onSubmit={handleUpdateScene}
+        onCancel={() => setIsEditing(false)}
+      />
+
+      <ConfirmModal
+        isOpen={deleteConfirm}
+        title="Delete Scene"
+        message={`Are you sure you want to delete Scene ${scene?.number}? This action cannot be undone.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        onConfirm={confirmDeleteScene}
+        onCancel={() => setDeleteConfirm(false)}
+      />
     </div>
   );
 }
