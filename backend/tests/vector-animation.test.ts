@@ -132,6 +132,55 @@ test("Vector Animation - Kinematics: Motion Path Walking with Auto-Flip", () => 
   assert.strictEqual(revPose.flipX, true); // Auto-flipped facing left
 });
 
+test("Vector Animation - Completed motion path holds its endpoint for later clips", () => {
+  const instance: CharacterInstance = {
+    instanceId: "char-path-hold",
+    characterId: "pip_the_bear",
+    x: 200,
+    y: 450,
+    scale: 1.0,
+    rotation: 0,
+    flipX: false,
+    zIndex: 1,
+  };
+
+  const clips: AnimationClip[] = [
+    {
+      clipId: "clip-path-hold",
+      instanceId: instance.instanceId,
+      action: "walk",
+      startMs: 0,
+      durationMs: 2000,
+      loop: false,
+      motionMode: "motion_path",
+      motionPath: {
+        startX: 200,
+        startY: 450,
+        endX: 800,
+        endY: 380,
+        easing: "linear",
+      },
+    },
+    {
+      clipId: "clip-wave-after-walk",
+      instanceId: instance.instanceId,
+      action: "wave",
+      startMs: 2500,
+      durationMs: 1000,
+      loop: true,
+    },
+  ];
+
+  const afterWalk = evaluatePose(instance, clips, 2250);
+  assert.strictEqual(afterWalk.x, 800);
+  assert.strictEqual(afterWalk.y, 380);
+
+  const duringWave = evaluatePose(instance, clips, 3000);
+  assert.strictEqual(duringWave.activeAction, "wave");
+  assert.strictEqual(duringWave.x, 800);
+  assert.strictEqual(duringWave.y, 380);
+});
+
 test("Vector Animation - Kinematics: Waving and Jumping", () => {
   const instance: CharacterInstance = {
     instanceId: "char-3",
