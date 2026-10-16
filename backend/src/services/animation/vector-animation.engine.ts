@@ -333,7 +333,18 @@ export class VectorAnimationEngine {
         const rightLegTransform = `rotate(${pose.rightLegAngle}, ${parts.rightLeg.pivot.x}, ${parts.rightLeg.pivot.y})`;
         const torsoTransform = `translate(0, ${pose.torsoBobY}) rotate(${pose.torsoAngle}, ${parts.torso.pivot.x}, ${parts.torso.pivot.y}) scale(1, ${pose.chestScaleY})`;
         const leftArmTransform = `translate(0, ${pose.torsoBobY}) rotate(${pose.leftArmAngle}, ${parts.leftArm.pivot.x}, ${parts.leftArm.pivot.y})`;
-        const rightArmTransform = `translate(0, ${pose.torsoBobY}) rotate(${pose.rightArmAngle + pose.rightForearmAngle}, ${parts.rightArm.pivot.x}, ${parts.rightArm.pivot.y})`;
+        const rightArmTransform = `translate(0, ${pose.torsoBobY}) rotate(${pose.rightArmAngle}, ${parts.rightArm.pivot.x}, ${parts.rightArm.pivot.y})`;
+        const rightArmXml = `
+          <g transform="${rightArmTransform}">
+            ${renderPartXml(parts.rightArm, 'translate(0, 0)')}
+            ${parts.rightForearm
+              ? renderPartXml(
+                  parts.rightForearm,
+                  `rotate(${pose.rightForearmAngle}, ${parts.rightForearm.pivot.x}, ${parts.rightForearm.pivot.y})`
+                )
+              : ''}
+          </g>
+        `;
         const headTransform = `translate(0, ${pose.torsoBobY}) rotate(${pose.headAngle}, ${parts.head.pivot.x}, ${parts.head.pivot.y})`;
 
         const shadowY = pose.y + (rig.baseHeight / 2) * pose.scale - 8;
@@ -347,7 +358,7 @@ export class VectorAnimationEngine {
             ${renderPartXml(parts.rightLeg, rightLegTransform)}
             ${renderPartXml(parts.leftArm, leftArmTransform)}
             ${renderPartXml(parts.torso, torsoTransform)}
-            ${renderPartXml(parts.rightArm, rightArmTransform)}
+            ${rightArmXml}
             ${renderPartXml(parts.head, headTransform)}
           </g>
         `;
