@@ -733,12 +733,29 @@ export default function StoryDetailPage() {
         promptOverride
       );
 
-      // Update scene with generated image
+      // Update scene with generated image. If the current animation background is unset
+      // or was using the previous scene image, keep the editor preview and export in sync.
+      // Preserve a separately selected background if it differs from the scene's image.
       const updated = scenes.map((s) => {
         if (s.sceneId !== sceneId) return s;
+
+        const currentBackgroundUrl = s.animationData?.background?.imageUrl;
+        const shouldSyncAnimationBackground =
+          !!s.animationData &&
+          (!currentBackgroundUrl || currentBackgroundUrl === s.imageUrl);
+
         return {
           ...s,
           imageUrl: result.url,
+          animationData: shouldSyncAnimationBackground
+            ? {
+                ...s.animationData!,
+                background: {
+                  imageUrl: result.url,
+                  fit: s.animationData?.background?.fit || 'cover',
+                },
+              }
+            : s.animationData,
           visualPrompt: promptOverride || s.visualPrompt,
           generationStatus: 'completed' as const,
         };
