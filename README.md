@@ -46,22 +46,22 @@ The following code is present in the repository at the time this README was revi
 
 These files confirm that relevant implementation code and test scripts exist. They do **not**, by themselves, prove the frontend/backend builds succeed, every editor interaction works, database changes are deployed, or a real MP4/audio export has been verified in the current environment. No current CI workflow run was found during this review. Run the documented commands and retain actual output when reporting pass/fail status.
 
-## 4. Known Implementation Risks to Verify
+## 4. Source Review Findings and Follow-Up Verification
 
-The source review identified these concrete issues to investigate before adding more features:
+The following findings came from source inspection. Code changes have been made on the `fix/2d-animation-verification` branch for some of them, but build/runtime verification has not yet run in this environment.
 
-1. **Parallel character definitions:** The frontend and backend each have their own Pip/Sammy rig templates. Changes may drift unless tests compare key contract details or the definitions are consolidated safely.
-2. **Preview/export rendering differences:** The browser renderer and backend independently build SVG transforms. Verify that both produce equivalent part rotations, pivot transforms, body motion, scaling, rotation, flip, and layering at the same timestamp.
-3. **Forearm rendering:** The frontend and backend pose evaluators produce forearm angles, but renderer code combines the right forearm angle into the right-arm rotation and does not visibly render the optional forearm part as a separate joint. Wave motion may therefore differ from the intended articulated result.
-4. **Scene-relative timing:** Export renders frame timestamps from zero, while the browser canvas derives time from the timeline playhead and scene start. Verify clip offsets are interpreted consistently for all scenes.
-5. **Frame storage cost:** The vector export currently writes every PNG frame to a temporary directory before FFmpeg encoding. This is not the direct stdin streaming described by earlier drafts; benchmark resource use before changing the pipeline.
-6. **Background paths and MIME types:** Backend SVG rendering resolves local asset paths and currently maps PNG to image/png and other file extensions to image/jpeg. Test JPEG/WebP/other supported backgrounds and missing files.
-7. **Export completion checks:** The assembly service sets a completed status after FFmpeg/copy operations. Verify the resulting file exists, is non-empty, and has valid streams before reporting success.
-8. **Audio behavior:** The scene renderer can create a silent AAC track when there is no narration file. Verify the final master audio logic handles silent segments, narration, and optional background music without dropping or misaligning audio.
-9. **Overlapping clips:** The pose evaluator selects the first active clip for an instance. Define expected behavior for overlapping actions and test it.
-10. **Persistence/autosave:** The data model and update handlers exist; verify debounced saves, race handling, reload restoration, and database persistence rather than assuming them from the presence of handlers.
+1. **Parallel character definitions remain:** The frontend and backend each maintain Pip/Sammy rig templates. The new right-forearm parts were added to both sets, but they can drift. Add contract tests or consolidate the source only after assessing build/runtime constraints.
+2. **Preview/export renderer parity remains to be verified:** The browser and backend independently construct SVG transforms. A separate right forearm is now represented and rendered in both implementations, but visual parity at identical timestamps still needs comparison.
+3. **Completed motion paths now retain their endpoint in code:** Both pose evaluators use the endpoint of the most recently completed non-looping motion-path walk as the base position for later actions. A focused backend regression test was added; it has not yet been executed.
+4. **Scene-relative timing needs end-to-end verification:** Export renders each scene from timestamp zero, while the browser maps the global playhead to scene-relative time. Verify clips start at the expected offsets for every scene.
+5. **Frame storage cost remains:** Vector export writes PNG frames to a temporary directory before FFmpeg encoding. It does not currently stream frames directly to FFmpeg stdin. Benchmark disk and memory use before redesigning it.
+6. **Background path handling was improved; MIME coverage remains:** Export now falls back to the resolved scene image when the animation background URL is absent or invalid. The SVG renderer still needs explicit verification for PNG, JPEG, WebP, missing files, and other media formats.
+7. **Export result validation was added:** The assembly service now checks that the output file exists and is non-empty, then uses FFprobe to verify H.264 video, AAC audio, and a positive duration before reporting completion. This logic still requires execution against real exports.
+8. **Audio behavior needs end-to-end verification:** Silent AAC tracks can be generated for scenes without narration. Verify multi-scene concatenation, narration, optional background music, synchronization, and playback on the actual output file.
+9. **Overlapping clip behavior remains limited:** The pose evaluator selects the first active clip for an instance. Define and test the desired precedence when actions overlap. The current inspector also edits the first clip associated with an instance, so sequential multi-action editing needs an explicit design/test.
+10. **Persistence/autosave requires runtime verification:** The schema field and update handlers exist, but debounced saves, race handling, refresh restoration, and database persistence still need testing.
 
-Fix confirmed defects in priority order and keep changes scoped to the existing implementation.
+Keep changes scoped to the existing editor and preserve working story, media, and audio flows.
 
 ## 5. Phase 0 — Repository Audit Status
 
