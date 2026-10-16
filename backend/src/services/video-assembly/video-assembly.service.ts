@@ -5,6 +5,8 @@ import { execFile } from 'child_process';
 import { randomUUID } from 'crypto';
 // @ts-ignore
 import ffmpegStatic from '@ffmpeg-installer/ffmpeg';
+// @ts-ignore
+import ffprobeStatic from '@ffprobe-installer/ffprobe';
 import { getStoryByStoryId, getScenesByStoryId, getImagesBySceneId } from '../database/database.service.js';
 import { VectorAnimationEngine } from '../animation/vector-animation.engine.js';
 
@@ -177,7 +179,21 @@ export class VideoAssemblyService {
         if ((scene as any).animationData && (scene as any).animationData.characterInstances?.length > 0) {
           await this.renderVectorAnimationSceneSegment({
             ffmpegPath,
-            animationData: (scene as any).animationData,
+            animationData: {
+              ...(scene as any).animationData,
+              // Mirror PreviewCanvas: if no valid animation background is set, use the scene image.
+              // Passing a resolved local path also supports scenes whose background was found in the Images table.
+              background:
+                (scene as any).animationData.background?.imageUrl &&
+                fs.existsSync(this.resolveLocalPath((scene as any).animationData.background.imageUrl))
+                  ? (scene as any).animationData.background
+                  : imagePath && fs.existsSync(imagePath)
+                    ? {
+                        imageUrl: imagePath,
+                        fit: (scene as any).animationData.background?.fit || 'cover',
+                      }
+                    : (scene as any).animationData.background,
+            },
             audioPath: audioPath && fs.existsSync(audioPath) ? audioPath : null,
             durationSec,
             width,
@@ -299,6 +315,31 @@ export class VideoAssemblyService {
       } else {
         // Move assembled file to final storage
         await fs.promises.copyFile(assembledPath, finalOutputPath);
+      }
+
+      // Do not report success unless a non-empty output file exists and ffprobe can read it.
+      const outputStat = await fs.promises.stat(finalOutputPath).catch(() => null);
+      if (!outputStat || !outputStat.isFile() || outputStat.size === 0) {
+        throw new Error('Video export did not produce a non-empty MP4 file.');
+      }
+
+      const ffprobePath = ffprobeStatic?.path || 'ffprobe';
+      const { stdout: probeStdout } = await execFileAsync(ffprobePath, [
+        '-v', 'error',
+        '-show_entries', 'format=duration:stream=codec_type,codec_name',
+        '-of', 'json',
+        finalOutputPath,
+      ]);
+      const probe = JSON.parse(probeStdout);
+      const hasVideoStream = probe.streams?.some(
+        (stream: any) => stream.codec_type === 'video' && stream.codec_name === 'h264'
+      );
+      const hasAudioStream = probe.streams?.some(
+        (stream: any) => stream.codec_type === 'audio' && stream.codec_name === 'aac'
+      );
+      const outputDurationSec = Number.parseFloat(probe.format?.duration || '0');
+      if (!hasVideoStream || !hasAudioStream || !Number.isFinite(outputDurationSec) || outputDurationSec <= 0) {
+        throw new Error('Export validation failed: expected playable H.264 video and AAC audio streams.');
       }
 
       const downloadUrl = `/storage/exports/${finalFilename}`;
