@@ -18,6 +18,7 @@ test("Vector Animation - Rig Templates", () => {
   assert.ok(pip.parts.head);
   assert.ok(pip.parts.leftArm);
   assert.ok(pip.parts.rightArm);
+  assert.ok(pip.parts.rightForearm, "Pip rig must expose a separate forearm pivot");
   assert.ok(pip.parts.leftLeg);
   assert.ok(pip.parts.rightLeg);
 
@@ -26,6 +27,7 @@ test("Vector Animation - Rig Templates", () => {
   assert.strictEqual(sammy.species, "Human");
   assert.ok(sammy.parts.torso);
   assert.ok(sammy.parts.head);
+  assert.ok(sammy.parts.rightForearm, "Sammy rig must expose a separate forearm pivot");
 });
 
 test("Vector Animation - Kinematics: In-Place Walking", () => {
@@ -259,6 +261,7 @@ test("Vector Animation - Headless Resvg Rasterization to PNG Buffer", () => {
 
   assert.ok(svgXml.includes("<svg"));
   assert.ok(svgXml.includes("char-test-pip"));
+  assert.ok(svgXml.includes('id="rightForearm"'), "Export SVG must render the separate forearm joint");
   assert.ok(svgXml.includes("</svg>"));
 
   // Test PNG rasterization
