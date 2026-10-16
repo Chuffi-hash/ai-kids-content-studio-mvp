@@ -81,6 +81,19 @@ export function evaluatePose(
 ): EvaluatedPose {
   const instanceClips = clips.filter((c) => c.instanceId === instance.instanceId);
 
+  // Keep the character at the end of its most recently completed non-looping motion path.
+  // This also provides the starting transform for later clips (for example, wave after walk).
+  const completedMotionPathClip = instanceClips
+    .filter(
+      (c) =>
+        c.action === 'walk' &&
+        c.motionMode === 'motion_path' &&
+        !!c.motionPath &&
+        !c.loop &&
+        sceneRelativeMs > c.startMs + c.durationMs
+    )
+    .sort((a, b) => (b.startMs + b.durationMs) - (a.startMs + a.durationMs))[0];
+
   let activeClip: AnimationClip | null = null;
   for (const clip of instanceClips) {
     const endMs = clip.startMs + clip.durationMs;
@@ -90,11 +103,17 @@ export function evaluatePose(
     }
   }
 
-  let currentX = instance.x;
-  let currentY = instance.y;
+  let currentX = completedMotionPathClip?.motionPath?.endX ?? instance.x;
+  let currentY = completedMotionPathClip?.motionPath?.endY ?? instance.y;
   let currentScale = instance.scale || 1.0;
   let currentRotation = instance.rotation || 0;
-  let currentFlipX = instance.flipX || false;
+  let currentFlipX = completedMotionPathClip?.motionPath
+    ? completedMotionPathClip.motionPath.endX < completedMotionPathClip.motionPath.startX
+      ? true
+      : completedMotionPathClip.motionPath.endX > completedMotionPathClip.motionPath.startX
+        ? false
+        : instance.flipX || false
+    : instance.flipX || false;
 
   let torsoBobY = 0;
   let torsoAngle = 0;
@@ -178,7 +197,8 @@ export function evaluatePose(
       case 'jump': {
         const jumpHeight = 110;
         const verticalDisplacement = -4 * jumpHeight * u * (1 - u);
-        currentY = instance.y + verticalDisplacement;
+        // Apply jumping relative to the current timeline position, including a completed walk path.
+        currentY += verticalDisplacement;
 
         if (u < 0.15) {
           chestScaleY = 0.85;
@@ -313,7 +333,18 @@ export class VectorAnimationEngine {
         const rightLegTransform = `rotate(${pose.rightLegAngle}, ${parts.rightLeg.pivot.x}, ${parts.rightLeg.pivot.y})`;
         const torsoTransform = `translate(0, ${pose.torsoBobY}) rotate(${pose.torsoAngle}, ${parts.torso.pivot.x}, ${parts.torso.pivot.y}) scale(1, ${pose.chestScaleY})`;
         const leftArmTransform = `translate(0, ${pose.torsoBobY}) rotate(${pose.leftArmAngle}, ${parts.leftArm.pivot.x}, ${parts.leftArm.pivot.y})`;
-        const rightArmTransform = `translate(0, ${pose.torsoBobY}) rotate(${pose.rightArmAngle + pose.rightForearmAngle}, ${parts.rightArm.pivot.x}, ${parts.rightArm.pivot.y})`;
+        const rightArmTransform = `translate(0, ${pose.torsoBobY}) rotate(${pose.rightArmAngle}, ${parts.rightArm.pivot.x}, ${parts.rightArm.pivot.y})`;
+        const rightArmXml = `
+          <g transform="${rightArmTransform}">
+            ${renderPartXml(parts.rightArm, 'translate(0, 0)')}
+            ${parts.rightForearm
+              ? renderPartXml(
+                  parts.rightForearm,
+                  `rotate(${pose.rightForearmAngle}, ${parts.rightForearm.pivot.x}, ${parts.rightForearm.pivot.y})`
+                )
+              : ''}
+          </g>
+        `;
         const headTransform = `translate(0, ${pose.torsoBobY}) rotate(${pose.headAngle}, ${parts.head.pivot.x}, ${parts.head.pivot.y})`;
 
         const shadowY = pose.y + (rig.baseHeight / 2) * pose.scale - 8;
@@ -327,7 +358,7 @@ export class VectorAnimationEngine {
             ${renderPartXml(parts.rightLeg, rightLegTransform)}
             ${renderPartXml(parts.leftArm, leftArmTransform)}
             ${renderPartXml(parts.torso, torsoTransform)}
-            ${renderPartXml(parts.rightArm, rightArmTransform)}
+            ${rightArmXml}
             ${renderPartXml(parts.head, headTransform)}
           </g>
         `;

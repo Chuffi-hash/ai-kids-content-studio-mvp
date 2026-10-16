@@ -87,7 +87,7 @@ export const VectorCharacterRenderer: React.FC<VectorCharacterRendererProps> = (
   const rightLegTransform = `rotate(${pose.rightLegAngle}, ${parts.rightLeg.pivot.x}, ${parts.rightLeg.pivot.y})`;
   const torsoTransform = `translate(0, ${pose.torsoBobY}) rotate(${pose.torsoAngle}, ${parts.torso.pivot.x}, ${parts.torso.pivot.y}) scale(1, ${pose.chestScaleY})`;
   const leftArmTransform = `translate(0, ${pose.torsoBobY}) rotate(${pose.leftArmAngle}, ${parts.leftArm.pivot.x}, ${parts.leftArm.pivot.y})`;
-  const rightArmTransform = `translate(0, ${pose.torsoBobY}) rotate(${pose.rightArmAngle + pose.rightForearmAngle}, ${parts.rightArm.pivot.x}, ${parts.rightArm.pivot.y})`;
+  const rightArmTransform = `translate(0, ${pose.torsoBobY}) rotate(${pose.rightArmAngle}, ${parts.rightArm.pivot.x}, ${parts.rightArm.pivot.y})`;
   const headTransform = `translate(0, ${pose.torsoBobY}) rotate(${pose.headAngle}, ${parts.head.pivot.x}, ${parts.head.pivot.y})`;
 
   return (
@@ -116,9 +116,17 @@ export const VectorCharacterRenderer: React.FC<VectorCharacterRendererProps> = (
         {parts.torso.shapes.map(renderShape)}
       </g>
 
-      {/* 3. Front Arm (Right Arm for waving and gesture actions) */}
+      {/* 3. Front Arm. Forearm motion is nested under the shoulder transform. */}
       <g id="rightArm" transform={rightArmTransform}>
         {parts.rightArm.shapes.map(renderShape)}
+        {parts.rightForearm && (
+          <g
+            id="rightForearm"
+            transform={`rotate(${pose.rightForearmAngle}, ${parts.rightForearm.pivot.x}, ${parts.rightForearm.pivot.y})`}
+          >
+            {parts.rightForearm.shapes.map(renderShape)}
+          </g>
+        )}
       </g>
 
       {/* 4. Head Group */}
