@@ -200,24 +200,29 @@ export const PIP_THE_BEAR: VectorRigDefinition = {
     // Right Arm (Character's right, viewer's front arm for waving)
     rightArm: {
       id: 'rightArm',
-      label: 'Right Arm',
+      label: 'Right Upper Arm',
       pivot: { x: 30, y: -4 },
       zIndex: 3, // In front of torso
       shapes: [
-        // Upper arm & paw
         {
           type: 'path',
-          d: 'M 30 -4 Q 48 15 38 34 Q 28 42 22 32 Q 22 10 30 -4 Z',
+          d: 'M 30 -4 Q 43 0 43 14 L 36 20 Q 29 11 30 -4 Z',
           fill: '#b45309',
         },
-        // Paw pads
+      ],
+    },
+    rightForearm: {
+      id: 'rightForearm',
+      label: 'Right Forearm & Paw',
+      pivot: { x: 39, y: 17 },
+      zIndex: 4,
+      shapes: [
         {
-          type: 'circle',
-          cx: 30,
-          cy: 32,
-          r: 4,
-          fill: '#fef3c7',
+          type: 'path',
+          d: 'M 39 14 Q 47 24 38 34 Q 29 40 23 31 L 33 18 Z',
+          fill: '#b45309',
         },
+        { type: 'circle', cx: 30, cy: 32, r: 4, fill: '#fef3c7' },
       ],
     },
 
@@ -397,20 +402,33 @@ export const SAMMY_THE_KID: VectorRigDefinition = {
     },
     rightArm: {
       id: 'rightArm',
-      label: 'Right Arm',
+      label: 'Right Upper Arm',
       pivot: { x: 28, y: -4 },
       zIndex: 3,
       shapes: [
         {
           type: 'path',
-          d: 'M 26 -4 Q 42 12 34 32 Q 24 38 18 30 Q 18 8 26 -4 Z',
+          d: 'M 26 -4 Q 39 0 38 14 L 31 19 Q 24 9 26 -4 Z',
           fill: '#fed7aa',
         },
         // Shirt sleeve
         {
           type: 'path',
-          d: 'M 28 -4 Q 40 6 32 14 L 20 8 Z',
+          d: 'M 28 -4 Q 40 6 34 14 L 25 8 Z',
           fill: '#f59e0b',
+        },
+      ],
+    },
+    rightForearm: {
+      id: 'rightForearm',
+      label: 'Right Forearm',
+      pivot: { x: 34, y: 14 },
+      zIndex: 4,
+      shapes: [
+        {
+          type: 'path',
+          d: 'M 34 12 Q 43 21 34 31 Q 27 36 21 29 L 28 16 Z',
+          fill: '#fed7aa',
         },
       ],
     },
