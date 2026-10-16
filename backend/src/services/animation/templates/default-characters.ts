@@ -100,11 +100,20 @@ export const PIP_THE_BEAR: VectorRigDefinition = {
     },
     rightArm: {
       id: 'rightArm',
-      label: 'Right Arm',
+      label: 'Right Upper Arm',
       pivot: { x: 30, y: -4 },
       zIndex: 3,
       shapes: [
-        { type: 'path', d: 'M 30 -4 Q 48 15 38 34 Q 28 42 22 32 Q 22 10 30 -4 Z', fill: '#b45309' },
+        { type: 'path', d: 'M 30 -4 Q 43 0 43 14 L 36 20 Q 29 11 30 -4 Z', fill: '#b45309' },
+      ],
+    },
+    rightForearm: {
+      id: 'rightForearm',
+      label: 'Right Forearm & Paw',
+      pivot: { x: 39, y: 17 },
+      zIndex: 4,
+      shapes: [
+        { type: 'path', d: 'M 39 14 Q 47 24 38 34 Q 29 40 23 31 L 33 18 Z', fill: '#b45309' },
         { type: 'circle', cx: 30, cy: 32, r: 4, fill: '#fef3c7' },
       ],
     },
