@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Character, getAllCharacters } from '../../services/character.service';
+import { CloseIcon, PlusIcon } from '../common/Icons';
 
 interface CharacterSelectorProps {
   selectedIds: string[];
@@ -58,7 +59,7 @@ export default function CharacterSelector({ selectedIds, onChange, disabled }: C
                 disabled={disabled}
                 aria-label={`Remove ${character.name}`}
               >
-                ✕
+                <CloseIcon size={12} />
               </button>
             </div>
           ))
@@ -68,8 +69,10 @@ export default function CharacterSelector({ selectedIds, onChange, disabled }: C
           className="character-selector-add-btn"
           onClick={() => setIsOpen(true)}
           disabled={disabled || loading}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}
         >
-          + Add Character
+          <PlusIcon size={14} />
+          <span>Add Character</span>
         </button>
       </div>
 
@@ -83,7 +86,7 @@ export default function CharacterSelector({ selectedIds, onChange, disabled }: C
               onClick={() => setIsOpen(false)}
               aria-label="Close"
             >
-              ✕
+              <CloseIcon size={14} />
             </button>
           </div>
 
@@ -117,7 +120,7 @@ export default function CharacterSelector({ selectedIds, onChange, disabled }: C
                     className="character-selector-item-add"
                     aria-label={`Add ${character.name}`}
                   >
-                    +
+                    <PlusIcon size={14} />
                   </button>
                 </div>
               ))}

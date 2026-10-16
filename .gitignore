@@ -2,5 +2,15 @@ node_modules
 dist
 .env
 .DS_Store
-storage/*
-!storage/.gitkeep
+
+# Storage and generated media files (never commit to git / GitHub)
+storage/**
+!storage/**/.gitkeep
+backend/storage/**
+!backend/storage/**/.gitkeep
+**/storage/audio/**
+**/storage/videos/**
+**/storage/exports/**
+**/storage/temp/**
+**/storage/images/**
+**/storage/music/**

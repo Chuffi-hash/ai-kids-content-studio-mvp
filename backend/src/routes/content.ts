@@ -1,4 +1,6 @@
 import { Router } from "express";
+import fs from "fs";
+import path from "path";
 import { generateStory } from "../services/story.service.js";
 import { generateScenes } from "../services/scene.service.js";
 import {
@@ -19,14 +21,22 @@ import {
   deleteScene,
   restoreScene,
   updateCharacter,
+  updateStoryMetadata,
+  batchUpdateSceneTimelines,
+  createSceneVersion,
+  getSceneVersions,
+  restoreSceneVersion,
 } from "../services/database/database.service.js";
 import { ImageGenerationService } from "../services/image-generation/image-generation.service.js";
 import { getImageGenerationProvider } from "../services/image-generation/provider.factory.js";
 import { LocalStorageService } from "../services/storage/local-storage.service.js";
 import { buildSceneImagePrompt } from "../services/image-generation/prompt-builder.js";
+import { AudioGenerationService } from "../services/audio-generation/audio-generation.service.js";
+import { estimateSpeechDurationMs, formatTimeMs } from "../services/timing/timing.service.js";
 import { randomUUID } from "crypto";
 
 export const contentRouter = Router();
+const audioGenerationService = new AudioGenerationService();
 
 contentRouter.get("/modules", (_req, res) => {
   res.json([
@@ -172,16 +182,30 @@ contentRouter.post("/story/:storyId/scenes/generate", async (req, res) => {
       sceneCount: 5,
     });
 
-    // Save scenes to PostgreSQL immediately (do not wait for image generation)
+    // Save scenes to PostgreSQL immediately with realistic calculated timings
+    let runningTimeMs = 0;
     const savedScenes = await Promise.all(
-      scenes.map((scene) => {
+      scenes.map((scene, index) => {
+        const estimatedDurationMs = estimateSpeechDurationMs(scene.narration);
+        const startMs = runningTimeMs;
+        const endMs = startMs + estimatedDurationMs;
+        runningTimeMs = endMs;
+
         const sceneData = {
           id: randomUUID(),
           sceneId: `${storyId}-scene-${scene.sceneNumber}`,
           storyId,
           title: `Scene ${scene.sceneNumber}`,
-          number: scene.sceneNumber ?? 0,
+          number: scene.sceneNumber ?? index + 1,
+          order: index + 1,
+          startMs,
+          endMs,
           narration: scene.narration,
+          visualPrompt: scene.description,
+          cameraDirection: "Eye level wide establishing shot",
+          characterIds: JSON.stringify(linkedCharacters.map((c) => c.id)),
+          estimatedDurationMs,
+          generationStatus: "draft",
         };
         return createScene(sceneData);
       }),
@@ -216,13 +240,42 @@ contentRouter.get("/story/:storyId", async (req, res) => {
       scenes.map(async (scene: any) => {
         const images = await getImagesBySceneId(scene.sceneId);
         const latestImage = images.length > 0 ? images[0] : null;
+
+        // Parse characterIds if stored as JSON string
+        let parsedCharacterIds: string[] = [];
+        if (scene.characterIds) {
+          try {
+            parsedCharacterIds = JSON.parse(scene.characterIds);
+          } catch {
+            parsedCharacterIds = [scene.characterIds];
+          }
+        }
+
         return {
           id: scene.id,
           sceneId: scene.sceneId,
           storyId: scene.storyId,
           title: scene.title,
           number: scene.number,
+          order: scene.order ?? scene.number,
+          startMs: scene.startMs ?? 0,
+          endMs: scene.endMs ?? 0,
           narration: scene.narration,
+          visualPrompt: scene.visualPrompt || null,
+          cameraDirection: scene.cameraDirection || "Eye level wide establishing shot",
+          characterIds: parsedCharacterIds,
+          imageUrl: scene.imageUrl || (latestImage ? latestImage.imageUrl : null),
+          videoUrl: scene.videoUrl || null,
+          audioUrl: scene.audioUrl || null,
+          generationStatus: scene.generationStatus || "draft",
+          estimatedDurationMs: scene.estimatedDurationMs || 0,
+          actualAudioDurationMs: scene.actualAudioDurationMs || null,
+          generationError: scene.generationError || null,
+          animationData: scene.animationData || null,
+          versions: scene.versions || [],
+          deletedAt: scene.deletedAt || null,
+          createdAt: scene.createdAt,
+          updatedAt: scene.updatedAt,
           image: latestImage
             ? {
                 id: latestImage.id,
@@ -252,6 +305,7 @@ contentRouter.get("/story/:storyId", async (req, res) => {
       audience: story.audience,
       genre: story.genre,
       visualStyle: story.visualStyle,
+      targetDuration: story.targetDuration || null,
       characters: characters.map((character) => ({
         id: character.id,
         name: character.name,
@@ -343,34 +397,459 @@ contentRouter.put("/story/:storyId", async (req, res) => {
   }
 });
 
-contentRouter.delete("/story/:storyId", async (req, res) => {
+contentRouter.delete(["/story/:storyId", "/stories/:storyId"], async (req, res) => {
   try {
     const { storyId } = req.params;
 
     await deleteStory(storyId);
 
     return res.json({ success: true });
-  } catch (error) {
-    console.error(error);
-    return res.status(500).json({ message: "Failed to delete story" });
+  } catch (error: any) {
+    console.error("[Content] Error deleting story:", error);
+    return res.status(500).json({ message: error?.message || "Failed to delete story" });
+  }
+});
+
+// Update story metadata (title, logline, lesson, targetDuration, etc.) without regenerating
+contentRouter.patch("/story/:storyId", async (req, res) => {
+  try {
+    const { storyId } = req.params;
+    const { title, logline, lesson, targetDuration, topic, ageGroup, audience, genre, visualStyle } = req.body;
+
+    const existingStory = await getStoryByStoryId(storyId);
+    if (!existingStory) {
+      return res.status(404).json({ message: "Story not found" });
+    }
+
+    const updated = await updateStoryMetadata(storyId, {
+      title,
+      logline,
+      lesson,
+      targetDuration: targetDuration !== undefined ? targetDuration : undefined,
+      topic,
+      ageGroup,
+      audience,
+      genre,
+      visualStyle,
+    });
+
+    return res.json(updated);
+  } catch (error: any) {
+    console.error("[Content] Failed to update story metadata:", error);
+    return res.status(500).json({ message: error.message || "Failed to update story metadata" });
+  }
+});
+
+// Create a new scene in a story
+contentRouter.post("/story/:storyId/scenes", async (req, res) => {
+  try {
+    const { storyId } = req.params;
+    const { title, narration, visualPrompt, cameraDirection, durationMs = 5000 } = req.body;
+
+    const story = await getStoryByStoryId(storyId);
+    if (!story) return res.status(404).json({ message: "Story not found" });
+
+    const existingScenes = await getScenesByStoryId(storyId, false);
+    const lastScene = existingScenes[existingScenes.length - 1];
+
+    const nextNumber = (lastScene?.number ?? 0) + 1;
+    const nextOrder = (lastScene?.order ?? 0) + 1;
+    const startMs = lastScene?.endMs ?? 0;
+    const endMs = startMs + Math.max(1500, durationMs);
+    const sceneId = `${storyId}-scene-${randomUUID().slice(0, 8)}`;
+
+    const newScene = await createScene({
+      id: randomUUID(),
+      sceneId,
+      storyId,
+      title: title || `Scene ${nextNumber}`,
+      number: nextNumber,
+      order: nextOrder,
+      startMs,
+      endMs,
+      narration: narration || "",
+      visualPrompt: visualPrompt || null,
+      cameraDirection: cameraDirection || "Eye level wide establishing shot",
+      estimatedDurationMs: durationMs,
+      generationStatus: "draft",
+    });
+
+    return res.status(201).json(newScene);
+  } catch (error: any) {
+    console.error("[Content] Failed to create scene:", error);
+    return res.status(500).json({ message: error.message || "Failed to create scene" });
+  }
+});
+
+// Batch update scene timeline timings and orders
+contentRouter.put("/story/:storyId/scenes/timeline", async (req, res) => {
+  try {
+    const { storyId } = req.params;
+    const { scenes } = req.body;
+
+    if (!Array.isArray(scenes)) {
+      return res.status(400).json({ message: "scenes array is required" });
+    }
+
+    await batchUpdateSceneTimelines(storyId, scenes);
+    return res.json({ success: true, count: scenes.length });
+  } catch (error: any) {
+    console.error("[Content] Failed to update timeline:", error);
+    return res.status(500).json({ message: error.message || "Failed to update timeline" });
   }
 });
 
 contentRouter.put("/scenes/:sceneId", async (req, res) => {
   try {
     const { sceneId } = req.params;
-    const { title, narration, number } = req.body;
+    const {
+      title,
+      narration,
+      number,
+      order,
+      startMs,
+      endMs,
+      visualPrompt,
+      cameraDirection,
+      characterIds,
+      imageUrl,
+      videoUrl,
+      audioUrl,
+      generationStatus,
+      estimatedDurationMs,
+      actualAudioDurationMs,
+      generationError,
+      animationData,
+    } = req.body;
 
     const updatedScene = await updateScene(sceneId, {
       title,
       narration,
       number,
+      order,
+      startMs,
+      endMs,
+      visualPrompt,
+      cameraDirection,
+      characterIds: Array.isArray(characterIds) ? JSON.stringify(characterIds) : characterIds,
+      imageUrl,
+      videoUrl,
+      audioUrl,
+      generationStatus,
+      estimatedDurationMs,
+      actualAudioDurationMs,
+      generationError,
+      animationData: animationData !== undefined ? animationData : undefined,
     });
 
     return res.json(updatedScene);
   } catch (error) {
     console.error(error);
     return res.status(500).json({ message: "Failed to update scene" });
+  }
+});
+
+// Duplicate a scene
+contentRouter.post("/scenes/:sceneId/duplicate", async (req, res) => {
+  try {
+    const { sceneId } = req.params;
+    const scene = await getSceneBySceneId(sceneId);
+    if (!scene) return res.status(404).json({ message: "Scene not found" });
+
+    const allScenes = await getScenesByStoryId(scene.storyId, false);
+    const sceneDuration = scene.endMs - scene.startMs > 0 ? scene.endMs - scene.startMs : (scene.estimatedDurationMs || 5000);
+    const newSceneId = `${scene.storyId}-scene-${randomUUID().slice(0, 8)}`;
+
+    const duplicatedScene = await createScene({
+      id: randomUUID(),
+      sceneId: newSceneId,
+      storyId: scene.storyId,
+      title: `${scene.title} (Copy)`,
+      number: scene.number + 1,
+      order: scene.order + 1,
+      startMs: scene.endMs,
+      endMs: scene.endMs + sceneDuration,
+      narration: scene.narration,
+      visualPrompt: scene.visualPrompt,
+      cameraDirection: scene.cameraDirection,
+      characterIds: scene.characterIds,
+      imageUrl: scene.imageUrl,
+      videoUrl: scene.videoUrl,
+      audioUrl: scene.audioUrl,
+      estimatedDurationMs: sceneDuration,
+      actualAudioDurationMs: scene.actualAudioDurationMs,
+      generationStatus: scene.generationStatus,
+      animationData: (scene as any).animationData || null,
+    });
+
+    // Ripple subsequent scenes
+    const subsequent = allScenes.filter((s) => s.order > scene.order && s.sceneId !== sceneId);
+    if (subsequent.length > 0) {
+      const updates = subsequent.map((s) => ({
+        sceneId: s.sceneId,
+        order: s.order + 1,
+        startMs: s.startMs + sceneDuration,
+        endMs: s.endMs + sceneDuration,
+        estimatedDurationMs: s.estimatedDurationMs,
+        actualAudioDurationMs: s.actualAudioDurationMs,
+      }));
+      await batchUpdateSceneTimelines(scene.storyId, updates);
+    }
+
+    return res.status(201).json(duplicatedScene);
+  } catch (error: any) {
+    console.error("[Content] Failed to duplicate scene:", error);
+    return res.status(500).json({ message: error.message || "Failed to duplicate scene" });
+  }
+});
+
+// Split a scene at playhead position splitMs
+contentRouter.post("/scenes/:sceneId/split", async (req, res) => {
+  try {
+    const { sceneId } = req.params;
+    const { splitMs } = req.body;
+
+    if (!splitMs || typeof splitMs !== "number") {
+      return res.status(400).json({ message: "Valid splitMs (number) is required" });
+    }
+
+    const scene = await getSceneBySceneId(sceneId);
+    if (!scene) return res.status(404).json({ message: "Scene not found" });
+
+    if (splitMs <= scene.startMs + 500 || splitMs >= scene.endMs - 500) {
+      return res.status(400).json({
+        message: `Split position must be at least 500ms away from scene edges (${scene.startMs + 500}ms - ${scene.endMs - 500}ms)`,
+      });
+    }
+
+    const originalEndMs = scene.endMs;
+    // Update Scene A
+    await updateScene(sceneId, {
+      endMs: splitMs,
+      estimatedDurationMs: splitMs - scene.startMs,
+    });
+
+    // Create Scene B
+    const newSceneId = `${scene.storyId}-scene-${randomUUID().slice(0, 8)}`;
+    const newScene = await createScene({
+      id: randomUUID(),
+      sceneId: newSceneId,
+      storyId: scene.storyId,
+      title: `${scene.title} (Part 2)`,
+      number: scene.number + 1,
+      order: scene.order + 1,
+      startMs: splitMs,
+      endMs: originalEndMs,
+      narration: "",
+      visualPrompt: scene.visualPrompt,
+      cameraDirection: scene.cameraDirection,
+      characterIds: scene.characterIds,
+      imageUrl: scene.imageUrl,
+      estimatedDurationMs: originalEndMs - splitMs,
+      generationStatus: "draft",
+    });
+
+    // Increment orders of all subsequent scenes
+    const allScenes = await getScenesByStoryId(scene.storyId, false);
+    const subsequent = allScenes.filter((s) => s.order > scene.order && s.sceneId !== sceneId && s.sceneId !== newSceneId);
+    if (subsequent.length > 0) {
+      const updates = subsequent.map((s) => ({
+        sceneId: s.sceneId,
+        order: s.order + 1,
+        startMs: s.startMs,
+        endMs: s.endMs,
+        estimatedDurationMs: s.estimatedDurationMs,
+        actualAudioDurationMs: s.actualAudioDurationMs,
+      }));
+      await batchUpdateSceneTimelines(scene.storyId, updates);
+    }
+
+    return res.json({ success: true, sceneAId: sceneId, sceneB: newScene });
+  } catch (error: any) {
+    console.error("[Content] Failed to split scene:", error);
+    return res.status(500).json({ message: error.message || "Failed to split scene" });
+  }
+});
+
+// Merge scene with next adjacent scene
+contentRouter.post("/scenes/:sceneId/merge", async (req, res) => {
+  try {
+    const { sceneId } = req.params;
+    const { targetSceneId } = req.body;
+
+    const sceneA = await getSceneBySceneId(sceneId);
+    if (!sceneA) return res.status(404).json({ message: "First scene not found" });
+
+    let sceneB;
+    if (targetSceneId) {
+      sceneB = await getSceneBySceneId(targetSceneId);
+    } else {
+      const allScenes = await getScenesByStoryId(sceneA.storyId, false);
+      const nextIndex = allScenes.findIndex((s) => s.sceneId === sceneId) + 1;
+      sceneB = allScenes[nextIndex];
+    }
+
+    if (!sceneB) {
+      return res.status(400).json({ message: "No adjacent scene found to merge with" });
+    }
+
+    // Combine narration and expand duration
+    const mergedNarration = [sceneA.narration, sceneB.narration].filter(Boolean).join(" ");
+    const mergedEndMs = Math.max(sceneA.endMs, sceneB.endMs);
+    const mergedDuration = mergedEndMs - sceneA.startMs;
+
+    await updateScene(sceneA.sceneId, {
+      narration: mergedNarration,
+      endMs: mergedEndMs,
+      estimatedDurationMs: mergedDuration,
+    });
+
+    // Soft delete Scene B
+    await deleteScene(sceneB.sceneId);
+
+    // Reindex remaining scenes
+    const remainingScenes = await getScenesByStoryId(sceneA.storyId, false);
+    const updates = remainingScenes.map((s, idx) => ({
+      sceneId: s.sceneId,
+      order: idx + 1,
+      startMs: s.startMs,
+      endMs: s.endMs,
+      estimatedDurationMs: s.estimatedDurationMs,
+      actualAudioDurationMs: s.actualAudioDurationMs,
+    }));
+    await batchUpdateSceneTimelines(sceneA.storyId, updates);
+
+    return res.json({ success: true, mergedSceneId: sceneA.sceneId });
+  } catch (error: any) {
+    console.error("[Content] Failed to merge scenes:", error);
+    return res.status(500).json({ message: error.message || "Failed to merge scenes" });
+  }
+});
+
+// Scene versioning endpoints
+contentRouter.get("/scenes/:sceneId/versions", async (req, res) => {
+  try {
+    const { sceneId } = req.params;
+    const versions = await getSceneVersions(sceneId);
+    return res.json(versions);
+  } catch (error: any) {
+    console.error("[Content] Failed to get scene versions:", error);
+    return res.status(500).json({ message: "Failed to get scene versions" });
+  }
+});
+
+contentRouter.post("/scenes/:sceneId/versions/:versionId/restore", async (req, res) => {
+  try {
+    const { sceneId, versionId } = req.params;
+    const restored = await restoreSceneVersion(sceneId, versionId);
+    return res.json({ success: true, scene: restored });
+  } catch (error: any) {
+    console.error("[Content] Failed to restore scene version:", error);
+    return res.status(500).json({ message: error.message || "Failed to restore scene version" });
+  }
+});
+
+// Real voice / narration generation endpoint
+contentRouter.post("/scenes/:sceneId/voice", async (req, res) => {
+  try {
+    const { sceneId } = req.params;
+    const { narration, lang } = req.body;
+
+    const scene = await getSceneBySceneId(sceneId);
+    if (!scene) {
+      return res.status(404).json({ message: "Scene not found" });
+    }
+
+    const textToSpeak = narration || scene.narration;
+    if (!textToSpeak || textToSpeak.trim().length === 0) {
+      return res.status(400).json({ message: "Scene has no narration text to speak" });
+    }
+
+    const result = await audioGenerationService.generateNarrationAudio({
+      sceneId,
+      narration: textToSpeak,
+      lang: lang || "en",
+    });
+
+    return res.json({
+      success: true,
+      sceneId,
+      audioUrl: result.audioUrl,
+      durationMs: result.durationMs,
+    });
+  } catch (error: any) {
+    console.error(`[Content] Voice generation failed for scene ${req.params.sceneId}:`, error);
+    return res.status(500).json({ message: error.message || "Failed to generate voice narration" });
+  }
+});
+
+// Delete / remove narration audio from a scene
+contentRouter.delete("/scenes/:sceneId/voice", async (req, res) => {
+  try {
+    const { sceneId } = req.params;
+    await audioGenerationService.removeSceneAudio(sceneId);
+    return res.json({ success: true, sceneId });
+  } catch (error: any) {
+    console.error(`[Content] Failed to remove narration audio for scene ${req.params.sceneId}:`, error);
+    return res.status(500).json({ message: error.message || "Failed to remove narration audio" });
+  }
+});
+
+// Upload audio endpoint (music soundtrack, narration, sound effect)
+contentRouter.post("/audio/upload", async (req, res) => {
+  try {
+    const { filename, fileData, category = 'music' } = req.body;
+    if (!filename || !fileData) {
+      return res.status(400).json({ message: "filename and fileData (base64) are required" });
+    }
+
+    const result = await audioGenerationService.saveUploadedAudio({
+      filename,
+      base64Data: fileData,
+      category,
+    });
+
+    return res.json({
+      success: true,
+      audio: result,
+    });
+  } catch (error: any) {
+    console.error("[Content] Failed to upload audio:", error);
+    return res.status(500).json({ message: error.message || "Failed to upload audio" });
+  }
+});
+
+// List available soundtrack music presets and uploaded tracks
+contentRouter.get("/music/tracks", async (req, res) => {
+  try {
+    const musicDir = path.join(process.cwd(), process.env.STORAGE_DIR || "./storage", "music");
+    const tracks: Array<{ id: string; label: string; url?: string; durationMs?: number; isCustom?: boolean }> = [
+      { id: "gentle-storybook", label: "Gentle Storybook (Calm & Warm)", url: "/storage/music/gentle-storybook.mp3" },
+      { id: "playful-adventure", label: "Playful Adventure (Upbeat & Cheerful)", url: "/storage/music/playful-adventure.mp3" },
+      { id: "whimsical-forest", label: "Whimsical Forest (Magical & Light)", url: "/storage/music/whimsical-forest.mp3" },
+      { id: "none", label: "No Background Music (Voice Only)" },
+    ];
+
+    if (fs.existsSync(musicDir)) {
+      const files = await fs.promises.readdir(musicDir);
+      for (const file of files) {
+        if (file.startsWith("upload-") && (file.endsWith(".mp3") || file.endsWith(".wav") || file.endsWith(".m4a"))) {
+          const trackUrl = `/storage/music/${file}`;
+          const cleanName = file.replace(/^upload-\d+-/, "").replace(/\.[^.]+$/, "");
+          tracks.push({
+            id: trackUrl,
+            label: `Custom: ${cleanName}`,
+            url: trackUrl,
+            isCustom: true,
+          });
+        }
+      }
+    }
+
+    return res.json(tracks);
+  } catch (error: any) {
+    console.error("[Content] Failed to list music tracks:", error);
+    return res.status(500).json({ message: "Failed to list music tracks" });
   }
 });
 
@@ -504,15 +983,18 @@ contentRouter.post("/scenes/:sceneId/image", async (req, res) => {
       console.log(`[Content] Character: ${char.name}, hasReferenceImage: ${!!char.referenceImageUrl}, hasCanonicalAppearance: ${!!char.canonicalAppearance}`);
     });
 
-    // Build image prompt from the scene's existing data
-    const prompt = buildSceneImagePrompt(
-      {
-        description: sceneDescription,
-        title: sceneTitle,
-        narration: scene ? scene.narration : description,
-      },
-      enhancedCharacters,
-    );
+    // Build image prompt from custom prompt or scene's existing data
+    const customPrompt = req.body.prompt;
+    const prompt = (customPrompt && typeof customPrompt === "string" && customPrompt.trim().length > 0)
+      ? customPrompt.trim()
+      : buildSceneImagePrompt(
+          {
+            description: sceneDescription,
+            title: sceneTitle,
+            narration: scene ? scene.narration : description,
+          },
+          enhancedCharacters,
+        );
 
     console.log(`[Content] Generated prompt for scene ${sceneId}:`);
     console.log(prompt);
@@ -556,6 +1038,24 @@ contentRouter.post("/scenes/:sceneId/image", async (req, res) => {
       width: 1024,
       height: 576,
       status: "completed",
+    });
+
+    // Update scene record with latest imageUrl and visualPrompt
+    await updateScene(sceneId, {
+      imageUrl: url,
+      visualPrompt: prompt,
+      generationStatus: "completed",
+    });
+
+    // Record scene version
+    await createSceneVersion({
+      id: randomUUID(),
+      sceneId,
+      prompt,
+      imageUrl: url,
+      cameraDirection: scene?.cameraDirection,
+      narration: scene?.narration,
+      durationMs: scene && scene.endMs > scene.startMs ? scene.endMs - scene.startMs : undefined,
     });
 
     console.log(

@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import StoryCard from "../components/story/StoryCard";
 import { getAllStories, deleteStory, Story } from "../services/story.service";
 import { ConfirmModal } from "../components/common/ConfirmModal";
+import { SearchIcon, CloseIcon } from "../components/common/Icons";
 import "../components/story/stories-library.css";
 
 export default function StoriesPage() {
@@ -98,13 +99,16 @@ export default function StoriesPage() {
 
       {apiError && (
         <div className="api-error">
-          {apiError}
-          <button onClick={() => setApiError(null)} className="error-close">✕</button>
+          <span>{apiError}</span>
+          <button onClick={() => setApiError(null)} className="error-close" aria-label="Dismiss error">
+            <CloseIcon size={14} />
+          </button>
         </div>
       )}
 
       <div className="stories-toolbar">
         <div className="toolbar-search">
+          <SearchIcon className="search-icon" size={15} />
           <input
             type="text"
             placeholder="Search stories..."

@@ -6,7 +6,7 @@ export class MockVideoProvider implements VideoGenerationProvider {
     await new Promise(resolve => setTimeout(resolve, 1000));
     
     // Extract scene number from image URL if possible
-    const sceneMatch = input.imageUrl.match(/Scene\+(\d+)/);
+    const sceneMatch = input.imageUrl?.match(/Scene\+(\d+)/);
     const sceneNumber = sceneMatch ? sceneMatch[1] : '1';
     
     return {

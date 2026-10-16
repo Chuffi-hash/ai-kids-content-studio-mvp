@@ -4,6 +4,7 @@ import { fetchStory, StorybookStory, StorybookScene } from '../../services/story
 import { resolveAssetUrl } from '../../utils/urlHelper';
 import { PageHeader } from '../common/PageHeader';
 import { BackButton } from '../common/BackButton';
+import { ImageIcon, AlertTriangleIcon, ArrowLeftIcon, ArrowRightIcon } from '../common/Icons';
 import './storybook-viewer.css';
 
 interface StorybookViewerProps {
@@ -124,7 +125,7 @@ export default function StorybookViewer({ storyId: propStoryId }: StorybookViewe
           subtitle={story?.logline}
           actions={
             <div className="page-actions">
-              <BackButton to={`/stories/${story?.storyId}`} label="← Back to Story" />
+              <BackButton to={`/stories/${story?.storyId}`} label="Back to Story" />
             </div>
           }
         />
@@ -146,7 +147,9 @@ export default function StorybookViewer({ storyId: propStoryId }: StorybookViewe
     if (!image) {
       return (
         <div className="image-placeholder">
-          <span className="placeholder-icon">🖼️</span>
+          <span className="placeholder-icon">
+            <ImageIcon size={44} color="#64748b" />
+          </span>
           <p>No image available</p>
         </div>
       );
@@ -155,7 +158,9 @@ export default function StorybookViewer({ storyId: propStoryId }: StorybookViewe
     if (image.status === 'failed') {
       return (
         <div className="image-error">
-          <span className="error-icon">⚠️</span>
+          <span className="error-icon">
+            <AlertTriangleIcon size={44} color="#ef4444" />
+          </span>
           <p>Image generation failed</p>
         </div>
       );
@@ -173,7 +178,9 @@ export default function StorybookViewer({ storyId: propStoryId }: StorybookViewe
     if (imageError[currentScene.sceneId]) {
       return (
         <div className="image-error">
-          <span className="error-icon">⚠️</span>
+          <span className="error-icon">
+            <AlertTriangleIcon size={44} color="#ef4444" />
+          </span>
           <p>Failed to load image</p>
         </div>
       );
@@ -198,7 +205,7 @@ export default function StorybookViewer({ storyId: propStoryId }: StorybookViewe
         subtitle={story.logline}
         actions={
           <div className="page-actions">
-            <BackButton to={`/stories/${story.storyId}`} label="← Back to Story" />
+            <BackButton to={`/stories/${story.storyId}`} label="Back to Story" />
           </div>
         }
       />
@@ -225,7 +232,8 @@ export default function StorybookViewer({ storyId: propStoryId }: StorybookViewe
             disabled={isFirstScene}
             aria-label="Previous scene"
           >
-            ← Previous
+            <ArrowLeftIcon size={16} />
+            <span>Previous</span>
           </button>
 
           <div className="progress-indicator">
@@ -244,7 +252,8 @@ export default function StorybookViewer({ storyId: propStoryId }: StorybookViewe
             disabled={isLastScene}
             aria-label="Next scene"
           >
-            Next →
+            <span>Next</span>
+            <ArrowRightIcon size={16} />
           </button>
         </div>
       </div>

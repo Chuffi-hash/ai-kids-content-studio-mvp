@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Character } from "../../services/character.service";
+import { CloseIcon } from "../common/Icons";
 
 interface CharacterFormProps {
   character?: Character | null;
@@ -91,19 +92,20 @@ export default function CharacterForm({
   }
 
   return (
-    <div className="character-form">
+    <form onSubmit={handleSubmit} className="character-form">
       <div className="character-form-header">
         <h2>{character ? "Edit Character" : "Create Character"}</h2>
         <button
           className="character-form-close"
           onClick={onCancel}
           aria-label="Close"
+          type="button"
         >
-          ✕
+          <CloseIcon size={16} />
         </button>
       </div>
 
-      <form onSubmit={handleSubmit} className="character-form-layout">
+      <div className="character-form-layout character-form-body">
         <div className="character-form-section">
           <h3>Basic Identity</h3>
           <div className="form-grid">
@@ -254,20 +256,20 @@ export default function CharacterForm({
             />
           </label>
         </div>
+      </div>
 
-        <div className="character-form-footer">
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={onCancel}
-          >
-            Cancel
-          </button>
-          <button type="submit" className="btn btn-primary">
-            {character ? "Update Character" : "Create Character"}
-          </button>
-        </div>
-      </form>
-    </div>
+      <div className="character-form-footer">
+        <button
+          type="button"
+          className="btn btn-secondary"
+          onClick={onCancel}
+        >
+          Cancel
+        </button>
+        <button type="submit" className="btn btn-primary">
+          {character ? "Update Character" : "Create Character"}
+        </button>
+      </div>
+    </form>
   );
 }

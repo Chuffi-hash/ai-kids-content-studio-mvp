@@ -5,6 +5,7 @@ import { generateSceneImage, updateScene, deleteScene } from '../services/scene.
 import { PageHeader } from '../components/common/PageHeader';
 import { BackButton } from '../components/common/BackButton';
 import { ConfirmModal } from '../components/common/ConfirmModal';
+import { CloseIcon } from '../components/common/Icons';
 import { SceneAssetCard, AssetStatus } from '../components/scenes/SceneAssetCard';
 import SceneModal from '../components/scenes/SceneModal';
 import '../components/scenes/scenes.css';
@@ -128,7 +129,7 @@ export default function SceneDetailPage() {
         subtitle={story.logline}
         actions={
           <div className="page-actions">
-            <BackButton to={`/stories/${story.storyId}?tab=scenes`} label="← Back to Scenes" />
+            <BackButton to={`/stories/${story.storyId}?tab=scenes`} label="Back to Scenes" />
             <button className="btn btn-secondary btn-sm" onClick={handleEditScene}>
               Edit Scene
             </button>
@@ -141,8 +142,10 @@ export default function SceneDetailPage() {
 
       {apiError && (
         <div className="api-error">
-          {apiError}
-          <button onClick={() => setApiError(null)} className="error-close">✕</button>
+          <span>{apiError}</span>
+          <button onClick={() => setApiError(null)} className="error-close" aria-label="Dismiss error">
+            <CloseIcon size={12} />
+          </button>
         </div>
       )}
 

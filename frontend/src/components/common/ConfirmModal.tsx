@@ -1,3 +1,5 @@
+import { CloseIcon } from './Icons';
+
 interface ConfirmModalProps {
   isOpen: boolean;
   title: string;
@@ -25,7 +27,7 @@ export function ConfirmModal({
         <div className="modal-header">
           <h2>{title}</h2>
           <button className="modal-close" onClick={onCancel} aria-label="Close">
-            ✕
+            <CloseIcon size={16} />
           </button>
         </div>
         <div className="modal-body">

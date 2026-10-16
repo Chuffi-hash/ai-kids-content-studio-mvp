@@ -53,6 +53,7 @@ export const AnyNull = runtime.AnyNull
 export const ModelName = {
   Story: 'Story',
   Scene: 'Scene',
+  SceneVersion: 'SceneVersion',
   Image: 'Image',
   Character: 'Character',
   StoryCharacter: 'StoryCharacter'
@@ -85,6 +86,7 @@ export const StoryScalarFieldEnum = {
   audience: 'audience',
   genre: 'genre',
   visualStyle: 'visualStyle',
+  targetDuration: 'targetDuration',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 } as const
@@ -98,13 +100,44 @@ export const SceneScalarFieldEnum = {
   storyId: 'storyId',
   title: 'title',
   number: 'number',
+  order: 'order',
+  startMs: 'startMs',
+  endMs: 'endMs',
   narration: 'narration',
+  visualPrompt: 'visualPrompt',
+  cameraDirection: 'cameraDirection',
+  characterIds: 'characterIds',
+  imageUrl: 'imageUrl',
+  videoUrl: 'videoUrl',
+  audioUrl: 'audioUrl',
+  generationStatus: 'generationStatus',
+  estimatedDurationMs: 'estimatedDurationMs',
+  actualAudioDurationMs: 'actualAudioDurationMs',
+  generationError: 'generationError',
+  animationData: 'animationData',
   deletedAt: 'deletedAt',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 } as const
 
 export type SceneScalarFieldEnum = (typeof SceneScalarFieldEnum)[keyof typeof SceneScalarFieldEnum]
+
+
+export const SceneVersionScalarFieldEnum = {
+  id: 'id',
+  sceneId: 'sceneId',
+  versionNumber: 'versionNumber',
+  prompt: 'prompt',
+  narration: 'narration',
+  cameraDirection: 'cameraDirection',
+  imageUrl: 'imageUrl',
+  videoUrl: 'videoUrl',
+  audioUrl: 'audioUrl',
+  durationMs: 'durationMs',
+  createdAt: 'createdAt'
+} as const
+
+export type SceneVersionScalarFieldEnum = (typeof SceneVersionScalarFieldEnum)[keyof typeof SceneVersionScalarFieldEnum]
 
 
 export const ImageScalarFieldEnum = {
@@ -132,6 +165,7 @@ export const CharacterScalarFieldEnum = {
   personality: 'personality',
   visualDescription: 'visualDescription',
   distinctiveFeatures: 'distinctiveFeatures',
+  isLocked: 'isLocked',
   canonicalAppearance: 'canonicalAppearance',
   referenceImageUrl: 'referenceImageUrl',
   referenceImagePrompt: 'referenceImagePrompt',

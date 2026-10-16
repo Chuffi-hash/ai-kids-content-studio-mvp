@@ -298,7 +298,7 @@
 
 .scene-image-action {
   margin-top: 8px;
-  border: 1px solid #bfdbfe;
+  border: 1px solid rgba(59, 130, 246, 0.4);
   border-radius: var(--radius-xs);
   padding: 6px 10px;
   background: var(--color-accent-soft);
@@ -306,11 +306,12 @@
   cursor: pointer;
   font-size: 12px;
   font-weight: 600;
-  transition: background-color 0.15s ease;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
 }
 
 .scene-image-action:hover:not(:disabled) {
-  background: #dbeafe;
+  background: rgba(59, 130, 246, 0.25);
+  border-color: #3b82f6;
 }
 
 .scene-image-action:disabled {

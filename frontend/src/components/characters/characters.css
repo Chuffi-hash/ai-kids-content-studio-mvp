@@ -42,31 +42,17 @@
   position: relative;
 }
 
-.toolbar-search input {
-  padding-left: 32px;
-}
-
-.toolbar-search::before {
-  content: "";
+.toolbar-search .search-icon {
   position: absolute;
-  left: 11px;
+  left: 12px;
   top: 50%;
   transform: translateY(-50%);
-  width: 13px;
-  height: 13px;
-  border: 1.5px solid var(--color-text-faint);
-  border-radius: 50%;
+  color: var(--color-text-muted);
+  pointer-events: none;
 }
 
-.toolbar-search::after {
-  content: "";
-  position: absolute;
-  left: 22px;
-  top: calc(50% + 5px);
-  width: 6px;
-  height: 1.5px;
-  background: var(--color-text-faint);
-  transform: rotate(45deg);
+.toolbar-search input {
+  padding-left: 34px;
 }
 
 /* ---------------------- Character grid ---------------------- */
@@ -309,10 +295,12 @@
 
 .character-modal {
   background: var(--color-surface);
+  border: 1px solid var(--color-border);
   border-radius: 12px;
   width: 100%;
   max-width: 640px;
-  max-height: 90vh;
+  max-height: calc(100vh - 48px);
+  height: min(760px, calc(100vh - 48px));
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -321,7 +309,8 @@
 
 @media (max-width: 768px) {
   .character-modal {
-    max-height: 95vh;
+    max-height: calc(100vh - 20px);
+    height: calc(100vh - 20px);
   }
 }
 
@@ -330,6 +319,8 @@
   display: flex;
   flex-direction: column;
   height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .character-form-header {
@@ -339,6 +330,7 @@
   gap: 12px;
   padding: 16px 20px;
   border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface);
   flex-shrink: 0;
 }
 
@@ -346,6 +338,7 @@
   margin: 0;
   font-size: 16px;
   font-weight: 600;
+  color: var(--color-text);
 }
 
 .character-form-close {
@@ -357,6 +350,9 @@
   padding: 4px 6px;
   border-radius: var(--radius-xs);
   line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .character-form-close:hover {
@@ -364,8 +360,10 @@
   color: var(--color-text);
 }
 
-.character-form-layout {
-  flex: 1;
+.character-form-layout,
+.character-form-body {
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
   padding: 20px;
   display: flex;
@@ -390,12 +388,14 @@
 
 .character-form-footer {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
-  gap: 10px;
-  padding: 14px 20px;
+  gap: 12px;
+  padding: 16px 20px;
   border-top: 1px solid var(--color-border);
   background: var(--color-surface);
   flex-shrink: 0;
+  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.15);
 }
 
 /* ---------------------- Character Selector ---------------------- */

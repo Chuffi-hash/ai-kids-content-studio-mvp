@@ -24,7 +24,8 @@
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
-  padding: 20px;
+  padding: 22px 24px;
+  box-shadow: var(--shadow-card);
 }
 
 .story-builder-section-header {
@@ -37,26 +38,32 @@
 
 .story-builder-section-header h2 {
   margin: 0;
-  font-size: 15px;
-  font-weight: 600;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--color-text);
   letter-spacing: -0.01em;
 }
 
 .story-builder-section-header .muted {
   margin: 0;
   font-size: 13px;
+  color: var(--color-text-muted);
 }
 
 /* ---------------------- Story settings (compact row) ---------------------- */
 .story-settings {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 12px;
+  gap: 16px;
 }
 
 .story-settings label {
-  gap: 5px;
+  gap: 6px;
   font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
 }
 
 /* ---------------------- Story idea ---------------------- */
@@ -74,9 +81,9 @@
 }
 
 .story-idea-input .hint {
-  font-size: 12px;
-  color: var(--color-text-faint);
-  margin: 0;
+  font-size: 13px;
+  color: var(--color-text-muted);
+  margin: 2px 0 0 0;
 }
 
 /* ---------------------- Optional purpose ---------------------- */
@@ -96,13 +103,13 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 5px 8px 5px 5px;
+  padding: 6px 12px 6px 6px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-full);
-  background: var(--color-surface);
+  background: var(--color-surface-elevated);
   font-size: 13px;
   font-weight: 500;
-  color: var(--color-text-secondary);
+  color: var(--color-text);
 }
 
 .character-chip-initial {
@@ -137,6 +144,7 @@
   color: var(--color-text-muted);
   font-size: 13px;
   margin: 0;
+  margin-right: 8px;
 }
 
 .page-section {

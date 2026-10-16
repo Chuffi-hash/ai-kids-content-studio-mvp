@@ -10,6 +10,7 @@
  */
 export type * from './models/Story.js'
 export type * from './models/Scene.js'
+export type * from './models/SceneVersion.js'
 export type * from './models/Image.js'
 export type * from './models/Character.js'
 export type * from './models/StoryCharacter.js'

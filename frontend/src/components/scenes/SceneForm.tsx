@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Scene } from '../../services/scene.service';
+import { CloseIcon } from '../common/Icons';
 
 interface SceneFormProps {
   scene?: Scene | null;
@@ -53,11 +54,12 @@ export default function SceneForm({ scene, onSubmit, onCancel }: SceneFormProps)
       <div className="scene-form-header">
         <h2>{scene ? 'Edit Scene' : 'Add Scene'}</h2>
         <button
+          type="button"
           className="scene-form-close"
           onClick={onCancel}
           aria-label="Close"
         >
-          ✕
+          <CloseIcon size={16} />
         </button>
       </div>
 

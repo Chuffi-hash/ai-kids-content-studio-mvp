@@ -4,16 +4,21 @@
   "scripts": {
     "dev": "tsx watch src/bootstrap.ts",
     "build": "tsc",
-    "start": "node dist/src/bootstrap.js"
+    "start": "node dist/src/bootstrap.js",
+    "test": "tsx --test tests/**/*.test.ts"
   },
   "dependencies": {
+    "@ffmpeg-installer/ffmpeg": "^1.1.0",
+    "@ffprobe-installer/ffprobe": "^2.1.2",
     "@huggingface/inference": "^4.13.25",
     "@prisma/adapter-pg": "^7.9.1",
     "@prisma/client": "^7.9.1",
+    "@resvg/resvg-js": "^2.6.2",
     "better-sqlite3": "^13.0.3",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^5.1.0",
+    "google-tts-api": "^2.0.2",
     "ollama": "^0.6.3",
     "openai": "^7.4.0",
     "pg": "^8.23.0",

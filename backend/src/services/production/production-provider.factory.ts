@@ -5,6 +5,8 @@ import { HuggingFaceImageProvider } from "./image-generation/providers/huggingfa
 import { PollinationsImageProvider } from "./image-generation/providers/pollinations-image.provider.js";
 import { VideoGenerationProvider } from "./video-generation/video-generation.provider.js";
 import { MockVideoProvider } from "./video-generation/providers/mock-video.provider.js";
+import { FFmpegVideoProvider } from "./video-generation/providers/ffmpeg-video.provider.js";
+import { AIVideoProvider } from "./video-generation/providers/ai-video.provider.js";
 import { LocalStorageService } from "../storage/local-storage.service.js";
 
 export function getImageGenerationProvider(): ImageGenerationProvider {
@@ -30,23 +32,25 @@ export function getImageGenerationProvider(): ImageGenerationProvider {
   }
 }
 
-export function getVideoGenerationProvider(): VideoGenerationProvider {
-  const providerType = process.env.VIDEO_PROVIDER || "mock";
+export function getVideoGenerationProvider(workflow?: 'ffmpeg' | 'ai'): VideoGenerationProvider {
+  if (workflow === 'ai') {
+    return new AIVideoProvider();
+  }
+
+  const providerType = process.env.VIDEO_PROVIDER || "ffmpeg";
 
   switch (providerType) {
+    case "ai":
+      return new AIVideoProvider();
+    case "ffmpeg":
+      return new FFmpegVideoProvider();
     case "mock":
-      return new MockVideoProvider();
+      return new FFmpegVideoProvider();
     case "runway":
-      throw new Error(
-        "RunwayProvider is not yet implemented. Set VIDEO_PROVIDER=mock to use the mock provider.",
-      );
-    case "pika":
-      throw new Error(
-        "PikaProvider is not yet implemented. Set VIDEO_PROVIDER=mock to use the mock provider.",
-      );
+    case "replicate":
+      return new AIVideoProvider();
     default:
-      throw new Error(
-        `Unsupported VIDEO_PROVIDER value: "${providerType}". Supported values: mock, runway, pika`,
-      );
+      return new FFmpegVideoProvider();
   }
 }
+

@@ -1,4 +1,6 @@
+import React from 'react';
 import { resolveAssetUrl } from '../../utils/urlHelper';
+import { ImageIcon, MicIcon, FilmIcon, VideoIcon } from '../common/Icons';
 
 export type AssetType = 'image' | 'voice' | 'animation' | 'video';
 
@@ -23,16 +25,23 @@ const assetLabels: Record<AssetType, string> = {
   video: 'Video',
 };
 
-const assetIcons: Record<AssetType, string> = {
-  image: '🖼️',
-  voice: '🎙️',
-  animation: '🎬',
-  video: '📹',
-};
+function renderAssetIcon(type: AssetType, size = 18) {
+  switch (type) {
+    case 'image':
+      return <ImageIcon size={size} />;
+    case 'voice':
+      return <MicIcon size={size} />;
+    case 'animation':
+      return <FilmIcon size={size} />;
+    case 'video':
+      return <VideoIcon size={size} />;
+    default:
+      return <FilmIcon size={size} />;
+  }
+}
 
 export function SceneAssetCard({ type, asset, onGenerate, onRegenerate, disabled }: SceneAssetCardProps) {
   const label = assetLabels[type];
-  const icon = assetIcons[type];
   
   const getStatusBadge = () => {
     if (!asset) return <span className="asset-status-badge pending">Pending</span>;
@@ -55,7 +64,7 @@ export function SceneAssetCard({ type, asset, onGenerate, onRegenerate, disabled
     if (!asset || asset.status !== 'completed' || !asset.url) {
       return (
         <div className="asset-placeholder">
-          <span className="asset-placeholder-icon">{icon}</span>
+          <span className="asset-placeholder-icon">{renderAssetIcon(type, 28)}</span>
           <span className="asset-placeholder-text">No {label.toLowerCase()} yet</span>
         </div>
       );
@@ -73,7 +82,7 @@ export function SceneAssetCard({ type, asset, onGenerate, onRegenerate, disabled
 
     return (
       <div className="asset-preview-placeholder">
-        <span className="asset-preview-icon">{icon}</span>
+        <span className="asset-preview-icon">{renderAssetIcon(type, 28)}</span>
         <span className="asset-preview-text">{label} ready</span>
       </div>
     );
@@ -83,7 +92,7 @@ export function SceneAssetCard({ type, asset, onGenerate, onRegenerate, disabled
     <div className="scene-asset-card">
       <div className="asset-card-header">
         <div className="asset-card-title">
-          <span className="asset-icon">{icon}</span>
+          <span className="asset-icon">{renderAssetIcon(type, 16)}</span>
           <span>{label}</span>
         </div>
         {getStatusBadge()}
@@ -96,6 +105,7 @@ export function SceneAssetCard({ type, asset, onGenerate, onRegenerate, disabled
       <div className="asset-card-actions">
         {asset?.status === 'completed' && onRegenerate && (
           <button
+            type="button"
             className="btn btn-secondary btn-sm"
             onClick={onRegenerate}
             disabled={disabled}
@@ -105,6 +115,7 @@ export function SceneAssetCard({ type, asset, onGenerate, onRegenerate, disabled
         )}
         {(!asset || asset.status !== 'completed') && onGenerate && (
           <button
+            type="button"
             className="btn btn-primary btn-sm"
             onClick={onGenerate}
             disabled={disabled || asset?.status === 'generating'}

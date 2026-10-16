@@ -31,6 +31,7 @@ export type CharacterMinAggregateOutputType = {
   personality: string | null
   visualDescription: string | null
   distinctiveFeatures: string | null
+  isLocked: boolean | null
   referenceImageUrl: string | null
   referenceImagePrompt: string | null
   createdAt: Date | null
@@ -44,6 +45,7 @@ export type CharacterMaxAggregateOutputType = {
   personality: string | null
   visualDescription: string | null
   distinctiveFeatures: string | null
+  isLocked: boolean | null
   referenceImageUrl: string | null
   referenceImagePrompt: string | null
   createdAt: Date | null
@@ -57,6 +59,7 @@ export type CharacterCountAggregateOutputType = {
   personality: number
   visualDescription: number
   distinctiveFeatures: number
+  isLocked: number
   canonicalAppearance: number
   referenceImageUrl: number
   referenceImagePrompt: number
@@ -73,6 +76,7 @@ export type CharacterMinAggregateInputType = {
   personality?: true
   visualDescription?: true
   distinctiveFeatures?: true
+  isLocked?: true
   referenceImageUrl?: true
   referenceImagePrompt?: true
   createdAt?: true
@@ -86,6 +90,7 @@ export type CharacterMaxAggregateInputType = {
   personality?: true
   visualDescription?: true
   distinctiveFeatures?: true
+  isLocked?: true
   referenceImageUrl?: true
   referenceImagePrompt?: true
   createdAt?: true
@@ -99,6 +104,7 @@ export type CharacterCountAggregateInputType = {
   personality?: true
   visualDescription?: true
   distinctiveFeatures?: true
+  isLocked?: true
   canonicalAppearance?: true
   referenceImageUrl?: true
   referenceImagePrompt?: true
@@ -186,6 +192,7 @@ export type CharacterGroupByOutputType = {
   personality: string
   visualDescription: string
   distinctiveFeatures: string
+  isLocked: boolean
   canonicalAppearance: runtime.JsonValue | null
   referenceImageUrl: string | null
   referenceImagePrompt: string | null
@@ -221,6 +228,7 @@ export type CharacterWhereInput = {
   personality?: Prisma.StringFilter<"Character"> | string
   visualDescription?: Prisma.StringFilter<"Character"> | string
   distinctiveFeatures?: Prisma.StringFilter<"Character"> | string
+  isLocked?: Prisma.BoolFilter<"Character"> | boolean
   canonicalAppearance?: Prisma.JsonNullableFilter<"Character">
   referenceImageUrl?: Prisma.StringNullableFilter<"Character"> | string | null
   referenceImagePrompt?: Prisma.StringNullableFilter<"Character"> | string | null
@@ -236,6 +244,7 @@ export type CharacterOrderByWithRelationInput = {
   personality?: Prisma.SortOrder
   visualDescription?: Prisma.SortOrder
   distinctiveFeatures?: Prisma.SortOrder
+  isLocked?: Prisma.SortOrder
   canonicalAppearance?: Prisma.SortOrderInput | Prisma.SortOrder
   referenceImageUrl?: Prisma.SortOrderInput | Prisma.SortOrder
   referenceImagePrompt?: Prisma.SortOrderInput | Prisma.SortOrder
@@ -254,6 +263,7 @@ export type CharacterWhereUniqueInput = Prisma.AtLeast<{
   personality?: Prisma.StringFilter<"Character"> | string
   visualDescription?: Prisma.StringFilter<"Character"> | string
   distinctiveFeatures?: Prisma.StringFilter<"Character"> | string
+  isLocked?: Prisma.BoolFilter<"Character"> | boolean
   canonicalAppearance?: Prisma.JsonNullableFilter<"Character">
   referenceImageUrl?: Prisma.StringNullableFilter<"Character"> | string | null
   referenceImagePrompt?: Prisma.StringNullableFilter<"Character"> | string | null
@@ -269,6 +279,7 @@ export type CharacterOrderByWithAggregationInput = {
   personality?: Prisma.SortOrder
   visualDescription?: Prisma.SortOrder
   distinctiveFeatures?: Prisma.SortOrder
+  isLocked?: Prisma.SortOrder
   canonicalAppearance?: Prisma.SortOrderInput | Prisma.SortOrder
   referenceImageUrl?: Prisma.SortOrderInput | Prisma.SortOrder
   referenceImagePrompt?: Prisma.SortOrderInput | Prisma.SortOrder
@@ -289,6 +300,7 @@ export type CharacterScalarWhereWithAggregatesInput = {
   personality?: Prisma.StringWithAggregatesFilter<"Character"> | string
   visualDescription?: Prisma.StringWithAggregatesFilter<"Character"> | string
   distinctiveFeatures?: Prisma.StringWithAggregatesFilter<"Character"> | string
+  isLocked?: Prisma.BoolWithAggregatesFilter<"Character"> | boolean
   canonicalAppearance?: Prisma.JsonNullableWithAggregatesFilter<"Character">
   referenceImageUrl?: Prisma.StringNullableWithAggregatesFilter<"Character"> | string | null
   referenceImagePrompt?: Prisma.StringNullableWithAggregatesFilter<"Character"> | string | null
@@ -303,6 +315,7 @@ export type CharacterCreateInput = {
   personality: string
   visualDescription: string
   distinctiveFeatures: string
+  isLocked?: boolean
   canonicalAppearance?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   referenceImageUrl?: string | null
   referenceImagePrompt?: string | null
@@ -318,6 +331,7 @@ export type CharacterUncheckedCreateInput = {
   personality: string
   visualDescription: string
   distinctiveFeatures: string
+  isLocked?: boolean
   canonicalAppearance?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   referenceImageUrl?: string | null
   referenceImagePrompt?: string | null
@@ -333,6 +347,7 @@ export type CharacterUpdateInput = {
   personality?: Prisma.StringFieldUpdateOperationsInput | string
   visualDescription?: Prisma.StringFieldUpdateOperationsInput | string
   distinctiveFeatures?: Prisma.StringFieldUpdateOperationsInput | string
+  isLocked?: Prisma.BoolFieldUpdateOperationsInput | boolean
   canonicalAppearance?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   referenceImageUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   referenceImagePrompt?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -348,6 +363,7 @@ export type CharacterUncheckedUpdateInput = {
   personality?: Prisma.StringFieldUpdateOperationsInput | string
   visualDescription?: Prisma.StringFieldUpdateOperationsInput | string
   distinctiveFeatures?: Prisma.StringFieldUpdateOperationsInput | string
+  isLocked?: Prisma.BoolFieldUpdateOperationsInput | boolean
   canonicalAppearance?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   referenceImageUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   referenceImagePrompt?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -363,6 +379,7 @@ export type CharacterCreateManyInput = {
   personality: string
   visualDescription: string
   distinctiveFeatures: string
+  isLocked?: boolean
   canonicalAppearance?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   referenceImageUrl?: string | null
   referenceImagePrompt?: string | null
@@ -377,6 +394,7 @@ export type CharacterUpdateManyMutationInput = {
   personality?: Prisma.StringFieldUpdateOperationsInput | string
   visualDescription?: Prisma.StringFieldUpdateOperationsInput | string
   distinctiveFeatures?: Prisma.StringFieldUpdateOperationsInput | string
+  isLocked?: Prisma.BoolFieldUpdateOperationsInput | boolean
   canonicalAppearance?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   referenceImageUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   referenceImagePrompt?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -391,6 +409,7 @@ export type CharacterUncheckedUpdateManyInput = {
   personality?: Prisma.StringFieldUpdateOperationsInput | string
   visualDescription?: Prisma.StringFieldUpdateOperationsInput | string
   distinctiveFeatures?: Prisma.StringFieldUpdateOperationsInput | string
+  isLocked?: Prisma.BoolFieldUpdateOperationsInput | boolean
   canonicalAppearance?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   referenceImageUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   referenceImagePrompt?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -405,6 +424,7 @@ export type CharacterCountOrderByAggregateInput = {
   personality?: Prisma.SortOrder
   visualDescription?: Prisma.SortOrder
   distinctiveFeatures?: Prisma.SortOrder
+  isLocked?: Prisma.SortOrder
   canonicalAppearance?: Prisma.SortOrder
   referenceImageUrl?: Prisma.SortOrder
   referenceImagePrompt?: Prisma.SortOrder
@@ -419,6 +439,7 @@ export type CharacterMaxOrderByAggregateInput = {
   personality?: Prisma.SortOrder
   visualDescription?: Prisma.SortOrder
   distinctiveFeatures?: Prisma.SortOrder
+  isLocked?: Prisma.SortOrder
   referenceImageUrl?: Prisma.SortOrder
   referenceImagePrompt?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
@@ -432,6 +453,7 @@ export type CharacterMinOrderByAggregateInput = {
   personality?: Prisma.SortOrder
   visualDescription?: Prisma.SortOrder
   distinctiveFeatures?: Prisma.SortOrder
+  isLocked?: Prisma.SortOrder
   referenceImageUrl?: Prisma.SortOrder
   referenceImagePrompt?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
@@ -441,6 +463,10 @@ export type CharacterMinOrderByAggregateInput = {
 export type CharacterScalarRelationFilter = {
   is?: Prisma.CharacterWhereInput
   isNot?: Prisma.CharacterWhereInput
+}
+
+export type BoolFieldUpdateOperationsInput = {
+  set?: boolean
 }
 
 export type CharacterCreateNestedOneWithoutStoryCharactersInput = {
@@ -464,6 +490,7 @@ export type CharacterCreateWithoutStoryCharactersInput = {
   personality: string
   visualDescription: string
   distinctiveFeatures: string
+  isLocked?: boolean
   canonicalAppearance?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   referenceImageUrl?: string | null
   referenceImagePrompt?: string | null
@@ -478,6 +505,7 @@ export type CharacterUncheckedCreateWithoutStoryCharactersInput = {
   personality: string
   visualDescription: string
   distinctiveFeatures: string
+  isLocked?: boolean
   canonicalAppearance?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   referenceImageUrl?: string | null
   referenceImagePrompt?: string | null
@@ -508,6 +536,7 @@ export type CharacterUpdateWithoutStoryCharactersInput = {
   personality?: Prisma.StringFieldUpdateOperationsInput | string
   visualDescription?: Prisma.StringFieldUpdateOperationsInput | string
   distinctiveFeatures?: Prisma.StringFieldUpdateOperationsInput | string
+  isLocked?: Prisma.BoolFieldUpdateOperationsInput | boolean
   canonicalAppearance?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   referenceImageUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   referenceImagePrompt?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -522,6 +551,7 @@ export type CharacterUncheckedUpdateWithoutStoryCharactersInput = {
   personality?: Prisma.StringFieldUpdateOperationsInput | string
   visualDescription?: Prisma.StringFieldUpdateOperationsInput | string
   distinctiveFeatures?: Prisma.StringFieldUpdateOperationsInput | string
+  isLocked?: Prisma.BoolFieldUpdateOperationsInput | boolean
   canonicalAppearance?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   referenceImageUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   referenceImagePrompt?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -567,6 +597,7 @@ export type CharacterSelect<ExtArgs extends runtime.Types.Extensions.InternalArg
   personality?: boolean
   visualDescription?: boolean
   distinctiveFeatures?: boolean
+  isLocked?: boolean
   canonicalAppearance?: boolean
   referenceImageUrl?: boolean
   referenceImagePrompt?: boolean
@@ -583,6 +614,7 @@ export type CharacterSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Ext
   personality?: boolean
   visualDescription?: boolean
   distinctiveFeatures?: boolean
+  isLocked?: boolean
   canonicalAppearance?: boolean
   referenceImageUrl?: boolean
   referenceImagePrompt?: boolean
@@ -597,6 +629,7 @@ export type CharacterSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Ext
   personality?: boolean
   visualDescription?: boolean
   distinctiveFeatures?: boolean
+  isLocked?: boolean
   canonicalAppearance?: boolean
   referenceImageUrl?: boolean
   referenceImagePrompt?: boolean
@@ -611,6 +644,7 @@ export type CharacterSelectScalar = {
   personality?: boolean
   visualDescription?: boolean
   distinctiveFeatures?: boolean
+  isLocked?: boolean
   canonicalAppearance?: boolean
   referenceImageUrl?: boolean
   referenceImagePrompt?: boolean
@@ -618,7 +652,7 @@ export type CharacterSelectScalar = {
   updatedAt?: boolean
 }
 
-export type CharacterOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "name" | "species" | "personality" | "visualDescription" | "distinctiveFeatures" | "canonicalAppearance" | "referenceImageUrl" | "referenceImagePrompt" | "createdAt" | "updatedAt", ExtArgs["result"]["character"]>
+export type CharacterOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "name" | "species" | "personality" | "visualDescription" | "distinctiveFeatures" | "isLocked" | "canonicalAppearance" | "referenceImageUrl" | "referenceImagePrompt" | "createdAt" | "updatedAt", ExtArgs["result"]["character"]>
 export type CharacterInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   storyCharacters?: boolean | Prisma.Character$storyCharactersArgs<ExtArgs>
   _count?: boolean | Prisma.CharacterCountOutputTypeDefaultArgs<ExtArgs>
@@ -638,6 +672,7 @@ export type $CharacterPayload<ExtArgs extends runtime.Types.Extensions.InternalA
     personality: string
     visualDescription: string
     distinctiveFeatures: string
+    isLocked: boolean
     canonicalAppearance: runtime.JsonValue | null
     referenceImageUrl: string | null
     referenceImagePrompt: string | null
@@ -1073,6 +1108,7 @@ export interface CharacterFieldRefs {
   readonly personality: Prisma.FieldRef<"Character", 'String'>
   readonly visualDescription: Prisma.FieldRef<"Character", 'String'>
   readonly distinctiveFeatures: Prisma.FieldRef<"Character", 'String'>
+  readonly isLocked: Prisma.FieldRef<"Character", 'Boolean'>
   readonly canonicalAppearance: Prisma.FieldRef<"Character", 'Json'>
   readonly referenceImageUrl: Prisma.FieldRef<"Character", 'String'>
   readonly referenceImagePrompt: Prisma.FieldRef<"Character", 'String'>

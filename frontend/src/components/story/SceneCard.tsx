@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Scene } from '../../types/story';
 import { getApiUrl } from '../../utils/urlHelper';
+import { SparklesIcon, ImageIcon } from '../common/Icons';
 
 interface SceneCardProps {
   scene: Scene;
@@ -100,7 +101,7 @@ export default function SceneCard({ scene, storyId, characters }: SceneCardProps
         </div>
       ) : (
         <div className="story-scene-image-placeholder" aria-hidden="true">
-          <span>✦</span>
+          <ImageIcon size={28} color="var(--color-text-faint)" />
           <small>Scene preview</small>
         </div>
       )}
@@ -111,11 +112,14 @@ export default function SceneCard({ scene, storyId, characters }: SceneCardProps
         <p className="story-scene-narration">{scene.narration}</p>
         {error && <p className="story-scene-error">{error}</p>}
         <button
+          type="button"
           className="scene-image-action"
           onClick={handleGenerateImage}
           disabled={generating}
+          style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
         >
-          {generating ? 'Creating image…' : imageUrl ? '↻ Regenerate image' : '✦ Generate image'}
+          <SparklesIcon size={14} />
+          <span>{generating ? 'Creating image…' : imageUrl ? 'Regenerate image' : 'Generate image'}</span>
         </button>
       </div>
     </article>

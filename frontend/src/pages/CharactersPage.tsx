@@ -13,6 +13,7 @@ import CharacterGrid from "../components/characters/CharacterGrid";
 import CharacterEmptyState from "../components/characters/CharacterEmptyState";
 import CharacterModal from "../components/characters/CharacterModal";
 import { ConfirmModal } from "../components/common/ConfirmModal";
+import { CloseIcon } from "../components/common/Icons";
 import "../components/characters/characters.css";
 
 export default function CharactersPage() {
@@ -200,8 +201,10 @@ export default function CharactersPage() {
 
       {apiError && (
         <div className="api-error">
-          {apiError}
-          <button onClick={() => setApiError(null)} className="error-close">✕</button>
+          <span>{apiError}</span>
+          <button onClick={() => setApiError(null)} className="error-close" aria-label="Dismiss error">
+            <CloseIcon size={12} />
+          </button>
         </div>
       )}
 

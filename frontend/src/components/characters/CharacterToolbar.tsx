@@ -1,3 +1,6 @@
+import React from 'react';
+import { SearchIcon } from '../common/Icons';
+
 interface CharacterToolbarProps {
   searchQuery: string;
   speciesFilter: string;
@@ -22,6 +25,7 @@ export default function CharacterToolbar({
   return (
     <div className="character-toolbar">
       <div className="toolbar-search">
+        <SearchIcon className="search-icon" size={15} />
         <input
           type="text"
           placeholder="Search characters..."

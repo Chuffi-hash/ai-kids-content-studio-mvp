@@ -1,3 +1,6 @@
+import React from 'react';
+import { CloseIcon, CheckIcon } from '../common/Icons';
+
 interface Character {
   id: string;
   name: string;
@@ -30,8 +33,8 @@ export function CharacterPickerModal({
       <div className="modal modal-lg" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h2>Select Characters</h2>
-          <button className="modal-close" onClick={onClose} aria-label="Close">
-            ✕
+          <button className="modal-close" onClick={onClose} aria-label="Close" type="button">
+            <CloseIcon size={16} />
           </button>
         </div>
         <div className="modal-body">
@@ -59,7 +62,7 @@ export function CharacterPickerModal({
                       </div>
                     </div>
                     <div className="character-picker-checkbox">
-                      {isSelected ? '✓' : ''}
+                      {isSelected && <CheckIcon size={14} color="#ffffff" />}
                     </div>
                   </div>
                 );
@@ -68,10 +71,10 @@ export function CharacterPickerModal({
           </div>
         </div>
         <div className="modal-footer">
-          <button className="btn btn-secondary" onClick={onClose}>
+          <button type="button" className="btn btn-secondary" onClick={onClose}>
             Cancel
           </button>
-          <button className="btn btn-primary" onClick={onConfirm}>
+          <button type="button" className="btn btn-primary" onClick={onConfirm}>
             Done
           </button>
         </div>

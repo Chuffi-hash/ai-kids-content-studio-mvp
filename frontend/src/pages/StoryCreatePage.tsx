@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import StoryBuilder from "../components/story/StoryBuilder";
 import GeneratedStory from "../components/story/GeneratedStory";
 import { PageHeader } from "../components/common/PageHeader";
+import { CloseIcon } from "../components/common/Icons";
 import { getAllCharacters, Character } from "../services/character.service";
 import { Story, Scene } from "../types/story";
 import { ProductionState, ProductionScene } from "../types/production";
@@ -161,9 +162,9 @@ export default function StoryCreatePage() {
       />
       {apiError && (
         <div className="api-error">
-          {apiError}
-          <button onClick={() => setApiError(null)} className="error-close">
-            ✕
+          <span>{apiError}</span>
+          <button onClick={() => setApiError(null)} className="error-close" aria-label="Dismiss error">
+            <CloseIcon size={12} />
           </button>
         </div>
       )}

@@ -1,3 +1,6 @@
+import React from 'react';
+import { PlusIcon } from '../common/Icons';
+
 interface CharacterLibraryHeaderProps {
   onCreateCharacter: () => void;
 }
@@ -11,8 +14,14 @@ export default function CharacterLibraryHeader({
         <h1>Character Library</h1>
         <p className="muted">Reusable characters for your stories</p>
       </div>
-      <button className="btn btn-primary" onClick={onCreateCharacter}>
-        + New Character
+      <button
+        type="button"
+        className="btn btn-primary"
+        onClick={onCreateCharacter}
+        style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+      >
+        <PlusIcon size={15} />
+        <span>New Character</span>
       </button>
     </div>
   );

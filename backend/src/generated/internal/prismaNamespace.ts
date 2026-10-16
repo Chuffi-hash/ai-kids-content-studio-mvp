@@ -399,6 +399,7 @@ type FieldRefInputType<Model, FieldType> = Model extends never ? never : FieldRe
 export const ModelName = {
   Story: 'Story',
   Scene: 'Scene',
+  SceneVersion: 'SceneVersion',
   Image: 'Image',
   Character: 'Character',
   StoryCharacter: 'StoryCharacter'
@@ -417,7 +418,7 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
     omit: GlobalOmitOptions
   }
   meta: {
-    modelProps: "story" | "scene" | "image" | "character" | "storyCharacter"
+    modelProps: "story" | "scene" | "sceneVersion" | "image" | "character" | "storyCharacter"
     txIsolationLevel: TransactionIsolationLevel
   }
   model: {
@@ -566,6 +567,80 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         count: {
           args: Prisma.SceneCountArgs<ExtArgs>
           result: runtime.Types.Utils.Optional<Prisma.SceneCountAggregateOutputType> | number
+        }
+      }
+    }
+    SceneVersion: {
+      payload: Prisma.$SceneVersionPayload<ExtArgs>
+      fields: Prisma.SceneVersionFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.SceneVersionFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$SceneVersionPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.SceneVersionFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$SceneVersionPayload>
+        }
+        findFirst: {
+          args: Prisma.SceneVersionFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$SceneVersionPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.SceneVersionFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$SceneVersionPayload>
+        }
+        findMany: {
+          args: Prisma.SceneVersionFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$SceneVersionPayload>[]
+        }
+        create: {
+          args: Prisma.SceneVersionCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$SceneVersionPayload>
+        }
+        createMany: {
+          args: Prisma.SceneVersionCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.SceneVersionCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$SceneVersionPayload>[]
+        }
+        delete: {
+          args: Prisma.SceneVersionDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$SceneVersionPayload>
+        }
+        update: {
+          args: Prisma.SceneVersionUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$SceneVersionPayload>
+        }
+        deleteMany: {
+          args: Prisma.SceneVersionDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.SceneVersionUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.SceneVersionUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$SceneVersionPayload>[]
+        }
+        upsert: {
+          args: Prisma.SceneVersionUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$SceneVersionPayload>
+        }
+        aggregate: {
+          args: Prisma.SceneVersionAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateSceneVersion>
+        }
+        groupBy: {
+          args: Prisma.SceneVersionGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.SceneVersionGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.SceneVersionCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.SceneVersionCountAggregateOutputType> | number
         }
       }
     }
@@ -841,6 +916,7 @@ export const StoryScalarFieldEnum = {
   audience: 'audience',
   genre: 'genre',
   visualStyle: 'visualStyle',
+  targetDuration: 'targetDuration',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 } as const
@@ -854,13 +930,44 @@ export const SceneScalarFieldEnum = {
   storyId: 'storyId',
   title: 'title',
   number: 'number',
+  order: 'order',
+  startMs: 'startMs',
+  endMs: 'endMs',
   narration: 'narration',
+  visualPrompt: 'visualPrompt',
+  cameraDirection: 'cameraDirection',
+  characterIds: 'characterIds',
+  imageUrl: 'imageUrl',
+  videoUrl: 'videoUrl',
+  audioUrl: 'audioUrl',
+  generationStatus: 'generationStatus',
+  estimatedDurationMs: 'estimatedDurationMs',
+  actualAudioDurationMs: 'actualAudioDurationMs',
+  generationError: 'generationError',
+  animationData: 'animationData',
   deletedAt: 'deletedAt',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 } as const
 
 export type SceneScalarFieldEnum = (typeof SceneScalarFieldEnum)[keyof typeof SceneScalarFieldEnum]
+
+
+export const SceneVersionScalarFieldEnum = {
+  id: 'id',
+  sceneId: 'sceneId',
+  versionNumber: 'versionNumber',
+  prompt: 'prompt',
+  narration: 'narration',
+  cameraDirection: 'cameraDirection',
+  imageUrl: 'imageUrl',
+  videoUrl: 'videoUrl',
+  audioUrl: 'audioUrl',
+  durationMs: 'durationMs',
+  createdAt: 'createdAt'
+} as const
+
+export type SceneVersionScalarFieldEnum = (typeof SceneVersionScalarFieldEnum)[keyof typeof SceneVersionScalarFieldEnum]
 
 
 export const ImageScalarFieldEnum = {
@@ -888,6 +995,7 @@ export const CharacterScalarFieldEnum = {
   personality: 'personality',
   visualDescription: 'visualDescription',
   distinctiveFeatures: 'distinctiveFeatures',
+  isLocked: 'isLocked',
   canonicalAppearance: 'canonicalAppearance',
   referenceImageUrl: 'referenceImageUrl',
   referenceImagePrompt: 'referenceImagePrompt',
@@ -970,20 +1078,6 @@ export type ListStringFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaMod
 
 
 /**
- * Reference to a field of type 'DateTime'
- */
-export type DateTimeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'DateTime'>
-    
-
-
-/**
- * Reference to a field of type 'DateTime[]'
- */
-export type ListDateTimeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'DateTime[]'>
-    
-
-
-/**
  * Reference to a field of type 'Int'
  */
 export type IntFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Int'>
@@ -998,6 +1092,20 @@ export type ListIntFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel,
 
 
 /**
+ * Reference to a field of type 'DateTime'
+ */
+export type DateTimeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'DateTime'>
+    
+
+
+/**
+ * Reference to a field of type 'DateTime[]'
+ */
+export type ListDateTimeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'DateTime[]'>
+    
+
+
+/**
  * Reference to a field of type 'Json'
  */
 export type JsonFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Json'>
@@ -1008,6 +1116,13 @@ export type JsonFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'J
  * Reference to a field of type 'QueryMode'
  */
 export type EnumQueryModeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'QueryMode'>
+    
+
+
+/**
+ * Reference to a field of type 'Boolean'
+ */
+export type BooleanFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Boolean'>
     
 
 
@@ -1177,6 +1292,7 @@ export type PrismaClientOptions = PrismaClientOptionsWithAccelerateUrl | PrismaC
 export type GlobalOmitConfig = {
   story?: Prisma.StoryOmit
   scene?: Prisma.SceneOmit
+  sceneVersion?: Prisma.SceneVersionOmit
   image?: Prisma.ImageOmit
   character?: Prisma.CharacterOmit
   storyCharacter?: Prisma.StoryCharacterOmit

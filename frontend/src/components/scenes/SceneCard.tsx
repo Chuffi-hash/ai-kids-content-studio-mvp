@@ -2,6 +2,7 @@ import { Scene } from '../../services/scene.service';
 import { SceneStatus } from './SceneStatus';
 import { SceneActions } from  './SceneActions';
 import { resolveAssetUrl } from '../../utils/urlHelper';
+import { ImageIcon } from '../common/Icons';
 
 interface SceneCardProps {
   scene: Scene;
@@ -38,7 +39,9 @@ export function SceneCard({ scene, storyId, characters, onClick, onGenerateImage
           </div>
         ) : (
           <div className="scene-card-image scene-image-placeholder">
-            <div className="placeholder-icon">🖼️</div>
+            <div className="placeholder-icon">
+              <ImageIcon size={24} color="#64748b" />
+            </div>
             <div className="placeholder-text">No image generated</div>
           </div>
         )}

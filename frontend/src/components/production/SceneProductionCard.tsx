@@ -1,9 +1,11 @@
+import React from 'react';
 import { ProductionScene, ProductionStatus } from '../../types/production';
 import { resolveAssetUrl } from '../../utils/urlHelper';
+import { CheckIcon, CloseIcon, ImageIcon, MicIcon, ClapperboardIcon, FilmIcon } from '../common/Icons';
 
 type TrackType = 'image' | 'voice' | 'animation' | 'video';
 
- interface SceneProductionCardProps {
+interface SceneProductionCardProps {
   scene: ProductionScene;
   onGenerateTrack: (sceneId: string, trackType: TrackType) => void;
 }
@@ -20,10 +22,10 @@ function getStatusBadge(status: ProductionStatus) {
   const config = statusConfig[status];
   return (
     <span className={`status-badge ${config.className}`}>
-      {status === 'completed' && '✓'}
+      {status === 'completed' && <CheckIcon size={12} color="#34d399" />}
       {status === 'generating' && <span className="spinner" />}
-      {status === 'pending' && '○'}
-      {status === 'failed' && '✕'}
+      {status === 'pending' && <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'currentColor', display: 'inline-block' }} />}
+      {status === 'failed' && <CloseIcon size={10} color="#fca5a5" />}
       {config.label}
     </span>
   );
@@ -36,7 +38,7 @@ function ProductionTrack({
   onGenerate,
   showRegenerate 
 }: { 
-  icon: string; 
+  icon: React.ReactNode; 
   label: string; 
   status: ProductionStatus;
   onGenerate: () => void;
@@ -103,26 +105,26 @@ export default function SceneProductionCard({ scene, onGenerateTrack }: ScenePro
 
       <div className="production-tracks">
         <ProductionTrack 
-          icon="🖼" 
+          icon={<ImageIcon size={16} />} 
           label="Image" 
           status={scene.image.status} 
           onGenerate={() => onGenerateTrack(scene.sceneId, 'image')}
           showRegenerate={true}
         />
         <ProductionTrack 
-          icon="🎙" 
+          icon={<MicIcon size={16} />} 
           label="Voice" 
           status={scene.voice.status} 
           onGenerate={() => onGenerateTrack(scene.sceneId, 'voice')}
         />
         <ProductionTrack 
-          icon="🎬" 
+          icon={<ClapperboardIcon size={16} />} 
           label="Animation" 
           status={scene.animation.status} 
           onGenerate={() => onGenerateTrack(scene.sceneId, 'animation')}
         />
         <ProductionTrack 
-          icon="🎞" 
+          icon={<FilmIcon size={16} />} 
           label="Video" 
           status={scene.video.status} 
           onGenerate={() => onGenerateTrack(scene.sceneId, 'video')}

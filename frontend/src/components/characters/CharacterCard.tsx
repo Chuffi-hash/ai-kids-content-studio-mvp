@@ -1,5 +1,7 @@
+import React from "react";
 import { Character } from "../../services/character.service";
 import { DeleteButton } from '../common/DeleteButton';
+import { UserIcon, EditIcon, SparklesIcon } from '../common/Icons';
 
 interface CharacterCardProps {
   character: Character;
@@ -25,7 +27,9 @@ export default function CharacterCard({
           />
         ) : (
           <div className="character-image-placeholder">
-            <div className="placeholder-icon">🖼️</div>
+            <div className="placeholder-icon">
+              <UserIcon size={36} color="var(--color-text-faint)" />
+            </div>
             <div className="placeholder-text">Character Reference</div>
             <div className="placeholder-subtext">Generate an image to use this character as a visual reference in scenes</div>
           </div>
@@ -37,18 +41,22 @@ export default function CharacterCard({
           <div className="character-card-actions">
             {onEdit && (
               <button
+                type="button"
                 className="btn btn-ghost btn-sm"
                 onClick={onEdit}
-                title="Edit"
+                title={`Edit ${character.name}`}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}
               >
-                Edit
+                <EditIcon size={13} />
+                <span>Edit</span>
               </button>
             )}
             {onDelete && (
               <DeleteButton
                 onClick={onDelete}
-                title="Delete character"
-                aria-label="Delete character"
+                title={`Delete ${character.name}`}
+                ariaLabel={`Delete character ${character.name}`}
+                size="sm"
               />
             )}
           </div>
@@ -68,18 +76,24 @@ export default function CharacterCard({
         <div className="character-card-footer">
           {onGenerateReference && !character.referenceImageUrl && (
             <button
+              type="button"
               className="btn btn-primary btn-sm"
               onClick={onGenerateReference}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
             >
-              Generate Image
+              <SparklesIcon size={14} />
+              <span>Generate Image</span>
             </button>
           )}
           {onGenerateReference && character.referenceImageUrl && (
             <button
+              type="button"
               className="btn btn-secondary btn-sm"
               onClick={onGenerateReference}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
             >
-              Regenerate Image
+              <SparklesIcon size={14} />
+              <span>Regenerate Image</span>
             </button>
           )}
         </div>

@@ -1,4 +1,5 @@
 import { ProductionState } from '../../types/production';
+import { CheckIcon } from '../common/Icons';
 
 interface PipelineProgressProps {
   currentStage: ProductionState['currentStage'];
@@ -31,9 +32,11 @@ export default function PipelineProgress({ currentStage }: PipelineProgressProps
         return (
           <div key={stage.key} className={`pipeline-step pipeline-step--${status}`}>
             <div className="pipeline-step-indicator">
-              {status === 'completed' && '✓'}
-              {status === 'current' && '●'}
-              {status === 'pending' && '○'}
+              {status === 'completed' ? (
+                <CheckIcon size={12} color="#34d399" />
+              ) : (
+                <span>{index + 1}</span>
+              )}
             </div>
             <span className="pipeline-step-label">{stage.label}</span>
             {index < stages.length - 1 && <div className="pipeline-step-connector" />}

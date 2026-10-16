@@ -1,3 +1,6 @@
+import React from 'react';
+import { CloseIcon, PlusIcon } from '../common/Icons';
+
 interface Character {
   id: string;
   name: string;
@@ -38,7 +41,7 @@ export default function CharacterSelector({
               onClick={() => onToggle(character.id)}
               aria-label={`Remove ${character.name}`}
             >
-              ✕
+              <CloseIcon size={11} />
             </button>
           </span>
         ))
@@ -47,8 +50,10 @@ export default function CharacterSelector({
         type="button"
         className="btn btn-secondary btn-sm"
         onClick={onOpenPicker}
+        style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}
       >
-        + Add Character
+        <PlusIcon size={14} />
+        <span>Add Character</span>
       </button>
     </div>
   );

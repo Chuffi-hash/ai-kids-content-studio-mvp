@@ -1,8 +1,6 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
-// Get a free hosted Postgres database in seconds: `npx create-db`
-
 generator client {
   provider = "prisma-client"
   output   = "../src/generated"
@@ -23,6 +21,7 @@ model Story {
   audience       String?
   genre          String?
   visualStyle    String?
+  targetDuration Int?
   scenes         Scene[]
   storyCharacters StoryCharacter[]
   createdAt      DateTime         @default(now())
@@ -32,21 +31,53 @@ model Story {
 }
 
 model Scene {
-  id         String    @id @default(cuid())
-  sceneId    String    @unique
-  storyId    String
-  story      Story     @relation(fields: [storyId], references: [storyId])
-  title      String
-  number     Int
-  narration  String
-  images     Image[]
-  deletedAt  DateTime?
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  id                    String         @id @default(cuid())
+  sceneId               String         @unique
+  storyId               String
+  story                 Story          @relation(fields: [storyId], references: [storyId])
+  title                 String
+  number                Int
+  order                 Int            @default(0)
+  startMs               Int            @default(0)
+  endMs                 Int            @default(0)
+  narration             String
+  visualPrompt          String?
+  cameraDirection       String?
+  characterIds          String?
+  imageUrl              String?
+  videoUrl              String?
+  audioUrl              String?
+  generationStatus      String         @default("draft")
+  estimatedDurationMs   Int            @default(0)
+  actualAudioDurationMs Int?
+  generationError       String?
+  animationData         Json?
+  images                Image[]
+  versions              SceneVersion[]
+  deletedAt             DateTime?
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
 
   @@index([sceneId])
   @@index([storyId])
   @@index([deletedAt])
+}
+
+model SceneVersion {
+  id              String   @id @default(cuid())
+  sceneId         String
+  scene           Scene    @relation(fields: [sceneId], references: [sceneId])
+  versionNumber   Int      @default(1)
+  prompt          String?
+  narration       String?
+  cameraDirection String?
+  imageUrl        String?
+  videoUrl        String?
+  audioUrl        String?
+  durationMs      Int      @default(0)
+  createdAt       DateTime @default(now())
+
+  @@index([sceneId])
 }
 
 model Image {
@@ -69,18 +100,19 @@ model Image {
 }
 
 model Character {
-  id                  String   @id @default(cuid())
+  id                  String           @id @default(cuid())
   name                String
   species             String
   personality         String
   visualDescription   String
   distinctiveFeatures String
+  isLocked            Boolean          @default(false)
   canonicalAppearance Json?
   referenceImageUrl   String?
   referenceImagePrompt String?
   storyCharacters     StoryCharacter[]
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
 
   @@index([name])
 }

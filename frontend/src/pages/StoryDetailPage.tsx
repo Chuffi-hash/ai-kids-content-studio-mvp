@@ -1,359 +1,1195 @@
-import { useState, useEffect } from 'react';
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { fetchStory, StorybookStory } from '../services/storybook.service';
-import { StoryOverview } from '../components/story/StoryOverview';
-import { StoryEditForm } from '../components/story/StoryEditForm';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import {
+  EditorStory,
+  EditorScene,
+  SceneVersionItem,
+  SaveStatus,
+  HistorySnapshot,
+} from '../types/editor';
+import { CharacterInstance, AnimationClip, VectorSceneData } from '../types/animation';
+import * as editorService from '../services/editor.service';
 import { generateScenes } from '../services/content.service';
-import { getApiUrl } from '../utils/urlHelper';
-import { PageHeader } from '../components/common/PageHeader';
-import { BackButton } from '../components/common/BackButton';
-import { SceneGrid } from '../components/scenes/SceneGrid';
-import { generateSceneImage, Scene, deleteScene, restoreScene } from '../services/scene.service';
-import CharacterCard from '../components/characters/CharacterCard';
-import { Character, deleteCharacter, generateCharacterReferenceImage } from '../services/character.service';
-import { ConfirmModal } from '../components/common/ConfirmModal';
-import '../components/story/story-detail.css';
-import '../components/scenes/scenes.css';
-
-type Tab = 'overview' | 'characters' | 'scenes' | 'production';
+import { generateCharacterReferenceImage } from '../services/character.service';
+import { recalculateContiguousTimeline, validateSceneTiming } from '../utils/timingEngine';
+import { TopToolbar } from '../components/editor/TopToolbar';
+import { LeftAssetPanel } from '../components/editor/LeftAssetPanel';
+import { PreviewCanvas } from '../components/editor/PreviewCanvas';
+import { PropertiesInspector } from '../components/editor/PropertiesInspector';
+import { Timeline } from '../components/editor/Timeline';
+import { ExportModal } from '../components/editor/ExportModal';
+import { AlertTriangleIcon, ArrowLeftIcon, FilmIcon, SparklesIcon, PlusIcon } from '../components/common/Icons';
+import '../components/editor/editor.css';
 
 export default function StoryDetailPage() {
   const { storyId } = useParams<{ storyId: string }>();
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const [story, setStory] = useState<StorybookStory | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [isEditing, setIsEditing] = useState(false);
-  const [generatingScenes, setGeneratingScenes] = useState(false);
-  const [generatingImage, setGeneratingImage] = useState(false);
-  const [apiError, setApiError] = useState<string | null>(null);
-  const [deleteCharacterConfirm, setDeleteCharacterConfirm] = useState<{ id: string; name: string } | null>(null);
-  const [showDeletedScenes, setShowDeletedScenes] = useState(false);
-  
-  const activeTab = (searchParams.get('tab') as Tab) || 'overview';
-  
-  const setActiveTab = (tab: Tab) => {
-    setSearchParams({ tab });
-  };
+
+  // Primary state
+  const [story, setStory] = useState<EditorStory | null>(null);
+  const [scenes, setScenes] = useState<EditorScene[]>([]);
+  const [activeSceneId, setActiveSceneId] = useState<string | null>(null);
+  const [activeVersions, setActiveVersions] = useState<SceneVersionItem[]>([]);
+  const [selectedInstanceId, setSelectedInstanceId] = useState<string | null>(null);
+
+  // Playback & timeline state
+  const [currentTimeMs, setCurrentTimeMs] = useState<number>(0);
+  const [isPlaying, setIsPlaying] = useState<boolean>(false);
+  const [previewMode, setPreviewMode] = useState<'scene' | 'export'>('scene');
+  const [exportVideoUrl, setExportVideoUrl] = useState<string | null>(null);
+
+  // Background music state
+  const [selectedMusic, setSelectedMusic] = useState<string | null>('gentle-storybook');
+  const [musicVolume, setMusicVolume] = useState<number>(0.2);
+
+  // Persistence & save status
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved');
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  // Active AI generation states
+  const [generatingImageForScene, setGeneratingImageForScene] = useState<string | null>(null);
+  const [generatingVoiceForScene, setGeneratingVoiceForScene] = useState<string | null>(null);
+  const [generatingVideoForScene, setGeneratingVideoForScene] = useState<string | null>(null);
+  const [generatingAllScenes, setGeneratingAllScenes] = useState<boolean>(false);
+
+  // Export modal state
+  const [isExportModalOpen, setIsExportModalOpen] = useState<boolean>(false);
+
+  // Loading & error state
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [initialLoadError, setInitialLoadError] = useState<string | null>(null);
+
+  // Undo / Redo History stack
+  const [history, setHistory] = useState<{
+    past: HistorySnapshot[];
+    future: HistorySnapshot[];
+  }>({ past: [], future: [] });
+
+  // Refs for debounced autosave and playback loop
+  const autosaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isInitialMountRef = useRef<boolean>(true);
+  const lastTickRef = useRef<number>(performance.now());
+  const animationFrameRef = useRef<number | null>(null);
+  const latestScenesRef = useRef<EditorScene[]>(scenes);
+  latestScenesRef.current = scenes;
+
+  // ----------------------------------------------------
+  // Initial Data Loading
+  // ----------------------------------------------------
+  const loadStoryData = useCallback(async () => {
+    if (!storyId) return;
+    try {
+      setIsLoading(true);
+      setInitialLoadError(null);
+      const loadedStory = await editorService.fetchEditorStory(storyId);
+      
+      // Ensure scenes have contiguous timeline timing
+      const rawScenes = loadedStory.scenes || [];
+      const orderedScenes = rawScenes.length > 0
+        ? recalculateContiguousTimeline(rawScenes)
+        : [];
+
+      setStory(loadedStory);
+      setScenes(orderedScenes);
+
+      if (orderedScenes.length > 0) {
+        const initialSceneId = orderedScenes[0].sceneId;
+        setActiveSceneId(initialSceneId);
+        // Load version history for initial scene
+        try {
+          const versions = await editorService.getSceneVersions(initialSceneId);
+          setActiveVersions(versions);
+        } catch (e) {
+          console.warn('Could not load versions:', e);
+        }
+      }
+
+      setSaveStatus('saved');
+    } catch (err: any) {
+      console.error('Failed to load story:', err);
+      setInitialLoadError(err.message || 'Failed to load story editor');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [storyId]);
 
   useEffect(() => {
-    if (storyId) {
-      loadStory();
-    }
-  }, [storyId, showDeletedScenes]);
+    loadStoryData();
+  }, [loadStoryData]);
 
-  async function loadStory() {
-    try {
-      setLoading(true);
-      const data = await fetchStory(storyId!, showDeletedScenes);
-      setStory(data);
-    } catch (error) {
-      console.error('Failed to load story:', error);
-    } finally {
-      setLoading(false);
+  // Load versions whenever active scene changes
+  useEffect(() => {
+    if (!activeSceneId) {
+      setActiveVersions([]);
+      return;
     }
-  }
+    let cancelled = false;
+    editorService
+      .getSceneVersions(activeSceneId)
+      .then((vers) => {
+        if (!cancelled) setActiveVersions(vers);
+      })
+      .catch((err) => {
+        console.warn('Failed to load scene versions:', err);
+        if (!cancelled) setActiveVersions([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSceneId]);
 
-  async function handleGenerateScenes() {
+  // ----------------------------------------------------
+  // History Record Helper (Undo / Redo)
+  // ----------------------------------------------------
+  const pushHistorySnapshot = useCallback(
+    (currentScenes: EditorScene[], title?: string, targetDuration?: number | null) => {
+      const snapshot: HistorySnapshot = {
+        scenes: JSON.parse(JSON.stringify(currentScenes)),
+        title: title ?? story?.title ?? 'Untitled Story',
+        targetDuration: targetDuration ?? story?.targetDuration ?? null,
+        activeSceneId,
+      };
+
+      setHistory((prev) => ({
+        past: [...prev.past.slice(-29), snapshot], // keep last 30 snapshots
+        future: [],
+      }));
+    },
+    [story?.title, story?.targetDuration, activeSceneId]
+  );
+
+  // ----------------------------------------------------
+  // Debounced Autosave Engine
+  // ----------------------------------------------------
+  const triggerDebouncedSave = useCallback(
+    (updatedScenes: EditorScene[], updatedStory?: Partial<EditorStory>) => {
+      if (isInitialMountRef.current) {
+        isInitialMountRef.current = false;
+        return;
+      }
+
+      setSaveStatus('saving');
+      setSaveError(null);
+
+      if (autosaveTimeoutRef.current) {
+        clearTimeout(autosaveTimeoutRef.current);
+      }
+
+      autosaveTimeoutRef.current = setTimeout(async () => {
+        if (!storyId) return;
+        try {
+          // Save scene timeline and metadata in parallel
+          const promises: Promise<any>[] = [];
+
+          if (updatedScenes.length > 0) {
+            promises.push(editorService.batchSaveTimeline(storyId, updatedScenes));
+          }
+
+          if (updatedStory) {
+            promises.push(
+              editorService.saveStoryMetadata(storyId, {
+                title: updatedStory.title,
+                targetDuration: updatedStory.targetDuration,
+                logline: updatedStory.logline,
+                lesson: updatedStory.lesson,
+              })
+            );
+          }
+
+          await Promise.all(promises);
+          setSaveStatus('saved');
+        } catch (err: any) {
+          console.error('Autosave error:', err);
+          setSaveStatus('error');
+          setSaveError(err.message || 'Autosave failed');
+        }
+      }, 800);
+    },
+    [storyId]
+  );
+
+  // Manual save retry handler
+  const handleRetrySave = () => {
+    triggerDebouncedSave(latestScenesRef.current, story || undefined);
+  };
+
+  // ----------------------------------------------------
+  // Timeline Duration & Scene Synchronizer
+  // ----------------------------------------------------
+  const totalDurationMs = scenes.length > 0
+    ? Math.max(...scenes.map((s) => s.endMs || 0), 1000)
+    : 0;
+
+  // Sync playhead with active scene
+  useEffect(() => {
+    if (scenes.length === 0) return;
+    const sceneAtPlayhead = scenes.find(
+      (s) => currentTimeMs >= s.startMs && currentTimeMs < s.endMs
+    );
+    if (sceneAtPlayhead && sceneAtPlayhead.sceneId !== activeSceneId) {
+      setActiveSceneId(sceneAtPlayhead.sceneId);
+    }
+  }, [currentTimeMs, scenes, activeSceneId]);
+
+  // ----------------------------------------------------
+  // High-Precision Playback Loop
+  // ----------------------------------------------------
+  useEffect(() => {
+    if (!isPlaying) {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+      return;
+    }
+
+    lastTickRef.current = performance.now();
+
+    const tick = () => {
+      const now = performance.now();
+      const delta = now - lastTickRef.current;
+      lastTickRef.current = now;
+
+      setCurrentTimeMs((prev) => {
+        const nextTime = prev + delta;
+        if (nextTime >= totalDurationMs) {
+          setIsPlaying(false);
+          return 0; // Loop or stop at start
+        }
+        return nextTime;
+      });
+
+      animationFrameRef.current = requestAnimationFrame(tick);
+    };
+
+    animationFrameRef.current = requestAnimationFrame(tick);
+
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+    };
+  }, [isPlaying, totalDurationMs]);
+
+  // ----------------------------------------------------
+  // Playhead & Transport Controls
+  // ----------------------------------------------------
+  const handleTogglePlay = () => {
+    if (!isPlaying && currentTimeMs >= totalDurationMs - 100) {
+      setCurrentTimeMs(0);
+    }
+    setIsPlaying((prev) => !prev);
+  };
+
+  const handleRewind = () => {
+    setIsPlaying(false);
+    setCurrentTimeMs(0);
+    if (scenes.length > 0) {
+      setActiveSceneId(scenes[0].sceneId);
+    }
+  };
+
+  const handleSeek = (newMs: number) => {
+    const clampedMs = Math.max(0, Math.min(newMs, totalDurationMs));
+    setCurrentTimeMs(clampedMs);
+    const sceneAtPlayhead = scenes.find(
+      (s) => clampedMs >= s.startMs && clampedMs < s.endMs
+    );
+    if (sceneAtPlayhead && sceneAtPlayhead.sceneId !== activeSceneId) {
+      setActiveSceneId(sceneAtPlayhead.sceneId);
+    }
+  };
+
+  // ----------------------------------------------------
+  // Undo & Redo Handlers
+  // ----------------------------------------------------
+  const canUndo = history.past.length > 0;
+  const canRedo = history.future.length > 0;
+
+  const handleUndo = () => {
+    if (!canUndo) return;
+    const previousSnapshot = history.past[history.past.length - 1];
+    const newPast = history.past.slice(0, -1);
+
+    const currentSnapshot: HistorySnapshot = {
+      scenes: JSON.parse(JSON.stringify(scenes)),
+      title: story?.title || '',
+      targetDuration: story?.targetDuration,
+      activeSceneId,
+    };
+
+    setHistory({
+      past: newPast,
+      future: [currentSnapshot, ...history.future],
+    });
+
+    setScenes(previousSnapshot.scenes);
+    if (story) {
+      setStory({
+        ...story,
+        title: previousSnapshot.title,
+        targetDuration: previousSnapshot.targetDuration,
+      });
+    }
+    if (previousSnapshot.activeSceneId) {
+      setActiveSceneId(previousSnapshot.activeSceneId);
+    }
+
+    triggerDebouncedSave(previousSnapshot.scenes, {
+      title: previousSnapshot.title,
+      targetDuration: previousSnapshot.targetDuration,
+    });
+  };
+
+  const handleRedo = () => {
+    if (!canRedo) return;
+    const nextSnapshot = history.future[0];
+    const newFuture = history.future.slice(1);
+
+    const currentSnapshot: HistorySnapshot = {
+      scenes: JSON.parse(JSON.stringify(scenes)),
+      title: story?.title || '',
+      targetDuration: story?.targetDuration,
+      activeSceneId,
+    };
+
+    setHistory({
+      past: [...history.past, currentSnapshot],
+      future: newFuture,
+    });
+
+    setScenes(nextSnapshot.scenes);
+    if (story) {
+      setStory({
+        ...story,
+        title: nextSnapshot.title,
+        targetDuration: nextSnapshot.targetDuration,
+      });
+    }
+    if (nextSnapshot.activeSceneId) {
+      setActiveSceneId(nextSnapshot.activeSceneId);
+    }
+
+    triggerDebouncedSave(nextSnapshot.scenes, {
+      title: nextSnapshot.title,
+      targetDuration: nextSnapshot.targetDuration,
+    });
+  };
+
+  // ----------------------------------------------------
+  // Global Keyboard Shortcuts (Space, Ctrl+Z, Ctrl+Y / Ctrl+Shift+Z)
+  // ----------------------------------------------------
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+
+      if (e.code === 'Space') {
+        e.preventDefault();
+        handleTogglePlay();
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        handleUndo();
+      } else if (
+        ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') ||
+        ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'z')
+      ) {
+        e.preventDefault();
+        handleRedo();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleTogglePlay, handleUndo, handleRedo]);
+
+  // ----------------------------------------------------
+  // Title & Target Duration Updates
+  // ----------------------------------------------------
+  const handleTitleChange = (newTitle: string) => {
     if (!story) return;
+    pushHistorySnapshot(scenes, newTitle);
+    const updated = { ...story, title: newTitle };
+    setStory(updated);
+    triggerDebouncedSave(scenes, updated);
+  };
 
-    setGeneratingScenes(true);
-    setApiError(null);
+  const handleTargetDurationChange = (newTargetMs: number | null) => {
+    if (!story) return;
+    pushHistorySnapshot(scenes, story.title, newTargetMs);
+    const updated = { ...story, targetDuration: newTargetMs };
+    setStory(updated);
+    triggerDebouncedSave(scenes, updated);
+  };
+
+  // ----------------------------------------------------
+  // Scene Selection
+  // ----------------------------------------------------
+  const handleSelectScene = (sceneId: string) => {
+    setActiveSceneId(sceneId);
+    const targetScene = scenes.find((s) => s.sceneId === sceneId);
+    if (targetScene) {
+      // Seek playhead to start of scene if playhead is outside its range
+      if (currentTimeMs < targetScene.startMs || currentTimeMs >= targetScene.endMs) {
+        setCurrentTimeMs(targetScene.startMs);
+      }
+    }
+  };
+
+  // ----------------------------------------------------
+  // Scene CRUD Operations
+  // ----------------------------------------------------
+  const handleAddScene = async () => {
+    if (!storyId) return;
+    try {
+      pushHistorySnapshot(scenes);
+      const newOrder = scenes.length;
+      const defaultDuration = 5000;
+      const lastSceneEnd = scenes.length > 0 ? scenes[scenes.length - 1].endMs : 0;
+
+      const created = await editorService.createScene(storyId, {
+        title: `Scene ${newOrder + 1}`,
+        narration: 'A new adventure unfolds in the story.',
+        visualPrompt: 'A bright, colorful storybook scene.',
+        cameraDirection: 'Eye level wide establishing shot',
+        durationMs: defaultDuration,
+      });
+
+      const updatedRaw = [
+        ...scenes,
+        {
+          ...created,
+          order: newOrder,
+          startMs: lastSceneEnd,
+          endMs: lastSceneEnd + defaultDuration,
+          estimatedDurationMs: defaultDuration,
+        },
+      ];
+
+      const recalculated = recalculateContiguousTimeline(updatedRaw);
+      setScenes(recalculated);
+      setActiveSceneId(created.sceneId);
+      triggerDebouncedSave(recalculated);
+    } catch (err: any) {
+      console.error('Failed to add scene:', err);
+      alert(err.message || 'Failed to add scene');
+    }
+  };
+
+  const handleDuplicateScene = async (sceneId: string) => {
+    try {
+      pushHistorySnapshot(scenes);
+      const duplicated = await editorService.duplicateScene(sceneId);
+      
+      const sourceIndex = scenes.findIndex((s) => s.sceneId === sceneId);
+      const updatedList = [...scenes];
+      
+      if (sourceIndex >= 0) {
+        updatedList.splice(sourceIndex + 1, 0, duplicated);
+      } else {
+        updatedList.push(duplicated);
+      }
+
+      const recalculated = recalculateContiguousTimeline(updatedList);
+      setScenes(recalculated);
+      setActiveSceneId(duplicated.sceneId);
+      triggerDebouncedSave(recalculated);
+    } catch (err: any) {
+      console.error('Failed to duplicate scene:', err);
+      alert(err.message || 'Failed to duplicate scene');
+    }
+  };
+
+  const handleDeleteScene = async (sceneId: string) => {
+    if (scenes.length <= 1) {
+      alert('A project must have at least one scene.');
+      return;
+    }
 
     try {
-      const generatedScenes = await generateScenes(
+      pushHistorySnapshot(scenes);
+      await editorService.deleteScene(sceneId);
+
+      const targetIndex = scenes.findIndex((s) => s.sceneId === sceneId);
+      const remaining = scenes.filter((s) => s.sceneId !== sceneId);
+      const recalculated = recalculateContiguousTimeline(remaining);
+      setScenes(recalculated);
+
+      // Select adjacent scene
+      const nextIndex = Math.min(targetIndex, recalculated.length - 1);
+      if (recalculated[nextIndex]) {
+        setActiveSceneId(recalculated[nextIndex].sceneId);
+      }
+
+      triggerDebouncedSave(recalculated);
+    } catch (err: any) {
+      console.error('Failed to delete scene:', err);
+      alert(err.message || 'Failed to delete scene');
+    }
+  };
+
+  const handleSplitScene = async (sceneId: string, splitMs: number) => {
+    try {
+      pushHistorySnapshot(scenes);
+      await editorService.splitScene(sceneId, splitMs);
+      await loadStoryData();
+    } catch (err: any) {
+      console.error('Failed to split scene:', err);
+      alert(err.message || 'Failed to split scene');
+    }
+  };
+
+  const handleMergeScenes = async (sceneId: string) => {
+    try {
+      pushHistorySnapshot(scenes);
+      await editorService.mergeScenes(sceneId);
+      await loadStoryData();
+    } catch (err: any) {
+      console.error('Failed to merge scenes:', err);
+      alert(err.message || 'Failed to merge scenes');
+    }
+  };
+
+  // Timeline clips direct batch update (from reordering or resizing)
+  const handleUpdateScenes = (updatedScenes: EditorScene[]) => {
+    pushHistorySnapshot(scenes);
+    setScenes(updatedScenes);
+    triggerDebouncedSave(updatedScenes);
+  };
+
+  // Scene metadata update from Properties Inspector
+  const handleUpdateActiveScene = (sceneId: string, updates: Partial<EditorScene>) => {
+    pushHistorySnapshot(scenes);
+    const updated = scenes.map((s) => {
+      if (s.sceneId !== sceneId) return s;
+      return { ...s, ...updates };
+    });
+    setScenes(updated);
+    triggerDebouncedSave(updated);
+  };
+
+  // ----------------------------------------------------
+  // 2D Character Animation Operations
+  // ----------------------------------------------------
+  const handleSelectInstance = useCallback((instanceId: string | null) => {
+    setSelectedInstanceId(instanceId);
+  }, []);
+
+  const handleUpdateAnimationData = useCallback(
+    (sceneId: string, newData: VectorSceneData) => {
+      pushHistorySnapshot(scenes);
+      const updated = scenes.map((s) => {
+        if (s.sceneId !== sceneId) return s;
+        return {
+          ...s,
+          animationData: newData,
+        };
+      });
+      setScenes(updated);
+      triggerDebouncedSave(updated);
+    },
+    [scenes, pushHistorySnapshot, triggerDebouncedSave]
+  );
+
+  const handleUpdateInstance = useCallback(
+    (instanceId: string, updates: Partial<CharacterInstance>) => {
+      if (!activeSceneId) return;
+      const targetScene = scenes.find((s) => s.sceneId === activeSceneId);
+      if (!targetScene || !targetScene.animationData) return;
+
+      const updatedInstances = (targetScene.animationData.characterInstances || []).map((inst) =>
+        inst.instanceId === instanceId ? { ...inst, ...updates } : inst
+      );
+
+      handleUpdateAnimationData(activeSceneId, {
+        ...targetScene.animationData,
+        characterInstances: updatedInstances,
+      });
+    },
+    [activeSceneId, scenes, handleUpdateAnimationData]
+  );
+
+  const handleAddCharacterToScene = useCallback(
+    (sceneId: string, characterId: 'pip_the_bear' | 'sammy_the_kid') => {
+      const targetScene = scenes.find((s) => s.sceneId === sceneId);
+      if (!targetScene) return;
+
+      const currentAnimData: VectorSceneData = targetScene.animationData || {
+        version: 1,
+        viewport: { width: 1280, height: 720 },
+        background: targetScene.imageUrl ? { imageUrl: targetScene.imageUrl, fit: 'cover' } : undefined,
+        characterInstances: [],
+        animationClips: [],
+      };
+
+      const newInstanceId = `char-${characterId}-${Date.now().toString(36)}`;
+      const newName = characterId === 'pip_the_bear' ? 'Pip the Bear' : 'Sammy the Kid';
+
+      // Stagger initial position if other characters exist
+      const count = currentAnimData.characterInstances.length;
+      const initialX = 640 + (count % 2 === 0 ? count * 120 : -count * 120);
+      const initialY = 460;
+
+      const newInstance: CharacterInstance = {
+        instanceId: newInstanceId,
+        characterId,
+        assetType: 'vector_rig',
+        name: newName,
+        x: Math.max(200, Math.min(1080, initialX)),
+        y: initialY,
+        scale: 1.0,
+        rotation: 0,
+        flipX: false,
+        zIndex: count + 1,
+      };
+
+      const sceneDuration = targetScene.endMs - targetScene.startMs || 5000;
+      const defaultClip: AnimationClip = {
+        clipId: `clip-${Date.now().toString(36)}`,
+        instanceId: newInstanceId,
+        action: 'walk',
+        startMs: 0,
+        durationMs: sceneDuration,
+        loop: true,
+        motionMode: 'in_place',
+      };
+
+      const updatedAnimData: VectorSceneData = {
+        ...currentAnimData,
+        characterInstances: [...currentAnimData.characterInstances, newInstance],
+        animationClips: [...currentAnimData.animationClips, defaultClip],
+      };
+
+      handleUpdateAnimationData(sceneId, updatedAnimData);
+      setSelectedInstanceId(newInstanceId);
+    },
+    [scenes, handleUpdateAnimationData]
+  );
+
+  const handleRemoveCharacterFromScene = useCallback(
+    (sceneId: string, instanceId: string) => {
+      const targetScene = scenes.find((s) => s.sceneId === sceneId);
+      if (!targetScene || !targetScene.animationData) return;
+
+      const updatedAnimData: VectorSceneData = {
+        ...targetScene.animationData,
+        characterInstances: targetScene.animationData.characterInstances.filter(
+          (i) => i.instanceId !== instanceId
+        ),
+        animationClips: targetScene.animationData.animationClips.filter(
+          (c) => c.instanceId !== instanceId
+        ),
+      };
+
+      handleUpdateAnimationData(sceneId, updatedAnimData);
+      if (selectedInstanceId === instanceId) {
+        setSelectedInstanceId(null);
+      }
+    },
+    [scenes, selectedInstanceId, handleUpdateAnimationData]
+  );
+
+  const handleSetBackgroundForScene = useCallback(
+    (sceneId: string, imageUrl: string) => {
+      const targetScene = scenes.find((s) => s.sceneId === sceneId);
+      if (!targetScene) return;
+
+      const currentAnimData: VectorSceneData = targetScene.animationData || {
+        version: 1,
+        viewport: { width: 1280, height: 720 },
+        characterInstances: [],
+        animationClips: [],
+      };
+
+      const updatedAnimData: VectorSceneData = {
+        ...currentAnimData,
+        background: { imageUrl, fit: 'cover' },
+      };
+
+      handleUpdateAnimationData(sceneId, updatedAnimData);
+    },
+    [scenes, handleUpdateAnimationData]
+  );
+
+  // ----------------------------------------------------
+  // AI Generation Operations (Real Services)
+  // ----------------------------------------------------
+  const handleGenerateImage = async (sceneId: string, promptOverride?: string) => {
+    if (!story) return;
+    try {
+      setGeneratingImageForScene(sceneId);
+      const characters = story.characters || [];
+      const result = await editorService.generateSceneImage(
+        sceneId,
+        story.storyId,
+        characters,
+        promptOverride
+      );
+
+      // Update scene with generated image
+      const updated = scenes.map((s) => {
+        if (s.sceneId !== sceneId) return s;
+        return {
+          ...s,
+          imageUrl: result.url,
+          visualPrompt: promptOverride || s.visualPrompt,
+          generationStatus: 'completed' as const,
+        };
+      });
+
+      setScenes(updated);
+      triggerDebouncedSave(updated);
+
+      // Refresh versions
+      const vers = await editorService.getSceneVersions(sceneId);
+      setActiveVersions(vers);
+    } catch (err: any) {
+      console.error('Image generation error:', err);
+      alert(`Image generation failed: ${err.message || 'Provider error'}`);
+    } finally {
+      setGeneratingImageForScene(null);
+    }
+  };
+
+  const handleGenerateVoice = async (sceneId: string) => {
+    const targetScene = scenes.find((s) => s.sceneId === sceneId);
+    if (!targetScene) return;
+
+    try {
+      setGeneratingVoiceForScene(sceneId);
+      const result = await editorService.generateSceneVoice(sceneId, targetScene.narration);
+
+      // If speech duration exceeds scene duration, automatically expand the scene
+      const currentDuration = targetScene.endMs - targetScene.startMs;
+      const minNeededMs = Math.max(result.durationMs, 2000);
+      const shouldExpand = minNeededMs > currentDuration;
+
+      let updatedList = scenes.map((s) => {
+        if (s.sceneId !== sceneId) return s;
+        return {
+          ...s,
+          audioUrl: result.audioUrl,
+          actualAudioDurationMs: result.durationMs,
+          endMs: shouldExpand ? s.startMs + minNeededMs : s.endMs,
+        };
+      });
+
+      if (shouldExpand) {
+        updatedList = recalculateContiguousTimeline(updatedList);
+      }
+
+      setScenes(updatedList);
+      triggerDebouncedSave(updatedList);
+
+      // Refresh versions
+      const vers = await editorService.getSceneVersions(sceneId);
+      setActiveVersions(vers);
+    } catch (err: any) {
+      console.error('Voice generation error:', err);
+      alert(`Voice generation failed: ${err.message || 'TTS service error'}`);
+    } finally {
+      setGeneratingVoiceForScene(null);
+    }
+  };
+
+  const handleRemoveVoice = async (sceneId: string) => {
+    try {
+      pushHistorySnapshot(scenes);
+      await editorService.removeSceneVoice(sceneId);
+
+      const updated = scenes.map((s) => {
+        if (s.sceneId !== sceneId) return s;
+        return {
+          ...s,
+          audioUrl: undefined,
+          actualAudioDurationMs: undefined,
+        };
+      });
+
+      setScenes(updated);
+      triggerDebouncedSave(updated);
+
+      // Refresh versions
+      const vers = await editorService.getSceneVersions(sceneId);
+      setActiveVersions(vers);
+    } catch (err: any) {
+      console.error('Failed to remove voice:', err);
+      alert(err.message || 'Failed to remove voice audio');
+    }
+  };
+
+  const handleGenerateVideo = async (sceneId: string, workflow: 'ffmpeg' | 'ai' = 'ffmpeg') => {
+    const targetScene = scenes.find((s) => s.sceneId === sceneId);
+    if (!targetScene) return;
+
+    const img = targetScene.imageUrl || targetScene.image?.imageUrl;
+    if (workflow === 'ffmpeg' && !img) {
+      alert('Ken Burns motion rendering requires a scene image. Please generate or assign an image first.');
+      return;
+    }
+
+    try {
+      setGeneratingVideoForScene(sceneId);
+      const durationSec = Math.max(2, Math.round((targetScene.endMs - targetScene.startMs) / 1000));
+      const result = await editorService.generateSceneVideo(
+        sceneId,
+        img || '',
+        durationSec,
+        workflow,
+        targetScene.visualPrompt || targetScene.narration
+      );
+
+      const updated = scenes.map((s) => {
+        if (s.sceneId !== sceneId) return s;
+        return {
+          ...s,
+          videoUrl: result.url,
+          generationStatus: 'completed' as const,
+        };
+      });
+
+      setScenes(updated);
+      triggerDebouncedSave(updated);
+
+      // Refresh versions
+      const vers = await editorService.getSceneVersions(sceneId);
+      setActiveVersions(vers);
+    } catch (err: any) {
+      console.error('Video clip generation error:', err);
+      alert(`Video clip generation failed: ${err.message || 'Video generation error'}`);
+    } finally {
+      setGeneratingVideoForScene(null);
+    }
+  };
+
+  const handleGenerateAllScenesInitial = async () => {
+    if (!story) return;
+    try {
+      setGeneratingAllScenes(true);
+      await generateScenes(
         story.storyId,
         {
           title: story.title,
           logline: story.logline,
           lesson: story.lesson,
         },
-        story.characters || [],
-      );
-
-      // Reload story to get updated scenes
-      await loadStory();
-    } catch (error) {
-      console.error(error);
-      setApiError('Failed to generate scenes. Please try again.');
-    } finally {
-      setGeneratingScenes(false);
-    }
-  }
-
-  function handleEditStory() {
-    setIsEditing(true);
-  }
-
-  function handleCancelEdit() {
-    setIsEditing(false);
-  }
-
-  async function handleSaveStory(data: {
-    topic: string;
-    audience: string;
-    genre: string;
-    visualStyle: string;
-    lesson: string;
-    characterIds: string[];
-  }) {
-    if (!story) return;
-
-    try {
-      setApiError(null);
-      const API_URL = getApiUrl();
-      const response = await fetch(`${API_URL}/api/content/story/${story!.storyId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          topic: data.topic,
-          audience: data.audience,
-          genre: data.genre,
-          visualStyle: data.visualStyle,
-          lesson: data.lesson,
-          characterIds: data.characterIds,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to regenerate story');
-      }
-
-      setIsEditing(false);
-      await loadStory();
-    } catch (error) {
-      console.error('Failed to regenerate story:', error);
-      setApiError('Failed to regenerate story. Please try again.');
-    }
-  }
-
-
-  async function handleGenerateImage(scene: Scene) {
-    if (!story) return;
-
-    setGeneratingImage(true);
-    setApiError(null);
-
-    try {
-      const image = await generateSceneImage(
-        scene.sceneId,
-        story.storyId,
         story.characters || []
       );
-      
-      // Reload story to get updated scene data
-      await loadStory();
-    } catch (error) {
-      console.error('Failed to generate image:', error);
-      setApiError('Failed to generate image. Please try again.');
+      await loadStoryData();
+    } catch (err: any) {
+      console.error('Failed to generate initial scenes:', err);
+      alert(err.message || 'Failed to generate initial scenes');
     } finally {
-      setGeneratingImage(false);
+      setGeneratingAllScenes(false);
     }
-  }
+  };
 
-  function handleSceneClick(scene: Scene) {
-    navigate(`/stories/${story!.storyId}/scenes/${scene.sceneId}`);
-  }
-
-  async function handleDeleteCharacter(id: string, name: string) {
+  const handleGenerateCharacterReference = async (characterId: string) => {
     try {
-      setApiError(null);
-      await deleteCharacter(id);
-      setDeleteCharacterConfirm(null);
-      loadStory();
-    } catch (error) {
-      console.error('Failed to delete character:', error);
-      setApiError('Failed to delete character. Please try again.');
-    }
-  }
-
-  async function handleRestoreScene(sceneId: string) {
-    try {
-      setApiError(null);
-      await restoreScene(sceneId);
-      loadStory();
-    } catch (error) {
-      console.error('Failed to restore scene:', error);
-      setApiError('Failed to restore scene. Please try again.');
-    }
-  }
-
-  async function handleDeleteScene(sceneId: string) {
-    try {
-      setApiError(null);
-      await deleteScene(sceneId);
-      loadStory();
-    } catch (error) {
-      console.error('Failed to delete scene:', error);
-      setApiError('Failed to delete scene. Please try again.');
-    }
-  }
-
-  async function handleGenerateCharacterReference(characterId: string) {
-    try {
-      setApiError(null);
       await generateCharacterReferenceImage(characterId);
-      loadStory();
-    } catch (error) {
-      console.error('Failed to generate character reference image:', error);
-      setApiError('Failed to generate character reference image. Please try again.');
+      await loadStoryData();
+    } catch (err: any) {
+      console.error('Failed to generate character reference image:', err);
+      alert(err.message || 'Failed to generate reference image');
+    }
+  };
+
+  const handleRestoreVersion = async (sceneId: string, versionId: string) => {
+    try {
+      pushHistorySnapshot(scenes);
+      await editorService.restoreSceneVersion(sceneId, versionId);
+      await loadStoryData();
+    } catch (err: any) {
+      console.error('Failed to restore version:', err);
+      alert(err.message || 'Failed to restore scene version');
+    }
+  };
+
+  const handleToggleCharacterForScene = (characterId: string, sceneId: string) => {
+    const targetScene = scenes.find((s) => s.sceneId === sceneId);
+    if (!targetScene) return;
+
+    const currentList = targetScene.characterIds || [];
+    const exists = currentList.includes(characterId);
+    const nextList = exists
+      ? currentList.filter((id) => id !== characterId)
+      : [...currentList, characterId];
+
+    handleUpdateActiveScene(sceneId, { characterIds: nextList });
+  };
+
+  const handleSelectMediaForScene = (
+    sceneId: string,
+    mediaUrl: string,
+    type: 'image' | 'video'
+  ) => {
+    if (type === 'image') {
+      handleUpdateActiveScene(sceneId, { imageUrl: mediaUrl });
+    } else {
+      handleUpdateActiveScene(sceneId, { videoUrl: mediaUrl });
+    }
+  };
+
+  // ----------------------------------------------------
+  // Validation Warnings Check
+  // ----------------------------------------------------
+  let hasValidationErrors = false;
+  let validationMessage: string | undefined;
+
+  for (const scene of scenes) {
+    const timingVal = validateSceneTiming(scene);
+    if (!timingVal.isValid && timingVal.warning) {
+      hasValidationErrors = true;
+      validationMessage = `${scene.title}: ${timingVal.warning}`;
+      break;
     }
   }
 
-  if (loading) {
-    return <div className="page">Loading story...</div>;
+  // Active scene object
+  const activeScene = scenes.find((s) => s.sceneId === activeSceneId) || scenes[0] || null;
+
+  // ----------------------------------------------------
+  // Loading & Error States
+  // ----------------------------------------------------
+  if (isLoading) {
+    return (
+      <div className="editor-root" style={{ display: 'grid', placeItems: 'center' }}>
+        <div style={{ textAlign: 'center', color: 'var(--ed-text-muted)' }}>
+          <div
+            style={{
+              width: '40px',
+              height: '40px',
+              border: '3px solid #3b82f6',
+              borderTopColor: 'transparent',
+              borderRadius: '50%',
+              margin: '0 auto 16px',
+              animation: 'spin 0.8s linear infinite',
+            }}
+          />
+          <h2 style={{ color: 'var(--ed-text)', fontSize: '18px', margin: '0 0 6px' }}>
+            Loading AI Studio Editor...
+          </h2>
+          <p style={{ margin: 0, fontSize: '13px' }}>Synchronizing timeline, scenes, and media assets</p>
+        </div>
+      </div>
+    );
   }
 
-  if (!story) {
-    return <div className="page">Story not found</div>;
-  }
-
-  return (
-    <div className="page">
-      <PageHeader
-        title={story?.title || 'Story Details'}
-        subtitle={story?.logline}
-        actions={
-          <div className="page-actions">
-            <BackButton to="/stories" label="← Back to Stories" />
+  if (initialLoadError || !story) {
+    return (
+      <div className="editor-root" style={{ display: 'grid', placeItems: 'center' }}>
+        <div
+          style={{
+            maxWidth: '460px',
+            textAlign: 'center',
+            padding: '32px',
+            background: 'var(--ed-surface)',
+            borderRadius: '12px',
+            border: '1px solid var(--ed-border)',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '16px' }}>
+            <AlertTriangleIcon size={40} color="#f59e0b" />
           </div>
-        }
+          <h2 style={{ margin: '0 0 8px', fontSize: '18px', color: 'var(--ed-text)' }}>
+            Story Not Found or Inaccessible
+          </h2>
+          <p style={{ color: 'var(--ed-text-muted)', fontSize: '13px', margin: '0 0 20px' }}>
+            {initialLoadError || 'The requested story could not be loaded into the editor.'}
+          </p>
+          <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+            <button className="ed-brand-btn" onClick={() => navigate('/stories')} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <ArrowLeftIcon size={14} /> Back to Stories
+            </button>
+            <button className="ed-btn-export" onClick={loadStoryData}>
+              Try Again
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ----------------------------------------------------
+  // Full-Page Desktop Video Editor Workspace
+  // ----------------------------------------------------
+  return (
+    <div className="editor-root">
+      {/* 1. Top Workspace Toolbar */}
+      <TopToolbar
+        title={story.title}
+        onTitleChange={handleTitleChange}
+        onBack={() => navigate('/stories')}
+        canUndo={canUndo}
+        canRedo={canRedo}
+        onUndo={handleUndo}
+        onRedo={handleRedo}
+        saveStatus={saveStatus}
+        onRetrySave={handleRetrySave}
+        currentTimeMs={currentTimeMs}
+        totalDurationMs={totalDurationMs}
+        targetDurationMs={story.targetDuration}
+        onTargetDurationChange={handleTargetDurationChange}
+        isPlaying={isPlaying}
+        onTogglePlay={handleTogglePlay}
+        onRewind={handleRewind}
+        onOpenExport={() => setIsExportModalOpen(true)}
+        hasValidationErrors={hasValidationErrors}
+        validationMessage={validationMessage}
       />
 
-      <div className="tabs">
-        <button
-          className={`tab ${activeTab === 'overview' ? 'active' : ''}`}
-          onClick={() => setActiveTab('overview')}
-        >
-          Overview
-        </button>
-        <button
-          className={`tab ${activeTab === 'characters' ? 'active' : ''}`}
-          onClick={() => setActiveTab('characters')}
-        >
-          Characters
-        </button>
-        <button
-          className={`tab ${activeTab === 'scenes' ? 'active' : ''}`}
-          onClick={() => setActiveTab('scenes')}
-        >
-          Scenes
-        </button>
-        <button
-          className={`tab ${activeTab === 'production' ? 'active' : ''}`}
-          onClick={() => setActiveTab('production')}
-        >
-          Production
-        </button>
-      </div>
+      {/* 2. Main Middle Workspace Area (Left Panel + Center Preview Canvas + Right Inspector) */}
+      <div className="ed-body">
+        {/* Left Asset Panel (Scenes, Characters, Images, Videos, Audio, Music) */}
+        <LeftAssetPanel
+          story={story}
+          scenes={scenes}
+          activeSceneId={activeSceneId}
+          onSelectScene={handleSelectScene}
+          onAddScene={handleAddScene}
+          onDuplicateScene={handleDuplicateScene}
+          onDeleteScene={handleDeleteScene}
+          onGenerateImage={(scId) => handleGenerateImage(scId)}
+          onGenerateVoice={(scId) => handleGenerateVoice(scId)}
+          onGenerateVideo={(scId) => handleGenerateVideo(scId)}
+          onToggleCharacterForScene={handleToggleCharacterForScene}
+          onSelectMediaForScene={handleSelectMediaForScene}
+          selectedMusic={selectedMusic}
+          onSelectMusic={setSelectedMusic}
+          musicVolume={musicVolume}
+          onMusicVolumeChange={setMusicVolume}
+          generatingImageForScene={generatingImageForScene}
+          generatingVoiceForScene={generatingVoiceForScene}
+          generatingVideoForScene={generatingVideoForScene}
+          onGenerateCharacterReference={handleGenerateCharacterReference}
+          onAddCharacterToScene={handleAddCharacterToScene}
+          onSetBackgroundForScene={handleSetBackgroundForScene}
+        />
 
-      <div className="tab-content">
-        {activeTab === 'overview' && (
-          isEditing ? (
-            <StoryEditForm
-              story={story}
-              characters={story.characters || []}
-              onSave={handleSaveStory}
-              onCancel={handleCancelEdit}
-            />
-          ) : (
-            <StoryOverview
-              story={story}
-              onEdit={handleEditStory}
-            />
-          )
-        )}
-
-        {activeTab === 'characters' && (
-          <div className="characters-tab">
-            {story.characters && story.characters.length > 0 ? (
-              <div className="character-grid">
-                {story.characters.map((character) => (
-                  <CharacterCard
-                    key={character.id}
-                    character={{
-                      id: character.id,
-                      name: character.name,
-                      species: character.species,
-                      personality: character.personality,
-                      visualDescription: character.description,
-                      distinctiveFeatures: '',
-                      createdAt: new Date().toISOString(),
-                      updatedAt: new Date().toISOString(),
-                      referenceImageUrl: character.referenceImageUrl || undefined,
-                      canonicalAppearance: character.canonicalAppearance || undefined,
-                    }}
-                    onEdit={() => navigate('/characters')}
-                    onDelete={() => handleDeleteCharacter(character.id, character.name)}
-                    onGenerateReference={() => handleGenerateCharacterReference(character.id)}
-                  />
-                ))}
+        {/* Center 16:9 Canvas & Playback Synchronizer */}
+        {scenes.length > 0 ? (
+          <PreviewCanvas
+            activeScene={activeScene}
+            currentTimeMs={currentTimeMs}
+            totalDurationMs={totalDurationMs}
+            isPlaying={isPlaying}
+            onTogglePlay={handleTogglePlay}
+            onSeek={handleSeek}
+            onGenerateImage={() => activeSceneId && handleGenerateImage(activeSceneId)}
+            isGeneratingImage={generatingImageForScene === activeSceneId}
+            isGeneratingVideo={generatingVideoForScene === activeSceneId}
+            exportVideoUrl={exportVideoUrl}
+            previewMode={previewMode}
+            onTogglePreviewMode={setPreviewMode}
+            selectedMusic={selectedMusic}
+            musicVolume={musicVolume}
+            selectedInstanceId={selectedInstanceId}
+            onSelectInstance={handleSelectInstance}
+            onUpdateInstance={handleUpdateInstance}
+            onUpdateAnimationData={(newData) => activeSceneId && handleUpdateAnimationData(activeSceneId, newData)}
+          />
+        ) : (
+          <div
+            style={{
+              flex: 1,
+              display: 'grid',
+              placeItems: 'center',
+              background: '#060911',
+              padding: '24px',
+            }}
+          >
+            <div style={{ textAlign: 'center', maxWidth: '420px' }}>
+              <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '16px' }}>
+                <FilmIcon size={48} color="#3b82f6" />
               </div>
-            ) : (
-              <div className="characters-empty">
-                <p className="muted">No characters in this story.</p>
-                <button className="btn btn-primary" onClick={() => navigate('/characters')}>
-                  Add Characters
+              <h3 style={{ color: 'var(--ed-text)', margin: '0 0 8px', fontSize: '18px' }}>
+                Your Storyboard is Empty
+              </h3>
+              <p style={{ color: 'var(--ed-text-muted)', fontSize: '13px', margin: '0 0 20px' }}>
+                Generate scripted scenes automatically using the AI Story Engine, or add your first scene manually to begin editing.
+              </p>
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+                <button
+                  className="ed-btn-export"
+                  onClick={handleGenerateAllScenesInitial}
+                  disabled={generatingAllScenes}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                >
+                  <SparklesIcon size={14} />
+                  <span>{generatingAllScenes ? 'Generating Scenes...' : 'Generate AI Scenes'}</span>
+                </button>
+                <button className="ed-brand-btn" onClick={handleAddScene} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                  <PlusIcon size={14} />
+                  <span>Add Empty Scene</span>
                 </button>
               </div>
-            )}
-          </div>
-        )}
-
-        {activeTab === 'scenes' && (
-          <div className="scenes-tab">
-            <div className="scenes-toolbar">
-              <label className="scenes-filter-toggle">
-                <input
-                  type="checkbox"
-                  checked={showDeletedScenes}
-                  onChange={(e) => setShowDeletedScenes(e.target.checked)}
-                />
-                Show deleted scenes
-              </label>
             </div>
-            {story.scenes && story.scenes.length > 0 ? (
-              <SceneGrid
-                scenes={story.scenes.filter(scene => 
-                  showDeletedScenes ? true : !scene.deletedAt
-                )}
-                storyId={story.storyId}
-                characters={story.characters || []}
-                onSceneClick={handleSceneClick}
-                onGenerateImage={handleGenerateImage}
-                generatingImage={generatingImage}
-                onRestoreScene={showDeletedScenes ? handleRestoreScene : undefined}
-                onDeleteScene={handleDeleteScene}
-              />
-            ) : (
-              <div className="scenes-empty">
-                <p className="muted">No scenes generated yet.</p>
-                <button className="primary" onClick={handleGenerateScenes} disabled={generatingScenes}>
-                  {generatingScenes ? 'Generating...' : 'Generate Scenes'}
-                </button>
-              </div>
-            )}
           </div>
         )}
 
-        {activeTab === 'production' && (
-          <div className="production-tab">
-            <h2>Production</h2>
-            <p className="muted">Production features coming soon.</p>
-          </div>
-        )}
+        {/* Right Properties Inspector */}
+        <PropertiesInspector
+          scene={activeScene}
+          characters={story.characters || []}
+          playheadMs={currentTimeMs}
+          onUpdateScene={handleUpdateActiveScene}
+          onGenerateImage={(scId, prompt) => handleGenerateImage(scId, prompt)}
+          onGenerateVoice={(scId) => handleGenerateVoice(scId)}
+          onRemoveVoice={handleRemoveVoice}
+          onGenerateVideo={(scId) => handleGenerateVideo(scId)}
+          onSplitScene={handleSplitScene}
+          onDuplicateScene={handleDuplicateScene}
+          onDeleteScene={handleDeleteScene}
+          versions={activeVersions}
+          onRestoreVersion={handleRestoreVersion}
+          isGeneratingImage={generatingImageForScene === activeSceneId}
+          isGeneratingVoice={generatingVoiceForScene === activeSceneId}
+          isGeneratingVideo={generatingVideoForScene === activeSceneId}
+          selectedInstanceId={selectedInstanceId}
+          onSelectInstance={handleSelectInstance}
+          onUpdateInstance={handleUpdateInstance}
+          onUpdateAnimationData={handleUpdateAnimationData}
+          onAddCharacterToScene={handleAddCharacterToScene}
+          onRemoveCharacterFromScene={handleRemoveCharacterFromScene}
+        />
       </div>
 
-      <ConfirmModal
-        isOpen={deleteCharacterConfirm !== null}
-        title="Delete Character"
-        message={`Are you sure you want to delete "${deleteCharacterConfirm?.name}" from this story? This action cannot be undone.`}
-        confirmText="Delete"
-        cancelText="Cancel"
-        onConfirm={() => deleteCharacterConfirm && handleDeleteCharacter(deleteCharacterConfirm.id, deleteCharacterConfirm.name)}
-        onCancel={() => setDeleteCharacterConfirm(null)}
+      {/* 3. Bottom Multi-Track Professional Timeline */}
+      <Timeline
+        scenes={scenes}
+        activeSceneId={activeSceneId}
+        onSelectScene={handleSelectScene}
+        playheadMs={currentTimeMs}
+        onSeek={handleSeek}
+        totalDurationMs={totalDurationMs}
+        onUpdateScenes={handleUpdateScenes}
+        onAddScene={handleAddScene}
+        onSplitScene={handleSplitScene}
+        onMergeScenes={handleMergeScenes}
+        selectedMusic={selectedMusic}
+        selectedInstanceId={selectedInstanceId}
+        onSelectInstance={handleSelectInstance}
+      />
+
+      {/* 4. Real Media Assembly & Video Export Modal */}
+      <ExportModal
+        isOpen={isExportModalOpen}
+        onClose={() => setIsExportModalOpen(false)}
+        story={story}
+        totalDurationMs={totalDurationMs}
+        selectedMusic={selectedMusic}
+        musicVolume={musicVolume}
+        onExportSuccess={(downloadUrl) => {
+          setExportVideoUrl(downloadUrl);
+          setPreviewMode('export');
+        }}
       />
     </div>
   );
