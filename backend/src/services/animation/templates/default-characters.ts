@@ -187,12 +187,21 @@ export const SAMMY_THE_KID: VectorRigDefinition = {
     },
     rightArm: {
       id: 'rightArm',
-      label: 'Right Arm',
+      label: 'Right Upper Arm',
       pivot: { x: 28, y: -4 },
       zIndex: 3,
       shapes: [
-        { type: 'path', d: 'M 26 -4 Q 42 12 34 32 Q 24 38 18 30 Q 18 8 26 -4 Z', fill: '#fed7aa' },
-        { type: 'path', d: 'M 28 -4 Q 40 6 32 14 L 20 8 Z', fill: '#f59e0b' },
+        { type: 'path', d: 'M 26 -4 Q 39 0 38 14 L 31 19 Q 24 9 26 -4 Z', fill: '#fed7aa' },
+        { type: 'path', d: 'M 28 -4 Q 40 6 34 14 L 25 8 Z', fill: '#f59e0b' },
+      ],
+    },
+    rightForearm: {
+      id: 'rightForearm',
+      label: 'Right Forearm',
+      pivot: { x: 34, y: 14 },
+      zIndex: 4,
+      shapes: [
+        { type: 'path', d: 'M 34 12 Q 43 21 34 31 Q 27 36 21 29 L 28 16 Z', fill: '#fed7aa' },
       ],
     },
     leftLeg: {
