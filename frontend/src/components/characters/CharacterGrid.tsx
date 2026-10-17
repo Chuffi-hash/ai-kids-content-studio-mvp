@@ -4,11 +4,20 @@ import CharacterCard from './CharacterCard';
 interface CharacterGridProps {
   characters: Character[];
   onEdit: (character: Character) => void;
+  onCustomize?: (character: Character) => void;
+  onDuplicate?: (character: Character) => void;
   onDelete: (id: string, name: string) => void;
   onGenerateReference?: (characterId: string) => void;
 }
 
-export default function CharacterGrid({ characters, onEdit, onDelete, onGenerateReference }: CharacterGridProps) {
+export default function CharacterGrid({
+  characters,
+  onEdit,
+  onCustomize,
+  onDuplicate,
+  onDelete,
+  onGenerateReference,
+}: CharacterGridProps) {
   return (
     <div className="character-grid">
       {characters.map((character) => (
@@ -16,6 +25,8 @@ export default function CharacterGrid({ characters, onEdit, onDelete, onGenerate
           key={character.id}
           character={character}
           onEdit={() => onEdit(character)}
+          onCustomize={onCustomize ? () => onCustomize(character) : undefined}
+          onDuplicate={onDuplicate ? () => onDuplicate(character) : undefined}
           onDelete={() => onDelete(character.id, character.name)}
           onGenerateReference={onGenerateReference ? () => onGenerateReference(character.id) : undefined}
         />

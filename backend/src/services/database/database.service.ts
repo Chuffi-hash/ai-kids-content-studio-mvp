@@ -1,5 +1,6 @@
 import dotenv from 'dotenv';
 import path from 'path';
+import { randomUUID } from 'crypto';
 
 // Fallback to load .env if not yet loaded by bootstrap
 if (!process.env.DATABASE_URL) {
@@ -570,6 +571,32 @@ export async function linkStoryCharacter(data: {
       storyId: data.storyId,
       characterId: data.characterId,
     },
+  });
+}
+
+export async function unlinkStoryCharacter(storyId: string, characterId: string) {
+  return await prisma.storyCharacter.deleteMany({
+    where: {
+      storyId,
+      characterId,
+    },
+  });
+}
+
+export async function setStoryCharacters(storyId: string, characterIds: string[]) {
+  return await prisma.$transaction(async (tx) => {
+    await tx.storyCharacter.deleteMany({
+      where: { storyId },
+    });
+    for (const characterId of characterIds) {
+      await tx.storyCharacter.create({
+        data: {
+          id: randomUUID(),
+          storyId,
+          characterId,
+        },
+      });
+    }
   });
 }
 

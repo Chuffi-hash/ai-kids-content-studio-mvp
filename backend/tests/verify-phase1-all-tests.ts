@@ -971,6 +971,7 @@ async function runAllVerificationTests() {
       status: 'FAIL',
       details: err.message,
     });
+  }
   } finally {
     // Automatically clean up all test stories and characters so they do not pollute the user dashboard
     for (const sid of createdStoryIds) {

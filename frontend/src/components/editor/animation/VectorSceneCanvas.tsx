@@ -1,6 +1,7 @@
 import React, { useRef } from 'react';
 import { VectorSceneData, CharacterInstance, MotionPath } from '../../../types/animation';
 import { getVectorRig } from '../../../assets/characters/defaultCharacters';
+import { buildRigFromAppearance } from '../../../utils/customCharacterRig';
 import { evaluateCharacterPose } from '../../../utils/animationEngine';
 import { VectorCharacterRenderer } from './VectorCharacterRenderer';
 import { TransformGizmo } from './TransformGizmo';
@@ -117,7 +118,11 @@ export const VectorSceneCanvas: React.FC<VectorSceneCanvasProps> = ({
       {/* 2. Character Instances Layer */}
       {sortedInstances.map((instance) => {
         const isSelected = instance.instanceId === selectedInstanceId;
-        const rig = getVectorRig(instance.characterId);
+        const rig =
+          instance.customRig ||
+          (instance.appearance
+            ? buildRigFromAppearance(instance.characterId, instance.name || 'Character', instance.appearance)
+            : getVectorRig(instance.characterId));
         const pose = evaluateCharacterPose(instance, clips, sceneRelativeMs);
 
         return (
@@ -150,7 +155,16 @@ export const VectorSceneCanvas: React.FC<VectorSceneCanvasProps> = ({
       {selectedInstance && (
         <TransformGizmo
           instance={selectedInstance}
-          rig={getVectorRig(selectedInstance.characterId)}
+          rig={
+            selectedInstance.customRig ||
+            (selectedInstance.appearance
+              ? buildRigFromAppearance(
+                  selectedInstance.characterId,
+                  selectedInstance.name || 'Character',
+                  selectedInstance.appearance
+                )
+              : getVectorRig(selectedInstance.characterId))
+          }
           motionPath={selectedMotionPath}
           onUpdateInstance={(updates) => onUpdateInstance(selectedInstance.instanceId, updates)}
           onUpdateMotionPath={handleUpdateMotionPath}

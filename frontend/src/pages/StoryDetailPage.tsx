@@ -18,6 +18,10 @@ import { PreviewCanvas } from '../components/editor/PreviewCanvas';
 import { PropertiesInspector } from '../components/editor/PropertiesInspector';
 import { Timeline } from '../components/editor/Timeline';
 import { ExportModal } from '../components/editor/ExportModal';
+import { StoryDetailsModal } from '../components/editor/StoryDetailsModal';
+import { CharacterBuilderModal } from '../components/characters/CharacterBuilderModal';
+import { buildRigFromAppearance } from '../utils/customCharacterRig';
+import { createCharacter, updateCharacter } from '../services/character.service';
 import { AlertTriangleIcon, ArrowLeftIcon, FilmIcon, SparklesIcon, PlusIcon } from '../components/common/Icons';
 import '../components/editor/editor.css';
 
@@ -31,6 +35,8 @@ export default function StoryDetailPage() {
   const [activeSceneId, setActiveSceneId] = useState<string | null>(null);
   const [activeVersions, setActiveVersions] = useState<SceneVersionItem[]>([]);
   const [selectedInstanceId, setSelectedInstanceId] = useState<string | null>(null);
+  const [isStoryDetailsOpen, setIsStoryDetailsOpen] = useState<boolean>(false);
+  const [isCharacterBuilderOpen, setIsCharacterBuilderOpen] = useState<boolean>(false);
 
   // Playback & timeline state
   const [currentTimeMs, setCurrentTimeMs] = useState<number>(0);
@@ -616,8 +622,33 @@ export default function StoryDetailPage() {
     [activeSceneId, scenes, handleUpdateAnimationData]
   );
 
+  const handleMoveScene = useCallback(
+    (sceneId: string, direction: 'up' | 'down') => {
+      const idx = scenes.findIndex((s) => s.sceneId === sceneId);
+      if (idx === -1) return;
+      if (direction === 'up' && idx === 0) return;
+      if (direction === 'down' && idx === scenes.length - 1) return;
+
+      const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
+      const reordered = [...scenes];
+      const [moved] = reordered.splice(idx, 1);
+      reordered.splice(targetIdx, 0, moved);
+
+      const updated = recalculateContiguousTimeline(
+        reordered.map((s, i) => ({ ...s, order: i + 1 }))
+      );
+
+      handleUpdateScenes(updated);
+    },
+    [scenes, handleUpdateScenes]
+  );
+
   const handleAddCharacterToScene = useCallback(
-    (sceneId: string, characterId: 'pip_the_bear' | 'sammy_the_kid') => {
+    (
+      sceneId: string,
+      characterId: string,
+      customData?: { name: string; appearance?: any; rig?: any }
+    ) => {
       const targetScene = scenes.find((s) => s.sceneId === sceneId);
       if (!targetScene) return;
 
@@ -630,7 +661,19 @@ export default function StoryDetailPage() {
       };
 
       const newInstanceId = `char-${characterId}-${Date.now().toString(36)}`;
-      const newName = characterId === 'pip_the_bear' ? 'Pip the Bear' : 'Sammy the Kid';
+      let newName = characterId === 'pip_the_bear' ? 'Pip the Bear' : characterId === 'sammy_the_kid' ? 'Sammy the Kid' : 'Custom Hero';
+      let customRig: any = undefined;
+      let appearance: any = undefined;
+
+      if (customData) {
+        if (customData.name) newName = customData.name;
+        if (customData.appearance) {
+          appearance = customData.appearance;
+          customRig = customData.rig || buildRigFromAppearance(characterId, newName, customData.appearance);
+        } else if (customData.rig) {
+          customRig = customData.rig;
+        }
+      }
 
       // Stagger initial position if other characters exist
       const count = currentAnimData.characterInstances.length;
@@ -648,6 +691,8 @@ export default function StoryDetailPage() {
         rotation: 0,
         flipX: false,
         zIndex: count + 1,
+        customRig,
+        appearance,
       };
 
       const sceneDuration = targetScene.endMs - targetScene.startMs || 5000;
@@ -1058,6 +1103,7 @@ export default function StoryDetailPage() {
         onTogglePlay={handleTogglePlay}
         onRewind={handleRewind}
         onOpenExport={() => setIsExportModalOpen(true)}
+        onOpenStoryDetails={() => setIsStoryDetailsOpen(true)}
         hasValidationErrors={hasValidationErrors}
         validationMessage={validationMessage}
       />
@@ -1073,6 +1119,8 @@ export default function StoryDetailPage() {
           onAddScene={handleAddScene}
           onDuplicateScene={handleDuplicateScene}
           onDeleteScene={handleDeleteScene}
+          onMoveScene={handleMoveScene}
+          onOpenCharacterBuilder={() => setIsCharacterBuilderOpen(true)}
           onGenerateImage={(scId) => handleGenerateImage(scId)}
           onGenerateVoice={(scId) => handleGenerateVoice(scId)}
           onGenerateVideo={(scId) => handleGenerateVideo(scId)}
@@ -1206,6 +1254,34 @@ export default function StoryDetailPage() {
         onExportSuccess={(downloadUrl) => {
           setExportVideoUrl(downloadUrl);
           setPreviewMode('export');
+        }}
+      />
+
+      {/* 5. Story Details & Character Roles Modal */}
+      {story && (
+        <StoryDetailsModal
+          isOpen={isStoryDetailsOpen}
+          story={story}
+          onClose={() => setIsStoryDetailsOpen(false)}
+          onStoryUpdated={(updatedStory) => {
+            setStory((prev) => (prev ? { ...prev, ...updatedStory } : null));
+          }}
+          onOpenCharacterBuilder={() => setIsCharacterBuilderOpen(true)}
+        />
+      )}
+
+      {/* 6. Custom Vector Character Builder Modal */}
+      <CharacterBuilderModal
+        isOpen={isCharacterBuilderOpen}
+        character={null}
+        onClose={() => setIsCharacterBuilderOpen(false)}
+        onSave={async (charData) => {
+          const created = await createCharacter(charData);
+          if (story) {
+            await editorService.linkCharacterToStory(story.storyId, created.id);
+            const updatedChars = await editorService.fetchStoryCharacters(story.storyId);
+            setStory((prev) => (prev ? { ...prev, characters: updatedChars } : null));
+          }
         }}
       />
     </div>

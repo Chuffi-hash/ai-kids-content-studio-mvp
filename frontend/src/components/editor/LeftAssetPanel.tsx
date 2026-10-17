@@ -3,6 +3,7 @@ import { EditorStory, EditorScene, EditorCharacter } from '../../types/editor';
 import { formatTimeMs, formatDurationHuman } from '../../utils/timingEngine';
 import { resolveAssetUrl } from '../../utils/urlHelper';
 import { fetchMusicTracks, uploadAudioFile, MusicTrackInfo } from '../../services/editor.service';
+import { Character, getAllCharacters } from '../../services/character.service';
 import {
   ClapperboardIcon,
   UsersIcon,
@@ -32,6 +33,8 @@ interface LeftAssetPanelProps {
   onAddScene: () => void;
   onDuplicateScene: (sceneId: string) => void;
   onDeleteScene: (sceneId: string) => void;
+  onMoveScene?: (sceneId: string, direction: 'up' | 'down') => void;
+  onOpenCharacterBuilder?: () => void;
   onGenerateImage: (sceneId: string) => Promise<void>;
   onGenerateVoice: (sceneId: string) => Promise<void>;
   onGenerateVideo: (sceneId: string, workflow?: 'ffmpeg' | 'ai') => Promise<void>;
@@ -45,7 +48,11 @@ interface LeftAssetPanelProps {
   generatingVoiceForScene: string | null;
   generatingVideoForScene: string | null;
   onGenerateCharacterReference: (characterId: string) => Promise<void>;
-  onAddCharacterToScene?: (sceneId: string, characterId: 'pip_the_bear' | 'sammy_the_kid') => void;
+  onAddCharacterToScene?: (
+    sceneId: string,
+    characterId: string,
+    customData?: { name: string; appearance?: any; rig?: any }
+  ) => void;
   onSetBackgroundForScene?: (sceneId: string, imageUrl: string) => void;
 }
 
@@ -57,6 +64,8 @@ export const LeftAssetPanel: React.FC<LeftAssetPanelProps> = ({
   onAddScene,
   onDuplicateScene,
   onDeleteScene,
+  onMoveScene,
+  onOpenCharacterBuilder,
   onGenerateImage,
   onGenerateVoice,
   onGenerateVideo,
@@ -76,8 +85,16 @@ export const LeftAssetPanel: React.FC<LeftAssetPanelProps> = ({
   const [activeTab, setActiveTab] = useState<AssetTab>('scenes');
   const [previewingAudio, setPreviewingAudio] = useState<string | null>(null);
   const [musicTracks, setMusicTracks] = useState<MusicTrackInfo[]>([]);
+  const [libraryCharacters, setLibraryCharacters] = useState<Character[]>([]);
   const [isUploadingAudio, setIsUploadingAudio] = useState<boolean>(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+
+  // Load library characters for 2D custom rig insertion
+  useEffect(() => {
+    getAllCharacters()
+      .then((chars) => setLibraryCharacters(chars))
+      .catch((err) => console.warn('Could not load library characters:', err));
+  }, [activeTab]);
 
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -273,12 +290,34 @@ export const LeftAssetPanel: React.FC<LeftAssetPanelProps> = ({
                       {formatDurationHuman(duration)} • {scene.narration ? `${scene.narration.slice(0, 30)}...` : 'No narration'}
                     </div>
                   </div>
-                  <div style={{ display: 'flex', gap: '4px' }} onClick={(e) => e.stopPropagation()}>
+                  <div style={{ display: 'flex', gap: '3px', alignItems: 'center' }} onClick={(e) => e.stopPropagation()}>
+                    {onMoveScene && idx > 0 && (
+                      <button
+                        type="button"
+                        className="ed-icon-btn"
+                        onClick={() => onMoveScene(scene.sceneId, 'up')}
+                        title="Move Scene Up"
+                        style={{ width: '22px', height: '22px', fontSize: '10px' }}
+                      >
+                        ▲
+                      </button>
+                    )}
+                    {onMoveScene && idx < scenes.length - 1 && (
+                      <button
+                        type="button"
+                        className="ed-icon-btn"
+                        onClick={() => onMoveScene(scene.sceneId, 'down')}
+                        title="Move Scene Down"
+                        style={{ width: '22px', height: '22px', fontSize: '10px' }}
+                      >
+                        ▼
+                      </button>
+                    )}
                     <button
                       className="ed-icon-btn"
                       onClick={() => onDuplicateScene(scene.sceneId)}
                       title="Duplicate Scene"
-                      style={{ width: '26px', height: '26px', fontSize: '11px' }}
+                      style={{ width: '22px', height: '22px', fontSize: '11px' }}
                     >
                       ⎘
                     </button>
@@ -288,9 +327,9 @@ export const LeftAssetPanel: React.FC<LeftAssetPanelProps> = ({
                         className="ed-icon-btn"
                         onClick={() => onDeleteScene(scene.sceneId)}
                         title="Delete Scene"
-                        style={{ width: '26px', height: '26px', fontSize: '11px', color: '#f87171', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                        style={{ width: '22px', height: '22px', fontSize: '11px', color: '#f87171', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
                       >
-                        <TrashIcon size={12} />
+                        <TrashIcon size={11} />
                       </button>
                     )}
                   </div>
@@ -303,8 +342,18 @@ export const LeftAssetPanel: React.FC<LeftAssetPanelProps> = ({
         {/* 2. CHARACTERS TAB */}
         {activeTab === 'characters' && (
           <>
-            <div className="ed-asset-section-title">
-              <span>2D Vector Character Rigs (2)</span>
+            <div className="ed-asset-section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>2D Vector Character Rigs</span>
+              {onOpenCharacterBuilder && (
+                <button
+                  type="button"
+                  className="ed-tool-btn"
+                  onClick={onOpenCharacterBuilder}
+                  style={{ fontSize: '10px', background: 'rgba(59, 130, 246, 0.2)', borderColor: '#3b82f6', color: '#60a5fa' }}
+                >
+                  + Rig Studio
+                </button>
+              )}
             </div>
 
             {/* Pip the Bear */}
@@ -348,6 +397,36 @@ export const LeftAssetPanel: React.FC<LeftAssetPanelProps> = ({
                 </div>
               </div>
             </div>
+
+            {/* Custom Built Characters from Library */}
+            {libraryCharacters.filter((c) => c.canonicalAppearance?.version === 1).map((char) => (
+              <div key={char.id} className="ed-character-card" style={{ border: '1px solid #8b5cf6', background: 'rgba(139, 92, 246, 0.08)' }}>
+                <div className="ed-char-avatar" style={{ background: '#3b0764', color: '#f3e8ff', fontSize: '18px' }}>
+                  🎨
+                </div>
+                <div className="ed-asset-info">
+                  <div className="ed-asset-title">{char.name}</div>
+                  <div className="ed-asset-subtitle">{char.species} • Custom Vector Rig</div>
+                  <div style={{ marginTop: '6px' }}>
+                    <button
+                      type="button"
+                      className="ed-btn-action primary"
+                      style={{ fontSize: '11px', padding: '4px 10px', background: '#8b5cf6', borderColor: '#8b5cf6' }}
+                      onClick={() =>
+                        activeScene &&
+                        onAddCharacterToScene &&
+                        onAddCharacterToScene(activeScene.sceneId, char.id, {
+                          name: char.name,
+                          appearance: char.canonicalAppearance,
+                        })
+                      }
+                    >
+                      + Add to Active Scene
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
 
             <div className="ed-asset-section-title" style={{ marginTop: '12px' }}>
               <span>Story AI Characters ({story.characters?.length || 0})</span>

@@ -3,7 +3,7 @@ import path from 'path';
 dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 
 import fs from 'fs';
-import { createStory, createScene } from '../src/services/database/database.service.js';
+import { prisma, createStory, createScene } from '../src/services/database/database.service.js';
 import { VideoAssemblyService } from '../src/services/video-assembly/video-assembly.service.js';
 import { AudioGenerationService } from '../src/services/audio-generation/audio-generation.service.js';
 // @ts-ignore
@@ -19,7 +19,8 @@ async function verify2dAnimationExport() {
 
   // 1. Create a test story in PostgreSQL
   const testStoryId = `story-anim-${Date.now()}`;
-  const story = await createStory({
+  try {
+    const story = await createStory({
     id: testStoryId,
     storyId: testStoryId,
     title: 'Pip the Bear 2D Animation Studio Test',
@@ -163,11 +164,19 @@ async function verify2dAnimationExport() {
       }
 
       console.log('\n🎉 ALL 2D VECTOR ANIMATION PIPELINE VERIFICATIONS PASSED SUCCESSFULLY!');
-      process.exit(0);
+      return;
     } else if (current.status === 'failed') {
       console.error('❌ Video Assembly Failed:', current.error);
-      process.exit(1);
+      throw new Error(`Video assembly failed: ${current.error}`);
     }
+  }
+  } finally {
+    try {
+      await prisma.image.deleteMany({ where: { scene: { storyId: testStoryId } } });
+      await prisma.sceneVersion.deleteMany({ where: { scene: { storyId: testStoryId } } });
+      await prisma.scene.deleteMany({ where: { storyId: testStoryId } });
+      await prisma.story.delete({ where: { storyId: testStoryId } });
+    } catch (_) {}
   }
 }
 

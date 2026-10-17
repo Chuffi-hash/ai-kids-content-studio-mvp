@@ -23,6 +23,11 @@ export async function saveStoryMetadata(
     logline?: string;
     lesson?: string;
     targetDuration?: number | null;
+    topic?: string | null;
+    ageGroup?: string | null;
+    audience?: string | null;
+    genre?: string | null;
+    visualStyle?: string | null;
   }
 ): Promise<any> {
   const res = await fetch(`${API_URL}/api/content/story/${storyId}`, {
@@ -31,6 +36,40 @@ export async function saveStoryMetadata(
     body: JSON.stringify(metadata),
   });
   if (!res.ok) throw new Error('Failed to update story metadata');
+  return res.json();
+}
+
+export async function fetchStoryCharacters(storyId: string): Promise<any[]> {
+  const res = await fetch(`${API_URL}/api/content/story/${storyId}/characters`);
+  if (!res.ok) throw new Error('Failed to fetch story characters');
+  return res.json();
+}
+
+export async function linkCharacterToStory(storyId: string, characterId: string): Promise<any> {
+  const res = await fetch(`${API_URL}/api/content/story/${storyId}/characters`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ characterId }),
+  });
+  if (!res.ok) throw new Error('Failed to link character to story');
+  return res.json();
+}
+
+export async function setStoryCharacters(storyId: string, characterIds: string[]): Promise<any> {
+  const res = await fetch(`${API_URL}/api/content/story/${storyId}/characters`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ characterIds }),
+  });
+  if (!res.ok) throw new Error('Failed to update story characters');
+  return res.json();
+}
+
+export async function unlinkCharacterFromStory(storyId: string, characterId: string): Promise<any> {
+  const res = await fetch(`${API_URL}/api/content/story/${storyId}/characters/${characterId}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) throw new Error('Failed to unlink character from story');
   return res.json();
 }
 

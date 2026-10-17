@@ -24,6 +24,8 @@ export interface CharacterInstance {
   rotation: number;
   flipX: boolean;
   zIndex: number;
+  customRig?: VectorRigDefinition;
+  appearance?: CustomCharacterAppearance;
 }
 
 export type AnimationActionType = 'idle' | 'walk' | 'wave' | 'jump';
@@ -116,4 +118,79 @@ export interface EvaluatedCharacterPose {
   rightLegAngle: number;
   chestScaleY: number;
   activeAction: AnimationActionType;
+}
+
+export interface CustomCharacterAppearance {
+  version: 1;
+  species: 'human' | 'bear' | 'robot' | 'animal';
+  gender?: 'neutral' | 'boy' | 'girl';
+  head: {
+    shape: 'round' | 'oval' | 'square' | 'heart';
+    size: number; // 0.8 - 1.3
+    skinColor: string;
+  };
+  neck?: {
+    length?: 'short' | 'normal' | 'long';
+    thickness?: 'slim' | 'normal' | 'wide';
+    style?: 'plain' | 'band' | 'scarf' | 'chibi';
+    color?: string;
+  };
+  hair: {
+    style: 'short' | 'curly' | 'spiky' | 'bob' | 'long' | 'ponytail' | 'bear_ears' | 'none';
+    color: string;
+  };
+  eyes: {
+    style: 'round' | 'dot' | 'anime' | 'happy' | 'sleepy';
+    color: string;
+    size: number; // 0.8 - 1.3
+  };
+  eyebrows: {
+    style: 'curved' | 'flat' | 'bushy' | 'arched';
+    color: string;
+  };
+  nose: {
+    style: 'button' | 'dot' | 'triangle' | 'oval' | 'bear_snout';
+    size: number;
+    color?: string;
+  };
+  mouth: {
+    style: 'smile' | 'open_grin' | 'laugh' | 'surprised' | 'line';
+    color?: string;
+  };
+  ears: {
+    style: 'round' | 'human' | 'bear' | 'elf';
+    size: number;
+  };
+  accessories?: {
+    glasses?: 'none' | 'round' | 'square';
+    glassesColor?: string;
+    freckles?: boolean;
+    blush?: boolean;
+    hat?: 'none' | 'cap' | 'beanie';
+    hatColor?: string;
+  };
+  torso: {
+    shape: 'standard' | 'slim' | 'stocky';
+    width: number; // 0.8 - 1.3
+    height: number; // 0.85 - 1.25
+    clothingStyle: 'tshirt' | 'hoodie' | 'vest' | 'collared' | 'dress';
+    shirtColor: string;
+    collarColor?: string;
+    pattern?: 'none' | 'star' | 'stripe' | 'circle';
+  };
+  arms: {
+    length: number; // 0.8 - 1.3
+    thickness: number; // 0.8 - 1.3
+    sleeveStyle: 'short' | 'long' | 'sleeveless';
+    handShape: 'simple' | 'mitten' | 'paw';
+    skinColor?: string;
+  };
+  legs: {
+    length: number; // 0.8 - 1.3
+    thickness: number; // 0.8 - 1.3
+    pantsStyle: 'pants' | 'shorts' | 'skirt';
+    pantsColor: string;
+    shoeStyle: 'sneakers' | 'boots' | 'shoes';
+    shoeColor: string;
+  };
 }

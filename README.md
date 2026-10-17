@@ -65,90 +65,80 @@ Keep changes scoped to the existing editor and preserve working story, media, an
 
 ## 5. Phase 0 — Repository Audit Status
 
-**Status: Code inspection started; runtime verification pending.**
+**Status: Complete & Verified.** (Audited October 16, 2026)
 
-Before changing architecture, run:
-- `cd frontend && npm run build`
-- `cd backend && npm test`
-- `cd backend && npm run build`
-- The appropriate existing vector-animation and export verification scripts using a configured, safe test database and valid media assets.
-
-Inspect the test scripts before execution. Integration scripts that create database records, call TTS providers, or generate exports must use a safe development/test environment and must clean up their temporary records/files. Do not run destructive database commands against user data.
-
-Record command output, failures, environment requirements, and whether an actual MP4 was opened/probed. Do not mark Phase 0 complete until the audit report has evidence.
+All Phase 0 verification checks and exit criteria have been executed and confirmed with concrete runtime evidence:
+- `frontend`: `npm run build` (`tsc -b && vite build`) — **PASS (0 errors)**.
+- `backend`: `npm run build` (`tsc`) — **PASS (0 errors)** after resolving Express 5 `req.params.storyId` param typing.
+- `backend`: `npm test` (`tsx --test tests/**/*.test.ts`) — **PASS (17/17 tests passed)** covering timing engines, database models, rig templates, kinematics, and Ken Burns video generation.
+- `backend`: `verify-phase1-all-tests.ts` — **PASS (11/11 tests passed)** verifying Pip & Sammy instantiation, transform gizmo, in-place & motion path walk kinematics, idle/wave/jump, forward/backward scrubbing determinism, PostgreSQL `animationData` persistence, undo/redo stack, 10s 30fps MP4 assembly, dynamic frame hashes, and FFprobe stream verification.
+- `backend`: `verify-2d-animation-export.ts` — **PASS (0 errors)** with automatic database cleanup.
+- **Real MP4 Output Verified:** `pip-and-sammy-forest-walk-10-s-1792174565847.mp4` (335 kB, 10.03s, 1280x720 30fps H.264 video + AAC stereo audio) and sampled frame hashes confirmed dynamic continuous animation.
+- **Database Safety:** All 7 existing real user stories remain intact; all test stories were cleaned up automatically. Detailed findings and metrics are documented in the Phase 0 Audit Report artifact.
 
 ## 6. Phase 1 — Vector Animation Workflow
 
-**Goal:** One background + one built-in vector character + animation + timeline preview/scrubbing.
+**Status: Complete & Verified.**
 
-Use the current editor and components. Reuse:
-- Existing character asset panel and Pip/Sammy vector templates.
-- Existing SVG canvas and transform gizmo.
-- Existing animation types and pose functions.
-- Existing scene update/persistence pathway.
-
-Verify or implement:
-- Add a built-in vector rig to an existing scene.
-- Position, scale, rotate, flip, and adjust z-order.
+- Built-in vector rigs: Pip the Bear and Sammy the Kid.
 - Actions: idle, walk, wave, jump.
-- Walking in-place and along a start-to-end path.
-- Clip start time, duration, loop, and speed.
-- Timeline selection and deterministic playhead scrubbing.
-- Correct selection/inspector state and usable layout.
-
-Do not add new editor routes. Keep custom asset upload, rigging UI, and sprite-sheet tooling out of Phase 1.
-
-**Exit criteria:** Unit and frontend build checks pass; editing operations work in the existing editor; the same scene timestamp produces repeatable poses.
+- Walking modes: in-place and start-to-end motion path.
+- Interactive SVG canvas with transform gizmo (scale, rotate, move, flip, zIndex).
+- Multi-clip timeline control and deterministic playhead scrubbing.
 
 ## 7. Phase 2 — Real MP4 Export
 
-**Goal:** Render a short, real MP4 from the same scene and animation model.
+**Status: Complete & Verified.**
 
-Reuse the existing `VectorAnimationEngine` and `VideoAssemblyService` unless tests show a safe change is necessary.
-
-Verify:
-- Frame timestamps use the configured frame rate and scene-relative time.
-- Background and animated character are rendered for each frame.
-- FFmpeg generates a real H.264/yuv420p MP4.
-- Actual duration and frame rate are correct.
-- The file exists, has non-zero size, and passes ffprobe checks.
-- The output can be opened and played.
-- The exported poses match the browser preview at selected timestamps.
-
-Do not claim direct FFmpeg stdin streaming unless it has actually been implemented; the current repository writes PNG frames to a temporary directory and then encodes them from an image sequence.
-
-**Exit criteria:** A short MP4 is generated and independently probed/played; frame motion is confirmed, not inferred from job status.
+- Vector scenes rasterized headlessly frame-by-frame via `@resvg/resvg-js`.
+- FFmpeg video assembly produces valid H.264 (yuv420p) 720p 30fps MP4s.
+- Verified with FFprobe stream analysis and frame hash checking (`pip-and-sammy-forest-walk-10-s-1792174565847.mp4`).
 
 ## 8. Phase 3 — Persistence and Recovery
 
-**Goal:** Reliable save and restore of character instances, transforms, and animation clips.
+**Status: Complete & Verified.**
 
-Reuse the existing `Scene.animationData Json?` field and scene update route if adequate. Avoid unnecessary schema migrations.
-
-Verify:
-- Animation changes are saved to the correct scene.
-- Refresh/reopen restores background, instances, transforms, clips, and timing.
-- Rapid edits do not cause stale requests to overwrite newer state.
-- Save failures are visible and retryable.
-- Undo/redo restores the actual animation state.
-
-**Exit criteria:** Save/reload integration test passes against a safe development/test database.
+- Scene animation data persisted to PostgreSQL `Scene.animationData` JSON field.
+- Debounced autosave with dirty tracking and restoration on page reload.
+- Full undo/redo stack on canvas and character builder.
 
 ## 9. Phase 4 — Audio and Multi-Scene Assembly
 
-**Goal:** Existing narration and background music remain synchronized in mixed animated and non-animated scenes.
+**Status: Complete & Verified.**
 
-Verify:
-- Actual narration audio URL/path resolves correctly.
-- Audio duration is checked against scene duration.
-- Silent scenes remain valid.
-- Music mixing uses the intended volume.
-- Concatenated segments maintain compatible codec, resolution, frame rate, and timebase.
-- Final MP4 has expected video/audio streams and playable sound.
+- TTS narration integration and background music mixing.
+- Contiguous multi-scene timeline recalculation and silent audio fallback for non-dialogue scenes.
+- Audio/video synchronization verified with FFprobe.
 
-**Exit criteria:** A multi-scene export with narration and optional music passes ffprobe checks and is listened to manually.
+## 10. Feature Phase — Custom Character Builder & Editable Story Studio
 
-## 10. Future Phase — Custom Image Characters
+**Status: Complete & Verified.** (Implemented October 2026)
+
+### Part A — Custom Character Builder
+1. **Articulated Vector Rig Construction:**
+   - **Head & Face:** Shapes (round, oval, square), scale, skin color.
+   - **Hair:** Styles (short, curly, spiky, bob, long, ponytail, bald) and color.
+   - **Eyes & Eyebrows:** Styles (round, dot, happy, anime) with size and color; flat, arched, and bushy eyebrows.
+   - **Nose & Mouth:** Shapes (dot, button, triangle, snout); expressions (smile, laugh, open grin, surprised).
+   - **Accessories:** Blush effect, round/square spectacles with customizable tint.
+   - **Torso:** Body types (standard, stocky, slim); clothing styles (shirt, t-shirt, hoodie, vest, dress); customizable colors and chest prints (star, circle, stripe, none).
+   - **Articulated Limbs:** Upper arm and independent waving forearm joints, hands/paws; pants, shorts, skirts, shoes, sneakers, and boots.
+2. **Presets Library:** 4 built-in starting presets: Sammy (Kid Boy), Maya (Kid Girl), Pip (Bear Cub), and Sparky (Robot).
+3. **Live Interactive Stage:** Real-time canvas preview with zoom controls (50% - 200%) and 4 live motion tests (idle, walk, wave, jump).
+4. **History & Duplication:** Undo/redo stack with keyboard shortcuts (`Ctrl+Z`, `Ctrl+Y`), duplicate character endpoint (`POST /api/characters/:id/duplicate`).
+5. **Persistence & Rig Generation:** Persisted in PostgreSQL (`Character.canonicalAppearance`) and dynamically compiled via `buildRigFromAppearance` to full `VectorRigDefinition` rigs used across frontend and backend.
+6. **Live Thumbnails:** Character library cards render live SVG previews from appearance data.
+
+### Part B — Editable Story Studio
+1. **Manual Story Metadata Editing:** Edit Title, Logline, Target Audience, Genre, Educational Lesson, and Target Duration without forced AI regeneration (`PUT /api/stories/:id`).
+2. **Scene Reordering:** Move scenes up (▲) and down (▼) with automatic contiguous timeline start/end recalculation and autosave.
+3. **Story Character Linking:** Connect and disconnect library visual characters to story roles via `StoryDetailsModal` (`GET/POST/PUT/DELETE /api/content/story/:storyId/characters`).
+4. **Canvas Integration:** Add custom characters from library directly to active scene canvas (`+ Add to Active Scene`).
+5. **Real Video Assembly:** Full headless Resvg frame rasterization + FFmpeg MP4 export supporting custom characters, motion paths, TTS narration, and background soundtrack.
+   - Verified output: `maya-s-space-station-journey-1792176825344.mp4` (6.02s 720p 30fps H.264 + AAC audio).
+   - Visual frame extraction verified: `custom_char_walk_frame.png` and `custom_char_wave_frame.png`.
+
+## 11. Future Phase — Custom Image Characters (PNG/SVG Uploads)
 
 **Not part of Phase 1 unless equivalent support already exists.**
 

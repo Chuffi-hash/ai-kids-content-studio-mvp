@@ -13,12 +13,14 @@ interface CharacterFormProps {
     canonicalAppearance?: any;
   }) => void;
   onCancel: () => void;
+  onOpenBuilder?: (character?: Character | null) => void;
 }
 
 export default function CharacterForm({
   character,
   onSubmit,
   onCancel,
+  onOpenBuilder,
 }: CharacterFormProps) {
   const [name, setName] = useState(character?.name || "");
   const [species, setSpecies] = useState(character?.species || "");
@@ -106,6 +108,40 @@ export default function CharacterForm({
       </div>
 
       <div className="character-form-layout character-form-body">
+        {onOpenBuilder && (
+          <div style={{
+            margin: '0 0 16px',
+            padding: '12px 16px',
+            background: 'linear-gradient(135deg, rgba(37, 99, 235, 0.2), rgba(147, 51, 234, 0.2))',
+            border: '1px solid rgba(99, 102, 241, 0.4)',
+            borderRadius: '8px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '12px'
+          }}>
+            <div>
+              <div style={{ fontWeight: 600, color: '#93c5fd', fontSize: '13px' }}>
+                🎨 Build & Customize Visually in Vector Rig Studio
+              </div>
+              <div style={{ fontSize: '12px', color: '#cbd5e1', marginTop: '2px' }}>
+                Design head, hair, neck, torso, and limbs with real-time test animations.
+              </div>
+            </div>
+            <button
+              type="button"
+              className="btn btn-primary"
+              style={{ flexShrink: 0, padding: '6px 12px', fontSize: '12px' }}
+              onClick={() => {
+                onCancel();
+                onOpenBuilder(character);
+              }}
+            >
+              Open Rig Studio
+            </button>
+          </div>
+        )}
+
         <div className="character-form-section">
           <h3>Basic Identity</h3>
           <div className="form-grid">

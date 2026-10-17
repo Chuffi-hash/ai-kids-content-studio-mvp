@@ -7,6 +7,10 @@ import {
   VectorPartShape,
   getVectorRig,
 } from './templates/default-characters.js';
+import {
+  buildRigFromAppearance,
+  CustomCharacterAppearance,
+} from './templates/custom-character-rig.js';
 
 export interface MotionPath {
   startX: number;
@@ -27,6 +31,8 @@ export interface CharacterInstance {
   rotation: number;
   flipX: boolean;
   zIndex: number;
+  customRig?: VectorRigDefinition;
+  appearance?: CustomCharacterAppearance;
 }
 
 export interface AnimationClip {
@@ -324,7 +330,11 @@ export class VectorAnimationEngine {
 
     const charactersXml = sortedInstances
       .map((instance) => {
-        const rig = getVectorRig(instance.characterId);
+        const rig =
+          instance.customRig ||
+          (instance.appearance
+            ? buildRigFromAppearance(instance.characterId, instance.name || 'Character', instance.appearance)
+            : getVectorRig(instance.characterId));
         const pose = evaluatePose(instance, clips, sceneRelativeMs);
         const parts = rig.parts;
 

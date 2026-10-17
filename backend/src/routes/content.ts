@@ -26,6 +26,8 @@ import {
   createSceneVersion,
   getSceneVersions,
   restoreSceneVersion,
+  unlinkStoryCharacter,
+  setStoryCharacters,
 } from "../services/database/database.service.js";
 import { ImageGenerationService } from "../services/image-generation/image-generation.service.js";
 import { getImageGenerationProvider } from "../services/image-generation/provider.factory.js";
@@ -399,7 +401,12 @@ contentRouter.put("/story/:storyId", async (req, res) => {
 
 contentRouter.delete(["/story/:storyId", "/stories/:storyId"], async (req, res) => {
   try {
-    const { storyId } = req.params;
+    const rawStoryId = req.params.storyId;
+    const storyId = Array.isArray(rawStoryId) ? rawStoryId[0] : rawStoryId;
+
+    if (!storyId) {
+      return res.status(400).json({ message: "storyId parameter is required" });
+    }
 
     await deleteStory(storyId);
 
@@ -437,6 +444,73 @@ contentRouter.patch("/story/:storyId", async (req, res) => {
   } catch (error: any) {
     console.error("[Content] Failed to update story metadata:", error);
     return res.status(500).json({ message: error.message || "Failed to update story metadata" });
+  }
+});
+
+// GET characters linked to story
+contentRouter.get("/story/:storyId/characters", async (req, res) => {
+  try {
+    const { storyId } = req.params;
+    const characters = await getCharactersByStoryId(storyId);
+    return res.json(characters);
+  } catch (error: any) {
+    console.error("[Content] Failed to fetch story characters:", error);
+    return res.status(500).json({ message: error.message || "Failed to fetch story characters" });
+  }
+});
+
+// POST link character to story
+contentRouter.post("/story/:storyId/characters", async (req, res) => {
+  try {
+    const { storyId } = req.params;
+    const { characterId } = req.body;
+    if (!characterId) {
+      return res.status(400).json({ message: "characterId is required" });
+    }
+    const character = await getCharacterById(characterId);
+    if (!character) {
+      return res.status(404).json({ message: "Character not found" });
+    }
+    await linkStoryCharacter({
+      id: randomUUID(),
+      storyId,
+      characterId,
+    });
+    const updatedCharacters = await getCharactersByStoryId(storyId);
+    return res.status(201).json(updatedCharacters);
+  } catch (error: any) {
+    console.error("[Content] Failed to link character to story:", error);
+    return res.status(500).json({ message: error.message || "Failed to link character to story" });
+  }
+});
+
+// PUT update all characters linked to story
+contentRouter.put("/story/:storyId/characters", async (req, res) => {
+  try {
+    const { storyId } = req.params;
+    const { characterIds } = req.body;
+    if (!Array.isArray(characterIds)) {
+      return res.status(400).json({ message: "characterIds must be an array" });
+    }
+    await setStoryCharacters(storyId, characterIds);
+    const updatedCharacters = await getCharactersByStoryId(storyId);
+    return res.json(updatedCharacters);
+  } catch (error: any) {
+    console.error("[Content] Failed to set story characters:", error);
+    return res.status(500).json({ message: error.message || "Failed to set story characters" });
+  }
+});
+
+// DELETE unlink character from story
+contentRouter.delete("/story/:storyId/characters/:characterId", async (req, res) => {
+  try {
+    const { storyId, characterId } = req.params;
+    await unlinkStoryCharacter(storyId, characterId);
+    const updatedCharacters = await getCharactersByStoryId(storyId);
+    return res.json(updatedCharacters);
+  } catch (error: any) {
+    console.error("[Content] Failed to unlink character from story:", error);
+    return res.status(500).json({ message: error.message || "Failed to unlink character from story" });
   }
 });
 
