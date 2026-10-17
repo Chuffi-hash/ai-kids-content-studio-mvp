@@ -288,6 +288,18 @@ export class VectorAnimationEngine {
   private base64ImageCache = new Map<string, string>();
 
   /**
+   * Direct helper to render an SVG frame string at a given millisecond timestamp.
+   */
+  renderFrameToSVG(animationData: VectorSceneData, timestampMs = 0, width = 1280, height = 720): string {
+    return this.generateSvgFrame({
+      animationData,
+      timestampSec: timestampMs / 1000,
+      width,
+      height,
+    });
+  }
+
+  /**
    * Generates a complete SVG frame XML document.
    */
   generateSvgFrame(options: {
@@ -343,6 +355,17 @@ export class VectorAnimationEngine {
         const rightLegTransform = `rotate(${pose.rightLegAngle}, ${parts.rightLeg.pivot.x}, ${parts.rightLeg.pivot.y})`;
         const torsoTransform = `translate(0, ${pose.torsoBobY}) rotate(${pose.torsoAngle}, ${parts.torso.pivot.x}, ${parts.torso.pivot.y}) scale(1, ${pose.chestScaleY})`;
         const leftArmTransform = `translate(0, ${pose.torsoBobY}) rotate(${pose.leftArmAngle}, ${parts.leftArm.pivot.x}, ${parts.leftArm.pivot.y})`;
+        const leftArmXml = `
+          <g transform="${leftArmTransform}">
+            ${renderPartXml(parts.leftArm, 'translate(0, 0)')}
+            ${parts.leftForearm
+              ? renderPartXml(
+                  parts.leftForearm,
+                  `rotate(${pose.leftForearmAngle}, ${parts.leftForearm.pivot.x}, ${parts.leftForearm.pivot.y})`
+                )
+              : ''}
+          </g>
+        `;
         const rightArmTransform = `translate(0, ${pose.torsoBobY}) rotate(${pose.rightArmAngle}, ${parts.rightArm.pivot.x}, ${parts.rightArm.pivot.y})`;
         const rightArmXml = `
           <g transform="${rightArmTransform}">
@@ -366,7 +389,7 @@ export class VectorAnimationEngine {
           <g id="char-${instance.instanceId}" data-character="${instance.characterId}" transform="${rootTransform}">
             ${renderPartXml(parts.leftLeg, leftLegTransform)}
             ${renderPartXml(parts.rightLeg, rightLegTransform)}
-            ${renderPartXml(parts.leftArm, leftArmTransform)}
+            ${leftArmXml}
             ${renderPartXml(parts.torso, torsoTransform)}
             ${rightArmXml}
             ${renderPartXml(parts.head, headTransform)}

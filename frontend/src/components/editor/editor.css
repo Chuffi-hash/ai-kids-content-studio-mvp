@@ -341,6 +341,42 @@ body.theme-light .ed-center-canvas {
   background: rgba(59, 130, 246, 0.1);
 }
 
+.ed-asset-item-card.dragging {
+  opacity: 0.45;
+  border: 1px dashed var(--ed-accent);
+  transform: scale(0.98);
+}
+
+.ed-asset-item-card.drag-over {
+  border-color: #3b82f6;
+  background: rgba(59, 130, 246, 0.15);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.4);
+}
+
+.ed-asset-drag-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  color: var(--ed-text-faint);
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 2px;
+  user-select: none;
+  opacity: 0.45;
+  transition: opacity 0.15s, color 0.15s;
+}
+
+.ed-asset-drag-handle:hover,
+.ed-asset-item-card:hover .ed-asset-drag-handle {
+  opacity: 1;
+  color: var(--ed-text);
+}
+
+.ed-asset-drag-handle:active {
+  cursor: grabbing;
+}
+
 .ed-asset-thumb {
   width: 54px;
   height: 38px;

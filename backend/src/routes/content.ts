@@ -12,6 +12,7 @@ import {
   getSceneBySceneId,
   createStory,
   createCharacter,
+  getCharacterByName,
   getCharacterById,
   getCharactersByStoryId,
   linkStoryCharacter,
@@ -104,16 +105,20 @@ contentRouter.post("/story/generate", async (req, res) => {
       visualStyle: visualStyle || null,
     });
 
-    // Create/reuse characters and link them to the story
+    // Create/reuse characters and link them to the story safely without overwriting
     for (const character of story.characters) {
-      const characterRecord = await createCharacter({
-        id: randomUUID(),
-        name: character.name,
-        species: character.species,
-        personality: character.personality,
-        visualDescription: character.description,
-        distinctiveFeatures: character.description.split(",")[0] || "",
-      });
+      const trimmedName = character.name.trim();
+      let characterRecord = await getCharacterByName(trimmedName);
+      if (!characterRecord) {
+        characterRecord = await createCharacter({
+          id: randomUUID(),
+          name: trimmedName,
+          species: character.species,
+          personality: character.personality,
+          visualDescription: character.description,
+          distinctiveFeatures: character.description.split(",")[0] || "",
+        });
+      }
 
       await linkStoryCharacter({
         id: randomUUID(),
@@ -573,7 +578,7 @@ contentRouter.put("/story/:storyId/scenes/timeline", async (req, res) => {
   }
 });
 
-contentRouter.put("/scenes/:sceneId", async (req, res) => {
+const handleSceneUpdate = async (req: any, res: any) => {
   try {
     const { sceneId } = req.params;
     const {
@@ -594,7 +599,20 @@ contentRouter.put("/scenes/:sceneId", async (req, res) => {
       actualAudioDurationMs,
       generationError,
       animationData,
+      dialogue,
+      characterActions,
     } = req.body;
+
+    let finalAnimationData = animationData;
+    if (dialogue !== undefined || characterActions !== undefined) {
+      const currentScene = await getSceneBySceneId(sceneId);
+      const existingAnim = ((finalAnimationData !== undefined ? finalAnimationData : currentScene?.animationData) || {}) as any;
+      finalAnimationData = {
+        ...existingAnim,
+        ...(dialogue !== undefined ? { dialogue } : {}),
+        ...(characterActions !== undefined ? { characterActions } : {}),
+      };
+    }
 
     const updatedScene = await updateScene(sceneId, {
       title,
@@ -613,15 +631,18 @@ contentRouter.put("/scenes/:sceneId", async (req, res) => {
       estimatedDurationMs,
       actualAudioDurationMs,
       generationError,
-      animationData: animationData !== undefined ? animationData : undefined,
+      animationData: finalAnimationData !== undefined ? finalAnimationData : undefined,
     });
 
     return res.json(updatedScene);
-  } catch (error) {
-    console.error(error);
-    return res.status(500).json({ message: "Failed to update scene" });
+  } catch (error: any) {
+    console.error("[Content] Failed to update scene:", error);
+    return res.status(500).json({ message: error.message || "Failed to update scene" });
   }
-});
+};
+
+contentRouter.put("/scenes/:sceneId", handleSceneUpdate);
+contentRouter.patch("/scenes/:sceneId", handleSceneUpdate);
 
 // Duplicate a scene
 contentRouter.post("/scenes/:sceneId/duplicate", async (req, res) => {

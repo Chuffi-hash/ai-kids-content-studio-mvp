@@ -8,6 +8,7 @@ import {
   createStory,
   createScene,
   createCharacter,
+  getCharacterByName,
   linkStoryCharacter,
   deleteStory,
   deleteCharacter,
@@ -48,6 +49,11 @@ async function verifyCustomCharacterExport() {
         color: '#b45309',
       },
     };
+
+    const existingMaya = await getCharacterByName('Maya Custom Explorer');
+    if (existingMaya) {
+      await deleteCharacter(existingMaya.id);
+    }
 
     const character = await createCharacter({
       id: testCharId,

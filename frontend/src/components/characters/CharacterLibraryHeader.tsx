@@ -24,7 +24,7 @@ export default function CharacterLibraryHeader({
           style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
         >
           <PlusIcon size={15} />
-          <span>+ Build Character (Rig Studio)</span>
+          <span>Build Character (Rig Studio)</span>
         </button>
         <button
           type="button"

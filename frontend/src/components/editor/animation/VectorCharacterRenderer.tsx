@@ -109,6 +109,14 @@ export const VectorCharacterRenderer: React.FC<VectorCharacterRendererProps> = (
 
       <g id="leftArm" transform={leftArmTransform}>
         {parts.leftArm.shapes.map(renderShape)}
+        {parts.leftForearm && (
+          <g
+            id="leftForearm"
+            transform={`rotate(${pose.leftForearmAngle}, ${parts.leftForearm.pivot.x}, ${parts.leftForearm.pivot.y})`}
+          >
+            {parts.leftForearm.shapes.map(renderShape)}
+          </g>
+        )}
       </g>
 
       {/* 2. Torso with chest breathing scale and bob */}
