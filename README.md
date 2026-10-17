@@ -186,7 +186,41 @@ All Phase 0 verification checks and exit criteria have been executed and confirm
 - **End-to-End MP4 Export:** `npx tsx tests/verify-structured-story-export.ts` — **PASS (0 errors)**.
   - Verified output: `pip-and-sammy-forest-magic-1792220247421.mp4` (428.7 KB, 30.42s, 1280x720 15fps H.264 video + stereo audio).
 
-## 12. Future Phase — Custom Image Characters (PNG/SVG Uploads)
+## 12. Phase 7 — Kokoro-82M TTS Integration, Audio Effects & Voice Studio
+
+**Status: Complete & Verified.** (Implemented October 17, 2026)
+
+### 1. Architecture & Capabilities
+- **Local ONNX Inference:** Decoupled, asynchronous Python sub-process worker (`backend/src/services/audio-generation/kokoro-inference.py`) executing `kokoro-onnx` and `onnxruntime`. Completely free to run locally without per-request cloud API bills, CUDA bloat, or blocking the Node.js Express event loop.
+- **27 Voices Catalogue:** Full official Kokoro-82M voice roster across American English (`af_heart`, `af_bella`, `af_nicole`, `am_adam`, `am_michael`, etc.) and British English (`bf_emma`, `bm_george`, `bm_daniel`, etc.) with gender, accents, grades, and traits.
+- **Speed Control:** Adjustable playback speed from 0.5x to 2.0x.
+- **Audio Post-Processing Effects:**
+  - **Normal:** Natural, high-fidelity 24kHz synthesized speech.
+  - **Robot:** Authentic electronic mechanical robotic voice via chained FFmpeg flanger, highpass/lowpass filters, and modulated delay.
+  - **Cartoon Creature:** Playful pitch-elevated creature/chipmunk voice utilizing `asetrate=24000*1.32,atempo=1/1.32` to guarantee exact timeline synchronization and duration preservation without drift.
+- **Voice Audition / Preview:** Instant modal/inspector sample player generating quick previews without regenerating scene state.
+- **Character-Aware Recommendations:** Automatically recommends and sets appropriate voice profiles and effects (e.g. Robot effect for robot archetypes, Creature effect for bears and fantasy animals).
+- **Graceful Fallback:** `TTSProviderFactory` prioritizes Kokoro-82M with transparent automatic fallback to Google TTS if the local model is not downloaded or Python runtime is missing.
+
+### 2. Model Setup
+Model weights are stored locally in `backend/models/kokoro/` and ignored by Git:
+```bash
+# Download official Kokoro ONNX model and voices binary (~337 MB total)
+python backend/scripts/download-kokoro-model.py
+```
+
+### 3. Verification Results
+- **Automated Audio Test Suite:** `npx tsx --test tests/kokoro-tts.test.ts` — **PASS (4/4 passed)**
+  - Voice catalogue & provider resolution (27 voices, provider factory, auto-detection).
+  - Speech synthesis generation & speed comparison (0.5x–2.0x duration differential).
+  - Audio post-processing effects (Robot modulation & Cartoon Creature synchronized pitch shifting).
+  - Voice preview & scene narration generation with atomic PostgreSQL persistence.
+- **Full Backend Test Suite:** `npm test` — **PASS (40/40 tests passed, 0 failures)**.
+- **Frontend Production Build:** `npm run build` — **PASS (0 errors, built in 3.89s)**.
+- **End-to-End MP4 Export with Kokoro Narration:** `npx tsx tests/verify-2d-animation-export.ts` — **PASS (0 errors)**.
+  - Generated and probed 24kHz Kokoro audio (`3584ms`), rendered vector character animation frames, and assembled final MP4: `pip-the-bear-2d-animation-stud-1792237143283.mp4` (146.9 KB, 4.02s, 1280x720 30fps H.264 video + AAC stereo audio).
+
+## 13. Future Phase — Custom Image Characters (PNG/SVG Uploads)
 
 **Not part of Phase 1 unless equivalent support already exists.**
 
