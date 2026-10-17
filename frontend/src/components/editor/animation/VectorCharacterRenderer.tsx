@@ -101,14 +101,38 @@ export const VectorCharacterRenderer: React.FC<VectorCharacterRendererProps> = (
       {/* 1. Behind Torso: Left Arm, Left Leg, Right Leg */}
       <g id="leftLeg" transform={leftLegTransform}>
         {parts.leftLeg.shapes.map(renderShape)}
+        {parts.leftLowerLeg && (
+          <g
+            id="leftLowerLeg"
+            transform={`rotate(${pose.leftLowerLegAngle}, ${parts.leftLowerLeg.pivot.x}, ${parts.leftLowerLeg.pivot.y})`}
+          >
+            {parts.leftLowerLeg.shapes.map(renderShape)}
+          </g>
+        )}
       </g>
 
       <g id="rightLeg" transform={rightLegTransform}>
         {parts.rightLeg.shapes.map(renderShape)}
+        {parts.rightLowerLeg && (
+          <g
+            id="rightLowerLeg"
+            transform={`rotate(${pose.rightLowerLegAngle}, ${parts.rightLowerLeg.pivot.x}, ${parts.rightLowerLeg.pivot.y})`}
+          >
+            {parts.rightLowerLeg.shapes.map(renderShape)}
+          </g>
+        )}
       </g>
 
       <g id="leftArm" transform={leftArmTransform}>
         {parts.leftArm.shapes.map(renderShape)}
+        {parts.leftForearm && (
+          <g
+            id="leftForearm"
+            transform={`rotate(${pose.leftForearmAngle}, ${parts.leftForearm.pivot.x}, ${parts.leftForearm.pivot.y})`}
+          >
+            {parts.leftForearm.shapes.map(renderShape)}
+          </g>
+        )}
       </g>
 
       {/* 2. Torso with chest breathing scale and bob */}
