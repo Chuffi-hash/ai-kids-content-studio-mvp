@@ -554,9 +554,9 @@ export async function createCharacter(data: {
     data: {
       id: data.id,
       name: trimmedName,
-      species: data.species,
-      personality: data.personality,
-      visualDescription: data.visualDescription,
+      species: data.species || 'human',
+      personality: data.personality || 'friendly and curious',
+      visualDescription: data.visualDescription || (data as any).description || `${trimmedName} the ${data.species || 'character'}`,
       distinctiveFeatures: data.distinctiveFeatures || '',
       canonicalAppearance: data.canonicalAppearance,
       referenceImageUrl: data.referenceImageUrl,

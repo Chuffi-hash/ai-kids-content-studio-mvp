@@ -33,14 +33,7 @@ export default function StoryCreatePage() {
     }
   }
 
-  async function generateStory(data: {
-    topic: string;
-    audience: string;
-    genre: string;
-    visualStyle: string;
-    lesson: string;
-    characterIds: string[];
-  }) {
+  async function generateStory(data: any) {
     setLoading(true);
     setApiError(null);
 
@@ -53,25 +46,32 @@ export default function StoryCreatePage() {
         },
         body: JSON.stringify({
           topic: data.topic,
-          lesson: data.lesson,
-          audience: data.audience,
+          ageGroup: data.ageGroup,
+          desiredDurationSeconds: data.desiredDurationSeconds,
+          language: data.language,
+          title: data.title || undefined,
           genre: data.genre,
           visualStyle: data.visualStyle,
+          lesson: data.lesson || undefined,
+          sceneCount: data.sceneCount || undefined,
+          tone: data.tone || undefined,
+          contentRestrictions: data.contentRestrictions || undefined,
           characterIds: data.characterIds,
         }),
       });
 
       if (!response.ok) {
-        throw new Error("Request failed");
+        const errJson = await response.json().catch(() => null);
+        throw new Error(errJson?.message || "Request failed");
       }
 
       const result = await response.json();
 
       // Navigate to story detail page after successful generation
       navigate(`/stories/${result.storyId}`);
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      setApiError("Failed to generate story. Please try again.");
+      setApiError(error?.message || "Failed to generate story. Please try again.");
     } finally {
       setLoading(false);
     }

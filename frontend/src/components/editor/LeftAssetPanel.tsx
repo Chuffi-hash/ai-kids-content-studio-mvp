@@ -36,6 +36,7 @@ interface LeftAssetPanelProps {
   onMoveScene?: (sceneId: string, direction: 'up' | 'down') => void;
   onReorderScene?: (fromIndex: number, toIndex: number) => void;
   onOpenCharacterBuilder?: () => void;
+  onRegenerateScene?: (sceneId: string) => Promise<void>;
   onGenerateImage: (sceneId: string) => Promise<void>;
   onGenerateVoice: (sceneId: string) => Promise<void>;
   onGenerateVideo: (sceneId: string, workflow?: 'ffmpeg' | 'ai') => Promise<void>;
@@ -68,6 +69,7 @@ export const LeftAssetPanel: React.FC<LeftAssetPanelProps> = ({
   onMoveScene,
   onReorderScene,
   onOpenCharacterBuilder,
+  onRegenerateScene,
   onGenerateImage,
   onGenerateVoice,
   onGenerateVideo,
@@ -92,6 +94,7 @@ export const LeftAssetPanel: React.FC<LeftAssetPanelProps> = ({
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [draggedSceneIdx, setDraggedSceneIdx] = useState<number | null>(null);
   const [dragOverSceneIdx, setDragOverSceneIdx] = useState<number | null>(null);
+  const [regeneratingSceneId, setRegeneratingSceneId] = useState<string | null>(null);
 
   // Load library characters for 2D custom rig insertion
   useEffect(() => {
@@ -339,6 +342,36 @@ export const LeftAssetPanel: React.FC<LeftAssetPanelProps> = ({
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: '3px', alignItems: 'center' }} onClick={(e) => e.stopPropagation()}>
+                    {onRegenerateScene && (
+                      <button
+                        type="button"
+                        className="ed-icon-btn"
+                        onClick={async () => {
+                          if (window.confirm(`Regenerate scene "${scene.title}" narration and visuals with AI?`)) {
+                            try {
+                              setRegeneratingSceneId(scene.sceneId);
+                              await onRegenerateScene(scene.sceneId);
+                            } finally {
+                              setRegeneratingSceneId(null);
+                            }
+                          }
+                        }}
+                        disabled={regeneratingSceneId === scene.sceneId}
+                        title="Regenerate scene narration and visuals with AI"
+                        style={{
+                          width: '22px',
+                          height: '22px',
+                          fontSize: '11px',
+                          color: '#c084fc',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          opacity: regeneratingSceneId === scene.sceneId ? 0.5 : 1,
+                        }}
+                      >
+                        <SparklesIcon size={11} />
+                      </button>
+                    )}
                     <button
                       type="button"
                       className="ed-icon-btn"
