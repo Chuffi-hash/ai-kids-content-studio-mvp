@@ -3,6 +3,7 @@ import fs from "fs";
 import path from "path";
 import { generateStory } from "../services/story.service.js";
 import { generateScenes } from "../services/scene.service.js";
+import { StoryGenerationService } from "../services/story-generation/story-generation.service.js";
 import {
   getStoryByStoryId,
   getScenesByStoryId,
@@ -73,78 +74,61 @@ contentRouter.post("/story/generate", async (req, res) => {
       genre,
       visualStyle,
       characterIds,
+      newCharacters,
+      desiredDurationSeconds,
+      targetDuration,
+      language,
+      title,
+      sceneCount,
+      tone,
+      contentRestrictions,
+      idempotencyKey,
     } = req.body;
 
-    if (!topic) {
+    if (!topic || typeof topic !== "string" || !topic.trim()) {
       return res.status(400).json({
         message: "topic is required",
       });
     }
 
-    const story = await generateStory({
-      topic,
-      ageGroup,
+    const duration = desiredDurationSeconds || targetDuration || 60;
+
+    const result = await StoryGenerationService.generateAndPersistStory({
+      topic: topic.trim(),
+      ageGroup: ageGroup || audience || "4-7 years",
+      desiredDurationSeconds: duration,
+      language: language || "English",
+      title,
+      genre: genre || "Adventure",
       lesson,
-      audience,
-      genre,
+      characterIds: Array.isArray(characterIds) ? characterIds : [],
+      newCharacters: Array.isArray(newCharacters) ? newCharacters : [],
+      sceneCount: typeof sceneCount === "number" ? sceneCount : undefined,
+      tone,
+      contentRestrictions,
+      idempotencyKey,
       visualStyle,
+      audience,
     });
 
-    // Persist the story
-    const storyId = `story-${randomUUID()}`;
-    await createStory({
-      id: story.id,
-      storyId,
-      title: story.title,
-      logline: story.logline,
-      lesson: story.lesson,
-      topic: topic || null,
-      ageGroup: ageGroup || null,
-      audience: audience || null,
-      genre: genre || null,
-      visualStyle: visualStyle || null,
+    return res.json({
+      id: result.story.id,
+      storyId: result.storyId,
+      title: result.story.title,
+      logline: result.story.logline,
+      lesson: result.story.lesson,
+      topic: result.story.topic,
+      ageGroup: result.story.ageGroup,
+      audience: result.story.audience,
+      genre: result.story.genre,
+      visualStyle: result.story.visualStyle,
+      targetDuration: result.story.targetDuration,
+      characters: result.characters,
+      scenes: result.scenes,
     });
-
-    // Create/reuse characters and link them to the story safely without overwriting
-    for (const character of story.characters) {
-      const trimmedName = character.name.trim();
-      let characterRecord = await getCharacterByName(trimmedName);
-      if (!characterRecord) {
-        characterRecord = await createCharacter({
-          id: randomUUID(),
-          name: trimmedName,
-          species: character.species,
-          personality: character.personality,
-          visualDescription: character.description,
-          distinctiveFeatures: character.description.split(",")[0] || "",
-        });
-      }
-
-      await linkStoryCharacter({
-        id: randomUUID(),
-        storyId,
-        characterId: characterRecord.id,
-      });
-    }
-
-    // Link any user-selected library characters to the story
-    if (Array.isArray(characterIds) && characterIds.length > 0) {
-      for (const characterId of characterIds) {
-        const character = await getCharacterById(characterId);
-        if (!character) continue;
-
-        await linkStoryCharacter({
-          id: randomUUID(),
-          storyId,
-          characterId: character.id,
-        });
-      }
-    }
-
-    return res.json({ ...story, storyId });
-  } catch (error) {
-    console.error(error);
-    return res.status(500).json({ message: "Failed to generate story" });
+  } catch (error: any) {
+    console.error("[Content] Error generating structured story:", error);
+    return res.status(500).json({ message: error?.message || "Failed to generate story" });
   }
 });
 
@@ -336,71 +320,82 @@ contentRouter.put("/story/:storyId", async (req, res) => {
     const {
       topic,
       audience,
+      ageGroup,
       genre,
       visualStyle,
       lesson,
       characterIds,
+      newCharacters,
+      desiredDurationSeconds,
+      targetDuration,
+      language,
+      title,
+      sceneCount,
+      tone,
+      contentRestrictions,
     } = req.body;
 
-    if (!topic) {
+    if (!topic || typeof topic !== "string" || !topic.trim()) {
       return res.status(400).json({
         message: "topic is required",
       });
     }
 
-    // Fetch existing story to get ageGroup for backward compatibility
     const existingStory = await getStoryByStoryId(storyId);
     if (!existingStory) {
       return res.status(404).json({ message: "Story not found" });
     }
 
-    // Regenerate story with new parameters
-    const story = await generateStory({
-      topic,
-      ageGroup: existingStory.ageGroup || undefined,
-      lesson,
-      audience,
-      genre,
-      visualStyle,
+    const duration = desiredDurationSeconds || targetDuration || existingStory.targetDuration || 60;
+
+    const result = await StoryGenerationService.regenerateStory(storyId, {
+      topic: topic.trim(),
+      ageGroup: ageGroup || audience || existingStory.ageGroup || "4-7 years",
+      desiredDurationSeconds: duration,
+      language: language || "English",
+      title: title || existingStory.title,
+      genre: genre || existingStory.genre || "Adventure",
+      lesson: lesson || existingStory.lesson,
+      characterIds: Array.isArray(characterIds) ? characterIds : [],
+      newCharacters: Array.isArray(newCharacters) ? newCharacters : [],
+      sceneCount: typeof sceneCount === "number" ? sceneCount : undefined,
+      tone,
+      contentRestrictions,
+      visualStyle: visualStyle || existingStory.visualStyle || undefined,
+      audience: audience || existingStory.audience || undefined,
     });
 
-    // Update story in database
-    await createStory({
-      id: story.id,
-      storyId,
-      title: story.title,
-      logline: story.logline,
-      lesson: story.lesson,
-      topic: topic || null,
-      ageGroup: existingStory.ageGroup || null,
-      audience: audience || null,
-      genre: genre || null,
-      visualStyle: visualStyle || null,
+    return res.json({
+      id: result.story.id,
+      storyId: result.storyId,
+      title: result.story.title,
+      logline: result.story.logline,
+      lesson: result.story.lesson,
+      topic: result.story.topic,
+      ageGroup: result.story.ageGroup,
+      audience: result.story.audience,
+      genre: result.story.genre,
+      visualStyle: result.story.visualStyle,
+      targetDuration: result.story.targetDuration,
+      characters: result.characters,
+      scenes: result.scenes,
     });
+  } catch (error: any) {
+    console.error("[Content] Failed to regenerate story:", error);
+    return res.status(500).json({ message: error?.message || "Failed to regenerate story" });
+  }
+});
 
-    // Handle character associations
-    // First, remove existing StoryCharacter links for this story
-    // (Note: This would require a deleteStoryCharacter function, for now we'll just add new ones)
-    // For MVP, we'll add new character links without removing old ones to avoid complexity
-    
-    // Link user-selected library characters to the story
-    if (Array.isArray(characterIds) && characterIds.length > 0) {
-      for (const characterId of characterIds) {
-        const character = await getCharacterById(characterId);
-        if (!character) continue;
+contentRouter.post("/scenes/:sceneId/regenerate", async (req, res) => {
+  try {
+    const { sceneId } = req.params;
+    const { prompt } = req.body || {};
 
-        await linkStoryCharacter({
-          id: randomUUID(),
-          storyId,
-          characterId: character.id,
-        });
-      }
-    }
-
-    return res.json({ ...story, storyId });
-  } catch (error) {
-    console.error(error);
-    return res.status(500).json({ message: "Failed to regenerate story" });
+    const updatedScene = await StoryGenerationService.regenerateSingleScene(sceneId, prompt);
+    return res.json(updatedScene);
+  } catch (error: any) {
+    console.error("[Content] Failed to regenerate scene:", error);
+    return res.status(500).json({ message: error?.message || "Failed to regenerate scene" });
   }
 });
 
