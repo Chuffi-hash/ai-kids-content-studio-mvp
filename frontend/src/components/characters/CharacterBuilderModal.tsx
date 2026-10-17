@@ -999,6 +999,45 @@ export const CharacterBuilderModal: React.FC<CharacterBuilderModalProps> = ({
                       }}
                     />
                   </div>
+                  <details className="char-control-group" style={{ marginTop: '12px' }}>
+                    <summary style={{ cursor: 'pointer', color: '#c4b5fd', fontWeight: 600 }}>Advanced arm anatomy</summary>
+                    {([
+                      ['leftLength', 'Left upper-arm length', appearance.arms.leftLength ?? appearance.arms.length],
+                      ['rightLength', 'Right upper-arm length', appearance.arms.rightLength ?? appearance.arms.length],
+                      ['leftThickness', 'Left upper-arm thickness', appearance.arms.leftThickness ?? appearance.arms.thickness],
+                      ['rightThickness', 'Right upper-arm thickness', appearance.arms.rightThickness ?? appearance.arms.thickness],
+                      ['leftForearmLength', 'Left forearm length', appearance.arms.leftForearmLength ?? appearance.arms.length],
+                      ['rightForearmLength', 'Right forearm length', appearance.arms.rightForearmLength ?? appearance.arms.length],
+                      ['leftForearmThickness', 'Left forearm thickness', appearance.arms.leftForearmThickness ?? appearance.arms.thickness],
+                      ['rightForearmThickness', 'Right forearm thickness', appearance.arms.rightForearmThickness ?? appearance.arms.thickness],
+                    ] as const).map(([key, label, value]) => (
+                      <div className="char-control-group" key={key} style={{ marginTop: '10px' }}>
+                        <label>{label}: {value.toFixed(2)}x</label>
+                        <input type="range" min="0.6" max="1.5" step="0.05" value={value}
+                          onChange={(e) => {
+                            const next = parseFloat(e.target.value);
+                            updateAppearance((a) => ({ ...a, arms: { ...a.arms, [key]: next } }));
+                          }}
+                        />
+                      </div>
+                    ))}
+                    {([
+                      ['leftShoulderOffsetX', 'Left shoulder X', appearance.arms.leftShoulderOffsetX ?? 0],
+                      ['leftShoulderOffsetY', 'Left shoulder Y', appearance.arms.leftShoulderOffsetY ?? 0],
+                      ['rightShoulderOffsetX', 'Right shoulder X', appearance.arms.rightShoulderOffsetX ?? 0],
+                      ['rightShoulderOffsetY', 'Right shoulder Y', appearance.arms.rightShoulderOffsetY ?? 0],
+                    ] as const).map(([key, label, value]) => (
+                      <div className="char-control-group" key={key} style={{ marginTop: '10px' }}>
+                        <label>{label}: {value}px</label>
+                        <input type="range" min="-12" max="12" step="1" value={value}
+                          onChange={(e) => {
+                            const next = parseFloat(e.target.value);
+                            updateAppearance((a) => ({ ...a, arms: { ...a.arms, [key]: next } }));
+                          }}
+                        />
+                      </div>
+                    ))}
+                  </details>
                 </div>
               )}
 
@@ -1097,6 +1136,43 @@ export const CharacterBuilderModal: React.FC<CharacterBuilderModalProps> = ({
                       ))}
                     </div>
                   </div>
+                  <details className="char-control-group" style={{ marginTop: '12px' }}>
+                    <summary style={{ cursor: 'pointer', color: '#c4b5fd', fontWeight: 600 }}>Advanced leg and knee anatomy</summary>
+                    {([
+                      ['leftUpperLength', 'Left upper leg length', appearance.legs.leftUpperLength ?? appearance.legs.length],
+                      ['rightUpperLength', 'Right upper leg length', appearance.legs.rightUpperLength ?? appearance.legs.length],
+                      ['leftLowerLength', 'Left lower leg length', appearance.legs.leftLowerLength ?? appearance.legs.length],
+                      ['rightLowerLength', 'Right lower leg length', appearance.legs.rightLowerLength ?? appearance.legs.length],
+                      ['leftThickness', 'Left leg thickness', appearance.legs.leftThickness ?? appearance.legs.thickness],
+                      ['rightThickness', 'Right leg thickness', appearance.legs.rightThickness ?? appearance.legs.thickness],
+                    ] as const).map(([key, label, value]) => (
+                      <div className="char-control-group" key={key} style={{ marginTop: '10px' }}>
+                        <label>{label}: {value.toFixed(2)}x</label>
+                        <input type="range" min="0.6" max="1.5" step="0.05" value={value}
+                          onChange={(e) => {
+                            const next = parseFloat(e.target.value);
+                            updateAppearance((a) => ({ ...a, legs: { ...a.legs, [key]: next } }));
+                          }}
+                        />
+                      </div>
+                    ))}
+                    {([
+                      ['leftHipOffsetX', 'Left hip X', appearance.legs.leftHipOffsetX ?? 0],
+                      ['leftHipOffsetY', 'Left hip Y', appearance.legs.leftHipOffsetY ?? 0],
+                      ['rightHipOffsetX', 'Right hip X', appearance.legs.rightHipOffsetX ?? 0],
+                      ['rightHipOffsetY', 'Right hip Y', appearance.legs.rightHipOffsetY ?? 0],
+                    ] as const).map(([key, label, value]) => (
+                      <div className="char-control-group" key={key} style={{ marginTop: '10px' }}>
+                        <label>{label}: {value}px</label>
+                        <input type="range" min="-12" max="12" step="1" value={value}
+                          onChange={(e) => {
+                            const next = parseFloat(e.target.value);
+                            updateAppearance((a) => ({ ...a, legs: { ...a.legs, [key]: next } }));
+                          }}
+                        />
+                      </div>
+                    ))}
+                  </details>
                 </div>
               )}
 
