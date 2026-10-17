@@ -68,6 +68,18 @@ export interface CustomCharacterAppearance {
     sleeveStyle: 'short' | 'long' | 'sleeveless';
     handShape: 'simple' | 'mitten' | 'paw';
     skinColor?: string;
+    leftLength?: number;
+    rightLength?: number;
+    leftThickness?: number;
+    rightThickness?: number;
+    leftForearmLength?: number;
+    rightForearmLength?: number;
+    leftForearmThickness?: number;
+    rightForearmThickness?: number;
+    leftShoulderOffsetX?: number;
+    leftShoulderOffsetY?: number;
+    rightShoulderOffsetX?: number;
+    rightShoulderOffsetY?: number;
   };
   legs: {
     length: number;
@@ -76,6 +88,16 @@ export interface CustomCharacterAppearance {
     pantsColor: string;
     shoeStyle: 'sneakers' | 'boots' | 'shoes';
     shoeColor: string;
+    leftUpperLength?: number;
+    rightUpperLength?: number;
+    leftLowerLength?: number;
+    rightLowerLength?: number;
+    leftThickness?: number;
+    rightThickness?: number;
+    leftHipOffsetX?: number;
+    leftHipOffsetY?: number;
+    rightHipOffsetX?: number;
+    rightHipOffsetY?: number;
   };
 }
 
@@ -383,18 +405,26 @@ export function buildRigFromAppearance(
   const earY = app.ears.style === 'bear' ? baseHeadY - 24 : baseHeadY;
 
   if (app.ears.style === 'bear') {
-    // Outer ears
     headShapes.push(
       { type: 'circle', cx: -28 * headSize, cy: earY, r: earRx, fill: skin },
       { type: 'circle', cx: 28 * headSize, cy: earY, r: earRx, fill: skin },
       { type: 'circle', cx: -28 * headSize, cy: earY, r: earRx * 0.55, fill: '#fef3c7' },
       { type: 'circle', cx: 28 * headSize, cy: earY, r: earRx * 0.55, fill: '#fef3c7' }
     );
-  } else if (app.ears.style !== 'round') {
-    // Human/elf ears on sides
+  } else if (app.ears.style === 'human') {
     headShapes.push(
       { type: 'ellipse', cx: -31 * headSize, cy: earY, rx: earRx, ry: earRy, fill: skin },
       { type: 'ellipse', cx: 31 * headSize, cy: earY, rx: earRx, ry: earRy, fill: skin }
+    );
+  } else if (app.ears.style === 'elf') {
+    headShapes.push(
+      { type: 'path', d: `M ${-25 * headSize} ${earY - 7} L ${-42 * headSize} ${earY - 2} L ${-27 * headSize} ${earY + 8} Z`, fill: skin },
+      { type: 'path', d: `M ${25 * headSize} ${earY - 7} L ${42 * headSize} ${earY - 2} L ${27 * headSize} ${earY + 8} Z`, fill: skin }
+    );
+  } else {
+    headShapes.push(
+      { type: 'circle', cx: -31 * headSize, cy: earY, r: 6 * (app.ears.size || 1), fill: skin },
+      { type: 'circle', cx: 31 * headSize, cy: earY, r: 6 * (app.ears.size || 1), fill: skin }
     );
   }
 
@@ -405,31 +435,23 @@ export function buildRigFromAppearance(
 
   if (app.head.shape === 'square') {
     headShapes.push({
-      type: 'rect',
-      x: -headRx,
-      y: baseHeadY - headRy,
-      width: headRx * 2,
-      height: headRy * 2,
-      fill: skin,
+      type: 'rect', x: -headRx, y: baseHeadY - headRy,
+      width: headRx * 2, height: headRy * 2, fill: skin,
     });
   } else if (app.head.shape === 'oval') {
     headShapes.push({
-      type: 'ellipse',
-      cx: 0,
-      cy: baseHeadY,
-      rx: headRx * 0.88,
-      ry: headRy * 1.15,
+      type: 'ellipse', cx: 0, cy: baseHeadY,
+      rx: headRx * 0.88, ry: headRy * 1.15, fill: skin,
+    });
+  } else if (app.head.shape === 'heart') {
+    headShapes.push({
+      type: 'path',
+      d: `M 0 ${baseHeadY + headRy * 0.95} C ${-headRx * 0.12} ${baseHeadY + headRy * 0.75} ${-headRx} ${baseHeadY + headRy * 0.25} ${-headRx} ${baseHeadY - headRy * 0.15} C ${-headRx} ${baseHeadY - headRy * 0.9} ${-headRx * 0.18} ${baseHeadY - headRy} 0 ${baseHeadY - headRy * 0.55} C ${headRx * 0.18} ${baseHeadY - headRy} ${headRx} ${baseHeadY - headRy * 0.9} ${headRx} ${baseHeadY - headRy * 0.15} C ${headRx} ${baseHeadY + headRy * 0.25} ${headRx * 0.12} ${baseHeadY + headRy * 0.75} 0 ${baseHeadY + headRy * 0.95} Z`,
       fill: skin,
     });
   } else {
-    // Round / Heart
     headShapes.push({
-      type: 'ellipse',
-      cx: 0,
-      cy: baseHeadY,
-      rx: headRx,
-      ry: headRy,
-      fill: skin,
+      type: 'ellipse', cx: 0, cy: baseHeadY, rx: headRx, ry: headRy, fill: skin,
     });
   }
 
@@ -446,7 +468,14 @@ export function buildRigFromAppearance(
   }
 
   // Hair Back/Main
-  if (app.hair.style === 'short') {
+  if (app.hair.style === 'bear_ears') {
+    headShapes.push(
+      { type: 'circle', cx: -23 * headSize, cy: baseHeadY - 24 * headSize, r: 11 * headSize, fill: hairColor },
+      { type: 'circle', cx: 23 * headSize, cy: baseHeadY - 24 * headSize, r: 11 * headSize, fill: hairColor },
+      { type: 'circle', cx: -23 * headSize, cy: baseHeadY - 24 * headSize, r: 5.5 * headSize, fill: '#fef3c7' },
+      { type: 'circle', cx: 23 * headSize, cy: baseHeadY - 24 * headSize, r: 5.5 * headSize, fill: '#fef3c7' }
+    );
+  } else if (app.hair.style === 'short') {
     headShapes.push(
       {
         type: 'path',
@@ -523,25 +552,24 @@ export function buildRigFromAppearance(
     );
   } else if (app.eyes.style === 'happy') {
     headShapes.push(
-      {
-        type: 'path',
-        d: `M ${leftEyeX - 6} ${eyeY + 2} Q ${leftEyeX} ${eyeY - 6} ${leftEyeX + 6} ${eyeY + 2}`,
-        stroke: eyeColor,
-        strokeWidth: 3,
-        strokeLinecap: 'round',
-        fill: 'none',
-      },
-      {
-        type: 'path',
-        d: `M ${rightEyeX - 6} ${eyeY + 2} Q ${rightEyeX} ${eyeY - 6} ${rightEyeX + 6} ${eyeY + 2}`,
-        stroke: eyeColor,
-        strokeWidth: 3,
-        strokeLinecap: 'round',
-        fill: 'none',
-      }
+      { type: 'path', d: `M ${leftEyeX - 6} ${eyeY + 2} Q ${leftEyeX} ${eyeY - 6} ${leftEyeX + 6} ${eyeY + 2}`, stroke: eyeColor, strokeWidth: 3, strokeLinecap: 'round', fill: 'none' },
+      { type: 'path', d: `M ${rightEyeX - 6} ${eyeY + 2} Q ${rightEyeX} ${eyeY - 6} ${rightEyeX + 6} ${eyeY + 2}`, stroke: eyeColor, strokeWidth: 3, strokeLinecap: 'round', fill: 'none' }
+    );
+  } else if (app.eyes.style === 'sleepy') {
+    headShapes.push(
+      { type: 'path', d: `M ${leftEyeX - 6} ${eyeY} Q ${leftEyeX} ${eyeY + 5} ${leftEyeX + 6} ${eyeY}`, stroke: eyeColor, strokeWidth: 3.4, strokeLinecap: 'round', fill: 'none' },
+      { type: 'path', d: `M ${rightEyeX - 6} ${eyeY} Q ${rightEyeX} ${eyeY + 5} ${rightEyeX + 6} ${eyeY}`, stroke: eyeColor, strokeWidth: 3.4, strokeLinecap: 'round', fill: 'none' }
+    );
+  } else if (app.eyes.style === 'anime') {
+    headShapes.push(
+      { type: 'ellipse', cx: leftEyeX, cy: eyeY, rx: 6.2 * eyeSize, ry: 7.5 * eyeSize, fill: '#ffffff', stroke: eyeColor, strokeWidth: 1.2 },
+      { type: 'ellipse', cx: leftEyeX, cy: eyeY + 1.2, rx: 3.7 * eyeSize, ry: 5.3 * eyeSize, fill: eyeColor },
+      { type: 'circle', cx: leftEyeX - 1.3, cy: eyeY - 2, r: 2.1 * eyeSize, fill: '#ffffff' },
+      { type: 'ellipse', cx: rightEyeX, cy: eyeY, rx: 6.2 * eyeSize, ry: 7.5 * eyeSize, fill: '#ffffff', stroke: eyeColor, strokeWidth: 1.2 },
+      { type: 'ellipse', cx: rightEyeX, cy: eyeY + 1.2, rx: 3.7 * eyeSize, ry: 5.3 * eyeSize, fill: eyeColor },
+      { type: 'circle', cx: rightEyeX - 1.3, cy: eyeY - 2, r: 2.1 * eyeSize, fill: '#ffffff' }
     );
   } else {
-    // Round / Anime / Normal cartoon
     headShapes.push(
       { type: 'circle', cx: leftEyeX, cy: eyeY, r: eyeR, fill: eyeColor },
       { type: 'circle', cx: leftEyeX - 1.5, cy: eyeY - 2, r: eyeR * 0.4, fill: '#ffffff' },
@@ -552,23 +580,18 @@ export function buildRigFromAppearance(
 
   // Eyebrows
   const browY = baseHeadY - 10 * headSize;
+  const eyebrowPath = (centerX: number) => {
+    const startX = centerX - 6 * headSize;
+    const endX = centerX + 6 * headSize;
+    if (app.eyebrows.style === 'flat') return `M ${startX} ${browY} L ${endX} ${browY}`;
+    if (app.eyebrows.style === 'arched') return `M ${startX} ${browY} Q ${centerX} ${browY - 8 * headSize} ${endX} ${browY}`;
+    if (app.eyebrows.style === 'bushy') return `M ${startX} ${browY + 1} L ${centerX - 2 * headSize} ${browY - 6 * headSize} L ${endX} ${browY + 1}`;
+    return `M ${startX} ${browY} Q ${centerX} ${browY - 3 * headSize} ${endX} ${browY}`;
+  };
+  const eyebrowWidth = app.eyebrows.style === 'bushy' ? 4.5 : app.eyebrows.style === 'flat' ? 2.2 : 2.6;
   headShapes.push(
-    {
-      type: 'path',
-      d: `M ${leftEyeX - 6} ${browY} Q ${leftEyeX} ${browY - 3} ${leftEyeX + 6} ${browY}`,
-      stroke: app.eyebrows.color || hairColor,
-      strokeWidth: app.eyebrows.style === 'bushy' ? 3.5 : 2,
-      strokeLinecap: 'round',
-      fill: 'none',
-    },
-    {
-      type: 'path',
-      d: `M ${rightEyeX - 6} ${browY} Q ${rightEyeX} ${browY - 3} ${rightEyeX + 6} ${browY}`,
-      stroke: app.eyebrows.color || hairColor,
-      strokeWidth: app.eyebrows.style === 'bushy' ? 3.5 : 2,
-      strokeLinecap: 'round',
-      fill: 'none',
-    }
+    { type: 'path', d: eyebrowPath(leftEyeX), stroke: app.eyebrows.color || hairColor, strokeWidth: eyebrowWidth, strokeLinecap: 'round', strokeLinejoin: 'round', fill: 'none' },
+    { type: 'path', d: eyebrowPath(rightEyeX), stroke: app.eyebrows.color || hairColor, strokeWidth: eyebrowWidth, strokeLinecap: 'round', strokeLinejoin: 'round', fill: 'none' }
   );
 
   // Nose
@@ -580,50 +603,28 @@ export function buildRigFromAppearance(
       fill: app.nose.color || '#1e293b',
     });
   } else if (app.nose.style === 'triangle') {
-    headShapes.push({
-      type: 'path',
-      d: `M -3.5 ${noseY + 2} L 0 ${noseY - 4} L 3.5 ${noseY + 2} Z`,
-      fill: app.nose.color || '#ea580c',
-    });
+    headShapes.push({ type: 'path', d: `M -3.5 ${noseY + 2} L 0 ${noseY - 4} L 3.5 ${noseY + 2} Z`, fill: app.nose.color || '#ea580c' });
+  } else if (app.nose.style === 'oval') {
+    headShapes.push({ type: 'ellipse', cx: 0, cy: noseY, rx: 4.5 * (app.nose.size || 1), ry: 2.8 * (app.nose.size || 1), fill: app.nose.color || '#d97706' });
   } else {
-    // Button / Dot
-    headShapes.push({
-      type: 'circle',
-      cx: 0,
-      cy: noseY,
-      r: (app.nose.style === 'dot' ? 2 : 3) * (app.nose.size || 1.0),
-      fill: app.nose.color || '#d97706',
-    });
+    headShapes.push({ type: 'circle', cx: 0, cy: noseY, r: (app.nose.style === 'dot' ? 2 : 3) * (app.nose.size || 1), fill: app.nose.color || '#d97706' });
   }
 
   // Mouth
   const mouthY = baseHeadY + 16;
-  if (app.mouth.style === 'open_grin' || app.mouth.style === 'laugh') {
-    headShapes.push({
-      type: 'path',
-      d: `M -9 ${mouthY} Q 0 ${mouthY + 12} 9 ${mouthY} Z`,
-      fill: '#b91c1c',
-      stroke: '#991b1b',
-      strokeWidth: 1.5,
-    });
+  if (app.mouth.style === 'open_grin') {
+    headShapes.push({ type: 'path', d: `M -9 ${mouthY} Q 0 ${mouthY + 12} 9 ${mouthY} Q 0 ${mouthY + 9} -9 ${mouthY} Z`, fill: '#b91c1c', stroke: '#991b1b', strokeWidth: 1.5 });
+  } else if (app.mouth.style === 'laugh') {
+    headShapes.push(
+      { type: 'path', d: `M -10 ${mouthY} Q 0 ${mouthY + 15} 10 ${mouthY} Q 0 ${mouthY + 10} -10 ${mouthY} Z`, fill: '#7f1d1d', stroke: '#991b1b', strokeWidth: 1.5 },
+      { type: 'path', d: `M -5 ${mouthY + 6} Q 0 ${mouthY + 3} 5 ${mouthY + 6} Q 2 ${mouthY + 11} 0 ${mouthY + 10} Q -2 ${mouthY + 11} -5 ${mouthY + 6} Z`, fill: '#fb7185' }
+    );
   } else if (app.mouth.style === 'surprised') {
-    headShapes.push({
-      type: 'circle',
-      cx: 0,
-      cy: mouthY + 2,
-      r: 4.5,
-      fill: '#b91c1c',
-    });
+    headShapes.push({ type: 'ellipse', cx: 0, cy: mouthY + 3, rx: 3.8, ry: 5.8, fill: '#b91c1c' });
+  } else if (app.mouth.style === 'line') {
+    headShapes.push({ type: 'path', d: `M -7 ${mouthY + 2} L 7 ${mouthY + 2}`, stroke: app.mouth.color || '#b91c1c', strokeWidth: 2.8, strokeLinecap: 'round', fill: 'none' });
   } else {
-    // Smile curve
-    headShapes.push({
-      type: 'path',
-      d: `M -8 ${mouthY} Q 0 ${mouthY + 8} 8 ${mouthY}`,
-      stroke: app.mouth.color || '#b91c1c',
-      strokeWidth: 2.8,
-      strokeLinecap: 'round',
-      fill: 'none',
-    });
+    headShapes.push({ type: 'path', d: `M -8 ${mouthY} Q 0 ${mouthY + 8} 8 ${mouthY}`, stroke: app.mouth.color || '#b91c1c', strokeWidth: 2.8, strokeLinecap: 'round', fill: 'none' });
   }
 
   // Optional Blush
@@ -655,7 +656,8 @@ export function buildRigFromAppearance(
   // 2. TORSO & NECK SHAPES
   // -------------------------------------------------------------------------
   const torsoShapes: VectorPartShape[] = [];
-  const halfW = 28 * torsoWidth;
+  const torsoShapeWidth = app.torso.shape === 'slim' ? 0.82 : app.torso.shape === 'stocky' ? 1.18 : 1;
+  const halfW = 28 * torsoWidth * torsoShapeWidth;
   const bottomY = 42 * torsoHeight;
 
   // Neck
@@ -751,23 +753,15 @@ export function buildRigFromAppearance(
 
   // Collar stripe / hoodie pouch
   if (app.torso.clothingStyle === 'hoodie') {
-    // Kangaroo pocket
-    torsoShapes.push({
-      type: 'path',
-      d: `M -14 20 L 14 20 L 18 36 L -18 36 Z`,
-      fill: collarColor,
-      opacity: 0.9,
-    });
+    torsoShapes.push({ type: 'path', d: `M -14 20 L 14 20 L 18 36 L -18 36 Z`, fill: collarColor, opacity: 0.9 });
+  } else if (app.torso.clothingStyle === 'collared') {
+    torsoShapes.push(
+      { type: 'path', d: 'M -15 0 L -4 4 L -9 15 Z', fill: collarColor },
+      { type: 'path', d: 'M 15 0 L 4 4 L 9 15 Z', fill: collarColor },
+      { type: 'path', d: 'M -4 4 L 0 9 L 4 4 L 2 22 L -2 22 Z', fill: '#ef4444' }
+    );
   } else {
-    // Collar accent
-    torsoShapes.push({
-      type: 'path',
-      d: 'M -14 0 Q 0 8 14 0',
-      stroke: collarColor,
-      strokeWidth: 3.5,
-      strokeLinecap: 'round',
-      fill: 'none',
-    });
+    torsoShapes.push({ type: 'path', d: 'M -14 0 Q 0 8 14 0', stroke: collarColor, strokeWidth: 3.5, strokeLinecap: 'round', fill: 'none' });
   }
 
   // Chest Pattern/Emblem
@@ -787,6 +781,11 @@ export function buildRigFromAppearance(
       r: 6,
       fill: '#fde047',
     });
+  } else if (app.torso.pattern === 'stripe') {
+    torsoShapes.push(
+      { type: 'path', d: `M ${-halfW + 4} 15 L ${halfW - 4} 15`, stroke: collarColor, strokeWidth: 4 },
+      { type: 'path', d: `M ${-halfW + 4} 25 L ${halfW - 4} 25`, stroke: collarColor, strokeWidth: 4 }
+    );
   }
 
   // Belt / Waistband (under shirt bottom)
@@ -803,94 +802,110 @@ export function buildRigFromAppearance(
   // 3. ARMS SHAPES & PIVOTS
   // -------------------------------------------------------------------------
   const armPivotX = 28 * torsoWidth;
+  const leftShoulderX = -armPivotX + (app.arms.leftShoulderOffsetX ?? 0);
+  const leftShoulderY = -4 + (app.arms.leftShoulderOffsetY ?? 0);
+  const rightShoulderX = armPivotX + (app.arms.rightShoulderOffsetX ?? 0);
+  const rightShoulderY = -4 + (app.arms.rightShoulderOffsetY ?? 0);
+  const leftArmLen = app.arms.leftLength ?? armLen;
+  const rightArmLen = app.arms.rightLength ?? armLen;
+  const leftArmThick = app.arms.leftThickness ?? armThick;
+  const rightArmThick = app.arms.rightThickness ?? armThick;
+  const leftForearmLen = app.arms.leftForearmLength ?? armLen;
+  const rightForearmLen = app.arms.rightForearmLength ?? armLen;
+  const leftForearmThick = app.arms.leftForearmThickness ?? leftArmThick;
+  const rightForearmThick = app.arms.rightForearmThickness ?? rightArmThick;
+  const leftElbowX = leftShoulderX - 6 * leftArmThick;
+  const leftElbowY = leftShoulderY + 14 * leftArmLen;
+  const rightElbowX = rightShoulderX + 6 * rightArmThick;
+  const rightElbowY = rightShoulderY + 14 * rightArmLen;
   const leftArmShapes: VectorPartShape[] = [];
   const rightArmShapes: VectorPartShape[] = [];
+  const leftForearmShapes: VectorPartShape[] = [];
   const rightForearmShapes: VectorPartShape[] = [];
 
-  // Left Arm (background arm)
-  leftArmShapes.push(
-    // Arm flesh
-    {
-      type: 'path',
-      d: `M ${-armPivotX} -4 Q ${-armPivotX - 16 * armThick} ${12 * armLen} ${-armPivotX - 6 * armThick} ${32 * armLen} Q -24 38 -18 30 Q -18 8 ${-armPivotX} -4 Z`,
-      fill: armSkin,
-    }
-  );
+  leftArmShapes.push({ type: 'path', d: `M ${leftShoulderX} ${leftShoulderY} Q ${leftShoulderX - 13 * leftArmThick} ${leftShoulderY + 4 * leftArmLen} ${leftElbowX - 3 * leftArmThick} ${leftElbowY} L ${leftElbowX + 3 * leftArmThick} ${leftElbowY} Q ${leftShoulderX + 5} ${leftShoulderY + 8} ${leftShoulderX} ${leftShoulderY} Z`, fill: armSkin });
+  rightArmShapes.push({ type: 'path', d: `M ${rightShoulderX} ${rightShoulderY} Q ${rightShoulderX + 13 * rightArmThick} ${rightShoulderY + 4 * rightArmLen} ${rightElbowX + 3 * rightArmThick} ${rightElbowY} L ${rightElbowX - 3 * rightArmThick} ${rightElbowY} Q ${rightShoulderX - 5} ${rightShoulderY + 8} ${rightShoulderX} ${rightShoulderY} Z`, fill: armSkin });
+
   if (app.arms.sleeveStyle !== 'sleeveless') {
-    leftArmShapes.push({
-      type: 'path',
-      d: `M ${-armPivotX} -4 Q ${-armPivotX - 14 * armThick} 6 ${-armPivotX - 6 * armThick} 14 L ${-armPivotX + 6} 8 Z`,
-      fill: shirtColor,
-    });
+    const leftSleeveEndY = app.arms.sleeveStyle === 'long' ? leftElbowY : leftShoulderY + 7 * leftArmLen;
+    const rightSleeveEndY = app.arms.sleeveStyle === 'long' ? rightElbowY : rightShoulderY + 7 * rightArmLen;
+    leftArmShapes.push({ type: 'path', d: `M ${leftShoulderX} ${leftShoulderY} Q ${leftShoulderX - 12 * leftArmThick} ${leftShoulderY + 3 * leftArmLen} ${leftElbowX - 2 * leftArmThick} ${leftSleeveEndY} L ${leftElbowX + 2 * leftArmThick} ${leftSleeveEndY} Q ${leftShoulderX + 3} ${leftShoulderY + 6} ${leftShoulderX} ${leftShoulderY} Z`, fill: shirtColor });
+    rightArmShapes.push({ type: 'path', d: `M ${rightShoulderX} ${rightShoulderY} Q ${rightShoulderX + 12 * rightArmThick} ${rightShoulderY + 3 * rightArmLen} ${rightElbowX + 2 * rightArmThick} ${rightSleeveEndY} L ${rightElbowX - 2 * rightArmThick} ${rightSleeveEndY} Q ${rightShoulderX - 3} ${rightShoulderY + 6} ${rightShoulderX} ${rightShoulderY} Z`, fill: shirtColor });
   }
 
-  // Right Upper Arm
-  rightArmShapes.push(
-    {
-      type: 'path',
-      d: `M ${armPivotX - 2} -4 Q ${armPivotX + 13 * armThick} 0 ${armPivotX + 10 * armThick} ${14 * armLen} L ${armPivotX + 3} 19 Q ${armPivotX - 4} 9 ${armPivotX - 2} -4 Z`,
-      fill: armSkin,
-    }
-  );
-  if (app.arms.sleeveStyle !== 'sleeveless') {
-    rightArmShapes.push({
-      type: 'path',
-      d: `M ${armPivotX} -4 Q ${armPivotX + 12 * armThick} 6 ${armPivotX + 6 * armThick} 14 L ${armPivotX - 3} 8 Z`,
-      fill: shirtColor,
-    });
+  const leftForearmEndY = leftElbowY + 16 * leftForearmLen;
+  const rightForearmEndY = rightElbowY + 16 * rightForearmLen;
+  leftForearmShapes.push({ type: 'path', d: `M ${leftElbowX} ${leftElbowY - 2} Q ${leftElbowX - 8 * leftForearmThick} ${leftElbowY + 5 * leftForearmLen} ${leftElbowX - 5 * leftForearmThick} ${leftForearmEndY} L ${leftElbowX + 3 * leftForearmThick} ${leftForearmEndY} Q ${leftElbowX + 6 * leftForearmThick} ${leftElbowY + 7 * leftForearmLen} ${leftElbowX + 4} ${leftElbowY + 2} Z`, fill: armSkin });
+  rightForearmShapes.push({ type: 'path', d: `M ${rightElbowX} ${rightElbowY - 2} Q ${rightElbowX + 8 * rightForearmThick} ${rightElbowY + 5 * rightForearmLen} ${rightElbowX + 5 * rightForearmThick} ${rightForearmEndY} L ${rightElbowX - 3 * rightForearmThick} ${rightForearmEndY} Q ${rightElbowX - 6 * rightForearmThick} ${rightElbowY + 7 * rightForearmLen} ${rightElbowX - 4} ${rightElbowY + 2} Z`, fill: armSkin });
+
+  if (app.arms.handShape === 'mitten') {
+    leftForearmShapes.push({ type: 'ellipse', cx: leftElbowX - 1, cy: leftForearmEndY, rx: 6 * leftForearmThick, ry: 5 * leftForearmThick, fill: armSkin });
+    rightForearmShapes.push({ type: 'ellipse', cx: rightElbowX + 1, cy: rightForearmEndY, rx: 6 * rightForearmThick, ry: 5 * rightForearmThick, fill: armSkin });
+  } else if (app.arms.handShape === 'paw') {
+    leftForearmShapes.push(
+      { type: 'ellipse', cx: leftElbowX - 2, cy: leftForearmEndY, rx: 7 * leftForearmThick, ry: 5 * leftForearmThick, fill: armSkin },
+      { type: 'circle', cx: leftElbowX - 6, cy: leftForearmEndY - 4, r: 2.1 * leftForearmThick, fill: '#fef3c7' },
+      { type: 'circle', cx: leftElbowX - 1, cy: leftForearmEndY - 5, r: 2.1 * leftForearmThick, fill: '#fef3c7' },
+      { type: 'circle', cx: leftElbowX + 4, cy: leftForearmEndY - 3, r: 2.1 * leftForearmThick, fill: '#fef3c7' }
+    );
+    rightForearmShapes.push(
+      { type: 'ellipse', cx: rightElbowX + 2, cy: rightForearmEndY, rx: 7 * rightForearmThick, ry: 5 * rightForearmThick, fill: armSkin },
+      { type: 'circle', cx: rightElbowX - 4, cy: rightForearmEndY - 3, r: 2.1 * rightForearmThick, fill: '#fef3c7' },
+      { type: 'circle', cx: rightElbowX + 1, cy: rightForearmEndY - 5, r: 2.1 * rightForearmThick, fill: '#fef3c7' },
+      { type: 'circle', cx: rightElbowX + 6, cy: rightForearmEndY - 4, r: 2.1 * rightForearmThick, fill: '#fef3c7' }
+    );
   }
-
-  // Right Forearm & Hand
-  const forearmPivotX = armPivotX + 6;
-  const forearmPivotY = 14 * armLen;
-
-  rightForearmShapes.push({
-    type: 'path',
-    d: `M ${forearmPivotX} ${forearmPivotY - 2} Q ${forearmPivotX + 9 * armThick} ${forearmPivotY + 9 * armLen} ${forearmPivotX} ${forearmPivotY + 19 * armLen} Q ${forearmPivotX - 7} ${forearmPivotY + 24 * armLen} ${forearmPivotX - 13} ${forearmPivotY + 17 * armLen} L ${forearmPivotX - 6} ${forearmPivotY + 2} Z`,
-    fill: armSkin,
-  });
 
   // -------------------------------------------------------------------------
   // 4. LEGS SHAPES & PIVOTS
   // -------------------------------------------------------------------------
-  const hipX = 16 * (0.8 + 0.2 * torsoWidth);
+  const hipBaseX = 16 * (0.8 + 0.2 * torsoWidth);
   const hipY = bottomY + 10;
-  const legH = 30 * legLen;
-
+  const leftHipX = -hipBaseX + (app.legs.leftHipOffsetX ?? 0);
+  const rightHipX = hipBaseX + (app.legs.rightHipOffsetX ?? 0);
+  const leftHipY = hipY + (app.legs.leftHipOffsetY ?? 0);
+  const rightHipY = hipY + (app.legs.rightHipOffsetY ?? 0);
+  const leftUpperH = 15 * (app.legs.leftUpperLength ?? legLen);
+  const rightUpperH = 15 * (app.legs.rightUpperLength ?? legLen);
+  const leftLowerH = 15 * (app.legs.leftLowerLength ?? legLen);
+  const rightLowerH = 15 * (app.legs.rightLowerLength ?? legLen);
+  const leftLegThick = app.legs.leftThickness ?? legThick;
+  const rightLegThick = app.legs.rightThickness ?? legThick;
+  const leftKneeY = leftHipY + leftUpperH;
+  const rightKneeY = rightHipY + rightUpperH;
+  const leftFootY = leftKneeY + leftLowerH;
+  const rightFootY = rightKneeY + rightLowerH;
   const leftLegShapes: VectorPartShape[] = [];
   const rightLegShapes: VectorPartShape[] = [];
+  const leftLowerLegShapes: VectorPartShape[] = [];
+  const rightLowerLegShapes: VectorPartShape[] = [];
 
-  // Left Leg (pants + shoe)
-  leftLegShapes.push(
-    // Pants
-    {
-      type: 'path',
-      d: `M ${-hipX - 8 * legThick} ${hipY} L ${-hipX - 4 * legThick} ${hipY + legH} L ${-hipX + 8 * legThick} ${hipY + legH} L ${-hipX + 8 * legThick} ${hipY} Z`,
-      fill: pantsColor,
-    },
-    // Shoe / Foot
-    {
-      type: 'path',
-      d: `M ${-hipX - 10 * legThick} ${hipY + legH} Q ${-hipX - 14 * legThick} ${hipY + legH + 10} ${-hipX + 2 * legThick} ${hipY + legH + 10} Q ${-hipX + 12 * legThick} ${hipY + legH + 10} ${-hipX + 10 * legThick} ${hipY + legH} Z`,
-      fill: shoeColor,
-    }
-  );
+  if (app.legs.pantsStyle === 'skirt') {
+    leftLegShapes.push({ type: 'path', d: `M ${leftHipX - 12 * leftLegThick} ${leftHipY} L ${leftHipX + 12 * leftLegThick} ${leftHipY} L ${leftHipX + 9 * leftLegThick} ${leftKneeY - 3} L ${leftHipX - 9 * leftLegThick} ${leftKneeY - 3} Z`, fill: pantsColor });
+    rightLegShapes.push({ type: 'path', d: `M ${rightHipX - 12 * rightLegThick} ${rightHipY} L ${rightHipX + 12 * rightLegThick} ${rightHipY} L ${rightHipX + 9 * rightLegThick} ${rightKneeY - 3} L ${rightHipX - 9 * rightLegThick} ${rightKneeY - 3} Z`, fill: pantsColor });
+  } else {
+    const leftUpperEnd = app.legs.pantsStyle === 'shorts' ? leftKneeY - 4 : leftKneeY;
+    const rightUpperEnd = app.legs.pantsStyle === 'shorts' ? rightKneeY - 4 : rightKneeY;
+    leftLegShapes.push({ type: 'path', d: `M ${leftHipX - 8 * leftLegThick} ${leftHipY} L ${leftHipX - 4 * leftLegThick} ${leftUpperEnd} L ${leftHipX + 8 * leftLegThick} ${leftUpperEnd} L ${leftHipX + 8 * leftLegThick} ${leftHipY} Z`, fill: pantsColor });
+    rightLegShapes.push({ type: 'path', d: `M ${rightHipX - 8 * rightLegThick} ${rightHipY} L ${rightHipX - 4 * rightLegThick} ${rightUpperEnd} L ${rightHipX + 8 * rightLegThick} ${rightUpperEnd} L ${rightHipX + 8 * rightLegThick} ${rightHipY} Z`, fill: pantsColor });
+  }
 
-  // Right Leg (pants + shoe)
-  rightLegShapes.push(
-    // Pants
-    {
-      type: 'path',
-      d: `M ${hipX - 8 * legThick} ${hipY} L ${hipX - 4 * legThick} ${hipY + legH} L ${hipX + 8 * legThick} ${hipY + legH} L ${hipX + 8 * legThick} ${hipY} Z`,
-      fill: pantsColor,
-    },
-    // Shoe / Foot
-    {
-      type: 'path',
-      d: `M ${hipX - 10 * legThick} ${hipY + legH} Q ${hipX - 6 * legThick} ${hipY + legH + 10} ${hipX + 10 * legThick} ${hipY + legH + 10} Q ${hipX + 18 * legThick} ${hipY + legH + 10} ${hipX + 12 * legThick} ${hipY + legH} Z`,
-      fill: shoeColor,
+  const leftLowerColor = app.legs.pantsStyle === 'pants' ? pantsColor : armSkin;
+  const rightLowerColor = app.legs.pantsStyle === 'pants' ? pantsColor : armSkin;
+  leftLowerLegShapes.push({ type: 'path', d: `M ${leftHipX - 5 * leftLegThick} ${leftKneeY} L ${leftHipX - 4 * leftLegThick} ${leftFootY} L ${leftHipX + 5 * leftLegThick} ${leftFootY} L ${leftHipX + 5 * leftLegThick} ${leftKneeY} Z`, fill: leftLowerColor });
+  rightLowerLegShapes.push({ type: 'path', d: `M ${rightHipX - 5 * rightLegThick} ${rightKneeY} L ${rightHipX - 4 * rightLegThick} ${rightFootY} L ${rightHipX + 5 * rightLegThick} ${rightFootY} L ${rightHipX + 5 * rightLegThick} ${rightKneeY} Z`, fill: rightLowerColor });
+
+  const appendFoot = (shapes: VectorPartShape[], x: number, footY: number, thick: number) => {
+    if (app.legs.shoeStyle === 'boots') {
+      shapes.push({ type: 'path', d: `M ${x - 7 * thick} ${footY - 9} L ${x + 6 * thick} ${footY - 9} L ${x + 9 * thick} ${footY + 8} Q ${x} ${footY + 12} ${x - 11 * thick} ${footY + 8} Z`, fill: shoeColor });
+      shapes.push({ type: 'path', d: `M ${x - 7 * thick} ${footY - 5} L ${x + 6 * thick} ${footY - 5}`, stroke: '#cbd5e1', strokeWidth: 1.5 });
+    } else {
+      shapes.push({ type: 'path', d: `M ${x - 10 * thick} ${footY} Q ${x - 14 * thick} ${footY + 10} ${x + 2 * thick} ${footY + 10} Q ${x + 12 * thick} ${footY + 10} ${x + 10 * thick} ${footY} Z`, fill: shoeColor });
+      if (app.legs.shoeStyle === 'sneakers') shapes.push({ type: 'path', d: `M ${x - 10 * thick} ${footY + 6} Q ${x} ${footY + 12} ${x + 10 * thick} ${footY + 6}`, stroke: '#f8fafc', strokeWidth: 2, strokeLinecap: 'round', fill: 'none' });
     }
-  );
+  };
+  appendFoot(leftLowerLegShapes, leftHipX, leftFootY, leftLegThick);
+  appendFoot(rightLowerLegShapes, rightHipX, rightFootY, rightLegThick);
 
   // -------------------------------------------------------------------------
   // 5. ASSEMBLE RIG
@@ -918,39 +933,28 @@ export function buildRigFromAppearance(
         shapes: headShapes,
       },
       leftArm: {
-        id: 'leftArm',
-        label: 'Left Arm',
-        pivot: { x: -armPivotX, y: -4 },
-        zIndex: 1,
-        shapes: leftArmShapes,
+        id: 'leftArm', label: 'Left Upper Arm', pivot: { x: leftShoulderX, y: leftShoulderY }, zIndex: 1, shapes: leftArmShapes,
+      },
+      leftForearm: {
+        id: 'leftForearm', label: 'Left Forearm / Elbow Joint', pivot: { x: leftElbowX, y: leftElbowY }, zIndex: 2, shapes: leftForearmShapes,
       },
       rightArm: {
-        id: 'rightArm',
-        label: 'Right Upper Arm',
-        pivot: { x: armPivotX, y: -4 },
-        zIndex: 3,
-        shapes: rightArmShapes,
+        id: 'rightArm', label: 'Right Upper Arm', pivot: { x: rightShoulderX, y: rightShoulderY }, zIndex: 3, shapes: rightArmShapes,
       },
       rightForearm: {
-        id: 'rightForearm',
-        label: 'Right Forearm',
-        pivot: { x: forearmPivotX, y: forearmPivotY },
-        zIndex: 4,
-        shapes: rightForearmShapes,
+        id: 'rightForearm', label: 'Right Forearm / Elbow Joint', pivot: { x: rightElbowX, y: rightElbowY }, zIndex: 4, shapes: rightForearmShapes,
       },
       leftLeg: {
-        id: 'leftLeg',
-        label: 'Left Leg',
-        pivot: { x: -hipX, y: hipY },
-        zIndex: 1,
-        shapes: leftLegShapes,
+        id: 'leftLeg', label: 'Left Upper Leg', pivot: { x: leftHipX, y: leftHipY }, zIndex: 1, shapes: leftLegShapes,
+      },
+      leftLowerLeg: {
+        id: 'leftLowerLeg', label: 'Left Lower Leg / Knee Joint', pivot: { x: leftHipX, y: leftKneeY }, zIndex: 1, shapes: leftLowerLegShapes,
       },
       rightLeg: {
-        id: 'rightLeg',
-        label: 'Right Leg',
-        pivot: { x: hipX, y: hipY },
-        zIndex: 1,
-        shapes: rightLegShapes,
+        id: 'rightLeg', label: 'Right Upper Leg', pivot: { x: rightHipX, y: rightHipY }, zIndex: 1, shapes: rightLegShapes,
+      },
+      rightLowerLeg: {
+        id: 'rightLowerLeg', label: 'Right Lower Leg / Knee Joint', pivot: { x: rightHipX, y: rightKneeY }, zIndex: 1, shapes: rightLowerLegShapes,
       },
     },
   };
