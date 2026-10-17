@@ -643,6 +643,31 @@ export default function StoryDetailPage() {
     [scenes, handleUpdateScenes]
   );
 
+  const handleReorderScene = useCallback(
+    (fromIdx: number, toIdx: number) => {
+      if (
+        fromIdx === toIdx ||
+        fromIdx < 0 ||
+        toIdx < 0 ||
+        fromIdx >= scenes.length ||
+        toIdx >= scenes.length
+      ) {
+        return;
+      }
+
+      const reordered = [...scenes];
+      const [moved] = reordered.splice(fromIdx, 1);
+      reordered.splice(toIdx, 0, moved);
+
+      const updated = recalculateContiguousTimeline(
+        reordered.map((s, i) => ({ ...s, order: i + 1 }))
+      );
+
+      handleUpdateScenes(updated);
+    },
+    [scenes, handleUpdateScenes]
+  );
+
   const handleAddCharacterToScene = useCallback(
     (
       sceneId: string,
@@ -1120,6 +1145,7 @@ export default function StoryDetailPage() {
           onDuplicateScene={handleDuplicateScene}
           onDeleteScene={handleDeleteScene}
           onMoveScene={handleMoveScene}
+          onReorderScene={handleReorderScene}
           onOpenCharacterBuilder={() => setIsCharacterBuilderOpen(true)}
           onGenerateImage={(scId) => handleGenerateImage(scId)}
           onGenerateVoice={(scId) => handleGenerateVoice(scId)}

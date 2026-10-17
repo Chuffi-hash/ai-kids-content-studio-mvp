@@ -34,6 +34,7 @@ interface LeftAssetPanelProps {
   onDuplicateScene: (sceneId: string) => void;
   onDeleteScene: (sceneId: string) => void;
   onMoveScene?: (sceneId: string, direction: 'up' | 'down') => void;
+  onReorderScene?: (fromIndex: number, toIndex: number) => void;
   onOpenCharacterBuilder?: () => void;
   onGenerateImage: (sceneId: string) => Promise<void>;
   onGenerateVoice: (sceneId: string) => Promise<void>;
@@ -65,6 +66,7 @@ export const LeftAssetPanel: React.FC<LeftAssetPanelProps> = ({
   onDuplicateScene,
   onDeleteScene,
   onMoveScene,
+  onReorderScene,
   onOpenCharacterBuilder,
   onGenerateImage,
   onGenerateVoice,
@@ -88,6 +90,8 @@ export const LeftAssetPanel: React.FC<LeftAssetPanelProps> = ({
   const [libraryCharacters, setLibraryCharacters] = useState<Character[]>([]);
   const [isUploadingAudio, setIsUploadingAudio] = useState<boolean>(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [draggedSceneIdx, setDraggedSceneIdx] = useState<number | null>(null);
+  const [dragOverSceneIdx, setDragOverSceneIdx] = useState<number | null>(null);
 
   // Load library characters for 2D custom rig insertion
   useEffect(() => {
@@ -270,13 +274,57 @@ export const LeftAssetPanel: React.FC<LeftAssetPanelProps> = ({
             {scenes.map((scene, idx) => {
               const isSelected = scene.sceneId === activeSceneId;
               const duration = scene.endMs > scene.startMs ? scene.endMs - scene.startMs : scene.estimatedDurationMs || 5000;
+              const isDragging = draggedSceneIdx === idx;
+              const isDragOver = dragOverSceneIdx === idx;
 
               return (
                 <div
                   key={scene.sceneId}
-                  className={`ed-asset-item-card ${isSelected ? 'selected' : ''}`}
+                  className={`ed-asset-item-card ${isSelected ? 'selected' : ''} ${isDragging ? 'dragging' : ''} ${isDragOver ? 'drag-over' : ''}`}
                   onClick={() => onSelectScene(scene.sceneId)}
+                  draggable={true}
+                  onDragStart={(e) => {
+                    setDraggedSceneIdx(idx);
+                    e.dataTransfer.effectAllowed = 'move';
+                    e.dataTransfer.setData('text/plain', String(idx));
+                  }}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                    if (dragOverSceneIdx !== idx) {
+                      setDragOverSceneIdx(idx);
+                    }
+                  }}
+                  onDragLeave={(e) => {
+                    if (e.currentTarget === e.target) {
+                      setDragOverSceneIdx(null);
+                    }
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    if (draggedSceneIdx !== null && draggedSceneIdx !== idx) {
+                      if (onReorderScene) {
+                        onReorderScene(draggedSceneIdx, idx);
+                      } else if (onMoveScene) {
+                        const dir = idx < draggedSceneIdx ? 'up' : 'down';
+                        onMoveScene(scenes[draggedSceneIdx].sceneId, dir);
+                      }
+                    }
+                    setDraggedSceneIdx(null);
+                    setDragOverSceneIdx(null);
+                  }}
+                  onDragEnd={() => {
+                    setDraggedSceneIdx(null);
+                    setDragOverSceneIdx(null);
+                  }}
                 >
+                  <div
+                    className="ed-asset-drag-handle"
+                    title="Drag to reorder scene"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    ⠿
+                  </div>
                   <div className="ed-asset-thumb">
                     {scene.imageUrl || scene.image?.imageUrl ? (
                       <img src={resolveAssetUrl(scene.imageUrl || scene.image?.imageUrl)} alt={scene.title} />
@@ -291,29 +339,8 @@ export const LeftAssetPanel: React.FC<LeftAssetPanelProps> = ({
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: '3px', alignItems: 'center' }} onClick={(e) => e.stopPropagation()}>
-                    {onMoveScene && idx > 0 && (
-                      <button
-                        type="button"
-                        className="ed-icon-btn"
-                        onClick={() => onMoveScene(scene.sceneId, 'up')}
-                        title="Move Scene Up"
-                        style={{ width: '22px', height: '22px', fontSize: '10px' }}
-                      >
-                        ▲
-                      </button>
-                    )}
-                    {onMoveScene && idx < scenes.length - 1 && (
-                      <button
-                        type="button"
-                        className="ed-icon-btn"
-                        onClick={() => onMoveScene(scene.sceneId, 'down')}
-                        title="Move Scene Down"
-                        style={{ width: '22px', height: '22px', fontSize: '10px' }}
-                      >
-                        ▼
-                      </button>
-                    )}
                     <button
+                      type="button"
                       className="ed-icon-btn"
                       onClick={() => onDuplicateScene(scene.sceneId)}
                       title="Duplicate Scene"
