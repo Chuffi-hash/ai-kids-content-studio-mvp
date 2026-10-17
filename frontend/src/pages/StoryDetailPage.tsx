@@ -855,13 +855,26 @@ export default function StoryDetailPage() {
     }
   };
 
-  const handleGenerateVoice = async (sceneId: string) => {
+  const handleGenerateVoice = async (
+    sceneId: string,
+    options?: {
+      provider?: string;
+      voice?: string;
+      speed?: number;
+      effect?: 'normal' | 'robot' | 'cartoon';
+      lang?: string;
+    }
+  ) => {
     const targetScene = scenes.find((s) => s.sceneId === sceneId);
     if (!targetScene) return;
 
     try {
       setGeneratingVoiceForScene(sceneId);
-      const result = await editorService.generateSceneVoice(sceneId, targetScene.narration);
+      const result = await editorService.generateSceneVoice(
+        sceneId,
+        targetScene.narration,
+        options
+      );
 
       // If speech duration exceeds scene duration, automatically expand the scene
       const currentDuration = targetScene.endMs - targetScene.startMs;
@@ -1243,7 +1256,7 @@ export default function StoryDetailPage() {
           playheadMs={currentTimeMs}
           onUpdateScene={handleUpdateActiveScene}
           onGenerateImage={(scId, prompt) => handleGenerateImage(scId, prompt)}
-          onGenerateVoice={(scId) => handleGenerateVoice(scId)}
+          onGenerateVoice={(scId, opts) => handleGenerateVoice(scId, opts)}
           onRemoveVoice={handleRemoveVoice}
           onGenerateVideo={(scId) => handleGenerateVideo(scId)}
           onSplitScene={handleSplitScene}

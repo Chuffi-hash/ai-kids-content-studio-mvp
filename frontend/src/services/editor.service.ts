@@ -243,14 +243,73 @@ export async function generateSceneImage(
   };
 }
 
+export interface SupportedVoice {
+  id: string;
+  name: string;
+  gender: 'female' | 'male' | 'neutral';
+  lang: string;
+  accent?: string;
+  grade?: string;
+  description?: string;
+}
+
+export interface TTSVoicesResponse {
+  activeProvider: string;
+  isKokoroAvailable: boolean;
+  voices: SupportedVoice[];
+  effects: Array<{ id: string; name: string; description: string }>;
+}
+
+export async function getTTSVoices(): Promise<TTSVoicesResponse> {
+  const res = await fetch(`${API_URL}/api/content/tts/voices`);
+  if (!res.ok) throw new Error('Failed to load voices catalogue');
+  return res.json();
+}
+
+export async function previewVoice(options: {
+  voice: string;
+  provider?: string;
+  speed?: number;
+  effect?: 'normal' | 'robot' | 'cartoon';
+  sampleText?: string;
+  lang?: string;
+}): Promise<{ audioUrl: string; durationMs: number; voice: string; effect: string }> {
+  const res = await fetch(`${API_URL}/api/content/tts/preview`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(options),
+  });
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.message || 'Failed to preview voice');
+  }
+  return res.json();
+}
+
 export async function generateSceneVoice(
   sceneId: string,
-  narration?: string
-): Promise<{ audioUrl: string; durationMs: number }> {
+  narration?: string,
+  options?: {
+    provider?: string;
+    voice?: string;
+    speed?: number;
+    effect?: 'normal' | 'robot' | 'cartoon';
+    lang?: string;
+  }
+): Promise<{
+  audioUrl: string;
+  durationMs: number;
+  provider?: string;
+  voice?: string;
+  effect?: string;
+}> {
   const res = await fetch(`${API_URL}/api/content/scenes/${sceneId}/voice`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ narration }),
+    body: JSON.stringify({
+      narration,
+      ...options,
+    }),
   });
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({}));

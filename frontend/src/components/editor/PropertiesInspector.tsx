@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { EditorScene, EditorCharacter, SceneVersionItem } from '../../types/editor';
 import {
   estimateSpeechDurationMs,
@@ -9,6 +9,11 @@ import {
 import { resolveAssetUrl } from '../../utils/urlHelper';
 import { CharacterInstance, VectorSceneData } from '../../types/animation';
 import { CharacterAnimationInspector } from './animation/CharacterAnimationInspector';
+import {
+  getTTSVoices,
+  previewVoice,
+  SupportedVoice,
+} from '../../services/editor.service';
 import {
   AlertTriangleIcon,
   CheckIcon,
@@ -29,7 +34,16 @@ interface PropertiesInspectorProps {
   playheadMs: number;
   onUpdateScene: (sceneId: string, updates: Partial<EditorScene>) => void;
   onGenerateImage: (sceneId: string, promptOverride?: string) => Promise<void>;
-  onGenerateVoice: (sceneId: string) => Promise<void>;
+  onGenerateVoice: (
+    sceneId: string,
+    options?: {
+      provider?: string;
+      voice?: string;
+      speed?: number;
+      effect?: 'normal' | 'robot' | 'cartoon';
+      lang?: string;
+    }
+  ) => Promise<void>;
   onRemoveVoice?: (sceneId: string) => Promise<void>;
   onGenerateVideo: (sceneId: string, workflow?: 'ffmpeg' | 'ai') => Promise<void>;
   onSplitScene: (sceneId: string, splitMs: number) => void;
@@ -116,6 +130,87 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
       audioPlayerRef.current.currentTime = 0;
     }
   }, [scene.sceneId, scene.title, scene.narration, scene.visualPrompt, scene.cameraDirection, scene.audioUrl]);
+
+  // Kokoro TTS Studio state
+  const [ttsVoices, setTtsVoices] = useState<SupportedVoice[]>([]);
+  const [isKokoroAvailable, setIsKokoroAvailable] = useState<boolean>(true);
+  const [selectedProvider, setSelectedProvider] = useState<'kokoro' | 'google'>('kokoro');
+  const [selectedLanguage, setSelectedLanguage] = useState<string>('en-us');
+  const [selectedVoice, setSelectedVoice] = useState<string>('af_heart');
+  const [voiceSpeed, setVoiceSpeed] = useState<number>(1.0);
+  const [voiceEffect, setVoiceEffect] = useState<'normal' | 'robot' | 'cartoon'>('normal');
+
+  // Preview state
+  const [isPreviewingVoice, setIsPreviewingVoice] = useState<boolean>(false);
+  const [previewAudioUrl, setPreviewAudioUrl] = useState<string | null>(null);
+  const [isPlayingPreview, setIsPlayingPreview] = useState<boolean>(false);
+  const previewAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Fetch TTS voices on mount
+  useEffect(() => {
+    getTTSVoices()
+      .then((data) => {
+        setTtsVoices(data.voices);
+        setIsKokoroAvailable(data.isKokoroAvailable);
+        setSelectedProvider(data.isKokoroAvailable ? 'kokoro' : 'google');
+        if (data.voices.length > 0) {
+          const hasAfHeart = data.voices.some((v) => v.id === 'af_heart');
+          setSelectedVoice(hasAfHeart ? 'af_heart' : data.voices[0].id);
+        }
+      })
+      .catch((err) => console.warn('Could not load TTS voices:', err));
+  }, []);
+
+  // Character-aware voice recommendation: adapt voice/effect based on scene characters
+  useEffect(() => {
+    const instances = scene?.animationData?.characterInstances || [];
+    if (instances.length > 0) {
+      const first = instances[0];
+      const matchChar = characters.find((c) => c.name.toLowerCase() === first.name.toLowerCase());
+      const charSpecies = (first.appearance?.species || matchChar?.species || '').toLowerCase();
+      if (charSpecies.includes('robot')) {
+        setVoiceEffect('robot');
+        if (selectedProvider === 'kokoro') setSelectedVoice('am_fenrir');
+      } else if (charSpecies.includes('bear') || charSpecies.includes('animal')) {
+        setVoiceEffect('cartoon');
+        if (selectedProvider === 'kokoro') setSelectedVoice('bm_george');
+      }
+    }
+  }, [scene?.sceneId]);
+
+  const handlePreviewVoice = async () => {
+    try {
+      setIsPreviewingVoice(true);
+      const res = await previewVoice({
+        voice: selectedVoice,
+        provider: selectedProvider,
+        speed: voiceSpeed,
+        effect: voiceEffect,
+        lang: selectedLanguage,
+      });
+      setPreviewAudioUrl(res.audioUrl);
+      setTimeout(() => {
+        if (previewAudioRef.current) {
+          previewAudioRef.current.currentTime = 0;
+          previewAudioRef.current.play().then(() => setIsPlayingPreview(true)).catch(() => {});
+        }
+      }, 50);
+    } catch (e: any) {
+      alert(`Voice preview failed: ${e.message || String(e)}`);
+    } finally {
+      setIsPreviewingVoice(false);
+    }
+  };
+
+  const handleGenerateVoiceClick = () => {
+    onGenerateVoice(scene.sceneId, {
+      provider: selectedProvider,
+      voice: selectedVoice,
+      speed: voiceSpeed,
+      effect: voiceEffect,
+      lang: selectedLanguage,
+    });
+  };
 
 
   const durationMs = scene.endMs > scene.startMs ? scene.endMs - scene.startMs : scene.estimatedDurationMs || 5000;
@@ -489,6 +584,242 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
             placeholder="Type spoken narration for this scene..."
           />
 
+          {/* Kokoro-82M Voice Studio Controls */}
+          <div
+            className="ed-voice-studio-panel"
+            style={{
+              background: 'var(--ed-bg)',
+              border: '1px solid var(--ed-border)',
+              borderRadius: '8px',
+              padding: '12px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '10px',
+              marginTop: '4px',
+              marginBottom: '8px',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: '11px', fontWeight: 700, color: '#c4b5fd', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                🎙️ Voice Studio
+              </span>
+              <span
+                style={{
+                  fontSize: '10px',
+                  padding: '2px 6px',
+                  borderRadius: '4px',
+                  background: selectedProvider === 'kokoro' ? 'rgba(52, 211, 153, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                  color: selectedProvider === 'kokoro' ? '#34d399' : '#fbbf24',
+                  fontWeight: 600,
+                }}
+              >
+                {selectedProvider === 'kokoro' ? '● Kokoro-82M (Local)' : '● Google TTS (Cloud)'}
+              </span>
+            </div>
+
+            {/* Provider & Language Selection */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+              <div>
+                <label style={{ fontSize: '10px', color: 'var(--ed-text-muted)', display: 'block', marginBottom: '3px' }}>
+                  TTS Provider
+                </label>
+                <select
+                  className="ed-input"
+                  style={{ fontSize: '11px', padding: '4px 6px', height: '28px' }}
+                  value={selectedProvider}
+                  onChange={(e) => setSelectedProvider(e.target.value as any)}
+                >
+                  <option value="kokoro">Kokoro-82M (Neural)</option>
+                  <option value="google">Google TTS (Fallback)</option>
+                </select>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '10px', color: 'var(--ed-text-muted)', display: 'block', marginBottom: '3px' }}>
+                  Language / Accent
+                </label>
+                <select
+                  className="ed-input"
+                  style={{ fontSize: '11px', padding: '4px 6px', height: '28px' }}
+                  value={selectedLanguage}
+                  onChange={(e) => {
+                    const l = e.target.value;
+                    setSelectedLanguage(l);
+                    if (l === 'en-gb') setSelectedVoice('bf_emma');
+                    else setSelectedVoice('af_heart');
+                  }}
+                >
+                  <option value="en-us">English (US)</option>
+                  <option value="en-gb">English (UK)</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Voice Selection & Preview */}
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3px' }}>
+                <label style={{ fontSize: '10px', color: 'var(--ed-text-muted)' }}>Speaker Voice</label>
+                <button
+                  type="button"
+                  className="ed-tool-btn"
+                  style={{ fontSize: '10px', padding: '2px 8px', color: '#c4b5fd', borderColor: '#8b5cf6' }}
+                  onClick={handlePreviewVoice}
+                  disabled={isPreviewingVoice}
+                >
+                  {isPreviewingVoice ? 'Previewing...' : '🔊 Audition Voice'}
+                </button>
+              </div>
+              <select
+                className="ed-input"
+                style={{ fontSize: '11px', padding: '4px 6px', height: '30px' }}
+                value={selectedVoice}
+                onChange={(e) => setSelectedVoice(e.target.value)}
+              >
+                {ttsVoices
+                  .filter(
+                    (v) =>
+                      !selectedLanguage ||
+                      v.lang.toLowerCase().includes(selectedLanguage.split('-')[1] || 'us') ||
+                      selectedProvider === 'google'
+                  )
+                  .map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.name} ({v.gender}, {v.accent || v.lang})
+                    </option>
+                  ))}
+              </select>
+            </div>
+
+            {/* In-line Voice Preview Player */}
+            {previewAudioUrl && (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  background: 'rgba(139, 92, 246, 0.12)',
+                  padding: '6px 10px',
+                  borderRadius: '6px',
+                  border: '1px solid rgba(139, 92, 246, 0.3)',
+                }}
+              >
+                <audio
+                  ref={previewAudioRef}
+                  src={resolveAssetUrl(previewAudioUrl)}
+                  onEnded={() => setIsPlayingPreview(false)}
+                  onError={() => setIsPlayingPreview(false)}
+                />
+                <button
+                  type="button"
+                  className="ed-tool-btn primary"
+                  style={{ width: '24px', height: '24px', padding: 0, justifyContent: 'center' }}
+                  onClick={() => {
+                    if (previewAudioRef.current) {
+                      if (isPlayingPreview) {
+                        previewAudioRef.current.pause();
+                        setIsPlayingPreview(false);
+                      } else {
+                        previewAudioRef.current.play();
+                        setIsPlayingPreview(true);
+                      }
+                    }
+                  }}
+                >
+                  {isPlayingPreview ? <PauseIcon size={12} /> : <PlayIcon size={12} />}
+                </button>
+                <span style={{ fontSize: '11px', color: '#e2e8f0', flex: 1 }}>
+                  Auditioning: <strong>{ttsVoices.find((v) => v.id === selectedVoice)?.name.split('(')[0] || selectedVoice}</strong> ({voiceEffect})
+                </span>
+                <button
+                  type="button"
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: '#94a3b8',
+                    cursor: 'pointer',
+                    fontSize: '12px',
+                  }}
+                  onClick={() => setPreviewAudioUrl(null)}
+                  title="Dismiss preview"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+
+            {/* Speech Speed Slider */}
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
+                <label style={{ fontSize: '10px', color: 'var(--ed-text-muted)' }}>Speech Speed</label>
+                <span style={{ fontSize: '10px', fontFamily: 'monospace', color: '#c4b5fd' }}>
+                  {voiceSpeed.toFixed(2)}x {voiceSpeed === 1.0 ? '(Normal)' : voiceSpeed < 1.0 ? '(Slower)' : '(Faster)'}
+                </span>
+              </div>
+              <input
+                type="range"
+                min="0.5"
+                max="2.0"
+                step="0.05"
+                value={voiceSpeed}
+                onChange={(e) => setVoiceSpeed(parseFloat(e.target.value))}
+                style={{ width: '100%', accentColor: 'var(--ed-accent)', height: '4px' }}
+              />
+            </div>
+
+            {/* Character Voice Style / Effect Pills */}
+            <div>
+              <label style={{ fontSize: '10px', color: 'var(--ed-text-muted)', display: 'block', marginBottom: '4px' }}>
+                Character Voice Style & Audio Effect
+              </label>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
+                <button
+                  type="button"
+                  className={`ed-tool-btn ${voiceEffect === 'normal' ? 'primary' : ''}`}
+                  style={{
+                    fontSize: '10px',
+                    padding: '5px 4px',
+                    justifyContent: 'center',
+                    background: voiceEffect === 'normal' ? '#7c3aed' : undefined,
+                    color: voiceEffect === 'normal' ? '#ffffff' : undefined,
+                  }}
+                  onClick={() => setVoiceEffect('normal')}
+                >
+                  ✨ Normal
+                </button>
+                <button
+                  type="button"
+                  className={`ed-tool-btn ${voiceEffect === 'robot' ? 'primary' : ''}`}
+                  style={{
+                    fontSize: '10px',
+                    padding: '5px 4px',
+                    justifyContent: 'center',
+                    background: voiceEffect === 'robot' ? '#7c3aed' : undefined,
+                    color: voiceEffect === 'robot' ? '#ffffff' : undefined,
+                  }}
+                  onClick={() => setVoiceEffect('robot')}
+                  title="Electronic synthesized robotic voice"
+                >
+                  🤖 Robot
+                </button>
+                <button
+                  type="button"
+                  className={`ed-tool-btn ${voiceEffect === 'cartoon' ? 'primary' : ''}`}
+                  style={{
+                    fontSize: '10px',
+                    padding: '5px 4px',
+                    justifyContent: 'center',
+                    background: voiceEffect === 'cartoon' ? '#7c3aed' : undefined,
+                    color: voiceEffect === 'cartoon' ? '#ffffff' : undefined,
+                  }}
+                  onClick={() => setVoiceEffect('cartoon')}
+                  title="Playful high-pitched cartoon creature"
+                >
+                  🐿️ Creature
+                </button>
+              </div>
+            </div>
+          </div>
+
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
             <span style={{ fontSize: '11px', color: 'var(--ed-text-muted)' }}>
               {scene.actualAudioDurationMs
@@ -497,8 +828,8 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
             </span>
             <button
               className="ed-btn-action primary"
-              style={{ fontSize: '11px', padding: '6px 10px' }}
-              onClick={() => onGenerateVoice(scene.sceneId)}
+              style={{ fontSize: '11px', padding: '6px 12px' }}
+              onClick={handleGenerateVoiceClick}
               disabled={isGeneratingVoice || !localNarration.trim()}
             >
               {isGeneratingVoice ? 'Generating...' : scene.audioUrl ? 'Regenerate Voice' : 'Generate Voice (TTS)'}
@@ -515,7 +846,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                 <button
                   className="ed-tool-btn"
                   style={{ marginTop: '6px', background: '#eab308', color: '#1a1a1a', fontWeight: 'bold' }}
-                  onClick={() => onGenerateVoice(scene.sceneId)}
+                  onClick={handleGenerateVoiceClick}
                   disabled={isGeneratingVoice}
                 >
                   {isGeneratingVoice ? 'Regenerating...' : 'Regenerate Voice'}

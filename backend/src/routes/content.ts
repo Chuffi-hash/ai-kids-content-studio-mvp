@@ -839,11 +839,41 @@ contentRouter.post("/scenes/:sceneId/versions/:versionId/restore", async (req, r
   }
 });
 
+// Get available TTS voices, provider status, and effects
+contentRouter.get("/tts/voices", async (_req, res) => {
+  try {
+    const info = await audioGenerationService.getVoices();
+    return res.json(info);
+  } catch (err: any) {
+    console.error("[Content] Failed to fetch voices catalogue:", err);
+    return res.status(500).json({ message: err.message || "Failed to fetch voices" });
+  }
+});
+
+// Preview voice with sample speech and effect
+contentRouter.post("/tts/preview", async (req, res) => {
+  try {
+    const { voice, provider, speed, effect, sampleText, lang } = req.body;
+    const result = await audioGenerationService.previewVoice({
+      voice,
+      provider,
+      speed: speed ? parseFloat(speed) : undefined,
+      effect,
+      sampleText,
+      lang,
+    });
+    return res.json({ success: true, ...result });
+  } catch (error: any) {
+    console.error("[Content] Voice preview failed:", error);
+    return res.status(500).json({ message: error.message || "Failed to generate voice preview" });
+  }
+});
+
 // Real voice / narration generation endpoint
 contentRouter.post("/scenes/:sceneId/voice", async (req, res) => {
   try {
     const { sceneId } = req.params;
-    const { narration, lang } = req.body;
+    const { narration, lang, provider, voice, speed, effect } = req.body;
 
     const scene = await getSceneBySceneId(sceneId);
     if (!scene) {
@@ -859,6 +889,10 @@ contentRouter.post("/scenes/:sceneId/voice", async (req, res) => {
       sceneId,
       narration: textToSpeak,
       lang: lang || "en",
+      provider,
+      voice,
+      speed: speed ? parseFloat(speed) : undefined,
+      effect,
     });
 
     return res.json({
@@ -866,6 +900,9 @@ contentRouter.post("/scenes/:sceneId/voice", async (req, res) => {
       sceneId,
       audioUrl: result.audioUrl,
       durationMs: result.durationMs,
+      provider: result.provider,
+      voice: result.voice,
+      effect: result.effect,
     });
   } catch (error: any) {
     console.error(`[Content] Voice generation failed for scene ${req.params.sceneId}:`, error);

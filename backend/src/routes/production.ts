@@ -271,7 +271,7 @@ productionRouter.post('/scenes/:sceneId/video', async (req, res) => {
 productionRouter.post('/scenes/:sceneId/voice', async (req, res) => {
   try {
     const { sceneId } = req.params;
-    const { narration, lang } = req.body;
+    const { narration, lang, provider, voice, speed, effect } = req.body;
 
     const scene = await getSceneBySceneId(sceneId);
     if (!scene) {
@@ -287,6 +287,10 @@ productionRouter.post('/scenes/:sceneId/voice', async (req, res) => {
       sceneId,
       narration: textToSpeak,
       lang: lang || 'en',
+      provider,
+      voice,
+      speed: speed ? parseFloat(speed) : undefined,
+      effect,
     });
 
     return res.json({
@@ -294,6 +298,9 @@ productionRouter.post('/scenes/:sceneId/voice', async (req, res) => {
       sceneId,
       audioUrl: result.audioUrl,
       durationMs: result.durationMs,
+      provider: result.provider,
+      voice: result.voice,
+      effect: result.effect,
     });
   } catch (error: any) {
     console.error(`[Production] Voice generation failed for scene ${req.params.sceneId}:`, error);

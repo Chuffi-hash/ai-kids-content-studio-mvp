@@ -4,10 +4,10 @@ import { promisify } from 'util';
 import { execFile } from 'child_process';
 import { randomUUID } from 'crypto';
 // @ts-ignore
-import * as googleTTS from 'google-tts-api';
-// @ts-ignore
 import ffprobeStatic from '@ffprobe-installer/ffprobe';
 import { updateScene, createSceneVersion, getSceneBySceneId } from '../database/database.service.js';
+import { TTSProviderFactory } from './tts-provider.factory.js';
+import { AudioEffectType, SupportedVoice } from './tts-provider.interface.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -24,6 +24,73 @@ export class AudioGenerationService {
   }
 
   /**
+   * Retrieves available voices catalogue and system capabilities.
+   */
+  async getVoices(): Promise<{
+    activeProvider: string;
+    isKokoroAvailable: boolean;
+    voices: SupportedVoice[];
+    effects: Array<{ id: string; name: string; description: string }>;
+  }> {
+    return await TTSProviderFactory.getAllVoices();
+  }
+
+  /**
+   * Generates a short voice preview audio sample for user auditioning.
+   */
+  async previewVoice(options: {
+    voice?: string;
+    provider?: string;
+    speed?: number;
+    effect?: AudioEffectType;
+    sampleText?: string;
+    lang?: string;
+  }): Promise<{
+    audioUrl: string;
+    durationMs: number;
+    voice: string;
+    provider: string;
+    effect: AudioEffectType;
+  }> {
+    const providerInstance = await TTSProviderFactory.getProvider(options.provider);
+    const voice = options.voice || (providerInstance.name === 'kokoro' ? 'af_heart' : 'en-US-Standard');
+    const effect = options.effect || 'normal';
+    const speed = options.speed || 1.0;
+    const lang = options.lang;
+
+    const previewText = options.sampleText || "Hi there! I am ready to tell a wonderful story for you.";
+
+    const result = await providerInstance.generateSpeech(previewText, {
+      voice,
+      speed,
+      effect,
+      lang,
+    });
+
+    const previewFilename = `preview-${Date.now()}-${Math.random().toString(36).substring(7)}.${result.format}`;
+    const filePath = path.join(this.audioDir, previewFilename);
+
+    await fs.promises.writeFile(filePath, result.audioBuffer);
+
+    let durationMs = result.durationMs;
+    if (!durationMs || durationMs <= 0) {
+      try {
+        durationMs = await this.probeAudioDuration(filePath);
+      } catch {
+        durationMs = 2500;
+      }
+    }
+
+    return {
+      audioUrl: `/storage/audio/${previewFilename}`,
+      durationMs,
+      voice,
+      provider: providerInstance.name,
+      effect,
+    };
+  }
+
+  /**
    * Generates spoken narration audio from text for a given scene.
    * Saves the audio file, accurately measures its duration with ffprobe,
    * updates the database record, and creates a scene version entry.
@@ -31,19 +98,26 @@ export class AudioGenerationService {
   async generateNarrationAudio(options: {
     sceneId: string;
     narration: string;
+    provider?: string;
+    voice?: string;
+    speed?: number;
+    effect?: AudioEffectType;
     lang?: string;
   }): Promise<{
     audioUrl: string;
     durationMs: number;
     filename: string;
+    provider: string;
+    voice: string;
+    effect: AudioEffectType;
   }> {
-    const { sceneId, narration, lang = 'en' } = options;
+    const { sceneId, narration, provider, voice, speed = 1.0, effect = 'normal', lang } = options;
 
     if (!narration || narration.trim().length === 0) {
       throw new Error('Narration text is required for audio generation');
     }
 
-    console.log(`[AudioGeneration] Generating narration for scene ${sceneId}: "${narration.substring(0, 60)}..."`);
+    console.log(`[AudioGeneration] Generating narration for scene ${sceneId}: "${narration.substring(0, 60)}..." (provider: ${provider || 'default'}, voice: ${voice || 'default'}, effect: ${effect})`);
 
     // Clean narration text: remove markdown formatting, stage directions, or extra symbols
     const cleanText = narration
@@ -54,26 +128,41 @@ export class AudioGenerationService {
 
     const textToSpeak = cleanText.length > 0 ? cleanText : narration.trim();
 
-    // Generate MP3 using google-tts-api (supports multi-sentence arbitrary length text)
-    let audioBuffer: Buffer;
+    // Select TTS provider (Kokoro-82M by default or fallback)
+    const providerInstance = await TTSProviderFactory.getProvider(provider);
+    const selectedVoice = voice || (providerInstance.name === 'kokoro' ? 'af_heart' : 'en-US-Standard');
+
+    let ttsResult;
     try {
-      const audioChunks = await googleTTS.getAllAudioBase64(textToSpeak, {
+      ttsResult = await providerInstance.generateSpeech(textToSpeak, {
+        voice: selectedVoice,
+        speed,
+        effect,
         lang,
-        slow: false,
-        timeout: 15000,
       });
-      audioBuffer = Buffer.concat(audioChunks.map((chunk: any) => Buffer.from(chunk.base64, 'base64')));
     } catch (err: any) {
-      console.error(`[AudioGeneration] Google TTS generation failed for scene ${sceneId}:`, err);
-      throw new Error(`TTS generation failed: ${err.message || String(err)}`);
+      console.warn(`[AudioGeneration] TTS generation with provider "${providerInstance.name}" failed:`, err);
+      // Graceful fallback to Google TTS if Kokoro fails
+      if (providerInstance.name !== 'google') {
+        console.log('[AudioGeneration] Attempting fallback to Google TTS...');
+        const fallbackProvider = await TTSProviderFactory.getProvider('google');
+        ttsResult = await fallbackProvider.generateSpeech(textToSpeak, {
+          voice: 'en-US-Standard',
+          speed,
+          effect,
+          lang: lang || 'en',
+        });
+      } else {
+        throw new Error(`TTS generation failed: ${err.message || String(err)}`);
+      }
     }
 
     const timestamp = Date.now();
-    const filename = `narration-${sceneId}-${timestamp}.mp3`;
+    const filename = `narration-${sceneId}-${timestamp}.${ttsResult.format}`;
     const filePath = path.join(this.audioDir, filename);
 
-    await fs.promises.writeFile(filePath, audioBuffer);
-    console.log(`[AudioGeneration] Audio file saved to ${filePath}, size: ${audioBuffer.length} bytes`);
+    await fs.promises.writeFile(filePath, ttsResult.audioBuffer);
+    console.log(`[AudioGeneration] Audio file saved to ${filePath}, size: ${ttsResult.audioBuffer.length} bytes`);
 
     // Accurately probe duration using ffprobe
     let durationMs = 0;
@@ -115,6 +204,9 @@ export class AudioGenerationService {
       audioUrl,
       durationMs,
       filename,
+      provider: ttsResult.provider,
+      voice: ttsResult.voice,
+      effect: ttsResult.effect,
     };
   }
 
@@ -226,5 +318,3 @@ export class AudioGenerationService {
     throw new Error(`Invalid duration output from ffprobe: "${stdout}"`);
   }
 }
-
-
