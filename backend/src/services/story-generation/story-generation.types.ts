@@ -92,3 +92,4 @@ export interface PersistedStoryResult {
   characters: any[];
   storyId: string;
 }
+
