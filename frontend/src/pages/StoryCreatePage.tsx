@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import StoryBuilder from "../components/story/StoryBuilder";
 import GeneratedStory from "../components/story/GeneratedStory";
 import { PageHeader } from "../components/common/PageHeader";
-import { CloseIcon } from "../components/common/Icons";
+import { CloseIcon, SparklesIcon } from "../components/common/Icons";
 import { getAllCharacters, Character } from "../services/character.service";
 import { Story, Scene } from "../types/story";
 import { ProductionState, ProductionScene } from "../types/production";
@@ -155,14 +155,21 @@ export default function StoryCreatePage() {
   }
 
   return (
-    <div className="page">
-      <PageHeader
-        title="Create Story"
-        subtitle="Configure your story settings and generate content"
-      />
+    <div className="page story-studio-page">
+      <div className="studio-hero-header">
+        <div className="studio-hero-badge">
+          <SparklesIcon size={12} />
+          <span>AI Story Studio</span>
+        </div>
+        <h1 className="studio-hero-title">Create Children's Story</h1>
+        <p className="studio-hero-subtitle">
+          Spark an imaginative idea, cast favorite characters, and direct your animated storybook in seconds.
+        </p>
+      </div>
+
       {apiError && (
-        <div className="api-error">
-          <span>{apiError}</span>
+        <div className="api-error studio-api-error">
+          <span className="error-message">⚠️ {apiError}</span>
           <button onClick={() => setApiError(null)} className="error-close" aria-label="Dismiss error">
             <CloseIcon size={12} />
           </button>
