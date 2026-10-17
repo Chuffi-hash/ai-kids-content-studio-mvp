@@ -91,7 +91,8 @@ test('Video Generation - FFmpeg Ken Burns Video Rendering with Audio and Faststa
 test('Database - Image and Video Asset Separation', async () => {
   const stories = await getAllStories();
   assert.ok(stories.length > 0, 'Must have at least one story in database for test');
-  const validStoryId = stories[0].storyId;
+  const persistentStory = stories.find((s) => !s.storyId.startsWith('story-test-')) || stories[0];
+  const validStoryId = persistentStory.storyId;
 
   const testSceneId = `test-media-${randomUUID().slice(0, 8)}`;
   const initialImageUrl = '/storage/images/scene-test-initial.png';

@@ -32,6 +32,7 @@ interface TopToolbarProps {
   onTogglePlay: () => void;
   onRewind: () => void;
   onOpenExport: () => void;
+  onOpenStoryDetails?: () => void;
   hasValidationErrors?: boolean;
   validationMessage?: string;
 }
@@ -54,6 +55,7 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
   onTogglePlay,
   onRewind,
   onOpenExport,
+  onOpenStoryDetails,
   hasValidationErrors,
   validationMessage,
 }) => {
@@ -123,6 +125,18 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
             placeholder="Untitled Story"
           />
         </div>
+
+        {onOpenStoryDetails && (
+          <button
+            type="button"
+            className="ed-tool-btn"
+            onClick={onOpenStoryDetails}
+            title="Edit story synopsis, genre, lesson, and manage characters"
+            style={{ fontSize: '11px', padding: '3px 8px', borderColor: '#8b5cf6', color: '#c084fc', background: 'rgba(139, 92, 246, 0.12)' }}
+          >
+            Story Details & Roles
+          </button>
+        )}
 
         <div className="ed-history-controls" style={{ display: 'flex', gap: '4px' }}>
           <button

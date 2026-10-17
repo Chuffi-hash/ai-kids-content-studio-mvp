@@ -38,6 +38,7 @@ export async function createCharacter(data: {
   personality: string;
   visualDescription: string;
   distinctiveFeatures?: string;
+  canonicalAppearance?: any;
 }): Promise<Character> {
   const API_URL = getApiUrl();
   const response = await fetch(`${API_URL}/api/characters`, {
@@ -61,6 +62,7 @@ export async function updateCharacter(
     personality?: string;
     visualDescription?: string;
     distinctiveFeatures?: string;
+    canonicalAppearance?: any;
   }
 ): Promise<Character> {
   const API_URL = getApiUrl();
@@ -73,6 +75,20 @@ export async function updateCharacter(
   });
   if (!response.ok) {
     throw new Error('Failed to update character');
+  }
+  return response.json();
+}
+
+export async function duplicateCharacter(id: string): Promise<Character> {
+  const API_URL = getApiUrl();
+  const response = await fetch(`${API_URL}/api/characters/${id}/duplicate`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
+  if (!response.ok) {
+    throw new Error('Failed to duplicate character');
   }
   return response.json();
 }

@@ -12,9 +12,10 @@ interface CharacterModalProps {
     distinctiveFeatures?: string;
   }) => void;
   onCancel: () => void;
+  onOpenBuilder?: (character?: Character | null) => void;
 }
 
-export default function CharacterModal({ isOpen, character, onSubmit, onCancel }: CharacterModalProps) {
+export default function CharacterModal({ isOpen, character, onSubmit, onCancel, onOpenBuilder }: CharacterModalProps) {
   if (!isOpen) return null;
 
   return (
@@ -24,6 +25,7 @@ export default function CharacterModal({ isOpen, character, onSubmit, onCancel }
           character={character}
           onSubmit={onSubmit}
           onCancel={onCancel}
+          onOpenBuilder={onOpenBuilder}
         />
       </div>
     </div>

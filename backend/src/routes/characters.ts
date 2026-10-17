@@ -53,13 +53,17 @@ characterRouter.get("/:id", async (req, res) => {
 // POST create new character
 characterRouter.post("/", async (req, res) => {
   try {
-    const { name, species, personality, visualDescription, distinctiveFeatures } = req.body;
+    const { name, species, personality, visualDescription, distinctiveFeatures, canonicalAppearance } = req.body;
 
-    if (!name || !species || !personality || !visualDescription) {
+    if (!name) {
       return res.status(400).json({
-        message: "name, species, personality, and visualDescription are required",
+        message: "Character name is required",
       });
     }
+
+    const resolvedSpecies = species || (canonicalAppearance?.species ? canonicalAppearance.species.charAt(0).toUpperCase() + canonicalAppearance.species.slice(1) : "Human");
+    const resolvedPersonality = personality || "Friendly, curious, and adventurous";
+    const resolvedDescription = visualDescription || `Custom 2D vector character (${resolvedSpecies})`;
 
     // Check if character already exists
     const existing = await getCharacterByName(name);
@@ -70,10 +74,11 @@ characterRouter.post("/", async (req, res) => {
     const character = await createCharacter({
       id: randomUUID(),
       name,
-      species,
-      personality,
-      visualDescription,
+      species: resolvedSpecies,
+      personality: resolvedPersonality,
+      visualDescription: resolvedDescription,
       distinctiveFeatures: distinctiveFeatures || "",
+      canonicalAppearance: canonicalAppearance || null,
     });
 
     return res.status(201).json(character);
@@ -83,11 +88,47 @@ characterRouter.post("/", async (req, res) => {
   }
 });
 
+// POST duplicate character
+characterRouter.post("/:id/duplicate", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const existing = await getCharacterById(id);
+    if (!existing) {
+      return res.status(404).json({ message: "Character not found" });
+    }
+
+    // Generate unique name
+    let copyName = `${existing.name} (Copy)`;
+    let counter = 2;
+    while (await getCharacterByName(copyName)) {
+      copyName = `${existing.name} (Copy ${counter})`;
+      counter++;
+    }
+
+    const duplicated = await createCharacter({
+      id: randomUUID(),
+      name: copyName,
+      species: existing.species,
+      personality: existing.personality,
+      visualDescription: existing.visualDescription,
+      distinctiveFeatures: existing.distinctiveFeatures,
+      canonicalAppearance: existing.canonicalAppearance,
+      referenceImageUrl: existing.referenceImageUrl || undefined,
+      referenceImagePrompt: existing.referenceImagePrompt || undefined,
+    });
+
+    return res.status(201).json(duplicated);
+  } catch (error) {
+    console.error("[Characters] Failed to duplicate character:", error);
+    return res.status(500).json({ message: "Failed to duplicate character" });
+  }
+});
+
 // PUT update character
 characterRouter.put("/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, species, personality, visualDescription, distinctiveFeatures } = req.body;
+    const { name, species, personality, visualDescription, distinctiveFeatures, canonicalAppearance } = req.body;
 
     const existing = await getCharacterById(id);
     if (!existing) {
@@ -107,7 +148,8 @@ characterRouter.put("/:id", async (req, res) => {
       species: species || existing.species,
       personality: personality || existing.personality,
       visualDescription: visualDescription || existing.visualDescription,
-      distinctiveFeatures: distinctiveFeatures || existing.distinctiveFeatures,
+      distinctiveFeatures: distinctiveFeatures !== undefined ? distinctiveFeatures : existing.distinctiveFeatures,
+      canonicalAppearance: canonicalAppearance !== undefined ? canonicalAppearance : existing.canonicalAppearance,
     });
 
     return res.json(character);
