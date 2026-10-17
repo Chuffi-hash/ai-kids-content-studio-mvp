@@ -5,11 +5,14 @@ import {
   CharacterInstance,
   AnimationClip,
   AnimationActionType,
+  ArmLimbConfig,
+  LegLimbConfig,
 } from '../../types/animation';
 import {
   DEFAULT_APPEARANCE,
   CHARACTER_PRESETS,
   buildRigFromAppearance,
+  normalizeAppearance,
 } from '../../utils/customCharacterRig';
 import { evaluateCharacterPose } from '../../utils/animationEngine';
 import { VectorCharacterRenderer } from '../editor/animation/VectorCharacterRenderer';
@@ -52,6 +55,50 @@ const COLOR_SWATCHES = {
   shoes: ['#ef4444', '#ffffff', '#1e293b', '#f59e0b', '#10b981', '#3b82f6', '#78350f'],
 };
 
+/**
+ * Resolves initial appearance safely for any character, preserving species and non-human rigs.
+ */
+export function resolveInitialAppearance(character?: Character | null): {
+  appearance: CustomCharacterAppearance;
+  isNewRigSetup: boolean;
+  setupNotice?: string;
+} {
+  if (character?.canonicalAppearance && (character.canonicalAppearance as any).version === 1) {
+    return {
+      appearance: normalizeAppearance(character.canonicalAppearance),
+      isNewRigSetup: false,
+    };
+  }
+
+  // Check species or name to pick an appropriate starting preset instead of blindly defaulting to human boy
+  const sp = (character?.species || '').toLowerCase();
+  const nm = (character?.name || '').toLowerCase();
+  let basePreset = CHARACTER_PRESETS.kid_boy.appearance;
+
+  if (sp.includes('bear') || nm.includes('bear') || nm.includes('pip')) {
+    basePreset = CHARACTER_PRESETS.bear_cub.appearance;
+  } else if (sp.includes('robot') || nm.includes('robot') || nm.includes('sparky')) {
+    basePreset = CHARACTER_PRESETS.robot.appearance;
+  } else if (sp.includes('girl') || nm.includes('girl') || nm.includes('maya')) {
+    basePreset = CHARACTER_PRESETS.kid_girl.appearance;
+  }
+
+  const normalized = normalizeAppearance({
+    ...basePreset,
+    species: character?.species || basePreset.species,
+  });
+
+  const setupNotice = character
+    ? `✨ 2D Puppet Setup: "${character.name}" was created without a 2D puppet. We prepared a starter ${character.species || 'human'} puppet for you to customize. Click "Save Changes" to attach it, or "✕" to leave your character untouched.`
+    : undefined;
+
+  return {
+    appearance: normalized,
+    isNewRigSetup: Boolean(character),
+    setupNotice,
+  };
+}
+
 export const CharacterBuilderModal: React.FC<CharacterBuilderModalProps> = ({
   isOpen,
   character,
@@ -59,10 +106,8 @@ export const CharacterBuilderModal: React.FC<CharacterBuilderModalProps> = ({
   onSave,
   onDuplicate,
 }) => {
-  // Appearance state & history for undo/redo
-  const initialApp = (character?.canonicalAppearance?.version === 1
-    ? character.canonicalAppearance
-    : DEFAULT_APPEARANCE) as CustomCharacterAppearance;
+  const initialResolved = resolveInitialAppearance(character);
+  const initialApp = initialResolved.appearance;
 
   const [appearance, setAppearance] = useState<CustomCharacterAppearance>(initialApp);
   const [history, setHistory] = useState<CustomCharacterAppearance[]>([initialApp]);
@@ -70,10 +115,23 @@ export const CharacterBuilderModal: React.FC<CharacterBuilderModalProps> = ({
 
   // Character metadata
   const [name, setName] = useState<string>(character?.name || 'My Hero');
-  const [species, setSpecies] = useState<string>(character?.species || 'Human');
+  const [species, setSpecies] = useState<string>(
+    character?.species ||
+      (initialApp.species
+        ? initialApp.species.charAt(0).toUpperCase() + initialApp.species.slice(1)
+        : 'Human')
+  );
   const [personality, setPersonality] = useState<string>(
     character?.personality || 'Brave, cheerful and adventurous'
   );
+  const [setupNotice, setSetupNotice] = useState<string | null>(
+    initialResolved.setupNotice || null
+  );
+  const [armSymmetry, setArmSymmetry] = useState<'symmetrical' | 'independent'>('symmetrical');
+  const [selectedArm, setSelectedArm] = useState<'left' | 'right'>('left');
+  const [legSymmetry, setLegSymmetry] = useState<'symmetrical' | 'independent'>('symmetrical');
+  const [selectedLeg, setSelectedLeg] = useState<'left' | 'right'>('left');
+
   const [activeTab, setActiveTab] = useState<BuilderTab>('head');
   const [activeAction, setActiveAction] = useState<AnimationActionType>('idle');
   const [zoom, setZoom] = useState<number>(1.0);
@@ -89,19 +147,54 @@ export const CharacterBuilderModal: React.FC<CharacterBuilderModalProps> = ({
   // Reset when opened or character prop changes
   useEffect(() => {
     if (isOpen) {
-      const app = (character?.canonicalAppearance?.version === 1
-        ? character.canonicalAppearance
-        : DEFAULT_APPEARANCE) as CustomCharacterAppearance;
-      setAppearance(app);
-      setHistory([app]);
+      const resolved = resolveInitialAppearance(character);
+      setAppearance(resolved.appearance);
+      setHistory([resolved.appearance]);
       setHistoryIndex(0);
       setName(character?.name || 'My Hero');
-      setSpecies(character?.species || 'Human');
+      setSpecies(
+        character?.species ||
+          (resolved.appearance.species
+            ? resolved.appearance.species.charAt(0).toUpperCase() +
+              resolved.appearance.species.slice(1)
+            : 'Human')
+      );
       setPersonality(character?.personality || 'Brave, cheerful and adventurous');
+      setSetupNotice(resolved.setupNotice || null);
+
+      const isArmDiff =
+        resolved.appearance.leftArm &&
+        resolved.appearance.rightArm &&
+        JSON.stringify(resolved.appearance.leftArm) !==
+          JSON.stringify(resolved.appearance.rightArm);
+      setArmSymmetry(isArmDiff ? 'independent' : 'symmetrical');
+
+      const isLegDiff =
+        resolved.appearance.leftLeg &&
+        resolved.appearance.rightLeg &&
+        JSON.stringify(resolved.appearance.leftLeg) !==
+          JSON.stringify(resolved.appearance.rightLeg);
+      setLegSymmetry(isLegDiff ? 'independent' : 'symmetrical');
+
       setErrorMsg(null);
       startTimeRef.current = performance.now();
     }
   }, [isOpen, character]);
+
+  // Lock background body scroll while modal is open
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const originalOverflow = document.body.style.overflow;
+    const originalOverscroll = document.body.style.overscrollBehavior;
+    document.body.style.overflow = 'hidden';
+    document.body.style.overscrollBehavior = 'none';
+
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      document.body.style.overscrollBehavior = originalOverscroll;
+    };
+  }, [isOpen]);
 
   // Animation ticker loop
   useEffect(() => {
@@ -173,7 +266,8 @@ export const CharacterBuilderModal: React.FC<CharacterBuilderModalProps> = ({
   const handleApplyPreset = (presetKey: string) => {
     const preset = CHARACTER_PRESETS[presetKey];
     if (!preset) return;
-    updateAppearance(() => preset.appearance);
+    const normalized = normalizeAppearance(preset.appearance);
+    updateAppearance(() => normalized);
     if (!character && name === 'My Hero') {
       setName(preset.label.split(' ')[0]);
     }
@@ -247,10 +341,16 @@ export const CharacterBuilderModal: React.FC<CharacterBuilderModalProps> = ({
       setErrorMsg(null);
       await onSave({
         name: name.trim(),
-        species: species.trim() || 'Human',
-        personality: personality.trim() || 'Friendly and adventurous',
-        visualDescription: `Custom vector character: ${appearance.gender || 'neutral'} ${appearance.species || 'human'} with ${appearance.hair.style} hair and ${appearance.torso.clothingStyle}`,
-        distinctiveFeatures: `${appearance.hair.color} hair, ${appearance.torso.shirtColor} top`,
+        species: species.trim() || character?.species || 'Human',
+        personality: personality.trim() || character?.personality || 'Friendly and adventurous',
+        visualDescription:
+          character?.visualDescription && character.visualDescription.trim().length > 0
+            ? character.visualDescription
+            : `Custom vector character: ${appearance.gender || 'neutral'} ${appearance.species || 'human'} with ${appearance.hair.style} hair and ${appearance.torso.clothingStyle}`,
+        distinctiveFeatures:
+          character?.distinctiveFeatures && character.distinctiveFeatures.trim().length > 0
+            ? character.distinctiveFeatures
+            : `${appearance.hair.color} hair, ${appearance.torso.shirtColor} top`,
         canonicalAppearance: appearance,
       });
       onClose();
@@ -278,8 +378,38 @@ export const CharacterBuilderModal: React.FC<CharacterBuilderModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="char-builder-overlay" onClick={onClose}>
-      <div className="char-builder-modal" onClick={(e) => e.stopPropagation()}>
+    <div
+      className="char-builder-overlay"
+      onClick={onClose}
+      onWheel={(e) => {
+        if (Math.abs(e.deltaX) > 0) {
+          e.stopPropagation();
+        }
+      }}
+    >
+      <div
+        className="char-builder-modal"
+        onClick={(e) => e.stopPropagation()}
+        onWheel={(e) => {
+          if (Math.abs(e.deltaX) > 0) {
+            e.stopPropagation();
+          }
+        }}
+      >
+        {/* Setup notice banner when opening an existing character that lacked a 2D vector rig */}
+        {setupNotice && (
+          <div className="char-builder-setup-notice">
+            <span>{setupNotice}</span>
+            <button
+              type="button"
+              onClick={() => setSetupNotice(null)}
+              title="Dismiss notice"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
         {/* Top Header Bar */}
         <div className="char-builder-header">
           <div className="char-builder-header-left">
@@ -940,163 +1070,432 @@ export const CharacterBuilderModal: React.FC<CharacterBuilderModalProps> = ({
               {/* 5. ARMS TAB */}
               {activeTab === 'arms' && (
                 <div className="char-builder-section">
-                  <div className="char-control-group">
-                    <label>Sleeve Length</label>
+                  <div className="char-symmetry-bar">
+                    <span className="char-symmetry-label">Arm Symmetry</span>
                     <div className="char-pill-row">
-                      {(['short', 'long', 'sleeveless'] as const).map((sleeve) => (
-                        <button
-                          key={sleeve}
-                          type="button"
-                          className={`char-pill-btn ${appearance.arms.sleeveStyle === sleeve ? 'active' : ''}`}
-                          onClick={() =>
-                            updateAppearance((a) => ({
-                              ...a,
-                              arms: { ...a.arms, sleeveStyle: sleeve },
-                            }))
-                          }
-                        >
-                          {sleeve}
-                        </button>
-                      ))}
+                      <button
+                        type="button"
+                        className={`char-pill-btn ${armSymmetry === 'symmetrical' ? 'active' : ''}`}
+                        onClick={() => {
+                          setArmSymmetry('symmetrical');
+                          updateAppearance((a) => ({
+                            ...a,
+                            leftArm: { ...a.arms },
+                            rightArm: { ...a.arms },
+                          }));
+                        }}
+                      >
+                        Symmetrical
+                      </button>
+                      <button
+                        type="button"
+                        className={`char-pill-btn ${armSymmetry === 'independent' ? 'active' : ''}`}
+                        onClick={() => setArmSymmetry('independent')}
+                      >
+                        Independent L/R
+                      </button>
                     </div>
                   </div>
 
-                  <div className="char-control-group">
-                    <label>Hand Shape</label>
-                    <div className="char-pill-row">
-                      {(['simple', 'mitten', 'paw'] as const).map((hand) => (
-                        <button
-                          key={hand}
-                          type="button"
-                          className={`char-pill-btn ${appearance.arms.handShape === hand ? 'active' : ''}`}
-                          onClick={() =>
-                            updateAppearance((a) => ({
-                              ...a,
-                              arms: { ...a.arms, handShape: hand },
-                            }))
-                          }
-                        >
-                          {hand}
-                        </button>
-                      ))}
+                  {armSymmetry === 'independent' && (
+                    <div className="char-subtabs">
+                      <button
+                        type="button"
+                        className={`char-subtab-btn ${selectedArm === 'left' ? 'active' : ''}`}
+                        onClick={() => setSelectedArm('left')}
+                      >
+                        Left Arm
+                      </button>
+                      <button
+                        type="button"
+                        className={`char-subtab-btn ${selectedArm === 'right' ? 'active' : ''}`}
+                        onClick={() => setSelectedArm('right')}
+                      >
+                        Right Arm
+                      </button>
                     </div>
-                  </div>
+                  )}
 
-                  <div className="char-control-group">
-                    <label>Arm Thickness: {appearance.arms.thickness.toFixed(2)}x</label>
-                    <input
-                      type="range"
-                      min="0.8"
-                      max="1.3"
-                      step="0.05"
-                      value={appearance.arms.thickness}
-                      onChange={(e) => {
-                        const val = parseFloat(e.target.value);
-                        updateAppearance((a) => ({
-                          ...a,
-                          arms: { ...a.arms, thickness: val },
-                        }));
-                      }}
-                    />
-                  </div>
+                  {(() => {
+                    const isIndep = armSymmetry === 'independent';
+                    const activeArmLimb: ArmLimbConfig | undefined = isIndep
+                      ? (selectedArm === 'left' ? appearance.leftArm : appearance.rightArm)
+                      : undefined;
+
+                    const currentSleeve = activeArmLimb?.sleeveStyle ?? appearance.arms.sleeveStyle ?? 'short';
+                    const currentHand = activeArmLimb?.handShape ?? appearance.arms.handShape ?? 'simple';
+                    const currentUpperLength = activeArmLimb?.upperArmLength ?? appearance.arms.length ?? 1.0;
+                    const currentUpperThick = activeArmLimb?.upperArmThickness ?? appearance.arms.thickness ?? 1.0;
+                    const currentForearmLength = activeArmLimb?.forearmLength ?? appearance.arms.length ?? 1.0;
+                    const currentForearmThick = activeArmLimb?.forearmThickness ?? appearance.arms.thickness ?? 1.0;
+
+                    const updateTargetArm = (patch: Partial<ArmLimbConfig>) => {
+                      updateAppearance((a) => {
+                        if (isIndep) {
+                          if (selectedArm === 'left') {
+                            const base = a.leftArm || {
+                              upperArmLength: a.arms.length,
+                              upperArmThickness: a.arms.thickness,
+                              forearmLength: a.arms.length,
+                              forearmThickness: a.arms.thickness,
+                              sleeveStyle: a.arms.sleeveStyle,
+                              handShape: a.arms.handShape,
+                            };
+                            return { ...a, leftArm: { ...base, ...patch } };
+                          } else {
+                            const base = a.rightArm || {
+                              upperArmLength: a.arms.length,
+                              upperArmThickness: a.arms.thickness,
+                              forearmLength: a.arms.length,
+                              forearmThickness: a.arms.thickness,
+                              sleeveStyle: a.arms.sleeveStyle,
+                              handShape: a.arms.handShape,
+                            };
+                            return { ...a, rightArm: { ...base, ...patch } };
+                          }
+                        } else {
+                          const nextArms = {
+                            ...a.arms,
+                            ...(patch.sleeveStyle ? { sleeveStyle: patch.sleeveStyle } : {}),
+                            ...(patch.handShape ? { handShape: patch.handShape } : {}),
+                            ...(patch.upperArmLength !== undefined ? { length: patch.upperArmLength } : {}),
+                            ...(patch.upperArmThickness !== undefined ? { thickness: patch.upperArmThickness } : {}),
+                          };
+                          return {
+                            ...a,
+                            arms: nextArms,
+                            leftArm: a.leftArm ? { ...a.leftArm, ...patch } : undefined,
+                            rightArm: a.rightArm ? { ...a.rightArm, ...patch } : undefined,
+                          };
+                        }
+                      });
+                    };
+
+                    return (
+                      <>
+                        <div className="char-control-group">
+                          <label>Sleeve Length</label>
+                          <div className="char-pill-row">
+                            {(['short', 'long', 'sleeveless'] as const).map((sleeve) => (
+                              <button
+                                key={sleeve}
+                                type="button"
+                                className={`char-pill-btn ${currentSleeve === sleeve ? 'active' : ''}`}
+                                onClick={() => updateTargetArm({ sleeveStyle: sleeve })}
+                              >
+                                {sleeve}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="char-control-group">
+                          <label>Hand Shape</label>
+                          <div className="char-pill-row">
+                            {(['simple', 'mitten', 'paw'] as const).map((hand) => (
+                              <button
+                                key={hand}
+                                type="button"
+                                className={`char-pill-btn ${currentHand === hand ? 'active' : ''}`}
+                                onClick={() => updateTargetArm({ handShape: hand })}
+                              >
+                                {hand}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="char-control-group">
+                          <label>Upper Arm Length: {currentUpperLength.toFixed(2)}x</label>
+                          <input
+                            type="range"
+                            min="0.7"
+                            max="1.4"
+                            step="0.05"
+                            value={currentUpperLength}
+                            onChange={(e) => updateTargetArm({ upperArmLength: parseFloat(e.target.value) })}
+                          />
+                        </div>
+
+                        <div className="char-control-group">
+                          <label>Upper Arm Thickness: {currentUpperThick.toFixed(2)}x</label>
+                          <input
+                            type="range"
+                            min="0.7"
+                            max="1.4"
+                            step="0.05"
+                            value={currentUpperThick}
+                            onChange={(e) => updateTargetArm({ upperArmThickness: parseFloat(e.target.value) })}
+                          />
+                        </div>
+
+                        <div className="char-control-group">
+                          <label>Forearm Length: {currentForearmLength.toFixed(2)}x</label>
+                          <input
+                            type="range"
+                            min="0.7"
+                            max="1.4"
+                            step="0.05"
+                            value={currentForearmLength}
+                            onChange={(e) => updateTargetArm({ forearmLength: parseFloat(e.target.value) })}
+                          />
+                        </div>
+
+                        <div className="char-control-group">
+                          <label>Forearm Thickness: {currentForearmThick.toFixed(2)}x</label>
+                          <input
+                            type="range"
+                            min="0.7"
+                            max="1.4"
+                            step="0.05"
+                            value={currentForearmThick}
+                            onChange={(e) => updateTargetArm({ forearmThickness: parseFloat(e.target.value) })}
+                          />
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
               )}
 
               {/* 6. LEGS TAB */}
               {activeTab === 'legs' && (
                 <div className="char-builder-section">
-                  <div className="char-control-group">
-                    <label>Bottom Style</label>
+                  <div className="char-symmetry-bar">
+                    <span className="char-symmetry-label">Leg Symmetry</span>
                     <div className="char-pill-row">
-                      {(['pants', 'shorts', 'skirt'] as const).map((style) => (
-                        <button
-                          key={style}
-                          type="button"
-                          className={`char-pill-btn ${appearance.legs.pantsStyle === style ? 'active' : ''}`}
-                          onClick={() =>
-                            updateAppearance((a) => ({
-                              ...a,
-                              legs: { ...a.legs, pantsStyle: style },
-                            }))
-                          }
-                        >
-                          {style}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="char-control-group">
-                    <label>Pants / Skirt Color</label>
-                    <div className="char-swatch-row">
-                      {COLOR_SWATCHES.pants.map((col) => (
-                        <button
-                          key={col}
-                          type="button"
-                          className={`char-color-swatch ${appearance.legs.pantsColor === col ? 'active' : ''}`}
-                          style={{ backgroundColor: col }}
-                          onClick={() =>
-                            updateAppearance((a) => ({
-                              ...a,
-                              legs: { ...a.legs, pantsColor: col },
-                            }))
-                          }
-                        />
-                      ))}
-                      <input
-                        type="color"
-                        value={appearance.legs.pantsColor}
-                        onChange={(e) =>
+                      <button
+                        type="button"
+                        className={`char-pill-btn ${legSymmetry === 'symmetrical' ? 'active' : ''}`}
+                        onClick={() => {
+                          setLegSymmetry('symmetrical');
                           updateAppearance((a) => ({
                             ...a,
-                            legs: { ...a.legs, pantsColor: e.target.value },
-                          }))
+                            leftLeg: { ...a.legs },
+                            rightLeg: { ...a.legs },
+                          }));
+                        }}
+                      >
+                        Symmetrical
+                      </button>
+                      <button
+                        type="button"
+                        className={`char-pill-btn ${legSymmetry === 'independent' ? 'active' : ''}`}
+                        onClick={() => setLegSymmetry('independent')}
+                      >
+                        Independent L/R
+                      </button>
+                    </div>
+                  </div>
+
+                  {legSymmetry === 'independent' && (
+                    <div className="char-subtabs">
+                      <button
+                        type="button"
+                        className={`char-subtab-btn ${selectedLeg === 'left' ? 'active' : ''}`}
+                        onClick={() => setSelectedLeg('left')}
+                      >
+                        Left Leg
+                      </button>
+                      <button
+                        type="button"
+                        className={`char-subtab-btn ${selectedLeg === 'right' ? 'active' : ''}`}
+                        onClick={() => setSelectedLeg('right')}
+                      >
+                        Right Leg
+                      </button>
+                    </div>
+                  )}
+
+                  {(() => {
+                    const isLegIndep = legSymmetry === 'independent';
+                    const activeLegLimb: LegLimbConfig | undefined = isLegIndep
+                      ? (selectedLeg === 'left' ? appearance.leftLeg : appearance.rightLeg)
+                      : undefined;
+
+                    const currentPantsStyle = activeLegLimb?.pantsStyle ?? appearance.legs.pantsStyle ?? 'pants';
+                    const currentPantsColor = activeLegLimb?.pantsColor ?? appearance.legs.pantsColor ?? '#1e3a8a';
+                    const currentShoeStyle = activeLegLimb?.shoeStyle ?? appearance.legs.shoeStyle ?? 'sneakers';
+                    const currentShoeColor = activeLegLimb?.shoeColor ?? appearance.legs.shoeColor ?? '#ef4444';
+                    const currentUpperLegLength = activeLegLimb?.upperLegLength ?? appearance.legs.length ?? 1.0;
+                    const currentUpperLegThick = activeLegLimb?.upperLegThickness ?? appearance.legs.thickness ?? 1.0;
+                    const currentLowerLegLength = activeLegLimb?.lowerLegLength ?? appearance.legs.length ?? 1.0;
+                    const currentLowerLegThick = activeLegLimb?.lowerLegThickness ?? appearance.legs.thickness ?? 1.0;
+
+                    const updateTargetLeg = (patch: Partial<LegLimbConfig>) => {
+                      updateAppearance((a) => {
+                        if (isLegIndep) {
+                          if (selectedLeg === 'left') {
+                            const base = a.leftLeg || {
+                              upperLegLength: a.legs.length,
+                              upperLegThickness: a.legs.thickness,
+                              lowerLegLength: a.legs.length,
+                              lowerLegThickness: a.legs.thickness,
+                              pantsStyle: a.legs.pantsStyle,
+                              pantsColor: a.legs.pantsColor,
+                              shoeStyle: a.legs.shoeStyle,
+                              shoeColor: a.legs.shoeColor,
+                            };
+                            return { ...a, leftLeg: { ...base, ...patch } };
+                          } else {
+                            const base = a.rightLeg || {
+                              upperLegLength: a.legs.length,
+                              upperLegThickness: a.legs.thickness,
+                              lowerLegLength: a.legs.length,
+                              lowerLegThickness: a.legs.thickness,
+                              pantsStyle: a.legs.pantsStyle,
+                              pantsColor: a.legs.pantsColor,
+                              shoeStyle: a.legs.shoeStyle,
+                              shoeColor: a.legs.shoeColor,
+                            };
+                            return { ...a, rightLeg: { ...base, ...patch } };
+                          }
+                        } else {
+                          const nextLegs = {
+                            ...a.legs,
+                            ...(patch.pantsStyle ? { pantsStyle: patch.pantsStyle } : {}),
+                            ...(patch.pantsColor ? { pantsColor: patch.pantsColor } : {}),
+                            ...(patch.shoeStyle ? { shoeStyle: patch.shoeStyle } : {}),
+                            ...(patch.shoeColor ? { shoeColor: patch.shoeColor } : {}),
+                            ...(patch.upperLegLength !== undefined ? { length: patch.upperLegLength } : {}),
+                            ...(patch.upperLegThickness !== undefined ? { thickness: patch.upperLegThickness } : {}),
+                          };
+                          return {
+                            ...a,
+                            legs: nextLegs,
+                            leftLeg: a.leftLeg ? { ...a.leftLeg, ...patch } : undefined,
+                            rightLeg: a.rightLeg ? { ...a.rightLeg, ...patch } : undefined,
+                          };
                         }
-                        className="char-color-picker"
-                      />
-                    </div>
-                  </div>
+                      });
+                    };
 
-                  <div className="char-control-group">
-                    <label>Shoe Style</label>
-                    <div className="char-pill-row">
-                      {(['sneakers', 'boots', 'shoes'] as const).map((style) => (
-                        <button
-                          key={style}
-                          type="button"
-                          className={`char-pill-btn ${appearance.legs.shoeStyle === style ? 'active' : ''}`}
-                          onClick={() =>
-                            updateAppearance((a) => ({
-                              ...a,
-                              legs: { ...a.legs, shoeStyle: style },
-                            }))
-                          }
-                        >
-                          {style}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+                    return (
+                      <>
+                        <div className="char-control-group">
+                          <label>Bottom Style</label>
+                          <div className="char-pill-row">
+                            {(['pants', 'shorts', 'skirt'] as const).map((style) => (
+                              <button
+                                key={style}
+                                type="button"
+                                className={`char-pill-btn ${currentPantsStyle === style ? 'active' : ''}`}
+                                onClick={() => updateTargetLeg({ pantsStyle: style })}
+                              >
+                                {style}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
 
-                  <div className="char-control-group">
-                    <label>Shoe Color</label>
-                    <div className="char-swatch-row">
-                      {COLOR_SWATCHES.shoes.map((col) => (
-                        <button
-                          key={col}
-                          type="button"
-                          className={`char-color-swatch ${appearance.legs.shoeColor === col ? 'active' : ''}`}
-                          style={{ backgroundColor: col }}
-                          onClick={() =>
-                            updateAppearance((a) => ({
-                              ...a,
-                              legs: { ...a.legs, shoeColor: col },
-                            }))
-                          }
-                        />
-                      ))}
-                    </div>
-                  </div>
+                        <div className="char-control-group">
+                          <label>Pants / Skirt Color</label>
+                          <div className="char-swatch-row">
+                            {COLOR_SWATCHES.pants.map((col) => (
+                              <button
+                                key={col}
+                                type="button"
+                                className={`char-color-swatch ${currentPantsColor === col ? 'active' : ''}`}
+                                style={{ backgroundColor: col }}
+                                onClick={() => updateTargetLeg({ pantsColor: col })}
+                              />
+                            ))}
+                            <input
+                              type="color"
+                              value={currentPantsColor}
+                              onChange={(e) => updateTargetLeg({ pantsColor: e.target.value })}
+                              className="char-color-picker"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="char-control-group">
+                          <label>Shoe Style</label>
+                          <div className="char-pill-row">
+                            {(['sneakers', 'boots', 'shoes'] as const).map((style) => (
+                              <button
+                                key={style}
+                                type="button"
+                                className={`char-pill-btn ${currentShoeStyle === style ? 'active' : ''}`}
+                                onClick={() => updateTargetLeg({ shoeStyle: style })}
+                              >
+                                {style}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="char-control-group">
+                          <label>Shoe Color</label>
+                          <div className="char-swatch-row">
+                            {COLOR_SWATCHES.shoes.map((col) => (
+                              <button
+                                key={col}
+                                type="button"
+                                className={`char-color-swatch ${currentShoeColor === col ? 'active' : ''}`}
+                                style={{ backgroundColor: col }}
+                                onClick={() => updateTargetLeg({ shoeColor: col })}
+                              />
+                            ))}
+                            <input
+                              type="color"
+                              value={currentShoeColor}
+                              onChange={(e) => updateTargetLeg({ shoeColor: e.target.value })}
+                              className="char-color-picker"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="char-control-group">
+                          <label>Upper Leg Length: {currentUpperLegLength.toFixed(2)}x</label>
+                          <input
+                            type="range"
+                            min="0.7"
+                            max="1.4"
+                            step="0.05"
+                            value={currentUpperLegLength}
+                            onChange={(e) => updateTargetLeg({ upperLegLength: parseFloat(e.target.value) })}
+                          />
+                        </div>
+
+                        <div className="char-control-group">
+                          <label>Upper Leg Thickness: {currentUpperLegThick.toFixed(2)}x</label>
+                          <input
+                            type="range"
+                            min="0.7"
+                            max="1.4"
+                            step="0.05"
+                            value={currentUpperLegThick}
+                            onChange={(e) => updateTargetLeg({ upperLegThickness: parseFloat(e.target.value) })}
+                          />
+                        </div>
+
+                        <div className="char-control-group">
+                          <label>Lower Leg Length: {currentLowerLegLength.toFixed(2)}x</label>
+                          <input
+                            type="range"
+                            min="0.7"
+                            max="1.4"
+                            step="0.05"
+                            value={currentLowerLegLength}
+                            onChange={(e) => updateTargetLeg({ lowerLegLength: parseFloat(e.target.value) })}
+                          />
+                        </div>
+
+                        <div className="char-control-group">
+                          <label>Lower Leg Thickness: {currentLowerLegThick.toFixed(2)}x</label>
+                          <input
+                            type="range"
+                            min="0.7"
+                            max="1.4"
+                            step="0.05"
+                            value={currentLowerLegThick}
+                            onChange={(e) => updateTargetLeg({ lowerLegThickness: parseFloat(e.target.value) })}
+                          />
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
               )}
 

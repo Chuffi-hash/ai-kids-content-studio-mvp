@@ -6,6 +6,7 @@ import {
   getCharacterByName,
   deleteCharacter,
   updateCharacter,
+  CharacterConflictError,
 } from "../services/database/database.service.js";
 import { ImageGenerationService } from "../services/image-generation/image-generation.service.js";
 import { getImageGenerationProvider } from "../services/image-generation/provider.factory.js";
@@ -55,25 +56,26 @@ characterRouter.post("/", async (req, res) => {
   try {
     const { name, species, personality, visualDescription, distinctiveFeatures, canonicalAppearance } = req.body;
 
-    if (!name) {
+    if (!name || !name.trim()) {
       return res.status(400).json({
         message: "Character name is required",
       });
     }
 
+    const trimmedName = name.trim();
     const resolvedSpecies = species || (canonicalAppearance?.species ? canonicalAppearance.species.charAt(0).toUpperCase() + canonicalAppearance.species.slice(1) : "Human");
     const resolvedPersonality = personality || "Friendly, curious, and adventurous";
     const resolvedDescription = visualDescription || `Custom 2D vector character (${resolvedSpecies})`;
 
     // Check if character already exists
-    const existing = await getCharacterByName(name);
+    const existing = await getCharacterByName(trimmedName);
     if (existing) {
       return res.status(409).json({ message: "Character with this name already exists" });
     }
 
     const character = await createCharacter({
       id: randomUUID(),
-      name,
+      name: trimmedName,
       species: resolvedSpecies,
       personality: resolvedPersonality,
       visualDescription: resolvedDescription,
@@ -82,7 +84,10 @@ characterRouter.post("/", async (req, res) => {
     });
 
     return res.status(201).json(character);
-  } catch (error) {
+  } catch (error: any) {
+    if (error instanceof CharacterConflictError || error?.statusCode === 409) {
+      return res.status(409).json({ message: error.message || "Character with this name already exists" });
+    }
     console.error(error);
     return res.status(500).json({ message: "Failed to create character" });
   }
@@ -136,15 +141,15 @@ characterRouter.put("/:id", async (req, res) => {
     }
 
     // If name is being changed, check if new name already exists
-    if (name && name !== existing.name) {
-      const nameConflict = await getCharacterByName(name);
-      if (nameConflict) {
+    if (name && name.trim().toLowerCase() !== existing.name.toLowerCase()) {
+      const nameConflict = await getCharacterByName(name.trim());
+      if (nameConflict && nameConflict.id !== id) {
         return res.status(409).json({ message: "Character with this name already exists" });
       }
     }
 
     const character = await updateCharacter(id, {
-      name: name || existing.name,
+      name: name ? name.trim() : existing.name,
       species: species || existing.species,
       personality: personality || existing.personality,
       visualDescription: visualDescription || existing.visualDescription,
@@ -153,7 +158,10 @@ characterRouter.put("/:id", async (req, res) => {
     });
 
     return res.json(character);
-  } catch (error) {
+  } catch (error: any) {
+    if (error instanceof CharacterConflictError || error?.statusCode === 409) {
+      return res.status(409).json({ message: error.message || "Character with this name already exists" });
+    }
     console.error(error);
     return res.status(500).json({ message: "Failed to update character" });
   }

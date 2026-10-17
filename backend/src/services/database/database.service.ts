@@ -33,40 +33,45 @@ export function initializeDatabase() {
 
 // Story operations
 export async function createStory(data: {
-  id: string;
-  storyId: string;
+  id?: string;
+  storyId?: string;
   title: string;
-  logline: string;
-  lesson: string;
+  logline?: string;
+  lesson?: string;
   topic?: string | null;
   ageGroup?: string | null;
   audience?: string | null;
   genre?: string | null;
   visualStyle?: string | null;
+  targetDuration?: number | null;
 }) {
+  const id = data.id || randomUUID();
+  const storyId = data.storyId || `story-${Date.now()}-${randomUUID().slice(0, 8)}`;
   return await prisma.story.upsert({
-    where: { storyId: data.storyId },
+    where: { storyId },
     update: {
       title: data.title,
-      logline: data.logline,
-      lesson: data.lesson,
+      logline: data.logline || '',
+      lesson: data.lesson || '',
       topic: data.topic,
       ageGroup: data.ageGroup,
       audience: data.audience,
       genre: data.genre,
       visualStyle: data.visualStyle,
+      targetDuration: data.targetDuration,
     },
     create: {
-      id: data.id,
-      storyId: data.storyId,
+      id,
+      storyId,
       title: data.title,
-      logline: data.logline,
-      lesson: data.lesson,
+      logline: data.logline || '',
+      lesson: data.lesson || '',
       topic: data.topic,
       ageGroup: data.ageGroup,
       audience: data.audience,
       genre: data.genre,
       visualStyle: data.visualStyle,
+      targetDuration: data.targetDuration,
     },
   });
 }
@@ -230,6 +235,8 @@ export async function getSceneBySceneId(sceneId: string) {
   });
 }
 
+export const getSceneById = getSceneBySceneId;
+
 export async function getScenesByStoryId(storyId: string, includeDeleted: boolean = false) {
   return await prisma.scene.findMany({
     where: { 
@@ -294,6 +301,20 @@ export async function batchUpdateSceneTimelines(storyId: string, updates: Array<
   generationStatus?: string;
   animationData?: any;
 }>) {
+  if (updates.length > 0) {
+    const sceneIds = updates.map((u) => u.sceneId);
+    const existing = await prisma.scene.findMany({
+      where: {
+        storyId,
+        sceneId: { in: sceneIds },
+      },
+      select: { sceneId: true },
+    });
+    if (existing.length !== updates.length) {
+      throw new Error('One or more scenes do not belong to the story being edited');
+    }
+  }
+
   const operations = updates.map((update) => {
     const data: any = {
       order: update.order,
@@ -326,9 +347,40 @@ export async function batchUpdateSceneTimelines(storyId: string, updates: Array<
 }
 
 export async function deleteScene(sceneId: string) {
-  return await prisma.scene.update({
-    where: { sceneId },
-    data: { deletedAt: new Date() },
+  return await prisma.$transaction(async (tx) => {
+    const target = await tx.scene.findFirst({
+      where: { OR: [{ sceneId }, { id: sceneId }] },
+    });
+    if (!target) throw new Error('Scene not found');
+
+    const deleted = await tx.scene.update({
+      where: { sceneId: target.sceneId },
+      data: { deletedAt: new Date() },
+    });
+
+    // Recalculate contiguous order and start/end times for remaining active scenes
+    const remainingScenes = await tx.scene.findMany({
+      where: { storyId: target.storyId, deletedAt: null },
+      orderBy: [{ order: 'asc' }, { number: 'asc' }],
+    });
+
+    let currentStartMs = 0;
+    for (let i = 0; i < remainingScenes.length; i++) {
+      const sc = remainingScenes[i];
+      const dur = sc.endMs > sc.startMs ? sc.endMs - sc.startMs : (sc.estimatedDurationMs || 5000);
+      await tx.scene.update({
+        where: { sceneId: sc.sceneId },
+        data: {
+          order: i + 1,
+          number: i + 1,
+          startMs: currentStartMs,
+          endMs: currentStartMs + dur,
+        },
+      });
+      currentStartMs += dur;
+    }
+
+    return deleted;
   });
 }
 
@@ -457,6 +509,18 @@ export async function updateImageStatus(id: string, status: string) {
   });
 }
 
+export class CharacterConflictError extends Error {
+  statusCode: number;
+  code: string;
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'CharacterConflictError';
+    this.statusCode = 409;
+    this.code = 'P2002';
+  }
+}
+
 // Character operations
 export async function createCharacter(data: {
   id: string;
@@ -469,36 +533,31 @@ export async function createCharacter(data: {
   referenceImageUrl?: string;
   referenceImagePrompt?: string;
 }) {
-  // Check if character exists by name
+  const trimmedName = data.name.trim();
+
+  // Check if character already exists by name (case-insensitive)
   const existing = await prisma.character.findFirst({
-    where: { name: data.name },
+    where: {
+      name: {
+        equals: trimmedName,
+        mode: 'insensitive',
+      },
+    },
   });
 
   if (existing) {
-    // Update existing character
-    return await prisma.character.update({
-      where: { id: existing.id },
-      data: {
-        species: data.species,
-        personality: data.personality,
-        visualDescription: data.visualDescription,
-        distinctiveFeatures: data.distinctiveFeatures,
-        canonicalAppearance: data.canonicalAppearance,
-        referenceImageUrl: data.referenceImageUrl,
-        referenceImagePrompt: data.referenceImagePrompt,
-      },
-    });
+    throw new CharacterConflictError(`Character with name "${trimmedName}" already exists`);
   }
 
   // Create new character
   return await prisma.character.create({
     data: {
       id: data.id,
-      name: data.name,
-      species: data.species,
-      personality: data.personality,
-      visualDescription: data.visualDescription,
-      distinctiveFeatures: data.distinctiveFeatures,
+      name: trimmedName,
+      species: data.species || 'human',
+      personality: data.personality || 'friendly and curious',
+      visualDescription: data.visualDescription || (data as any).description || `${trimmedName} the ${data.species || 'character'}`,
+      distinctiveFeatures: data.distinctiveFeatures || '',
       canonicalAppearance: data.canonicalAppearance,
       referenceImageUrl: data.referenceImageUrl,
       referenceImagePrompt: data.referenceImagePrompt,
@@ -507,8 +566,14 @@ export async function createCharacter(data: {
 }
 
 export async function getCharacterByName(name: string) {
+  const trimmedName = name.trim();
   return await prisma.character.findFirst({
-    where: { name },
+    where: {
+      name: {
+        equals: trimmedName,
+        mode: 'insensitive',
+      },
+    },
   });
 }
 
@@ -546,9 +611,26 @@ export async function updateCharacter(id: string, data: {
   referenceImageUrl?: string;
   referenceImagePrompt?: string;
 }) {
+  const updateData = { ...data };
+  if (updateData.name) {
+    const trimmed = updateData.name.trim();
+    const existing = await prisma.character.findFirst({
+      where: {
+        name: {
+          equals: trimmed,
+          mode: 'insensitive',
+        },
+      },
+    });
+    if (existing && existing.id !== id) {
+      throw new CharacterConflictError(`Character with name "${trimmed}" already exists`);
+    }
+    updateData.name = trimmed;
+  }
+
   return await prisma.character.update({
     where: { id },
-    data,
+    data: updateData,
   });
 }
 

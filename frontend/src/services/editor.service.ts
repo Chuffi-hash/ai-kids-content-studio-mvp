@@ -39,6 +39,47 @@ export async function saveStoryMetadata(
   return res.json();
 }
 
+export async function regenerateStoryContent(
+  storyId: string,
+  payload: {
+    topic: string;
+    ageGroup?: string;
+    desiredDurationSeconds?: number;
+    language?: string;
+    title?: string;
+    genre?: string;
+    lesson?: string;
+    characterIds?: string[];
+  }
+): Promise<any> {
+  const res = await fetch(`${API_URL}/api/content/story/${storyId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => null);
+    throw new Error(err?.message || 'Failed to regenerate story');
+  }
+  return res.json();
+}
+
+export async function regenerateSceneContent(
+  sceneId: string,
+  prompt?: string
+): Promise<any> {
+  const res = await fetch(`${API_URL}/api/content/scenes/${sceneId}/regenerate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prompt }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => null);
+    throw new Error(err?.message || 'Failed to regenerate scene');
+  }
+  return res.json();
+}
+
 export async function fetchStoryCharacters(storyId: string): Promise<any[]> {
   const res = await fetch(`${API_URL}/api/content/story/${storyId}/characters`);
   if (!res.ok) throw new Error('Failed to fetch story characters');

@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import StoryBuilder from "../components/story/StoryBuilder";
 import GeneratedStory from "../components/story/GeneratedStory";
 import { PageHeader } from "../components/common/PageHeader";
-import { CloseIcon } from "../components/common/Icons";
+import { CloseIcon, SparklesIcon } from "../components/common/Icons";
 import { getAllCharacters, Character } from "../services/character.service";
 import { Story, Scene } from "../types/story";
 import { ProductionState, ProductionScene } from "../types/production";
@@ -33,14 +33,7 @@ export default function StoryCreatePage() {
     }
   }
 
-  async function generateStory(data: {
-    topic: string;
-    audience: string;
-    genre: string;
-    visualStyle: string;
-    lesson: string;
-    characterIds: string[];
-  }) {
+  async function generateStory(data: any) {
     setLoading(true);
     setApiError(null);
 
@@ -53,25 +46,32 @@ export default function StoryCreatePage() {
         },
         body: JSON.stringify({
           topic: data.topic,
-          lesson: data.lesson,
-          audience: data.audience,
+          ageGroup: data.ageGroup,
+          desiredDurationSeconds: data.desiredDurationSeconds,
+          language: data.language,
+          title: data.title || undefined,
           genre: data.genre,
           visualStyle: data.visualStyle,
+          lesson: data.lesson || undefined,
+          sceneCount: data.sceneCount || undefined,
+          tone: data.tone || undefined,
+          contentRestrictions: data.contentRestrictions || undefined,
           characterIds: data.characterIds,
         }),
       });
 
       if (!response.ok) {
-        throw new Error("Request failed");
+        const errJson = await response.json().catch(() => null);
+        throw new Error(errJson?.message || "Request failed");
       }
 
       const result = await response.json();
 
       // Navigate to story detail page after successful generation
       navigate(`/stories/${result.storyId}`);
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      setApiError("Failed to generate story. Please try again.");
+      setApiError(error?.message || "Failed to generate story. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -155,14 +155,21 @@ export default function StoryCreatePage() {
   }
 
   return (
-    <div className="page">
-      <PageHeader
-        title="Create Story"
-        subtitle="Configure your story settings and generate content"
-      />
+    <div className="page story-studio-page">
+      <div className="studio-hero-header">
+        <div className="studio-hero-badge">
+          <SparklesIcon size={12} />
+          <span>AI Story Studio</span>
+        </div>
+        <h1 className="studio-hero-title">Create Children's Story</h1>
+        <p className="studio-hero-subtitle">
+          Spark an imaginative idea, cast favorite characters, and direct your animated storybook in seconds.
+        </p>
+      </div>
+
       {apiError && (
-        <div className="api-error">
-          <span>{apiError}</span>
+        <div className="api-error studio-api-error">
+          <span className="error-message">⚠️ {apiError}</span>
           <button onClick={() => setApiError(null)} className="error-close" aria-label="Dismiss error">
             <CloseIcon size={12} />
           </button>
