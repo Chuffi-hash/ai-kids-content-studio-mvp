@@ -73,6 +73,8 @@ export interface EvaluatedPose {
   rightForearmAngle: number;
   leftLegAngle: number;
   rightLegAngle: number;
+  leftLowerLegAngle: number;
+  rightLowerLegAngle: number;
   chestScaleY: number;
   activeAction: string;
 }
@@ -130,6 +132,8 @@ export function evaluatePose(
   let rightForearmAngle = 0;
   let leftLegAngle = 0;
   let rightLegAngle = 0;
+  let leftLowerLegAngle = 0;
+  let rightLowerLegAngle = 0;
   let chestScaleY = 1.0;
   let activeAction = 'idle';
 
@@ -156,6 +160,8 @@ export function evaluatePose(
 
         leftLegAngle = 28 * Math.sin(phase);
         rightLegAngle = -28 * Math.sin(phase);
+        leftLowerLegAngle = 18 * Math.max(0, Math.sin(phase));
+        rightLowerLegAngle = 18 * Math.max(0, -Math.sin(phase));
         leftArmAngle = -20 * Math.sin(phase);
         rightArmAngle = 20 * Math.sin(phase);
         torsoBobY = -7 * Math.abs(Math.sin(phase));
@@ -222,6 +228,8 @@ export function evaluatePose(
           chestScaleY = 1.08;
           leftLegAngle = -10;
           rightLegAngle = 10;
+          leftLowerLegAngle = -18;
+          rightLowerLegAngle = -18;
           leftArmAngle = -50;
           rightArmAngle = 50;
         }
@@ -256,6 +264,8 @@ export function evaluatePose(
     rightForearmAngle: Math.round(rightForearmAngle * 10) / 10,
     leftLegAngle: Math.round(leftLegAngle * 10) / 10,
     rightLegAngle: Math.round(rightLegAngle * 10) / 10,
+    leftLowerLegAngle: Math.round(leftLowerLegAngle * 10) / 10,
+    rightLowerLegAngle: Math.round(rightLowerLegAngle * 10) / 10,
     chestScaleY: Math.round(chestScaleY * 1000) / 1000,
     activeAction,
   };
