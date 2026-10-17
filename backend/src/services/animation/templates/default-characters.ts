@@ -42,7 +42,9 @@ export interface VectorRigDefinition {
     leftForearm?: VectorRigPart;
     rightForearm?: VectorRigPart;
     leftLeg: VectorRigPart;
+    leftLowerLeg?: VectorRigPart;
     rightLeg: VectorRigPart;
+    rightLowerLeg?: VectorRigPart;
   };
 }
 
