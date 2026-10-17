@@ -99,6 +99,8 @@ export interface VectorSceneData {
   };
   characterInstances: CharacterInstance[];
   animationClips: AnimationClip[];
+  dialogue?: Array<{ speaker: string; text: string }>;
+  characterActions?: Array<{ characterName: string; action: string; pose?: string }>;
 }
 
 export interface EvaluatedCharacterPose {
@@ -118,6 +120,33 @@ export interface EvaluatedCharacterPose {
   rightLegAngle: number;
   chestScaleY: number;
   activeAction: AnimationActionType;
+}
+
+export interface ArmLimbConfig {
+  shoulderOffset?: { x: number; y: number };
+  upperArmLength?: number;
+  upperArmThickness?: number;
+  elbowOffset?: { x: number; y: number };
+  forearmLength?: number;
+  forearmThickness?: number;
+  handSize?: number;
+  handShape?: 'simple' | 'mitten' | 'paw';
+  sleeveStyle?: 'short' | 'long' | 'sleeveless';
+  skinColor?: string;
+}
+
+export interface LegLimbConfig {
+  hipOffset?: { x: number; y: number };
+  upperLegLength?: number;
+  upperLegThickness?: number;
+  kneeOffset?: { x: number; y: number };
+  lowerLegLength?: number;
+  lowerLegThickness?: number;
+  footSize?: number;
+  pantsStyle?: 'pants' | 'shorts' | 'skirt';
+  pantsColor?: string;
+  shoeStyle?: 'sneakers' | 'boots' | 'shoes';
+  shoeColor?: string;
 }
 
 export interface CustomCharacterAppearance {
@@ -193,4 +222,9 @@ export interface CustomCharacterAppearance {
     shoeStyle: 'sneakers' | 'boots' | 'shoes';
     shoeColor: string;
   };
+  // Independent limb custom controls
+  leftArm?: ArmLimbConfig;
+  rightArm?: ArmLimbConfig;
+  leftLeg?: LegLimbConfig;
+  rightLeg?: LegLimbConfig;
 }

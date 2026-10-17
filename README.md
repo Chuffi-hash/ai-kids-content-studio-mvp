@@ -138,7 +138,55 @@ All Phase 0 verification checks and exit criteria have been executed and confirm
    - Verified output: `maya-s-space-station-journey-1792176825344.mp4` (6.02s 720p 30fps H.264 + AAC audio).
    - Visual frame extraction verified: `custom_char_walk_frame.png` and `custom_char_wave_frame.png`.
 
-## 11. Future Phase — Custom Image Characters (PNG/SVG Uploads)
+## 11. Feature Phase — Structured AI Story Generation Engine
+
+**Status: Complete & Verified.** (Implemented October 2026)
+
+### 1. Rich Input Model
+- **Required Inputs:** `topic`, `ageGroup` ("2-4 years", "4-7 years", "7-10 years", "Family"), `desiredDurationSeconds` (15s to 300s), `language`.
+- **Optional Inputs:** `title`, `genre`, `lesson`, `characterIds` (multi-select existing library character IDs), `sceneCount` (2 to 8), `tone`, `contentRestrictions`, `idempotencyKey`.
+
+### 2. Structured Output Schema & Zod Validation
+- All AI outputs are validated and normalized against `StructuredStorySchema` via `validateAndNormalizeStory()`:
+  - **Story Metadata:** `title`, `logline`, `lesson`, `targetAudience`, `genre`, `estimatedDurationSeconds`.
+  - **Characters:** Array with `name`, `role` ("protagonist" | "companion" | "supporting"), `species`, `description`, `personality`.
+  - **Scenes:** Array with `sceneNumber`, `title`, `summary`, `visualDescription`, `location`, `timeOfDay`, `narration`, `durationSeconds`, `dialogue` (`characterName`, `text`, `emotion`), and `characterActions` (`characterName`, `action`, `pose`, `description`).
+- **Resilience Pipeline:** Automatic markdown code-fence stripping (`extractAndParseJson`), trailing comma repair, bounded self-correction retry, and graceful offline fallback to `DeterministicStoryProvider`.
+
+### 3. Multi-Provider Architecture (`StoryProviderFactory`)
+- **OpenAI:** GPT-4o JSON mode when `OPENAI_API_KEY` is present.
+- **Local Ollama:** Local LLM model (e.g., `llama3.2:3b`) when reachable at `http://127.0.0.1:11434`.
+- **Deterministic Story Provider:** Offline, rule-based generation with zero external dependencies, 100% schema compliance, age-graded vocabulary, and realistic character cues. Used for fallback and instant reliable test runs.
+
+### 4. Character Resolution & Consistency
+- Resolves library characters by ID without destructive mutation or species overwrite.
+- Creates new characters using built-in species presets (bear cub, robot, kid girl, kid boy, human) preserving non-human characteristics.
+- Automatically synchronizes dialogue speaker names and character animation action targets.
+
+### 5. Animation-Ready Scene Preparation
+- Calculates scene durations using speech pacing heuristics (`estimateSpeechDurationMs`).
+- Assembles contiguous timeline across scenes (e.g. Scene 2 startMs equals Scene 1 endMs).
+- Places character instances on 1280x720 canvas (smart positioning to face each other in 2-character scenes).
+- Converts semantic character actions (`walk`, `wave`, `jump`, `idle`) to deterministic `AnimationClip` tracks and motion paths with fallback to `idle` for unknown actions.
+
+### 6. Persistence & Safe Story Editing API
+- `POST /api/content/story/generate`: Generates and atomically persists story, characters, and scenes inside a Prisma transaction, with idempotency key caching.
+- `PUT /api/content/story/:storyId`: In-place full story regeneration replacing scenes and dialogue inside an atomic transaction.
+- `PATCH /api/content/story/:storyId`: Manual non-destructive metadata update without altering scenes or animations.
+- `POST /api/content/scenes/:sceneId/regenerate`: Single-scene AI regeneration for targeted prompt adjustments while keeping overall story continuity.
+
+### 7. Frontend Studio Integration
+- `StoryBuilder.tsx`: Visual story creation form with required inputs and expandable optional controls.
+- `StoryDetailsModal.tsx`: Explicit "Regenerate Story (AI)" button with confirmation modal.
+- `LeftAssetPanel.tsx`: "Regenerate Scene (AI)" sparkle icon (`✨`) on each scene item card for instant scene iteration.
+
+### 8. Verification Results
+- **Full Backend Test Suite:** `npm test` — **PASS (36/36 tests passed)** covering structured generation, schema validation, character consistency, action mapping, idempotency caching, manual updates vs regeneration, single-scene regeneration, and provider fallback.
+- **Frontend Build:** `npm run build` — **PASS (0 errors, 2.42s build time)**.
+- **End-to-End MP4 Export:** `npx tsx tests/verify-structured-story-export.ts` — **PASS (0 errors)**.
+  - Verified output: `pip-and-sammy-forest-magic-1792220247421.mp4` (428.7 KB, 30.42s, 1280x720 15fps H.264 video + stereo audio).
+
+## 12. Future Phase — Custom Image Characters (PNG/SVG Uploads)
 
 **Not part of Phase 1 unless equivalent support already exists.**
 

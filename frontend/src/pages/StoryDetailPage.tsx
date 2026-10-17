@@ -563,6 +563,16 @@ export default function StoryDetailPage() {
     }
   };
 
+  const handleRegenerateScene = async (sceneId: string) => {
+    try {
+      await editorService.regenerateSceneContent(sceneId);
+      await loadStoryData();
+    } catch (err: any) {
+      console.error('Failed to regenerate scene:', err);
+      alert(err.message || 'Failed to regenerate scene');
+    }
+  };
+
   // Timeline clips direct batch update (from reordering or resizing)
   const handleUpdateScenes = (updatedScenes: EditorScene[]) => {
     pushHistorySnapshot(scenes);
@@ -633,6 +643,31 @@ export default function StoryDetailPage() {
       const reordered = [...scenes];
       const [moved] = reordered.splice(idx, 1);
       reordered.splice(targetIdx, 0, moved);
+
+      const updated = recalculateContiguousTimeline(
+        reordered.map((s, i) => ({ ...s, order: i + 1 }))
+      );
+
+      handleUpdateScenes(updated);
+    },
+    [scenes, handleUpdateScenes]
+  );
+
+  const handleReorderScene = useCallback(
+    (fromIdx: number, toIdx: number) => {
+      if (
+        fromIdx === toIdx ||
+        fromIdx < 0 ||
+        toIdx < 0 ||
+        fromIdx >= scenes.length ||
+        toIdx >= scenes.length
+      ) {
+        return;
+      }
+
+      const reordered = [...scenes];
+      const [moved] = reordered.splice(fromIdx, 1);
+      reordered.splice(toIdx, 0, moved);
 
       const updated = recalculateContiguousTimeline(
         reordered.map((s, i) => ({ ...s, order: i + 1 }))
@@ -1120,7 +1155,9 @@ export default function StoryDetailPage() {
           onDuplicateScene={handleDuplicateScene}
           onDeleteScene={handleDeleteScene}
           onMoveScene={handleMoveScene}
+          onReorderScene={handleReorderScene}
           onOpenCharacterBuilder={() => setIsCharacterBuilderOpen(true)}
+          onRegenerateScene={handleRegenerateScene}
           onGenerateImage={(scId) => handleGenerateImage(scId)}
           onGenerateVoice={(scId) => handleGenerateVoice(scId)}
           onGenerateVideo={(scId) => handleGenerateVideo(scId)}
@@ -1266,6 +1303,7 @@ export default function StoryDetailPage() {
           onStoryUpdated={(updatedStory) => {
             setStory((prev) => (prev ? { ...prev, ...updatedStory } : null));
           }}
+          onStoryRegenerated={loadStoryData}
           onOpenCharacterBuilder={() => setIsCharacterBuilderOpen(true)}
         />
       )}

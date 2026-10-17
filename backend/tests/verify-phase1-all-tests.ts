@@ -29,6 +29,8 @@ import {
   batchUpdateSceneTimelines,
   getCharactersByStoryId,
   createCharacter,
+  getCharacterByName,
+  deleteCharacter,
   linkStoryCharacter,
 } from '../src/services/database/database.service.js';
 import { AudioGenerationService } from '../src/services/audio-generation/audio-generation.service.js';
@@ -903,6 +905,11 @@ async function runAllVerificationTests() {
   // =========================================================================
   try {
     // 1. Existing character creation and story linkage
+    const existingBarney = await getCharacterByName('Barney Bear');
+    if (existingBarney) {
+      await deleteCharacter(existingBarney.id);
+    }
+
     const charId = `char-legacy-${Date.now()}`;
     const legacyChar = await createCharacter({
       id: randomUUID(),

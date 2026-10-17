@@ -35,6 +35,8 @@ export interface EditorScene {
   actualAudioDurationMs?: number | null;
   generationError?: string | null;
   animationData?: VectorSceneData | null;
+  dialogue?: Array<{ speaker: string; text: string }>;
+  characterActions?: Array<{ characterName: string; action: string; pose?: string }>;
   versions?: SceneVersionItem[];
   image?: {
     id: string;

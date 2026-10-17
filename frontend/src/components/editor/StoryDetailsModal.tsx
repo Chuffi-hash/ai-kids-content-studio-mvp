@@ -5,6 +5,7 @@ import {
   saveStoryMetadata,
   setStoryCharacters,
   fetchStoryCharacters,
+  regenerateStoryContent,
 } from '../../services/editor.service';
 import { CloseIcon, CheckIcon, PlusIcon, SparklesIcon } from '../common/Icons';
 
@@ -13,6 +14,7 @@ interface StoryDetailsModalProps {
   story: EditorStory;
   onClose: () => void;
   onStoryUpdated: (updatedStory: Partial<EditorStory>) => void;
+  onStoryRegenerated?: () => void;
   onOpenCharacterBuilder?: () => void;
 }
 
@@ -21,6 +23,7 @@ export const StoryDetailsModal: React.FC<StoryDetailsModalProps> = ({
   story,
   onClose,
   onStoryUpdated,
+  onStoryRegenerated,
   onOpenCharacterBuilder,
 }) => {
   // Story details state
@@ -41,6 +44,8 @@ export const StoryDetailsModal: React.FC<StoryDetailsModalProps> = ({
   );
   const [isLoadingChars, setIsLoadingChars] = useState<boolean>(false);
   const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [isRegenerating, setIsRegenerating] = useState<boolean>(false);
+  const [showRegenerateConfirm, setShowRegenerateConfirm] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'details' | 'characters'>('details');
 
@@ -132,6 +137,39 @@ export const StoryDetailsModal: React.FC<StoryDetailsModalProps> = ({
     }
   };
 
+  const handleRegenerateStory = async () => {
+    try {
+      setIsRegenerating(true);
+      setErrorMsg(null);
+
+      const targetDurationSeconds =
+        typeof targetDuration === 'number' && targetDuration > 0
+          ? targetDuration
+          : undefined;
+
+      await regenerateStoryContent(story.storyId, {
+        topic: topic.trim() || title.trim(),
+        title: title.trim(),
+        ageGroup: audience,
+        desiredDurationSeconds: targetDurationSeconds,
+        genre: genre.trim(),
+        lesson: lesson.trim(),
+        characterIds: linkedCharacterIds,
+      });
+
+      setShowRegenerateConfirm(false);
+      onClose();
+      if (onStoryRegenerated) {
+        onStoryRegenerated();
+      }
+    } catch (err: any) {
+      console.error('Failed to regenerate story:', err);
+      setErrorMsg(err.message || 'Failed to regenerate story');
+    } finally {
+      setIsRegenerating(false);
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -155,9 +193,28 @@ export const StoryDetailsModal: React.FC<StoryDetailsModalProps> = ({
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             <button
               type="button"
+              className="char-builder-btn secondary"
+              onClick={() => setShowRegenerateConfirm(true)}
+              disabled={isSaving || isRegenerating}
+              style={{
+                background: 'rgba(239, 68, 68, 0.1)',
+                borderColor: '#ef4444',
+                color: '#fca5a5',
+                fontSize: '12px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+              }}
+              title="Regenerate all story scenes and dialogue using AI"
+            >
+              <SparklesIcon size={13} />
+              <span>Regenerate Story (AI)</span>
+            </button>
+            <button
+              type="button"
               className="char-builder-btn primary"
               onClick={handleSave}
-              disabled={isSaving}
+              disabled={isSaving || isRegenerating}
               style={{ background: '#8b5cf6' }}
             >
               {isSaving ? 'Saving...' : 'Save Changes'}
@@ -172,6 +229,52 @@ export const StoryDetailsModal: React.FC<StoryDetailsModalProps> = ({
             </button>
           </div>
         </div>
+
+        {/* Story Regeneration Confirmation Dialog */}
+        {showRegenerateConfirm && (
+          <div
+            style={{
+              padding: '14px 18px',
+              background: '#451a1a',
+              borderBottom: '1px solid #7f1d1d',
+              color: '#fecaca',
+              fontSize: '12px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '12px',
+            }}
+          >
+            <div>
+              <div style={{ fontWeight: 600, color: '#fca5a5', marginBottom: '2px' }}>
+                ⚠️ Confirm Full Story Regeneration
+              </div>
+              <div>
+                This will use AI to regenerate the entire narrative, replacing all current scenes, dialogue, and character actions.
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
+              <button
+                type="button"
+                className="char-builder-btn primary"
+                onClick={handleRegenerateStory}
+                disabled={isRegenerating}
+                style={{ background: '#dc2626', borderColor: '#b91c1c', fontSize: '11px', padding: '6px 12px' }}
+              >
+                {isRegenerating ? 'Generating...' : 'Yes, Regenerate'}
+              </button>
+              <button
+                type="button"
+                className="char-builder-btn secondary"
+                onClick={() => setShowRegenerateConfirm(false)}
+                disabled={isRegenerating}
+                style={{ fontSize: '11px', padding: '6px 12px' }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
 
         {errorMsg && <div className="char-builder-alert">{errorMsg}</div>}
 

@@ -132,12 +132,18 @@ export default function CharactersPage() {
   }
 
   async function handleSaveFromBuilder(data: any) {
-    if (builderCharacter) {
-      await updateCharacter(builderCharacter.id, data);
-    } else {
-      await createCharacter(data);
+    try {
+      setApiError(null);
+      if (builderCharacter) {
+        await updateCharacter(builderCharacter.id, data);
+      } else {
+        await createCharacter(data);
+      }
+      loadCharacters();
+    } catch (error: any) {
+      console.error("Failed to save character from builder:", error);
+      setApiError(error.message || "Failed to save character. A character with this name may already exist.");
     }
-    loadCharacters();
   }
 
   async function handleDuplicateCharacter(id: string) {

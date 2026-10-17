@@ -172,6 +172,37 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
     onUpdateScene(scene.sceneId, { characterIds: next });
   };
 
+  const dialogueList: Array<{ speaker: string; text: string }> =
+    scene.dialogue || (scene.animationData?.dialogue as any) || [];
+  const actionList: Array<{ characterName: string; action: string; pose?: string }> =
+    scene.characterActions || (scene.animationData?.characterActions as any) || [];
+
+  const handleUpdateDialogue = (newDialogue: Array<{ speaker: string; text: string }>) => {
+    const updatedAnimationData = scene.animationData
+      ? { ...scene.animationData, dialogue: newDialogue }
+      : undefined;
+    onUpdateScene(scene.sceneId, {
+      dialogue: newDialogue,
+      ...(updatedAnimationData ? { animationData: updatedAnimationData } : {}),
+    });
+    if (updatedAnimationData && onUpdateAnimationData) {
+      onUpdateAnimationData(scene.sceneId, updatedAnimationData);
+    }
+  };
+
+  const handleUpdateActions = (newActions: Array<{ characterName: string; action: string; pose?: string }>) => {
+    const updatedAnimationData = scene.animationData
+      ? { ...scene.animationData, characterActions: newActions }
+      : undefined;
+    onUpdateScene(scene.sceneId, {
+      characterActions: newActions,
+      ...(updatedAnimationData ? { animationData: updatedAnimationData } : {}),
+    });
+    if (updatedAnimationData && onUpdateAnimationData) {
+      onUpdateAnimationData(scene.sceneId, updatedAnimationData);
+    }
+  };
+
   const canSplitAtPlayhead =
     playheadMs > scene.startMs + 500 && playheadMs < scene.endMs - 500;
 
@@ -755,6 +786,177 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
               </div>
             );
           })()}
+        </div>
+
+        {/* Structured Dialogue Section */}
+        <div className="ed-field-group">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <label className="ed-field-label">Structured Dialogue</label>
+            <button
+              type="button"
+              className="ed-tool-btn primary"
+              style={{ fontSize: '10px', padding: '2px 6px' }}
+              onClick={() => {
+                const defaultSpeaker = characters[0]?.name || (characterInstances[0]?.name) || 'Narrator';
+                handleUpdateDialogue([...dialogueList, { speaker: defaultSpeaker, text: '' }]);
+              }}
+            >
+              + Add Line
+            </button>
+          </div>
+
+          {dialogueList.length > 0 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              {dialogueList.map((dlg, idx) => (
+                <div
+                  key={idx}
+                  style={{
+                    background: 'var(--ed-bg)',
+                    padding: '8px',
+                    borderRadius: '6px',
+                    border: '1px solid var(--ed-border)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px',
+                  }}
+                >
+                  <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                    <input
+                      className="ed-input"
+                      style={{ flex: '0 0 100px', fontSize: '11px', padding: '3px 6px' }}
+                      value={dlg.speaker}
+                      placeholder="Speaker"
+                      onChange={(e) => {
+                        const updated = [...dialogueList];
+                        updated[idx] = { ...updated[idx], speaker: e.target.value };
+                        handleUpdateDialogue(updated);
+                      }}
+                    />
+                    <input
+                      className="ed-input"
+                      style={{ flex: 1, fontSize: '11px', padding: '3px 6px' }}
+                      value={dlg.text}
+                      placeholder="Dialogue line..."
+                      onChange={(e) => {
+                        const updated = [...dialogueList];
+                        updated[idx] = { ...updated[idx], text: e.target.value };
+                        handleUpdateDialogue(updated);
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="ed-tool-btn"
+                      style={{ color: '#f87171', padding: '3px 5px' }}
+                      onClick={() => {
+                        const updated = dialogueList.filter((_, i) => i !== idx);
+                        handleUpdateDialogue(updated);
+                      }}
+                      title="Delete dialogue line"
+                    >
+                      <TrashIcon size={11} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ fontSize: '11px', color: 'var(--ed-text-muted)', fontStyle: 'italic' }}>
+              No structured dialogue in this scene yet. Click "+ Add Line" to add speaker lines.
+            </div>
+          )}
+        </div>
+
+        {/* Character Actions Section */}
+        <div className="ed-field-group">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <label className="ed-field-label">Character Actions</label>
+            <button
+              type="button"
+              className="ed-tool-btn primary"
+              style={{ fontSize: '10px', padding: '2px 6px' }}
+              onClick={() => {
+                const defaultChar = characters[0]?.name || (characterInstances[0]?.name) || 'Hero';
+                handleUpdateActions([...actionList, { characterName: defaultChar, action: 'waves happily', pose: 'wave' }]);
+              }}
+            >
+              + Add Action
+            </button>
+          </div>
+
+          {actionList.length > 0 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              {actionList.map((act, idx) => (
+                <div
+                  key={idx}
+                  style={{
+                    background: 'var(--ed-bg)',
+                    padding: '8px',
+                    borderRadius: '6px',
+                    border: '1px solid var(--ed-border)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px',
+                  }}
+                >
+                  <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                    <input
+                      className="ed-input"
+                      style={{ flex: '0 0 90px', fontSize: '11px', padding: '3px 6px' }}
+                      value={act.characterName}
+                      placeholder="Character"
+                      onChange={(e) => {
+                        const updated = [...actionList];
+                        updated[idx] = { ...updated[idx], characterName: e.target.value };
+                        handleUpdateActions(updated);
+                      }}
+                    />
+                    <input
+                      className="ed-input"
+                      style={{ flex: 1, fontSize: '11px', padding: '3px 6px' }}
+                      value={act.action}
+                      placeholder="Action description..."
+                      onChange={(e) => {
+                        const updated = [...actionList];
+                        updated[idx] = { ...updated[idx], action: e.target.value };
+                        handleUpdateActions(updated);
+                      }}
+                    />
+                    <select
+                      className="ed-select"
+                      style={{ flex: '0 0 75px', fontSize: '11px', padding: '3px 4px' }}
+                      value={act.pose || 'idle'}
+                      onChange={(e) => {
+                        const updated = [...actionList];
+                        updated[idx] = { ...updated[idx], pose: e.target.value };
+                        handleUpdateActions(updated);
+                      }}
+                    >
+                      <option value="idle">idle</option>
+                      <option value="walk">walk</option>
+                      <option value="wave">wave</option>
+                      <option value="jump">jump</option>
+                    </select>
+                    <button
+                      type="button"
+                      className="ed-tool-btn"
+                      style={{ color: '#f87171', padding: '3px 5px' }}
+                      onClick={() => {
+                        const updated = actionList.filter((_, i) => i !== idx);
+                        handleUpdateActions(updated);
+                      }}
+                      title="Delete action"
+                    >
+                      <TrashIcon size={11} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ fontSize: '11px', color: 'var(--ed-text-muted)', fontStyle: 'italic' }}>
+              No character actions set. Click "+ Add Action" to record choreographed character actions.
+            </div>
+          )}
         </div>
 
         {/* 2D Character Animation Summary & Access */}
