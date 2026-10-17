@@ -86,7 +86,9 @@ export interface VectorRigDefinition {
     leftForearm?: VectorRigPart;
     rightForearm?: VectorRigPart;
     leftLeg: VectorRigPart;
+    leftLowerLeg?: VectorRigPart;
     rightLeg: VectorRigPart;
+    rightLowerLeg?: VectorRigPart;
   };
 }
 
@@ -116,6 +118,8 @@ export interface EvaluatedCharacterPose {
   rightForearmAngle: number;
   leftLegAngle: number;
   rightLegAngle: number;
+  leftLowerLegAngle: number;
+  rightLowerLegAngle: number;
   chestScaleY: number;
   activeAction: AnimationActionType;
 }
@@ -184,6 +188,18 @@ export interface CustomCharacterAppearance {
     sleeveStyle: 'short' | 'long' | 'sleeveless';
     handShape: 'simple' | 'mitten' | 'paw';
     skinColor?: string;
+    leftLength?: number;
+    rightLength?: number;
+    leftThickness?: number;
+    rightThickness?: number;
+    leftForearmLength?: number;
+    rightForearmLength?: number;
+    leftForearmThickness?: number;
+    rightForearmThickness?: number;
+    leftShoulderOffsetX?: number;
+    leftShoulderOffsetY?: number;
+    rightShoulderOffsetX?: number;
+    rightShoulderOffsetY?: number;
   };
   legs: {
     length: number; // 0.8 - 1.3
@@ -192,5 +208,15 @@ export interface CustomCharacterAppearance {
     pantsColor: string;
     shoeStyle: 'sneakers' | 'boots' | 'shoes';
     shoeColor: string;
+    leftUpperLength?: number;
+    rightUpperLength?: number;
+    leftLowerLength?: number;
+    rightLowerLength?: number;
+    leftThickness?: number;
+    rightThickness?: number;
+    leftHipOffsetX?: number;
+    leftHipOffsetY?: number;
+    rightHipOffsetX?: number;
+    rightHipOffsetY?: number;
   };
 }
