@@ -5,3 +5,4 @@ export interface StoryGenerationProvider {
   isAvailable(): Promise<boolean>;
   generateRaw(prompt: string, input: StoryGenerationInput): Promise<string>;
 }
+

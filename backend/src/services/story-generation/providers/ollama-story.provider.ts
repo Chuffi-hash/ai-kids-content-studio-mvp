@@ -48,3 +48,4 @@ export class OllamaStoryProvider implements StoryGenerationProvider {
     return response.message.content;
   }
 }
+

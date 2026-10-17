@@ -245,3 +245,4 @@ export function validateAndNormalizeStory(
     data: normalizedStory,
   };
 }
+
