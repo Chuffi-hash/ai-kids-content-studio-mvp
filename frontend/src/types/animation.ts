@@ -151,7 +151,7 @@ export interface LegLimbConfig {
 
 export interface CustomCharacterAppearance {
   version: 1;
-  species: 'human' | 'bear' | 'robot' | 'animal';
+  species: 'human' | 'bear' | 'robot' | 'animal' | 'alien' | 'fantasy_creature' | 'plant' | 'object' | 'other' | string;
   gender?: 'neutral' | 'boy' | 'girl';
   head: {
     shape: 'round' | 'oval' | 'square' | 'heart';

@@ -68,8 +68,8 @@
 }
 
 .scene-card:hover {
-  border-color: var(--color-border-strong);
-  box-shadow: var(--shadow-card);
+  border-color: var(--color-accent);
+  box-shadow: 0 4px 16px rgba(124, 58, 237, 0.12);
   transform: translateY(-2px);
 }
 
@@ -118,9 +118,9 @@
 }
 
 .scene-status-generating {
-  background: rgba(59, 130, 246, 0.15);
-  color: #93c5fd;
-  border: 1px solid rgba(59, 130, 246, 0.3);
+  background: rgba(139, 92, 246, 0.18);
+  color: #c4b5fd;
+  border: 1px solid rgba(139, 92, 246, 0.4);
 }
 
 .scene-status-pending {
@@ -240,9 +240,9 @@
 }
 
 .scene-action-button:hover:not(:disabled) {
-  border-color: var(--color-border-strong);
-  background: var(--color-surface-muted);
-  color: var(--color-text);
+  border-color: var(--color-accent);
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
 }
 
 .scene-action-button:disabled {
@@ -387,9 +387,9 @@
 }
 
 .asset-status-badge.generating {
-  background: rgba(59, 130, 246, 0.15);
-  color: #93c5fd;
-  border: 1px solid rgba(59, 130, 246, 0.3);
+  background: rgba(139, 92, 246, 0.18);
+  color: #c4b5fd;
+  border: 1px solid rgba(139, 92, 246, 0.4);
 }
 
 .asset-status-badge.pending {
@@ -486,8 +486,8 @@
 }
 
 .scene-form-close:hover {
-  background: var(--color-surface-muted);
-  color: var(--color-text);
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
 }
 
 .scene-form-layout {

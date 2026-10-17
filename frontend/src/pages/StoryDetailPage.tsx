@@ -1063,7 +1063,7 @@ export default function StoryDetailPage() {
             style={{
               width: '40px',
               height: '40px',
-              border: '3px solid #3b82f6',
+              border: '3px solid #8b5cf6',
               borderTopColor: 'transparent',
               borderRadius: '50%',
               margin: '0 auto 16px',
@@ -1209,7 +1209,7 @@ export default function StoryDetailPage() {
           >
             <div style={{ textAlign: 'center', maxWidth: '420px' }}>
               <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '16px' }}>
-                <FilmIcon size={48} color="#3b82f6" />
+                <FilmIcon size={48} color="#8b5cf6" />
               </div>
               <h3 style={{ color: 'var(--ed-text)', margin: '0 0 8px', fontSize: '18px' }}>
                 Your Storyboard is Empty

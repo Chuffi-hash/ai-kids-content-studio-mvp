@@ -177,47 +177,102 @@ export default function CharactersPage() {
     searchQuery || speciesFilter || personalityFilter,
   );
 
+  // Dynamically extract all unique species from characters plus standard list
+  const standardSpeciesList = [
+    'Human',
+    'Bear',
+    'Animal',
+    'Fantasy Creature',
+    'Robot',
+    'Alien',
+    'Plant',
+    'Object',
+  ];
+  const dynamicSpeciesOptions = Array.from(
+    new Set([
+      ...standardSpeciesList,
+      ...characters
+        .map((c) => c.species?.trim())
+        .filter(Boolean)
+        .map((s) => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()),
+      'Other',
+    ])
+  );
+
+  // Dynamically extract all individual traits from characters' personalities
+  const standardTraitsList = [
+    'Brave',
+    'Cheerful',
+    'Helpful',
+    'Loyal',
+    'Curious',
+    'Kind',
+    'Wise',
+    'Playful',
+    'Shy',
+    'Adventurous',
+    'Smart',
+    'Funny',
+    'Strong',
+    'Gentle',
+    'Creative',
+    'Energetic',
+  ];
+  const dynamicPersonalityOptions = Array.from(
+    new Set([
+      ...standardTraitsList,
+      ...characters
+        .flatMap((c) =>
+          (c.personality || '')
+            .split(/[,;&/]+/)
+            .map((t) => t.trim())
+            .filter((t) => t.length > 1)
+        )
+        .map((t) => t.charAt(0).toUpperCase() + t.slice(1).toLowerCase()),
+      'Other',
+    ])
+  );
+
   const filteredCharacters = characters.filter((character) => {
     const matchesSearch =
       character.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       character.species.toLowerCase().includes(searchQuery.toLowerCase()) ||
       character.personality.toLowerCase().includes(searchQuery.toLowerCase());
 
-    const matchesSpecies =
-      !speciesFilter ||
-      character.species.toLowerCase().includes(speciesFilter.toLowerCase()) ||
-      (speciesFilter === "Other" &&
-        ![
-          "Human",
-          "Animal",
-          "Fantasy Creature",
-          "Robot",
-          "Alien",
-          "Plant",
-          "Object",
-        ].includes(character.species));
+    const cSpecies = (character.species || '').toLowerCase();
+    const fSpecies = (speciesFilter || '').toLowerCase();
 
-    const matchesPersonality =
-      !personalityFilter ||
-      character.personality
-        .toLowerCase()
-        .includes(personalityFilter.toLowerCase()) ||
-      (personalityFilter === "Other" &&
-        ![
-          "Brave",
-          "Curious",
-          "Kind",
-          "Wise",
-          "Playful",
-          "Shy",
-          "Adventurous",
-          "Smart",
-          "Funny",
-          "Strong",
-          "Gentle",
-        ].some((trait) =>
-          character.personality.toLowerCase().includes(trait.toLowerCase()),
-        ));
+    let matchesSpecies = true;
+    if (speciesFilter) {
+      if (fSpecies === 'other') {
+        matchesSpecies = !standardSpeciesList.some(
+          (s) => s.toLowerCase() === cSpecies
+        );
+      } else if (fSpecies === 'animal') {
+        matchesSpecies =
+          cSpecies.includes('animal') ||
+          cSpecies.includes('bear') ||
+          cSpecies.includes('dog') ||
+          cSpecies.includes('cat') ||
+          cSpecies.includes('rabbit');
+      } else {
+        matchesSpecies = cSpecies.includes(fSpecies);
+      }
+    }
+
+    const cPersonality = (character.personality || '').toLowerCase();
+    const fPersonality = (personalityFilter || '').toLowerCase();
+
+    let matchesPersonality = true;
+    if (personalityFilter) {
+      if (fPersonality === 'other') {
+        matchesPersonality = !standardTraitsList.some((trait) =>
+          cPersonality.includes(trait.toLowerCase())
+        );
+      } else {
+        matchesPersonality = cPersonality.includes(fPersonality);
+      }
+    }
 
     return matchesSearch && matchesSpecies && matchesPersonality;
   });
@@ -232,6 +287,8 @@ export default function CharactersPage() {
         searchQuery={searchQuery}
         speciesFilter={speciesFilter}
         personalityFilter={personalityFilter}
+        speciesOptions={dynamicSpeciesOptions}
+        personalityOptions={dynamicPersonalityOptions}
         onSearchChange={setSearchQuery}
         onSpeciesChange={setSpeciesFilter}
         onPersonalityChange={setPersonalityFilter}

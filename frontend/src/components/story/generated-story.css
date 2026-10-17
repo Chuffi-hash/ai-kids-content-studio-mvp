@@ -298,7 +298,7 @@
 
 .scene-image-action {
   margin-top: 8px;
-  border: 1px solid rgba(59, 130, 246, 0.4);
+  border: 1px solid rgba(139, 92, 246, 0.4);
   border-radius: var(--radius-xs);
   padding: 6px 10px;
   background: var(--color-accent-soft);
@@ -310,8 +310,8 @@
 }
 
 .scene-image-action:hover:not(:disabled) {
-  background: rgba(59, 130, 246, 0.25);
-  border-color: #3b82f6;
+  background: rgba(139, 92, 246, 0.25);
+  border-color: #8b5cf6;
 }
 
 .scene-image-action:disabled {
