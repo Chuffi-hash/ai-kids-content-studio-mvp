@@ -238,9 +238,9 @@ export const Timeline: React.FC<TimelineProps> = ({
             type="button"
             className="ed-tool-btn"
             style={{
-              background: isRippleOn ? 'rgba(59, 130, 246, 0.2)' : 'transparent',
-              borderColor: isRippleOn ? '#3b82f6' : 'var(--ed-border)',
-              color: isRippleOn ? '#93c5fd' : 'var(--ed-text-muted)',
+              background: isRippleOn ? 'rgba(139, 92, 246, 0.2)' : 'transparent',
+              borderColor: isRippleOn ? '#8b5cf6' : 'var(--ed-border)',
+              color: isRippleOn ? '#c4b5fd' : 'var(--ed-text-muted)',
             }}
             onClick={() => setIsRippleOn(!isRippleOn)}
             title="When ripple is ON, resizing a scene shifts all subsequent scenes"
@@ -275,7 +275,7 @@ export const Timeline: React.FC<TimelineProps> = ({
             <span>Visuals</span>
           </div>
           <div className="ed-track-header" style={{ height: '48px', display: 'flex', alignItems: 'center', gap: '5px' }}>
-            <SparklesIcon size={13} color="#60a5fa" />
+            <SparklesIcon size={13} color="#a78bfa" />
             <span>2D Rig</span>
           </div>
           <div className="ed-track-header" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
@@ -401,21 +401,21 @@ export const Timeline: React.FC<TimelineProps> = ({
                       height: '36px',
                       borderRadius: '4px',
                       background: isSelected
-                        ? 'rgba(59, 130, 246, 0.35)'
-                        : 'rgba(59, 130, 246, 0.18)',
+                        ? 'rgba(139, 92, 246, 0.35)'
+                        : 'rgba(139, 92, 246, 0.18)',
                       border: isSelected
-                        ? '2px solid #3b82f6'
-                        : '1px solid rgba(59, 130, 246, 0.45)',
+                        ? '2px solid #8b5cf6'
+                        : '1px solid rgba(139, 92, 246, 0.45)',
                       display: 'flex',
                       alignItems: 'center',
                       padding: '0 8px',
                       gap: '6px',
                       fontSize: '11px',
-                      color: '#93c5fd',
+                      color: '#c4b5fd',
                       cursor: 'pointer',
                       overflow: 'hidden',
                       whiteSpace: 'nowrap',
-                      boxShadow: isSelected ? '0 0 10px rgba(59, 130, 246, 0.5)' : undefined,
+                      boxShadow: isSelected ? '0 0 10px rgba(139, 92, 246, 0.5)' : undefined,
                       zIndex: isSelected ? 5 : 2,
                     }}
                     onClick={() => {

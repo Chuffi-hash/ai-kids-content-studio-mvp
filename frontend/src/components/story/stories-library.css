@@ -159,9 +159,9 @@
 }
 
 .story-badge-visual {
-  background: rgba(59, 130, 246, 0.18);
-  color: #3b82f6;
-  border-color: rgba(59, 130, 246, 0.4);
+  background: rgba(139, 92, 246, 0.18);
+  color: #c4b5fd;
+  border-color: rgba(139, 92, 246, 0.4);
 }
 
 .story-badge-audience {
@@ -214,7 +214,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: #2563eb;
+  background: linear-gradient(135deg, #7c3aed 0%, #6366f1 100%);
   color: #ffffff;
   padding: 6px 14px;
   border-radius: var(--radius-xs);
@@ -226,9 +226,9 @@
 }
 
 .story-card-open-btn:hover {
-  background: #1d4ed8;
+  background: linear-gradient(135deg, #6d28d9 0%, #4f46e5 100%);
   transform: translateY(-1px);
-  box-shadow: 0 3px 10px rgba(37, 99, 235, 0.4);
+  box-shadow: 0 3px 10px rgba(124, 58, 237, 0.4);
 }
 
 /* ---------------------- States ---------------------- */

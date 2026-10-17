@@ -12,6 +12,8 @@ import {
 import {
   getAllStories,
   getStoryByStoryId,
+  createStory,
+  deleteStory,
   createScene,
   getScenesByStoryId,
   updateScene,
@@ -107,33 +109,32 @@ test('Timing Engine - audio duration validation and warning', () => {
 });
 
 test('Database - Story and Scene Operations', async () => {
-  const stories = await getAllStories();
-  assert.ok(Array.isArray(stories), 'Should retrieve array of stories');
-  assert.ok(stories.length > 0, 'Should have existing stories in database');
+  const isolatedStoryId = `story-editor-iso-${randomUUID().slice(0, 8)}`;
+  await createStory({
+    storyId: isolatedStoryId,
+    title: 'The Brave Little Explorer [Isolated Test]',
+    logline: 'An adventurous journey into the deep forest',
+  });
 
-  const firstStory = stories[0];
-  const story = await getStoryByStoryId(firstStory.storyId);
+  const story = await getStoryByStoryId(isolatedStoryId);
   assert.ok(story, 'Should load existing story by storyId');
-  assert.strictEqual(story?.storyId, firstStory.storyId);
+  assert.strictEqual(story?.storyId, isolatedStoryId);
 
   // Test updating story metadata
   const originalTitle = story?.title || 'Story';
-  const testTitle = `${originalTitle} [Editor Test]`;
-  await updateStoryMetadata(firstStory.storyId, { title: testTitle, targetDuration: 60000 });
+  const testTitle = `${originalTitle} [Updated]`;
+  await updateStoryMetadata(isolatedStoryId, { title: testTitle, targetDuration: 60000 });
 
-  const updatedStory = await getStoryByStoryId(firstStory.storyId);
+  const updatedStory = await getStoryByStoryId(isolatedStoryId);
   assert.strictEqual(updatedStory?.title, testTitle);
   assert.strictEqual(updatedStory?.targetDuration, 60000);
-
-  // Restore original title
-  await updateStoryMetadata(firstStory.storyId, { title: originalTitle });
 
   // Test scene creation, versioning, and cleanup
   const testSceneId = `test-scene-${randomUUID().slice(0, 8)}`;
   const created = await createScene({
     id: randomUUID(),
     sceneId: testSceneId,
-    storyId: firstStory.storyId,
+    storyId: isolatedStoryId,
     title: 'Test Integration Scene',
     number: 999,
     order: 999,
@@ -174,8 +175,9 @@ test('Database - Story and Scene Operations', async () => {
   assert.ok(versions.length >= 1);
   assert.strictEqual(versions[0].prompt, 'Version 1 prompt description');
 
-  // Clean up: delete test scene
+  // Clean up: delete test scene and isolated test story
   await deleteScene(testSceneId);
+  await deleteStory(isolatedStoryId);
 });
 
 test('Video Assembly Service - Export Job Creation and Status', () => {

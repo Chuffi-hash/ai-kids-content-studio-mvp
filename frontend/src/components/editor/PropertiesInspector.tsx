@@ -367,7 +367,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                       gap: '8px',
                     }}
                   >
-                    <SparklesIcon size={24} color="#60a5fa" />
+                    <SparklesIcon size={24} color="#8b5cf6" />
                     <span style={{ fontWeight: 600, color: 'var(--ed-text)', fontSize: '13px' }}>
                       No 2D Characters in Scene
                     </span>
@@ -963,10 +963,10 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
         <div style={{ background: 'var(--ed-bg)', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--ed-border)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--ed-text-muted)', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-              <SparklesIcon size={12} color="#60a5fa" />
+              <SparklesIcon size={12} color="#8b5cf6" />
               <span>2D Character Animation</span>
             </span>
-            <span style={{ fontSize: '10px', color: '#93c5fd', background: 'rgba(59, 130, 246, 0.15)', padding: '1px 6px', borderRadius: '4px' }}>
+            <span style={{ fontSize: '10px', color: '#c4b5fd', background: 'rgba(139, 92, 246, 0.16)', padding: '1px 6px', borderRadius: '4px' }}>
               {characterInstances.length} {characterInstances.length === 1 ? 'character' : 'characters'}
             </span>
           </div>

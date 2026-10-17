@@ -163,9 +163,9 @@ export const PreviewCanvas: React.FC<PreviewCanvasProps> = ({
             <span
               style={{
                 marginLeft: '4px',
-                background: 'rgba(59, 130, 246, 0.25)',
-                border: '1px solid rgba(59, 130, 246, 0.5)',
-                color: '#93c5fd',
+                background: 'rgba(139, 92, 246, 0.22)',
+                border: '1px solid rgba(139, 92, 246, 0.5)',
+                color: '#c4b5fd',
                 fontSize: '10px',
                 borderRadius: '3px',
                 padding: '1px 6px',
@@ -204,7 +204,7 @@ export const PreviewCanvas: React.FC<PreviewCanvasProps> = ({
               type="button"
               style={{
                 marginLeft: '6px',
-                background: forceStillPreview ? 'rgba(59, 130, 246, 0.4)' : 'rgba(255, 255, 255, 0.15)',
+                background: forceStillPreview ? 'rgba(139, 92, 246, 0.45)' : 'rgba(255, 255, 255, 0.15)',
                 border: '1px solid rgba(255, 255, 255, 0.25)',
                 color: 'white',
                 fontSize: '10px',
@@ -258,8 +258,8 @@ export const PreviewCanvas: React.FC<PreviewCanvasProps> = ({
               style={{
                 width: '36px',
                 height: '36px',
-                border: '3px solid rgba(59, 130, 246, 0.25)',
-                borderTopColor: '#3b82f6',
+                border: '3px solid rgba(139, 92, 246, 0.25)',
+                borderTopColor: '#8b5cf6',
                 borderRadius: '50%',
                 animation: 'spin 0.8s linear infinite',
               }}
