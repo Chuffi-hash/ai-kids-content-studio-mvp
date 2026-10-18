@@ -23,6 +23,10 @@ interface PreviewCanvasProps {
   totalDurationMs: number;
   onTogglePlay: () => void;
   onSeek: (targetMs: number) => void;
+  masterVolume?: number;
+  isMuted?: boolean;
+  onVolumeChange?: (volume: number) => void;
+  onToggleMute?: () => void;
   onGenerateImage?: () => void;
   isGeneratingImage?: boolean;
   isGeneratingVideo?: boolean;
@@ -44,6 +48,10 @@ export const PreviewCanvas: React.FC<PreviewCanvasProps> = ({
   totalDurationMs,
   onTogglePlay,
   onSeek,
+  masterVolume = 1.0,
+  isMuted = false,
+  onVolumeChange,
+  onToggleMute,
   onGenerateImage,
   isGeneratingImage,
   isGeneratingVideo,
@@ -61,7 +69,16 @@ export const PreviewCanvas: React.FC<PreviewCanvasProps> = ({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [videoError, setVideoError] = useState<string | null>(null);
   const [forceStillPreview, setForceStillPreview] = useState(false);
-  const [previewVolume, setPreviewVolume] = useState<number>(1);
+
+  // Scrubber drag management to avoid fighting with the 60fps playback loop
+  const [isScrubbing, setIsScrubbing] = useState<boolean>(false);
+  const [scrubValue, setScrubValue] = useState<number>(currentTimeMs);
+
+  useEffect(() => {
+    if (!isScrubbing) {
+      setScrubValue(currentTimeMs);
+    }
+  }, [currentTimeMs, isScrubbing]);
 
   // Sync playback state with underlying HTML5 video if playing a video asset
   useEffect(() => {
@@ -77,13 +94,14 @@ export const PreviewCanvas: React.FC<PreviewCanvasProps> = ({
     }
   }, [isPlaying]);
 
-  // Sync video volume with preview volume state
+  // Sync video volume with master volume and mute state
   useEffect(() => {
     if (videoRef.current) {
-      videoRef.current.volume = previewVolume;
-      videoRef.current.muted = previewVolume === 0;
+      const effectiveVol = isMuted ? 0 : Math.max(0, Math.min(1, masterVolume));
+      videoRef.current.volume = effectiveVol;
+      videoRef.current.muted = effectiveVol === 0;
     }
-  }, [previewVolume]);
+  }, [masterVolume, isMuted]);
 
   // Sync video current time when seeking
   useEffect(() => {
@@ -366,10 +384,36 @@ export const PreviewCanvas: React.FC<PreviewCanvasProps> = ({
           type="range"
           className="ed-scrubber"
           min="0"
-          max={Math.max(1000, totalDurationMs)}
-          step="50"
-          value={currentTimeMs}
-          onChange={(e) => onSeek(parseInt(e.target.value, 10))}
+          max={Math.max(1, totalDurationMs)}
+          step="1"
+          value={isScrubbing ? scrubValue : currentTimeMs}
+          onPointerDown={() => setIsScrubbing(true)}
+          onPointerUp={() => {
+            setIsScrubbing(false);
+            onSeek(scrubValue);
+          }}
+          onChange={(e) => {
+            const val = Number(e.target.value);
+            setScrubValue(val);
+            onSeek(val);
+          }}
+          onKeyDown={(e) => {
+            const stepMs = e.shiftKey ? 2000 : 500;
+            if (e.key === 'ArrowLeft') {
+              e.preventDefault();
+              onSeek(Math.max(0, currentTimeMs - stepMs));
+            } else if (e.key === 'ArrowRight') {
+              e.preventDefault();
+              onSeek(Math.min(totalDurationMs, currentTimeMs + stepMs));
+            } else if (e.key === 'Home') {
+              e.preventDefault();
+              onSeek(0);
+            } else if (e.key === 'End') {
+              e.preventDefault();
+              onSeek(totalDurationMs);
+            }
+          }}
+          title={`Playhead: ${formatTimeMs(currentTimeMs)} (Drag or click to seek)`}
         />
 
         <div style={{ fontFamily: 'monospace', fontSize: '12px', minWidth: '120px', textAlign: 'right' }}>
@@ -377,27 +421,38 @@ export const PreviewCanvas: React.FC<PreviewCanvasProps> = ({
           <span style={{ color: 'var(--ed-text-faint)' }}> / {formatTimeMs(totalDurationMs)}</span>
         </div>
 
-        {/* Preview volume control slider */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginLeft: '6px' }}>
+        {/* Master volume control slider */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginLeft: '6px' }}>
           <button
             type="button"
             className="ed-icon-btn"
-            style={{ width: '24px', height: '24px', border: 'none', background: 'transparent', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-            onClick={() => setPreviewVolume(previewVolume > 0 ? 0 : 1)}
-            title={previewVolume > 0 ? 'Mute' : 'Unmute'}
+            style={{ width: '26px', height: '26px', border: 'none', background: 'transparent', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+            onClick={onToggleMute || (() => {})}
+            title={isMuted || masterVolume === 0 ? 'Unmute' : 'Mute'}
           >
-            {previewVolume === 0 ? <VolumeMuteIcon size={14} color="#94a3b8" /> : <VolumeHighIcon size={14} color="#94a3b8" />}
+            {isMuted || masterVolume === 0 ? (
+              <VolumeMuteIcon size={15} color="#f87171" />
+            ) : (
+              <VolumeHighIcon size={15} color="#c4b5fd" />
+            )}
           </button>
           <input
             type="range"
             min="0"
             max="1"
-            step="0.05"
-            value={previewVolume}
-            onChange={(e) => setPreviewVolume(parseFloat(e.target.value))}
-            style={{ width: '55px', accentColor: 'var(--ed-accent)', cursor: 'pointer', height: '4px' }}
-            title={`Preview Volume: ${Math.round(previewVolume * 100)}%`}
+            step="0.01"
+            value={isMuted ? 0 : masterVolume}
+            onChange={(e) => {
+              const val = parseFloat(e.target.value);
+              if (onVolumeChange) onVolumeChange(val);
+            }}
+            className="ed-volume-slider"
+            style={{ width: '65px', accentColor: '#8b5cf6', cursor: 'pointer', height: '4px' }}
+            title={`Master Volume: ${Math.round((isMuted ? 0 : masterVolume) * 100)}%`}
           />
+          <span style={{ fontSize: '11px', color: 'var(--ed-text-muted)', fontFamily: 'monospace', minWidth: '28px' }}>
+            {Math.round((isMuted ? 0 : masterVolume) * 100)}%
+          </span>
         </div>
 
         <button

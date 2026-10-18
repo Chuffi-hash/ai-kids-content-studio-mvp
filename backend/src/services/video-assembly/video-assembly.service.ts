@@ -180,6 +180,9 @@ export class VideoAssemblyService {
         let audioPath = '';
         if (scene.audioUrl) {
           audioPath = this.resolveLocalPath(scene.audioUrl);
+          if (!fs.existsSync(audioPath)) {
+            console.warn(`[VideoAssembly] Audio file for scene ${scene.number || i + 1} not found at: ${audioPath}`);
+          }
         }
 
         const segmentPath = path.join(jobTempDir, `scene-${i}.mp4`);
@@ -492,6 +495,8 @@ export class VideoAssemblyService {
       args.push('-i', audioPath!);
       args.push(
         '-t', String(durationSec),
+        '-map', '0:v',
+        '-map', '1:a',
         '-c:v', 'libx264',
         '-preset', 'veryfast',
         '-af', 'apad,aresample=44100',
@@ -544,6 +549,8 @@ export class VideoAssemblyService {
         '-f', 'lavfi',
         '-i', 'anullsrc=channel_layout=stereo:sample_rate=44100',
         '-t', String(durationSec),
+        '-map', '0:v',
+        '-map', '1:a',
         '-c:v', 'libx264',
         '-preset', 'veryfast',
         '-c:a', 'aac',
@@ -643,6 +650,8 @@ export class VideoAssemblyService {
         '-t', String(durationSec),
         '-vf', vf,
         '-r', String(fps),
+        '-map', '0:v',
+        '-map', '1:a',
         '-c:v', 'libx264',
         '-preset', 'veryfast',
         '-af', 'apad,aresample=44100',
@@ -660,6 +669,8 @@ export class VideoAssemblyService {
         '-t', String(durationSec),
         '-vf', vf,
         '-r', String(fps),
+        '-map', '0:v',
+        '-map', '1:a',
         '-c:v', 'libx264',
         '-preset', 'veryfast',
         '-c:a', 'aac',
@@ -700,6 +711,8 @@ export class VideoAssemblyService {
       args.push('-i', audioPath);
       args.push(
         '-t', String(durationSec),
+        '-map', '0:v',
+        '-map', '1:a',
         '-c:v', 'libx264',
         '-preset', 'veryfast',
         '-af', 'apad,aresample=44100',
@@ -715,6 +728,8 @@ export class VideoAssemblyService {
         '-f', 'lavfi',
         '-i', 'anullsrc=channel_layout=stereo:sample_rate=44100',
         '-t', String(durationSec),
+        '-map', '0:v',
+        '-map', '1:a',
         '-c:v', 'libx264',
         '-preset', 'veryfast',
         '-c:a', 'aac',

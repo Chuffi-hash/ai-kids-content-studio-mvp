@@ -196,3 +196,36 @@ test('Video Assembly Service - Export Job Creation and Status', () => {
   assert.strictEqual(retrieved?.id, job.id);
 });
 
+test('Timing Engine - Ripple edit preserves dialogue relative startMs and shifts downstream', () => {
+  const scenes = [
+    {
+      sceneId: 'sc1',
+      startMs: 0,
+      endMs: 5000,
+      animationData: {
+        dialogueLines: [{ id: 'd1', startMs: 1200, durationMs: 2500, text: 'Hello' }],
+      },
+    },
+    {
+      sceneId: 'sc2',
+      startMs: 5000,
+      endMs: 10000,
+      animationData: {
+        dialogueLines: [{ id: 'd2', startMs: 500, durationMs: 2000, text: 'World' }],
+      },
+    },
+  ];
+
+  // Extend sc1 from 5000 to 7000ms (+2000ms delta)
+  const rippled = calculateRippleEdit(scenes as any, 'sc1', 7000);
+  assert.strictEqual(rippled[0].startMs, 0);
+  assert.strictEqual(rippled[0].endMs, 7000);
+  assert.strictEqual(rippled[1].startMs, 7000);
+  assert.strictEqual(rippled[1].endMs, 12000);
+  // sc1 dialogue relative startMs is preserved at 1200ms
+  assert.strictEqual((rippled[0] as any).animationData.dialogueLines[0].startMs, 1200);
+  // sc2 dialogue relative startMs is preserved at 500ms
+  assert.strictEqual((rippled[1] as any).animationData.dialogueLines[0].startMs, 500);
+});
+
+
