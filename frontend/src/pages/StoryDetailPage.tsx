@@ -776,26 +776,78 @@ export default function StoryDetailPage() {
     [scenes, selectedInstanceId, handleUpdateAnimationData]
   );
 
+  const handleUploadBackground = useCallback(
+    async (sceneId: string, file: File, fit: 'cover' | 'contain' = 'cover') => {
+      const res = await editorService.uploadSceneBackground(sceneId, file, fit);
+      if (res.scene) {
+        setScenes((prev) => {
+          const updated = prev.map((s) => (s.sceneId === sceneId ? { ...s, ...res.scene } : s));
+          triggerDebouncedSave(updated);
+          return updated;
+        });
+        if (activeSceneId === sceneId) {
+          editorService.getSceneVersions(sceneId).then(setActiveVersions).catch(() => {});
+        }
+      }
+    },
+    [activeSceneId, triggerDebouncedSave]
+  );
+
+  const handleSetBackground = useCallback(
+    async (sceneId: string, imageUrl: string, fit: 'cover' | 'contain' = 'cover') => {
+      const res = await editorService.setSceneBackground(sceneId, imageUrl, fit);
+      if (res.scene) {
+        setScenes((prev) => {
+          const updated = prev.map((s) => (s.sceneId === sceneId ? { ...s, ...res.scene } : s));
+          triggerDebouncedSave(updated);
+          return updated;
+        });
+        if (activeSceneId === sceneId) {
+          editorService.getSceneVersions(sceneId).then(setActiveVersions).catch(() => {});
+        }
+      }
+    },
+    [activeSceneId, triggerDebouncedSave]
+  );
+
+  const handleUpdateBackgroundFit = useCallback(
+    async (sceneId: string, fit: 'cover' | 'contain') => {
+      const res = await editorService.updateBackgroundFit(sceneId, fit);
+      if (res.scene) {
+        setScenes((prev) => {
+          const updated = prev.map((s) => (s.sceneId === sceneId ? { ...s, ...res.scene } : s));
+          triggerDebouncedSave(updated);
+          return updated;
+        });
+      }
+    },
+    [triggerDebouncedSave]
+  );
+
+  const handleRemoveBackground = useCallback(
+    async (sceneId: string) => {
+      const res = await editorService.removeSceneBackground(sceneId);
+      if (res.scene) {
+        setScenes((prev) => {
+          const updated = prev.map((s) => (s.sceneId === sceneId ? { ...s, ...res.scene } : s));
+          triggerDebouncedSave(updated);
+          return updated;
+        });
+        if (activeSceneId === sceneId) {
+          editorService.getSceneVersions(sceneId).then(setActiveVersions).catch(() => {});
+        }
+      }
+    },
+    [activeSceneId, triggerDebouncedSave]
+  );
+
   const handleSetBackgroundForScene = useCallback(
     (sceneId: string, imageUrl: string) => {
-      const targetScene = scenes.find((s) => s.sceneId === sceneId);
-      if (!targetScene) return;
-
-      const currentAnimData: VectorSceneData = targetScene.animationData || {
-        version: 1,
-        viewport: { width: 1280, height: 720 },
-        characterInstances: [],
-        animationClips: [],
-      };
-
-      const updatedAnimData: VectorSceneData = {
-        ...currentAnimData,
-        background: { imageUrl, fit: 'cover' },
-      };
-
-      handleUpdateAnimationData(sceneId, updatedAnimData);
+      handleSetBackground(sceneId, imageUrl, 'cover').catch((err) => {
+        console.error('Failed to set background for scene:', err);
+      });
     },
-    [scenes, handleUpdateAnimationData]
+    [handleSetBackground]
   );
 
   // ----------------------------------------------------
@@ -1254,7 +1306,12 @@ export default function StoryDetailPage() {
           scene={activeScene}
           characters={story.characters || []}
           playheadMs={currentTimeMs}
+          storyId={story.storyId}
           onUpdateScene={handleUpdateActiveScene}
+          onUploadBackground={handleUploadBackground}
+          onSetBackground={handleSetBackground}
+          onUpdateBackgroundFit={handleUpdateBackgroundFit}
+          onRemoveBackground={handleRemoveBackground}
           onGenerateImage={(scId, prompt) => handleGenerateImage(scId, prompt)}
           onGenerateVoice={(scId, opts) => handleGenerateVoice(scId, opts)}
           onRemoveVoice={handleRemoveVoice}

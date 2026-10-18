@@ -13,6 +13,12 @@ import {
   getTTSVoices,
   previewVoice,
   SupportedVoice,
+  uploadSceneBackground,
+  setSceneBackground,
+  updateBackgroundFit,
+  removeSceneBackground,
+  fetchStoryBackgrounds,
+  StoryBackgroundImage,
 } from '../../services/editor.service';
 import {
   AlertTriangleIcon,
@@ -26,13 +32,20 @@ import {
   PlusIcon,
   ScissorsIcon,
   SparklesIcon,
+  ImageIcon,
+  UploadIcon,
 } from '../common/Icons';
 
 interface PropertiesInspectorProps {
   scene: EditorScene | null;
   characters: EditorCharacter[];
   playheadMs: number;
+  storyId?: string;
   onUpdateScene: (sceneId: string, updates: Partial<EditorScene>) => void;
+  onUploadBackground?: (sceneId: string, file: File, fit?: 'cover' | 'contain') => Promise<void>;
+  onSetBackground?: (sceneId: string, imageUrl: string, fit?: 'cover' | 'contain') => Promise<void>;
+  onUpdateBackgroundFit?: (sceneId: string, fit: 'cover' | 'contain') => Promise<void>;
+  onRemoveBackground?: (sceneId: string) => Promise<void>;
   onGenerateImage: (sceneId: string, promptOverride?: string) => Promise<void>;
   onGenerateVoice: (
     sceneId: string,
@@ -67,7 +80,12 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
   scene,
   characters,
   playheadMs,
+  storyId,
   onUpdateScene,
+  onUploadBackground,
+  onSetBackground,
+  onUpdateBackgroundFit,
+  onRemoveBackground,
   onGenerateImage,
   onGenerateVoice,
   onRemoveVoice,
@@ -107,6 +125,18 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
   const [localCamera, setLocalCamera] = useState(scene.cameraDirection || 'Eye level wide establishing shot');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showRemoveVoiceConfirm, setShowRemoveVoiceConfirm] = useState(false);
+
+  // Scene Background State (Phase 1)
+  const bgFileInputRef = useRef<HTMLInputElement | null>(null);
+  const [isUploadingBg, setIsUploadingBg] = useState(false);
+  const [bgError, setBgError] = useState<string | null>(null);
+  const [showBgPicker, setShowBgPicker] = useState(false);
+  const [storyBackgrounds, setStoryBackgrounds] = useState<StoryBackgroundImage[]>([]);
+  const [isLoadingStoryBackgrounds, setIsLoadingStoryBackgrounds] = useState(false);
+  const [showRemoveBgConfirm, setShowRemoveBgConfirm] = useState(false);
+
+  const currentBgUrl = scene.animationData?.background?.imageUrl || scene.imageUrl;
+  const currentBgFit = scene.animationData?.background?.fit || 'cover';
 
   // Dedicated audio player state for scene inspector
   const audioPlayerRef = React.useRef<HTMLAudioElement | null>(null);
@@ -295,6 +325,90 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
     });
     if (updatedAnimationData && onUpdateAnimationData) {
       onUpdateAnimationData(scene.sceneId, updatedAnimationData);
+    }
+  };
+
+  // -------------------------------------------------------------------------
+  // Scene Background Handlers (Phase 1)
+  // -------------------------------------------------------------------------
+  const handleUploadBackgroundFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.type !== 'image/png' && file.type !== 'image/jpeg' && file.type !== 'image/jpg') {
+      setBgError('Please select a valid PNG or JPEG image file.');
+      return;
+    }
+
+    setBgError(null);
+    setIsUploadingBg(true);
+    try {
+      if (onUploadBackground) {
+        await onUploadBackground(scene.sceneId, file, currentBgFit);
+      } else {
+        const res = await uploadSceneBackground(scene.sceneId, file, currentBgFit);
+        if (res.scene) {
+          onUpdateScene(scene.sceneId, res.scene);
+        }
+      }
+    } catch (err: any) {
+      console.error('Background upload failed:', err);
+      setBgError(err.message || 'Failed to upload background image');
+    } finally {
+      setIsUploadingBg(false);
+      if (bgFileInputRef.current) bgFileInputRef.current.value = '';
+    }
+  };
+
+  const handleToggleFit = (newFit: 'cover' | 'contain') => {
+    setBgError(null);
+    if (onUpdateBackgroundFit) {
+      onUpdateBackgroundFit(scene.sceneId, newFit);
+    } else {
+      updateBackgroundFit(scene.sceneId, newFit)
+        .then((res) => {
+          if (res.scene) onUpdateScene(scene.sceneId, res.scene);
+        })
+        .catch((err) => setBgError(err.message || 'Failed to update fit mode'));
+    }
+  };
+
+  const handleOpenStoryBackgroundsModal = () => {
+    setShowBgPicker(true);
+    if (storyId) {
+      setIsLoadingStoryBackgrounds(true);
+      fetchStoryBackgrounds(storyId)
+        .then((bgs) => setStoryBackgrounds(bgs))
+        .catch((err) => console.warn('Failed to load story backgrounds:', err))
+        .finally(() => setIsLoadingStoryBackgrounds(false));
+    }
+  };
+
+  const handleSelectStoryBackground = (imageUrl: string) => {
+    setShowBgPicker(false);
+    setBgError(null);
+    if (onSetBackground) {
+      onSetBackground(scene.sceneId, imageUrl, currentBgFit);
+    } else {
+      setSceneBackground(scene.sceneId, imageUrl, currentBgFit)
+        .then((res) => {
+          if (res.scene) onUpdateScene(scene.sceneId, res.scene);
+        })
+        .catch((err) => setBgError(err.message || 'Failed to set background'));
+    }
+  };
+
+  const handleRemoveBackground = () => {
+    setShowRemoveBgConfirm(false);
+    setBgError(null);
+    if (onRemoveBackground) {
+      onRemoveBackground(scene.sceneId);
+    } else {
+      removeSceneBackground(scene.sceneId)
+        .then((res) => {
+          if (res.scene) onUpdateScene(scene.sceneId, res.scene);
+        })
+        .catch((err) => setBgError(err.message || 'Failed to remove background'));
     }
   };
 
@@ -1020,6 +1134,174 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
           )}
         </div>
 
+        {/* Scene Background (2D Stage) Section */}
+        <div className="ed-field-group ed-background-card">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+            <label className="ed-field-label" style={{ margin: 0, fontWeight: 600 }}>Scene Background</label>
+            {currentBgUrl ? (
+              <span className="ed-bg-badge-fit">{currentBgFit.toUpperCase()}</span>
+            ) : (
+              <span style={{ fontSize: '11px', color: '#94a3b8' }}>Default Stage</span>
+            )}
+          </div>
+
+          <p style={{ fontSize: '11px', color: '#64748b', margin: '0 0 8px 0', lineHeight: 1.4 }}>
+            Upload or select a scenic background. Reusable characters animate independently on top.
+          </p>
+
+          <input
+            type="file"
+            ref={bgFileInputRef}
+            style={{ display: 'none' }}
+            accept="image/png,image/jpeg"
+            onChange={handleUploadBackgroundFile}
+          />
+
+          {bgError && (
+            <div style={{ fontSize: '11px', color: '#ef4444', backgroundColor: 'rgba(239, 68, 68, 0.1)', padding: '6px 8px', borderRadius: '4px', marginBottom: '8px' }}>
+              {bgError}
+            </div>
+          )}
+
+          {currentBgUrl ? (
+            <div>
+              <div className="ed-bg-preview-box">
+                <img
+                  src={currentBgUrl}
+                  alt="Scene Background"
+                  className={currentBgFit === 'contain' ? 'fit-contain' : 'fit-cover'}
+                />
+              </div>
+
+              {/* Fit Mode Toggle */}
+              <div style={{ marginTop: '8px' }}>
+                <label className="ed-field-label" style={{ fontSize: '11px', marginBottom: '4px' }}>Fit Mode</label>
+                <div className="ed-bg-fit-toggles">
+                  <button
+                    type="button"
+                    className={`ed-bg-fit-btn ${currentBgFit === 'cover' ? 'active' : ''}`}
+                    onClick={() => handleToggleFit('cover')}
+                    title="Fill 16:9 frame (crops edges if needed)"
+                  >
+                    Cover (Fill)
+                  </button>
+                  <button
+                    type="button"
+                    className={`ed-bg-fit-btn ${currentBgFit === 'contain' ? 'active' : ''}`}
+                    onClick={() => handleToggleFit('contain')}
+                    title="Preserve aspect ratio (letterbox / pillarbox with dark stage backdrop)"
+                  >
+                    Contain (Fit)
+                  </button>
+                </div>
+              </div>
+
+              {/* Actions row */}
+              <div className="ed-bg-actions-row">
+                <button
+                  type="button"
+                  className="ed-btn-action"
+                  disabled={isUploadingBg}
+                  onClick={() => bgFileInputRef.current?.click()}
+                  title="Upload a new background image from your computer (PNG/JPEG)"
+                >
+                  <UploadIcon size={12} />
+                  <span>{isUploadingBg ? 'Uploading...' : 'Replace'}</span>
+                </button>
+                <button
+                  type="button"
+                  className="ed-btn-action"
+                  onClick={handleOpenStoryBackgroundsModal}
+                  title="Choose from images already used in this story"
+                >
+                  <ImageIcon size={12} />
+                  <span>From Story</span>
+                </button>
+                <button
+                  type="button"
+                  className="ed-btn-action danger"
+                  onClick={() => setShowRemoveBgConfirm(true)}
+                  title="Remove background and restore default stage"
+                >
+                  <TrashIcon size={12} />
+                  <span>Remove</span>
+                </button>
+              </div>
+
+              {showRemoveBgConfirm && (
+                <div style={{ marginTop: '8px', padding: '8px', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '6px' }}>
+                  <p style={{ fontSize: '11px', color: '#f87171', margin: '0 0 6px 0' }}>
+                    Remove custom background and restore default stylized stage?
+                  </p>
+                  <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
+                    <button
+                      type="button"
+                      className="ed-tool-btn"
+                      style={{ fontSize: '10px', padding: '2px 8px' }}
+                      onClick={() => setShowRemoveBgConfirm(false)}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      className="ed-tool-btn"
+                      style={{ fontSize: '10px', padding: '2px 8px', background: '#ef4444', color: 'white', borderColor: '#ef4444' }}
+                      onClick={handleRemoveBackground}
+                    >
+                      Confirm
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div>
+              <div
+                style={{
+                  border: '1px dashed #cbd5e1',
+                  borderRadius: '6px',
+                  padding: '16px 10px',
+                  textAlign: 'center',
+                  background: 'rgba(248, 250, 252, 0.5)',
+                  marginBottom: '8px',
+                }}
+              >
+                <div style={{ color: '#94a3b8', marginBottom: '6px' }}>
+                  <ImageIcon size={24} />
+                </div>
+                <p style={{ fontSize: '12px', fontWeight: 500, color: '#475569', margin: '0 0 2px 0' }}>
+                  No custom background
+                </p>
+                <p style={{ fontSize: '10px', color: '#94a3b8', margin: 0 }}>
+                  Using default vector stage backdrop
+                </p>
+              </div>
+
+              <div className="ed-bg-actions-row">
+                <button
+                  type="button"
+                  className="ed-btn-action primary"
+                  disabled={isUploadingBg}
+                  onClick={() => bgFileInputRef.current?.click()}
+                  style={{ flex: 1 }}
+                >
+                  <UploadIcon size={13} />
+                  <span>{isUploadingBg ? 'Uploading...' : 'Upload Image (PNG/JPEG)'}</span>
+                </button>
+                <button
+                  type="button"
+                  className="ed-btn-action"
+                  onClick={handleOpenStoryBackgroundsModal}
+                  title="Choose from images already used in this story"
+                >
+                  <ImageIcon size={13} />
+                  <span>From Story</span>
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Visual & Video Media Section */}
         <div className="ed-field-group">
           <label className="ed-field-label">Visual Scene Prompt</label>
@@ -1441,6 +1723,88 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
           </div>
         </div>
       </div>
+      )}
+
+      {/* Story Backgrounds Picker Modal */}
+      {showBgPicker && (
+        <div className="ed-bg-modal-overlay" onClick={() => setShowBgPicker(false)}>
+          <div className="ed-bg-modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="ed-bg-modal-header">
+              <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 600 }}>Select From Story Backgrounds</h4>
+              <button
+                type="button"
+                className="ed-tool-btn"
+                style={{ padding: '2px 8px' }}
+                onClick={() => setShowBgPicker(false)}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{ padding: '12px', maxHeight: '360px', overflowY: 'auto' }}>
+              {isLoadingStoryBackgrounds ? (
+                <div style={{ textAlign: 'center', padding: '24px 0', color: '#94a3b8', fontSize: '12px' }}>
+                  Loading backgrounds...
+                </div>
+              ) : storyBackgrounds.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '24px 0', color: '#94a3b8', fontSize: '12px' }}>
+                  No previous backgrounds found in this story.
+                  <div style={{ marginTop: '8px' }}>
+                    <button
+                      type="button"
+                      className="ed-btn-action primary"
+                      onClick={() => {
+                        setShowBgPicker(false);
+                        bgFileInputRef.current?.click();
+                      }}
+                      style={{ margin: '0 auto' }}
+                    >
+                      <UploadIcon size={12} />
+                      <span>Upload New Image</span>
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="ed-bg-picker-grid">
+                  {storyBackgrounds.map((bg, idx) => (
+                    <div
+                      key={bg.imageUrl + idx}
+                      className="ed-bg-picker-item"
+                      onClick={() => handleSelectStoryBackground(bg.imageUrl)}
+                      title={`Used in Scene ${bg.sceneNumber}`}
+                    >
+                      <img src={bg.imageUrl} alt={`Scene ${bg.sceneNumber}`} />
+                      <div className="ed-bg-picker-caption">Scene {bg.sceneNumber}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div style={{ padding: '8px 12px', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <button
+                type="button"
+                className="ed-btn-action"
+                style={{ fontSize: '11px' }}
+                onClick={() => {
+                  setShowBgPicker(false);
+                  bgFileInputRef.current?.click();
+                }}
+              >
+                <UploadIcon size={11} />
+                <span>Upload New</span>
+              </button>
+              <button
+                type="button"
+                className="ed-tool-btn"
+                style={{ fontSize: '11px' }}
+                onClick={() => setShowBgPicker(false)}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </aside>
   );

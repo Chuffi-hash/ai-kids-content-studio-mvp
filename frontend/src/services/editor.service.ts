@@ -442,4 +442,134 @@ export async function fetchMusicTracks(): Promise<MusicTrackInfo[]> {
   return res.json();
 }
 
+export interface SceneBackgroundResult {
+  success: boolean;
+  sceneId: string;
+  background?: {
+    imageUrl: string;
+    fit: 'cover' | 'contain';
+  };
+  scene?: EditorScene;
+  message?: string;
+}
+
+export interface StoryBackgroundImage {
+  imageUrl: string;
+  sceneId: string;
+  sceneTitle: string;
+  sceneNumber?: number;
+  prompt?: string;
+  createdAt?: string;
+}
+
+/**
+ * Uploads a local PNG/JPEG file to serve as a scene background.
+ */
+export async function uploadSceneBackground(
+  sceneId: string,
+  file: File,
+  fit: 'cover' | 'contain' = 'cover'
+): Promise<SceneBackgroundResult> {
+  const base64Data = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      const base64 = result.split(',')[1] || result;
+      resolve(base64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+
+  const res = await fetch(`${API_URL}/api/content/scenes/${sceneId}/background/upload`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      filename: file.name,
+      fileData: base64Data,
+      fit,
+    }),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.message || 'Failed to upload background image');
+  }
+
+  return res.json();
+}
+
+/**
+ * Assigns an existing image URL or updates fit mode for a scene background.
+ */
+export async function setSceneBackground(
+  sceneId: string,
+  imageUrl: string,
+  fit: 'cover' | 'contain' = 'cover'
+): Promise<SceneBackgroundResult> {
+  const res = await fetch(`${API_URL}/api/content/scenes/${sceneId}/background`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      imageUrl,
+      fit,
+    }),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.message || 'Failed to set scene background');
+  }
+
+  return res.json();
+}
+
+/**
+ * Updates fit mode ('cover' or 'contain') for the active scene background.
+ */
+export async function updateBackgroundFit(
+  sceneId: string,
+  fit: 'cover' | 'contain'
+): Promise<SceneBackgroundResult> {
+  const res = await fetch(`${API_URL}/api/content/scenes/${sceneId}/background`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fit }),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.message || 'Failed to update background fit mode');
+  }
+
+  return res.json();
+}
+
+/**
+ * Removes the scene background and restores the default stylized stage.
+ */
+export async function removeSceneBackground(sceneId: string): Promise<SceneBackgroundResult> {
+  const res = await fetch(`${API_URL}/api/content/scenes/${sceneId}/background`, {
+    method: 'DELETE',
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.message || 'Failed to remove scene background');
+  }
+
+  return res.json();
+}
+
+/**
+ * Fetches all candidate background images created across scenes in a story.
+ */
+export async function fetchStoryBackgrounds(storyId: string): Promise<StoryBackgroundImage[]> {
+  const res = await fetch(`${API_URL}/api/content/story/${storyId}/backgrounds`);
+  if (!res.ok) throw new Error('Failed to fetch story backgrounds');
+  const data = await res.json();
+  return data.backgrounds || [];
+}
+
+
 
