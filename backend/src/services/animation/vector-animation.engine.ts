@@ -313,26 +313,39 @@ export class VectorAnimationEngine {
     const sceneRelativeMs = timestampSec * 1000;
 
     let backgroundXml = '';
-    if (animationData.background?.imageUrl && resolveLocalPath) {
-      const localImagePath = resolveLocalPath(animationData.background.imageUrl);
-      if (fs.existsSync(localImagePath)) {
-        let base64 = this.base64ImageCache.get(localImagePath);
-        if (!base64) {
-          const buffer = fs.readFileSync(localImagePath);
-          const ext = path.extname(localImagePath).toLowerCase();
-          const mime = ext === '.png' ? 'image/png' : 'image/jpeg';
-          base64 = `data:${mime};base64,${buffer.toString('base64')}`;
-          this.base64ImageCache.set(localImagePath, base64);
+    if (animationData?.background?.imageUrl) {
+      let imageHref = animationData.background.imageUrl;
+      if (resolveLocalPath) {
+        try {
+          const localImagePath = resolveLocalPath(animationData.background.imageUrl);
+          if (fs.existsSync(localImagePath)) {
+            let base64 = this.base64ImageCache.get(localImagePath);
+            if (!base64) {
+              const buffer = fs.readFileSync(localImagePath);
+              const ext = path.extname(localImagePath).toLowerCase();
+              const mime = ext === '.png' ? 'image/png' : (ext === '.jpg' || ext === '.jpeg') ? 'image/jpeg' : 'image/png';
+              base64 = `data:${mime};base64,${buffer.toString('base64')}`;
+              this.base64ImageCache.set(localImagePath, base64);
+            }
+            imageHref = base64;
+          }
+        } catch (imgError) {
+          console.warn(`[VectorAnimationEngine] Failed to load background image:`, imgError);
         }
-        backgroundXml = `<image href="${base64}" x="0" y="0" width="${width}" height="${height}" preserveAspectRatio="xMidYMid slice"/>`;
       }
+
+      const fitMode = animationData.background?.fit === 'contain' ? 'xMidYMid meet' : 'xMidYMid slice';
+      const backdropXml = `<rect id="scene-background-backdrop" width="${width}" height="${height}" fill="#090d16"/>`;
+      backgroundXml = `<g id="scene-background-group">${backdropXml}<image id="scene-background-image" href="${imageHref}" x="0" y="0" width="${width}" height="${height}" preserveAspectRatio="${fitMode}"/></g>`;
     }
 
     if (!backgroundXml) {
       backgroundXml = `
-        <rect width="${width}" height="${height}" fill="#101726"/>
-        <line x1="0" y1="540" x2="${width}" y2="540" stroke="#1e293b" stroke-width="2"/>
-        <rect x="0" y="540" width="${width}" height="180" fill="#0d131f" opacity="0.6"/>
+        <g id="default-stylized-background">
+          <rect id="scene-background-rect" width="${width}" height="${height}" fill="#101726"/>
+          <line x1="0" y1="540" x2="${width}" y2="540" stroke="#1e293b" stroke-width="2"/>
+          <rect x="0" y="540" width="${width}" height="180" fill="#0d131f" opacity="0.6"/>
+        </g>
       `;
     }
 

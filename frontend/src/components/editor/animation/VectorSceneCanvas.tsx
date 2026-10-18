@@ -97,15 +97,18 @@ export const VectorSceneCanvas: React.FC<VectorSceneCanvasProps> = ({
 
       {/* 1. Background Layer */}
       {animationData.background?.imageUrl ? (
-        <image
-          id="scene-background-image"
-          href={resolveAssetUrl(animationData.background.imageUrl)}
-          x={0}
-          y={0}
-          width={1280}
-          height={720}
-          preserveAspectRatio={animationData.background.fit === 'contain' ? 'xMidYMid meet' : 'xMidYMid slice'}
-        />
+        <g id="scene-background-group">
+          <rect id="scene-background-backdrop" width={1280} height={720} fill="#090d16" />
+          <image
+            id="scene-background-image"
+            href={resolveAssetUrl(animationData.background.imageUrl)}
+            x={0}
+            y={0}
+            width={1280}
+            height={720}
+            preserveAspectRatio={animationData.background.fit === 'contain' ? 'xMidYMid meet' : 'xMidYMid slice'}
+          />
+        </g>
       ) : (
         <g id="default-stylized-background">
           <rect id="scene-background-rect" width={1280} height={720} fill="#101726" />
