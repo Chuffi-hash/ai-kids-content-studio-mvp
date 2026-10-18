@@ -1,4 +1,5 @@
 import { getApiUrl } from '../utils/urlHelper';
+import { CharacterVoiceConfig } from '../types/animation';
 
 export interface Character {
   id: string;
@@ -114,6 +115,42 @@ export async function generateCharacterReferenceImage(id: string): Promise<{
   });
   if (!response.ok) {
     throw new Error('Failed to generate character reference image');
+  }
+  return response.json();
+}
+
+export async function getCharacterVoice(id: string): Promise<{
+  characterId: string;
+  name: string;
+  voiceConfig: CharacterVoiceConfig;
+}> {
+  const API_URL = getApiUrl();
+  const response = await fetch(`${API_URL}/api/characters/${id}/voice`);
+  if (!response.ok) {
+    throw new Error('Failed to fetch character voice');
+  }
+  return response.json();
+}
+
+export async function updateCharacterVoice(
+  id: string,
+  voiceConfig: CharacterVoiceConfig
+): Promise<{
+  success: boolean;
+  characterId: string;
+  voiceConfig: CharacterVoiceConfig;
+  character: Character;
+}> {
+  const API_URL = getApiUrl();
+  const response = await fetch(`${API_URL}/api/characters/${id}/voice`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(voiceConfig),
+  });
+  if (!response.ok) {
+    throw new Error('Failed to update character voice');
   }
   return response.json();
 }

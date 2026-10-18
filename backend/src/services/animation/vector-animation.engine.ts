@@ -11,6 +11,7 @@ import {
   buildRigFromAppearance,
   CustomCharacterAppearance,
 } from './templates/custom-character-rig.js';
+import { getHeadShapesForPose } from './face-renderer.js';
 
 export interface MotionPath {
   startX: number;
@@ -33,6 +34,7 @@ export interface CharacterInstance {
   zIndex: number;
   customRig?: VectorRigDefinition;
   appearance?: CustomCharacterAppearance;
+  expression?: FacialExpression;
 }
 
 export interface AnimationClip {
@@ -47,6 +49,65 @@ export interface AnimationClip {
   motionPath?: MotionPath;
 }
 
+export type FacialExpression =
+  | 'neutral'
+  | 'happy'
+  | 'sad'
+  | 'angry'
+  | 'surprised'
+  | 'scared'
+  | 'confused'
+  | 'curious';
+
+export type MouthShape = 'rest' | 'open' | 'wide' | 'round' | 'closed';
+
+export type SpeakingDirection =
+  | 'cheerful'
+  | 'excited'
+  | 'calm'
+  | 'sad'
+  | 'worried'
+  | 'curious'
+  | 'serious';
+
+export interface ExpressionCue {
+  id?: string;
+  instanceId?: string;
+  characterInstanceId?: string;
+  characterId?: string;
+  expression: FacialExpression;
+  startMs: number;
+  durationMs: number;
+}
+
+export interface VisemeCue {
+  timeMs: number;
+  shape: MouthShape;
+  durationMs: number;
+}
+
+export interface SceneDialogue {
+  id: string;
+  characterId?: string;
+  characterInstanceId?: string;
+  characterName: string;
+  text: string;
+  voice?: string;
+  speakingDirection?: SpeakingDirection;
+  speed?: number;
+  audioUrl?: string;
+  startMs: number;
+  durationMs: number;
+  visemeCues?: VisemeCue[];
+}
+
+export interface CharacterVoiceConfig {
+  voiceId: string;
+  speed?: number;
+  style?: SpeakingDirection;
+  effect?: 'normal' | 'cartoon' | 'robot';
+}
+
 export interface VectorSceneData {
   version: number;
   viewport: { width: number; height: number };
@@ -56,6 +117,8 @@ export interface VectorSceneData {
   };
   characterInstances: CharacterInstance[];
   animationClips: AnimationClip[];
+  expressionCues?: ExpressionCue[];
+  dialogueLines?: SceneDialogue[];
 }
 
 export interface EvaluatedPose {
@@ -75,6 +138,9 @@ export interface EvaluatedPose {
   rightLegAngle: number;
   chestScaleY: number;
   activeAction: string;
+  expression?: FacialExpression;
+  mouthState?: MouthShape;
+  speaking?: boolean;
 }
 
 /**
@@ -83,7 +149,9 @@ export interface EvaluatedPose {
 export function evaluatePose(
   instance: CharacterInstance,
   clips: AnimationClip[],
-  sceneRelativeMs: number
+  sceneRelativeMs: number,
+  expressionCues: ExpressionCue[] = [],
+  dialogueLines: SceneDialogue[] = []
 ): EvaluatedPose {
   const instanceClips = clips.filter((c) => c.instanceId === instance.instanceId);
 
@@ -258,6 +326,93 @@ export function evaluatePose(
     rightLegAngle: Math.round(rightLegAngle * 10) / 10,
     chestScaleY: Math.round(chestScaleY * 1000) / 1000,
     activeAction,
+    expression: (() => {
+      // 1. Check timeline active expression cue
+      const activeExpCue = (expressionCues || []).find((c) => {
+        const matchesChar =
+          c.instanceId === instance.instanceId ||
+          c.characterInstanceId === instance.instanceId ||
+          (c.characterId && c.characterId === instance.characterId);
+        if (!matchesChar) return false;
+        const start = c.startMs ?? 0;
+        const dur = c.durationMs ?? 999999;
+        return sceneRelativeMs >= start && sceneRelativeMs <= start + dur;
+      });
+      if (activeExpCue) return activeExpCue.expression;
+
+      // 2. Check direct character instance expression
+      if (instance.expression) return instance.expression;
+
+      // 3. Fallback to any expression cue set on this character in the scene
+      const charCue = (expressionCues || []).find(
+        (c) =>
+          c.instanceId === instance.instanceId ||
+          c.characterInstanceId === instance.instanceId ||
+          (c.characterId && c.characterId === instance.characterId)
+      );
+      if (charCue) return charCue.expression;
+
+      // 4. Check active dialogue speaking direction
+      const activeDialogue = dialogueLines.find((d) => {
+        const isSpeaker =
+          (d.characterInstanceId && d.characterInstanceId === instance.instanceId) ||
+          (d.characterId && d.characterId === instance.characterId) ||
+          (d.characterName && instance.name && d.characterName.trim().toLowerCase() === instance.name.trim().toLowerCase());
+        return isSpeaker && sceneRelativeMs >= d.startMs && sceneRelativeMs <= d.startMs + d.durationMs;
+      });
+
+      if (activeDialogue?.speakingDirection) {
+        const dirMap: Record<string, FacialExpression> = {
+          cheerful: 'happy',
+          excited: 'surprised',
+          calm: 'neutral',
+          sad: 'sad',
+          worried: 'scared',
+          curious: 'curious',
+          serious: 'angry',
+        };
+        if (dirMap[activeDialogue.speakingDirection]) {
+          return dirMap[activeDialogue.speakingDirection];
+        }
+      }
+
+      return 'neutral';
+    })(),
+    mouthState: (() => {
+      const activeDialogue = dialogueLines.find((d) => {
+        const isSpeaker =
+          (d.characterInstanceId && d.characterInstanceId === instance.instanceId) ||
+          (d.characterId && d.characterId === instance.characterId) ||
+          (d.characterName && instance.name && d.characterName.trim().toLowerCase() === instance.name.trim().toLowerCase());
+        return isSpeaker && sceneRelativeMs >= d.startMs && sceneRelativeMs <= d.startMs + d.durationMs;
+      });
+      if (!activeDialogue) return 'rest';
+
+      const dialogueOffsetMs = sceneRelativeMs - activeDialogue.startMs;
+      if (activeDialogue.visemeCues && activeDialogue.visemeCues.length > 0) {
+        const activeViseme = activeDialogue.visemeCues.find(
+          (v) =>
+            dialogueOffsetMs >= v.timeMs &&
+            dialogueOffsetMs <= v.timeMs + v.durationMs
+        );
+        return activeViseme ? activeViseme.shape : 'open';
+      }
+
+      // Default rhythmic syllable cadence
+      const cycleMs = 140;
+      const step = Math.floor((dialogueOffsetMs % (cycleMs * 4)) / cycleMs);
+      const cadenceShapes: MouthShape[] = ['open', 'wide', 'round', 'closed'];
+      return cadenceShapes[step] || 'open';
+    })(),
+    speaking: Boolean(
+      dialogueLines.find((d) => {
+        const isSpeaker =
+          (d.characterInstanceId && d.characterInstanceId === instance.instanceId) ||
+          (d.characterId && d.characterId === instance.characterId) ||
+          (d.characterName && instance.name && d.characterName.trim().toLowerCase() === instance.name.trim().toLowerCase());
+        return isSpeaker && sceneRelativeMs >= d.startMs && sceneRelativeMs <= d.startMs + d.durationMs;
+      })
+    ),
   };
 }
 
@@ -355,12 +510,22 @@ export class VectorAnimationEngine {
 
     const charactersXml = sortedInstances
       .map((instance) => {
+        const hasHeadTags = instance.customRig?.parts?.head?.shapes?.some(
+          (s) => s.tag === 'eyes' || s.tag === 'mouth'
+        );
         const rig =
-          instance.customRig ||
-          (instance.appearance
-            ? buildRigFromAppearance(instance.characterId, instance.name || 'Character', instance.appearance)
-            : getVectorRig(instance.characterId));
-        const pose = evaluatePose(instance, clips, sceneRelativeMs);
+          (instance.customRig && hasHeadTags)
+            ? instance.customRig
+            : (instance.appearance
+                ? buildRigFromAppearance(instance.characterId, instance.name || 'Character', instance.appearance)
+                : (instance.customRig || getVectorRig(instance.characterId)));
+        const pose = evaluatePose(
+          instance,
+          clips,
+          sceneRelativeMs,
+          animationData.expressionCues,
+          animationData.dialogueLines
+        );
         const parts = rig.parts;
 
         const rootTransform = `translate(${pose.x}, ${pose.y}) scale(${pose.scale * (pose.flipX ? -1 : 1)}, ${pose.scale}) rotate(${pose.rotation})`;
@@ -392,6 +557,10 @@ export class VectorAnimationEngine {
           </g>
         `;
         const headTransform = `translate(0, ${pose.torsoBobY}) rotate(${pose.headAngle}, ${parts.head.pivot.x}, ${parts.head.pivot.y})`;
+        const dynamicHeadPart: VectorRigPart = {
+          ...parts.head,
+          shapes: getHeadShapesForPose(rig, pose),
+        };
 
         const shadowY = pose.y + (rig.baseHeight / 2) * pose.scale - 8;
         const shadowRx = 40 * pose.scale;
@@ -405,7 +574,7 @@ export class VectorAnimationEngine {
             ${leftArmXml}
             ${renderPartXml(parts.torso, torsoTransform)}
             ${rightArmXml}
-            ${renderPartXml(parts.head, headTransform)}
+            ${renderPartXml(dynamicHeadPart, headTransform)}
           </g>
         `;
 

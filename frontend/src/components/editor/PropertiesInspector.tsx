@@ -504,6 +504,8 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                 instance={selectedCharacterInstance}
                 animationData={scene.animationData}
                 sceneDurationMs={durationMs}
+                sceneId={scene.sceneId}
+                characters={characters}
                 onUpdateInstance={(id, updates) => onUpdateInstance && onUpdateInstance(id, updates)}
                 onUpdateAnimationData={(newData) => onUpdateAnimationData && onUpdateAnimationData(scene.sceneId, newData)}
                 onRemoveInstance={(id) => onRemoveCharacterFromScene && onRemoveCharacterFromScene(scene.sceneId, id)}

@@ -1,5 +1,6 @@
 import React from 'react';
 import { VectorRigDefinition, EvaluatedCharacterPose, VectorPartShape } from '../../../types/animation';
+import { getHeadShapesForPose } from '../../../utils/faceRenderer';
 
 interface VectorCharacterRendererProps {
   rig: VectorRigDefinition;
@@ -137,9 +138,9 @@ export const VectorCharacterRenderer: React.FC<VectorCharacterRendererProps> = (
         )}
       </g>
 
-      {/* 4. Head Group */}
+      {/* 4. Head Group with dynamic expressions & lip-sync */}
       <g id="head" transform={headTransform}>
-        {parts.head.shapes.map(renderShape)}
+        {getHeadShapesForPose(rig, pose).map(renderShape)}
       </g>
 
       {/* Selection bounding box indicator when selected */}
