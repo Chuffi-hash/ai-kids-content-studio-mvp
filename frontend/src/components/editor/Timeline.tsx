@@ -417,23 +417,23 @@ export const Timeline: React.FC<TimelineProps> = ({
         {/* Sticky Left Track Labels */}
         <div className="ed-tracks-headers">
           <div className="ed-track-header ruler-header">Time</div>
-          <div className="ed-track-header" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+          <div className="ed-track-header track-visuals">
             <FilmIcon size={13} />
             <span>Visuals</span>
           </div>
-          <div className="ed-track-header" style={{ height: '48px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+          <div className="ed-track-header track-rig">
             <SparklesIcon size={13} color="#a78bfa" />
             <span>2D Rig</span>
           </div>
-          <div className="ed-track-header" style={{ height: '44px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+          <div className="ed-track-header track-dialogue">
             <span style={{ fontSize: '13px' }}>👄</span>
             <span>Dialogue</span>
           </div>
-          <div className="ed-track-header" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+          <div className="ed-track-header track-narration">
             <MicIcon size={13} />
             <span>Narration</span>
           </div>
-          <div className="ed-track-header" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+          <div className="ed-track-header track-soundtrack">
             <MusicIcon size={13} />
             <span>Soundtrack</span>
           </div>
@@ -467,7 +467,7 @@ export const Timeline: React.FC<TimelineProps> = ({
           </div>
 
           {/* Track 1: Visuals (Scene Clips) */}
-          <div className="ed-track-row">
+          <div className="ed-track-row track-visuals">
             {scenes.map((scene) => {
               const isSelected = scene.sceneId === activeSceneId;
               const leftPx = msToPx(scene.startMs);
@@ -525,7 +525,7 @@ export const Timeline: React.FC<TimelineProps> = ({
           </div>
 
           {/* Track 2: 2D Characters & Animation Clips */}
-          <div className="ed-track-row" style={{ height: '48px' }}>
+          <div className="ed-track-row track-rig">
             {scenes.map((scene) => {
               const instances = scene.animationData?.characterInstances || [];
               const clips = scene.animationData?.animationClips || [];
@@ -555,6 +555,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                       left: `${leftPx}px`,
                       width: `${Math.max(28, widthPx)}px`,
                       position: 'absolute',
+                      top: '5px',
                       height: '36px',
                       borderRadius: '4px',
                       background: isSelected
@@ -624,7 +625,7 @@ export const Timeline: React.FC<TimelineProps> = ({
           </div>
 
           {/* Track: Dialogue & Lip-Sync */}
-          <div className="ed-track-row" style={{ height: '44px' }}>
+          <div className="ed-track-row track-dialogue">
             {scenes.map((scene) => {
               const dialogues = scene.animationData?.dialogueLines || [];
               if (dialogues.length === 0) return null;
@@ -648,6 +649,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                       left: `${leftPx}px`,
                       width: `${Math.max(30, widthPx)}px`,
                       position: 'absolute',
+                      top: '6px',
                       height: '32px',
                       borderRadius: '4px',
                       background: isOverflow
@@ -728,7 +730,7 @@ export const Timeline: React.FC<TimelineProps> = ({
           </div>
 
           {/* Track 4: Narration Voice */}
-          <div className="ed-track-row">
+          <div className="ed-track-row track-narration">
             {scenes.map((scene) => {
               if (!scene.narration && !scene.audioUrl) return null;
               const isSelected = scene.sceneId === activeSceneId;
@@ -772,7 +774,7 @@ export const Timeline: React.FC<TimelineProps> = ({
           </div>
 
           {/* Track 3: Soundtrack */}
-          <div className="ed-track-row">
+          <div className="ed-track-row track-soundtrack">
             {selectedMusic && selectedMusic !== 'none' && totalDurationMs > 0 && (
               <div
                 className="ed-music-block"

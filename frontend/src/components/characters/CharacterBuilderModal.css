@@ -295,11 +295,58 @@
 }
 
 .char-control-group input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
   width: 100%;
-  accent-color: #8b5cf6;
-  height: 4px;
-  background: #1e293b;
-  border-radius: 2px;
+  height: 5px;
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 3px;
+  outline: none;
+  cursor: pointer;
+  margin: 6px 0;
+  padding: 0;
+  transition: background 0.15s ease;
+}
+
+.char-control-group input[type='range']:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.char-control-group input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #8b5cf6;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 0 0 8px rgba(139, 92, 246, 0.8), 0 2px 4px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+  margin-top: -4.5px;
+  transition: transform 0.12s ease, background 0.12s ease;
+}
+
+.char-control-group input[type='range']::-webkit-slider-thumb:hover {
+  transform: scale(1.25);
+  background: #a78bfa;
+  box-shadow: 0 0 12px rgba(167, 139, 250, 0.95);
+}
+
+.char-control-group input[type='range']::-moz-range-track {
+  height: 5px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.14);
+  border: none;
+}
+
+.char-control-group input[type='range']::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #8b5cf6;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 0 0 8px rgba(139, 92, 246, 0.8);
+  cursor: pointer;
 }
 
 .char-pill-row {
