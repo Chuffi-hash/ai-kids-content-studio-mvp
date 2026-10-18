@@ -74,6 +74,8 @@ interface PropertiesInspectorProps {
   onUpdateAnimationData?: (sceneId: string, newData: VectorSceneData) => void;
   onAddCharacterToScene?: (sceneId: string, characterId: 'pip_the_bear' | 'sammy_the_kid') => void;
   onRemoveCharacterFromScene?: (sceneId: string, instanceId: string) => void;
+  isRippleOn?: boolean;
+  onToggleRipple?: () => void;
 }
 
 export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
@@ -104,6 +106,8 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
   onUpdateAnimationData,
   onAddCharacterToScene,
   onRemoveCharacterFromScene,
+  isRippleOn,
+  onToggleRipple,
 }) => {
   if (!scene) {
     return (
@@ -247,6 +251,14 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
   const timingValidation = validateSceneTiming(scene);
   const estimatedSpeechMs = estimateSpeechDurationMs(localNarration);
 
+  const [durationInputVal, setDurationInputVal] = useState<string>(
+    (durationMs / 1000).toFixed(1)
+  );
+
+  useEffect(() => {
+    setDurationInputVal((durationMs / 1000).toFixed(1));
+  }, [durationMs]);
+
   const handleTitleBlur = () => {
     if (localTitle !== scene.title) {
       onUpdateScene(scene.sceneId, { title: localTitle });
@@ -271,8 +283,26 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
     onUpdateScene(scene.sceneId, { cameraDirection: val });
   };
 
+  const handleDurationInputBlur = () => {
+    const parsed = parseFloat(durationInputVal);
+    if (!Number.isFinite(parsed) || isNaN(parsed)) {
+      setDurationInputVal((durationMs / 1000).toFixed(1));
+      return;
+    }
+    const clampedSec = Math.max(1.5, Math.min(300, parsed));
+    const newDur = Math.round(clampedSec * 1000);
+    setDurationInputVal(clampedSec.toFixed(1));
+    if (Math.abs(newDur - durationMs) >= 50) {
+      onUpdateScene(scene.sceneId, {
+        endMs: scene.startMs + newDur,
+        estimatedDurationMs: newDur,
+      });
+    }
+  };
+
   const handleDurationStep = (deltaSec: number) => {
-    const newDur = Math.max(1500, durationMs + deltaSec * 1000);
+    const newDur = Math.max(1500, Math.min(300000, durationMs + deltaSec * 1000));
+    setDurationInputVal((newDur / 1000).toFixed(1));
     onUpdateScene(scene.sceneId, {
       endMs: scene.startMs + newDur,
       estimatedDurationMs: newDur,
@@ -282,6 +312,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
   const handleFitToVoice = () => {
     if (scene.actualAudioDurationMs) {
       const newDur = Math.max(1500, scene.actualAudioDurationMs + 500); // 500ms safety pad
+      setDurationInputVal((newDur / 1000).toFixed(1));
       onUpdateScene(scene.sceneId, {
         endMs: scene.startMs + newDur,
         estimatedDurationMs: newDur,
@@ -650,12 +681,32 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
             <div>End: {formatTimeMs(scene.endMs)}</div>
           </div>
 
-          {/* Duration Adjust Stepper */}
-          <div style={{ display: 'flex', gap: '6px', marginTop: '4px' }}>
-            <button className="ed-tool-btn" onClick={() => handleDurationStep(-1)}>
+          {/* Duration Adjust: Direct Numeric Input & Steppers */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
+            <span style={{ fontSize: '11px', color: 'var(--ed-text-muted)' }}>Duration:</span>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+              <input
+                type="number"
+                step="0.5"
+                min="1.5"
+                max="300"
+                className="ed-input"
+                style={{ width: '64px', padding: '4px 6px', fontSize: '12px', textAlign: 'center', fontFamily: 'monospace' }}
+                value={durationInputVal}
+                onChange={(e) => setDurationInputVal(e.target.value)}
+                onBlur={handleDurationInputBlur}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    handleDurationInputBlur();
+                  }
+                }}
+              />
+              <span style={{ fontSize: '11px', color: 'var(--ed-text-muted)', fontFamily: 'monospace' }}>s</span>
+            </div>
+            <button className="ed-tool-btn" onClick={() => handleDurationStep(-1)} title="Decrease duration by 1s">
               -1s
             </button>
-            <button className="ed-tool-btn" onClick={() => handleDurationStep(1)}>
+            <button className="ed-tool-btn" onClick={() => handleDurationStep(1)} title="Increase duration by 1s">
               +1s
             </button>
             {scene.actualAudioDurationMs && scene.actualAudioDurationMs > durationMs && (
@@ -668,6 +719,33 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
               </button>
             )}
           </div>
+
+          {/* Ripple Mode Indicator & Explanation */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '8px', fontSize: '11px', color: 'var(--ed-text-muted)' }}>
+            <span>Ripple Edit: <strong style={{ color: isRippleOn ? '#c4b5fd' : '#94a3b8' }}>{isRippleOn ? 'ON' : 'OFF'}</strong></span>
+            {onToggleRipple && (
+              <button
+                type="button"
+                onClick={onToggleRipple}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#8b5cf6',
+                  cursor: 'pointer',
+                  padding: 0,
+                  textDecoration: 'underline',
+                  fontSize: '11px',
+                }}
+              >
+                Toggle
+              </button>
+            )}
+          </div>
+          <p style={{ margin: '3px 0 0', fontSize: '10px', color: '#64748b', lineHeight: 1.3 }}>
+            {isRippleOn
+              ? 'Downstream scenes shift automatically when this scene duration changes.'
+              : 'Subsequent scenes do not shift; timing remains untouched.'}
+          </p>
 
           {/* Timing Warning Alert */}
           {!timingValidation.isValid && (

@@ -567,6 +567,61 @@ body.theme-light .ed-center-canvas {
   flex: 1;
   accent-color: var(--ed-accent);
   cursor: pointer;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.12);
+  outline: none;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  transition: opacity 0.15s;
+}
+
+.ed-scrubber::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 3px;
+}
+
+.ed-scrubber::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #8b5cf6;
+  cursor: pointer;
+  margin-top: -4px;
+  box-shadow: 0 0 8px rgba(139, 92, 246, 0.8);
+  transition: transform 0.1s ease;
+}
+
+.ed-scrubber::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+}
+
+.ed-scrubber::-moz-range-track {
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.ed-scrubber::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #8b5cf6;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 0 8px rgba(139, 92, 246, 0.8);
+}
+
+.ed-volume-slider {
+  accent-color: #8b5cf6;
+  cursor: pointer;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.12);
+  margin: 0;
+  padding: 0;
 }
 
 /* ---------------- Right Properties Inspector ---------------- */
@@ -1378,5 +1433,48 @@ body.theme-light .ed-center-canvas {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* Dialogue Track Block & Trim Handles */
+.ed-dialogue-block {
+  user-select: none;
+  cursor: grab !important;
+  transition: border-color 0.15s, background-color 0.15s, box-shadow 0.15s;
+}
+
+.ed-dialogue-block:active {
+  cursor: grabbing !important;
+}
+
+.ed-dialogue-block:hover {
+  background: rgba(236, 72, 153, 0.28) !important;
+  border-color: rgba(236, 72, 153, 0.7) !important;
+}
+
+.ed-dialogue-block.overflow {
+  border-color: #ef4444 !important;
+  background: rgba(239, 68, 68, 0.25) !important;
+}
+
+.ed-dialogue-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  cursor: ew-resize !important;
+  z-index: 10;
+  background: transparent;
+  transition: background 0.15s;
+}
+
+.ed-dialogue-handle:hover {
+  background: rgba(236, 72, 153, 0.8) !important;
+}
+
+.ed-dialogue-handle.right {
+  right: 0;
+  border-top-right-radius: 3px;
+  border-bottom-right-radius: 3px;
+}
+
 
 
