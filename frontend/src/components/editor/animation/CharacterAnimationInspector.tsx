@@ -561,12 +561,12 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
             </div>
             <input
               type="range"
+              className="ed-inspector-slider"
               min="0.5"
               max="2.0"
               step="0.05"
               value={voiceSpeed}
               onChange={(e) => setVoiceSpeed(parseFloat(e.target.value))}
-              style={{ width: '100%', accentColor: 'var(--ed-accent)', marginTop: '2px' }}
             />
           </div>
 
@@ -797,24 +797,24 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
             <span style={{ fontSize: '11px', color: 'var(--ed-text-muted)' }}>Scale ({Math.round(instance.scale * 100)}%)</span>
             <input
               type="range"
+              className="ed-inspector-slider"
               min="0.3"
               max="2.5"
               step="0.05"
               value={instance.scale}
               onChange={(e) => onUpdateInstance(instance.instanceId, { scale: parseFloat(e.target.value) })}
-              style={{ width: '100%', accentColor: 'var(--ed-accent)' }}
             />
           </div>
           <div>
             <span style={{ fontSize: '11px', color: 'var(--ed-text-muted)' }}>Rotation ({instance.rotation}°)</span>
             <input
               type="range"
+              className="ed-inspector-slider"
               min="-180"
               max="180"
               step="5"
               value={instance.rotation}
               onChange={(e) => onUpdateInstance(instance.instanceId, { rotation: parseInt(e.target.value, 10) })}
-              style={{ width: '100%', accentColor: 'var(--ed-accent)' }}
             />
           </div>
         </div>

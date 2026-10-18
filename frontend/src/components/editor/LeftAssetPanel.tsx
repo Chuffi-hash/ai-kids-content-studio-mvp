@@ -844,12 +844,13 @@ export const LeftAssetPanel: React.FC<LeftAssetPanelProps> = ({
               </div>
               <input
                 type="range"
+                className="ed-inspector-slider"
                 min="0"
                 max="1"
                 step="0.05"
                 value={musicVolume}
                 onChange={(e) => onMusicVolumeChange(parseFloat(e.target.value))}
-                style={{ width: '100%', accentColor: 'var(--ed-accent)', marginTop: '8px' }}
+                style={{ marginTop: '8px' }}
               />
             </div>
           </>

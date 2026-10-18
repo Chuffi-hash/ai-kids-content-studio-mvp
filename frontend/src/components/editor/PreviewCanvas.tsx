@@ -447,7 +447,6 @@ export const PreviewCanvas: React.FC<PreviewCanvasProps> = ({
               if (onVolumeChange) onVolumeChange(val);
             }}
             className="ed-volume-slider"
-            style={{ width: '65px', accentColor: '#8b5cf6', cursor: 'pointer', height: '4px' }}
             title={`Master Volume: ${Math.round((isMuted ? 0 : masterVolume) * 100)}%`}
           />
           <span style={{ fontSize: '11px', color: 'var(--ed-text-muted)', fontFamily: 'monospace', minWidth: '28px' }}>

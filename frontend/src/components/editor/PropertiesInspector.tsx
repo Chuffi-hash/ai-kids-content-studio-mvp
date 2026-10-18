@@ -951,12 +951,12 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
               </div>
               <input
                 type="range"
+                className="ed-inspector-slider"
                 min="0.5"
                 max="2.0"
                 step="0.05"
                 value={voiceSpeed}
                 onChange={(e) => setVoiceSpeed(parseFloat(e.target.value))}
-                style={{ width: '100%', accentColor: 'var(--ed-accent)', height: '4px' }}
               />
             </div>
 
