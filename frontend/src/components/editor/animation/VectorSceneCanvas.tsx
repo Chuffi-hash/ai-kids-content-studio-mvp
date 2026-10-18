@@ -121,12 +121,22 @@ export const VectorSceneCanvas: React.FC<VectorSceneCanvasProps> = ({
       {/* 2. Character Instances Layer */}
       {sortedInstances.map((instance) => {
         const isSelected = instance.instanceId === selectedInstanceId;
+        const hasHeadTags = instance.customRig?.parts?.head?.shapes?.some(
+          (s) => s.tag === 'eyes' || s.tag === 'mouth'
+        );
         const rig =
-          instance.customRig ||
-          (instance.appearance
-            ? buildRigFromAppearance(instance.characterId, instance.name || 'Character', instance.appearance)
-            : getVectorRig(instance.characterId));
-        const pose = evaluateCharacterPose(instance, clips, sceneRelativeMs);
+          (instance.customRig && hasHeadTags)
+            ? instance.customRig
+            : (instance.appearance
+                ? buildRigFromAppearance(instance.characterId, instance.name || 'Character', instance.appearance)
+                : (instance.customRig || getVectorRig(instance.characterId)));
+        const pose = evaluateCharacterPose(
+          instance,
+          clips,
+          sceneRelativeMs,
+          animationData.expressionCues,
+          animationData.dialogueLines
+        );
 
         return (
           <g key={instance.instanceId} className="character-instance-wrapper">
@@ -158,16 +168,20 @@ export const VectorSceneCanvas: React.FC<VectorSceneCanvasProps> = ({
       {selectedInstance && (
         <TransformGizmo
           instance={selectedInstance}
-          rig={
-            selectedInstance.customRig ||
-            (selectedInstance.appearance
-              ? buildRigFromAppearance(
-                  selectedInstance.characterId,
-                  selectedInstance.name || 'Character',
-                  selectedInstance.appearance
-                )
-              : getVectorRig(selectedInstance.characterId))
-          }
+          rig={(() => {
+            const hasHeadTags = selectedInstance.customRig?.parts?.head?.shapes?.some(
+              (s) => s.tag === 'eyes' || s.tag === 'mouth'
+            );
+            return (selectedInstance.customRig && hasHeadTags)
+              ? selectedInstance.customRig
+              : (selectedInstance.appearance
+                  ? buildRigFromAppearance(
+                      selectedInstance.characterId,
+                      selectedInstance.name || 'Character',
+                      selectedInstance.appearance
+                    )
+                  : (selectedInstance.customRig || getVectorRig(selectedInstance.characterId)));
+          })()}
           motionPath={selectedMotionPath}
           onUpdateInstance={(updates) => onUpdateInstance(selectedInstance.instanceId, updates)}
           onUpdateMotionPath={handleUpdateMotionPath}

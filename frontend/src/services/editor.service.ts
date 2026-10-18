@@ -1,5 +1,6 @@
 import { getApiUrl } from '../utils/urlHelper';
 import { EditorStory, EditorScene, ExportJobStatus, SceneVersionItem } from '../types/editor';
+import { SceneDialogue } from '../types/animation';
 
 const API_URL = getApiUrl();
 
@@ -569,6 +570,56 @@ export async function fetchStoryBackgrounds(storyId: string): Promise<StoryBackg
   if (!res.ok) throw new Error('Failed to fetch story backgrounds');
   const data = await res.json();
   return data.backgrounds || [];
+}
+
+/**
+ * Generates character dialogue audio using Kokoro-82M TTS and derives lip-sync visemes.
+ */
+export async function generateSceneDialogueAudio(
+  sceneId: string,
+  payload: {
+    characterId?: string;
+    characterInstanceId?: string;
+    characterName: string;
+    text: string;
+    voice?: string;
+    speakingDirection?: string;
+    speed?: number;
+    startMs?: number;
+    effect?: string;
+  }
+): Promise<{ success: boolean; sceneId: string; dialogue: SceneDialogue }> {
+  const res = await fetch(`${API_URL}/api/content/scenes/${sceneId}/dialogue/generate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.message || 'Failed to generate dialogue audio');
+  }
+
+  return res.json();
+}
+
+/**
+ * Removes a dialogue line from a scene.
+ */
+export async function deleteSceneDialogue(
+  sceneId: string,
+  dialogueId: string
+): Promise<{ success: boolean; sceneId: string; dialogueId: string }> {
+  const res = await fetch(`${API_URL}/api/content/scenes/${sceneId}/dialogue/${dialogueId}`, {
+    method: 'DELETE',
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.message || 'Failed to delete dialogue line');
+  }
+
+  return res.json();
 }
 
 

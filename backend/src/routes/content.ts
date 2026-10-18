@@ -922,6 +922,97 @@ contentRouter.delete("/scenes/:sceneId/voice", async (req, res) => {
   }
 });
 
+// Generate dialogue audio with Kokoro-82M TTS and lip-sync viseme cues
+contentRouter.post("/scenes/:sceneId/dialogue/generate", async (req, res) => {
+  try {
+    const { sceneId } = req.params;
+    const {
+      characterId,
+      characterInstanceId,
+      characterName,
+      text,
+      voice,
+      speakingDirection,
+      speed,
+      startMs,
+      effect,
+      provider,
+    } = req.body;
+
+    if (!text || !text.trim()) {
+      return res.status(400).json({ message: "Dialogue text is required" });
+    }
+
+    const scene = await getSceneBySceneId(sceneId);
+    if (!scene) {
+      return res.status(404).json({ message: "Scene not found" });
+    }
+
+    const dialogue = await audioGenerationService.generateCharacterDialogueAudio({
+      sceneId,
+      characterId,
+      characterInstanceId,
+      characterName: characterName || "Character",
+      text,
+      voice,
+      speakingDirection,
+      speed: speed ? parseFloat(speed) : undefined,
+      startMs: typeof startMs === "number" ? startMs : 0,
+      effect,
+      provider,
+    });
+
+    // Update scene animationData.dialogueLines if animationData exists
+    if ((scene as any).animationData) {
+      const animData = (scene as any).animationData;
+      const existingLines = Array.isArray(animData.dialogueLines) ? animData.dialogueLines : [];
+      const updatedLines = [...existingLines, dialogue];
+      await updateScene(scene.sceneId, {
+        animationData: {
+          ...animData,
+          dialogueLines: updatedLines,
+        },
+      });
+    }
+
+    return res.json({
+      success: true,
+      sceneId,
+      dialogue,
+    });
+  } catch (error: any) {
+    console.error(`[Content] Failed to generate dialogue audio for scene ${req.params.sceneId}:`, error);
+    return res.status(500).json({ message: error.message || "Failed to generate dialogue audio" });
+  }
+});
+
+// Delete a dialogue line from a scene
+contentRouter.delete("/scenes/:sceneId/dialogue/:dialogueId", async (req, res) => {
+  try {
+    const { sceneId, dialogueId } = req.params;
+    const scene = await getSceneBySceneId(sceneId);
+    if (!scene) {
+      return res.status(404).json({ message: "Scene not found" });
+    }
+
+    if ((scene as any).animationData?.dialogueLines) {
+      const animData = (scene as any).animationData;
+      const filtered = animData.dialogueLines.filter((d: any) => d.id !== dialogueId);
+      await updateScene(scene.sceneId, {
+        animationData: {
+          ...animData,
+          dialogueLines: filtered,
+        },
+      });
+    }
+
+    return res.json({ success: true, sceneId, dialogueId });
+  } catch (error: any) {
+    console.error(`[Content] Failed to delete dialogue line for scene ${req.params.sceneId}:`, error);
+    return res.status(500).json({ message: error.message || "Failed to delete dialogue line" });
+  }
+});
+
 // Upload audio endpoint (music soundtrack, narration, sound effect)
 contentRouter.post("/audio/upload", async (req, res) => {
   try {

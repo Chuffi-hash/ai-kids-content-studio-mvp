@@ -5,9 +5,11 @@ import { execFile } from 'child_process';
 import { randomUUID } from 'crypto';
 // @ts-ignore
 import ffprobeStatic from '@ffprobe-installer/ffprobe';
-import { updateScene, createSceneVersion, getSceneBySceneId } from '../database/database.service.js';
+import { updateScene, createSceneVersion, getSceneBySceneId, getCharacterById } from '../database/database.service.js';
 import { TTSProviderFactory } from './tts-provider.factory.js';
 import { AudioEffectType, SupportedVoice } from './tts-provider.interface.js';
+import { generateVisemeCues } from './viseme-generator.js';
+import { SceneDialogue, SpeakingDirection } from '../animation/vector-animation.engine.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -208,6 +210,155 @@ export class AudioGenerationService {
       voice: ttsResult.voice,
       effect: ttsResult.effect,
     };
+  }
+
+  /**
+   * Generates character dialogue audio using Kokoro-82M, calculates exact duration,
+   * derives lip-sync viseme cues, and saves the dialogue audio file.
+   */
+  async generateCharacterDialogueAudio(options: {
+    sceneId: string;
+    characterId?: string;
+    characterInstanceId?: string;
+    characterName: string;
+    text: string;
+    voice?: string;
+    speakingDirection?: SpeakingDirection;
+    speed?: number;
+    effect?: AudioEffectType;
+    startMs?: number;
+    provider?: string;
+  }): Promise<SceneDialogue> {
+    const {
+      sceneId,
+      characterId,
+      characterInstanceId,
+      characterName,
+      text,
+      speakingDirection = 'calm',
+      startMs = 0,
+      effect = 'normal',
+      provider,
+    } = options;
+
+    if (!text || text.trim().length === 0) {
+      throw new Error('Dialogue text is required');
+    }
+
+    const cleanText = text
+      .replace(/\[.*?\]/g, '')
+      .replace(/\(.*?\)/g, '')
+      .replace(/[*_#`~]/g, '')
+      .trim();
+
+    const textToSpeak = cleanText.length > 0 ? cleanText : text.trim();
+
+    // 1. Resolve character's default voice if characterId provided
+    let voiceToUse = options.voice;
+    let baseSpeed = options.speed ?? 1.0;
+
+    if (!voiceToUse && characterId) {
+      try {
+        const char = await getCharacterById(characterId);
+        const voiceConfig = (char?.canonicalAppearance as any)?.voiceConfig;
+        if (voiceConfig?.voiceId) {
+          voiceToUse = voiceConfig.voiceId;
+          if (voiceConfig.speed && options.speed === undefined) {
+            baseSpeed = voiceConfig.speed;
+          }
+        }
+      } catch (err) {
+        console.warn(`[AudioGeneration] Could not fetch character ${characterId} for voiceConfig:`, err);
+      }
+    }
+
+    // Default voice heuristics based on species/name if still not set
+    if (!voiceToUse) {
+      if (characterId?.includes('pip') || characterName.toLowerCase().includes('bear')) {
+        voiceToUse = 'bm_george';
+      } else if (characterId?.includes('sammy') || characterName.toLowerCase().includes('kid')) {
+        voiceToUse = 'am_adam';
+      } else {
+        voiceToUse = 'af_heart';
+      }
+    }
+
+    // Direction speed modifier
+    const dirSpeedMultipliers: Record<string, number> = {
+      cheerful: 1.05,
+      excited: 1.15,
+      calm: 0.95,
+      sad: 0.88,
+      worried: 1.08,
+      curious: 1.0,
+      serious: 0.92,
+    };
+    const directionMultiplier = dirSpeedMultipliers[speakingDirection] || 1.0;
+    const effectiveSpeed = Math.max(0.5, Math.min(2.0, baseSpeed * directionMultiplier));
+
+    console.log(
+      `[AudioGeneration] Generating dialogue for character "${characterName}": "${textToSpeak.slice(0, 40)}..." (voice: ${voiceToUse}, speed: ${effectiveSpeed}, direction: ${speakingDirection})`
+    );
+
+    // 2. Synthesize speech using TTS provider (Kokoro-82M by default)
+    const providerInstance = await TTSProviderFactory.getProvider(provider);
+    let ttsResult;
+    try {
+      ttsResult = await providerInstance.generateSpeech(textToSpeak, {
+        voice: voiceToUse,
+        speed: effectiveSpeed,
+        effect,
+      });
+    } catch (err: any) {
+      console.warn(`[AudioGeneration] Dialogue TTS with provider "${providerInstance.name}" failed:`, err);
+      if (providerInstance.name !== 'google') {
+        console.log('[AudioGeneration] Falling back to Google TTS for dialogue...');
+        const fallback = await TTSProviderFactory.getProvider('google');
+        ttsResult = await fallback.generateSpeech(textToSpeak, {
+          voice: 'en-US-Standard',
+          speed: effectiveSpeed,
+          effect,
+        });
+      } else {
+        throw new Error(`Dialogue speech generation failed: ${err.message || String(err)}`);
+      }
+    }
+
+    const timestamp = Date.now();
+    const cleanId = (characterId || 'char').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const filename = `dialogue-${sceneId}-${cleanId}-${timestamp}.${ttsResult.format}`;
+    const filePath = path.join(this.audioDir, filename);
+
+    await fs.promises.writeFile(filePath, ttsResult.audioBuffer);
+
+    // 3. Measure duration accurately using ffprobe
+    let durationMs = 0;
+    try {
+      durationMs = await this.probeAudioDuration(filePath);
+    } catch {
+      const words = textToSpeak.split(/\s+/).length;
+      durationMs = Math.round((words * 400 + 400) / effectiveSpeed);
+    }
+
+    // 4. Derive deterministic lip-sync viseme cues
+    const visemeCues = generateVisemeCues(textToSpeak, durationMs);
+
+    const dialogueItem: SceneDialogue = {
+      id: randomUUID(),
+      characterId,
+      characterInstanceId,
+      characterName,
+      text: textToSpeak,
+      voice: ttsResult.voice || voiceToUse,
+      speakingDirection,
+      speed: effectiveSpeed,
+      audioUrl: `/storage/audio/${filename}`,
+      startMs,
+      durationMs,
+      visemeCues,
+    };
+
+    return dialogueItem;
   }
 
   /**

@@ -4,6 +4,10 @@ import {
   EvaluatedCharacterPose,
   VectorRigDefinition,
   AnimationActionType,
+  ExpressionCue,
+  SceneDialogue,
+  FacialExpression,
+  MouthShape,
 } from '../types/animation';
 
 /**
@@ -13,7 +17,9 @@ import {
 export function evaluateCharacterPose(
   instance: CharacterInstance,
   clips: AnimationClip[],
-  sceneRelativeMs: number
+  sceneRelativeMs: number,
+  expressionCues: ExpressionCue[] = [],
+  dialogueLines: SceneDialogue[] = []
 ): EvaluatedCharacterPose {
   // Find clips assigned to this character instance
   const instanceClips = clips.filter((c) => c.instanceId === instance.instanceId);
@@ -201,6 +207,93 @@ export function evaluateCharacterPose(
     rightLegAngle: Math.round(rightLegAngle * 10) / 10,
     chestScaleY: Math.round(chestScaleY * 1000) / 1000,
     activeAction,
+    expression: (() => {
+      // 1. Check timeline active expression cue
+      const activeExpCue = (expressionCues || []).find((c) => {
+        const matchesChar =
+          c.instanceId === instance.instanceId ||
+          c.characterInstanceId === instance.instanceId ||
+          (c.characterId && c.characterId === instance.characterId);
+        if (!matchesChar) return false;
+        const start = c.startMs ?? 0;
+        const dur = c.durationMs ?? 999999;
+        return sceneRelativeMs >= start && sceneRelativeMs <= start + dur;
+      });
+      if (activeExpCue) return activeExpCue.expression;
+
+      // 2. Check direct character instance expression
+      if (instance.expression) return instance.expression;
+
+      // 3. Fallback to any expression cue set on this character in the scene
+      const charCue = (expressionCues || []).find(
+        (c) =>
+          c.instanceId === instance.instanceId ||
+          c.characterInstanceId === instance.instanceId ||
+          (c.characterId && c.characterId === instance.characterId)
+      );
+      if (charCue) return charCue.expression;
+
+      // 4. Check active dialogue speaking direction
+      const activeDialogue = dialogueLines.find((d) => {
+        const isSpeaker =
+          (d.characterInstanceId && d.characterInstanceId === instance.instanceId) ||
+          (d.characterId && d.characterId === instance.characterId) ||
+          (d.characterName && instance.name && d.characterName.trim().toLowerCase() === instance.name.trim().toLowerCase());
+        return isSpeaker && sceneRelativeMs >= d.startMs && sceneRelativeMs <= d.startMs + d.durationMs;
+      });
+
+      if (activeDialogue?.speakingDirection) {
+        const dirMap: Record<string, FacialExpression> = {
+          cheerful: 'happy',
+          excited: 'surprised',
+          calm: 'neutral',
+          sad: 'sad',
+          worried: 'scared',
+          curious: 'curious',
+          serious: 'angry',
+        };
+        if (dirMap[activeDialogue.speakingDirection]) {
+          return dirMap[activeDialogue.speakingDirection];
+        }
+      }
+
+      return 'neutral';
+    })(),
+    mouthState: (() => {
+      const activeDialogue = dialogueLines.find((d) => {
+        const isSpeaker =
+          (d.characterInstanceId && d.characterInstanceId === instance.instanceId) ||
+          (d.characterId && d.characterId === instance.characterId) ||
+          (d.characterName && instance.name && d.characterName.trim().toLowerCase() === instance.name.trim().toLowerCase());
+        return isSpeaker && sceneRelativeMs >= d.startMs && sceneRelativeMs <= d.startMs + d.durationMs;
+      });
+      if (!activeDialogue) return 'rest';
+
+      const dialogueOffsetMs = sceneRelativeMs - activeDialogue.startMs;
+      if (activeDialogue.visemeCues && activeDialogue.visemeCues.length > 0) {
+        const activeViseme = activeDialogue.visemeCues.find(
+          (v) =>
+            dialogueOffsetMs >= v.timeMs &&
+            dialogueOffsetMs <= v.timeMs + v.durationMs
+        );
+        return activeViseme ? activeViseme.shape : 'open';
+      }
+
+      // Default rhythmic syllable cadence
+      const cycleMs = 140;
+      const step = Math.floor((dialogueOffsetMs % (cycleMs * 4)) / cycleMs);
+      const cadenceShapes: MouthShape[] = ['open', 'wide', 'round', 'closed'];
+      return cadenceShapes[step] || 'open';
+    })(),
+    speaking: Boolean(
+      dialogueLines.find((d) => {
+        const isSpeaker =
+          (d.characterInstanceId && d.characterInstanceId === instance.instanceId) ||
+          (d.characterId && d.characterId === instance.characterId) ||
+          (d.characterName && instance.name && d.characterName.trim().toLowerCase() === instance.name.trim().toLowerCase());
+        return isSpeaker && sceneRelativeMs >= d.startMs && sceneRelativeMs <= d.startMs + d.durationMs;
+      })
+    ),
   };
 }
 

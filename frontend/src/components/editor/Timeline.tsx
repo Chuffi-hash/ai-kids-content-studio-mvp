@@ -19,6 +19,20 @@ import {
   SparklesIcon,
 } from '../common/Icons';
 
+function getExpressionEmoji(expr?: string): string {
+  switch (expr) {
+    case 'happy': return '😊';
+    case 'sad': return '😢';
+    case 'angry': return '😠';
+    case 'surprised': return '😲';
+    case 'scared': return '😨';
+    case 'confused': return '🤨';
+    case 'curious': return '🤔';
+    case 'neutral': return '😐';
+    default: return '😐';
+  }
+}
+
 interface TimelineProps {
   scenes: EditorScene[];
   activeSceneId: string | null;
@@ -278,6 +292,10 @@ export const Timeline: React.FC<TimelineProps> = ({
             <SparklesIcon size={13} color="#a78bfa" />
             <span>2D Rig</span>
           </div>
+          <div className="ed-track-header" style={{ height: '44px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+            <span style={{ fontSize: '13px' }}>👄</span>
+            <span>Dialogue</span>
+          </div>
           <div className="ed-track-header" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
             <MicIcon size={13} />
             <span>Narration</span>
@@ -390,6 +408,12 @@ export const Timeline: React.FC<TimelineProps> = ({
                 const action = clip?.action || 'idle';
                 const isMotionPath = clip?.action === 'walk' && clip.motionMode === 'motion_path';
 
+                const cues = scene.animationData?.expressionCues || [];
+                const charCue = cues.find(
+                  (c) => c.characterInstanceId === inst.instanceId || c.characterId === inst.characterId
+                );
+                const activeExpr = charCue?.expression;
+
                 return (
                   <div
                     key={`char-clip-${inst.instanceId}`}
@@ -439,6 +463,24 @@ export const Timeline: React.FC<TimelineProps> = ({
                     >
                       {action} {isMotionPath ? '➔' : ''}
                     </span>
+                    {activeExpr && (
+                      <span
+                        style={{
+                          fontSize: '9px',
+                          fontWeight: 600,
+                          padding: '1px 4px',
+                          borderRadius: '3px',
+                          background: 'rgba(236, 72, 153, 0.25)',
+                          color: '#fbcfe8',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '2px',
+                        }}
+                        title={`Expression: ${activeExpr}`}
+                      >
+                        {getExpressionEmoji(activeExpr)} {activeExpr}
+                      </span>
+                    )}
                     <span style={{ fontSize: '10px', opacity: 0.8, fontFamily: 'monospace' }}>
                       {formatDurationHuman(clipDurationMs)}
                     </span>
@@ -448,7 +490,83 @@ export const Timeline: React.FC<TimelineProps> = ({
             })}
           </div>
 
-          {/* Track 3: Narration Voice */}
+          {/* Track: Dialogue & Lip-Sync */}
+          <div className="ed-track-row" style={{ height: '44px' }}>
+            {scenes.map((scene) => {
+              const dialogues = scene.animationData?.dialogueLines || [];
+              if (dialogues.length === 0) return null;
+
+              return dialogues.map((dlg) => {
+                const dlgStartMs = scene.startMs + (dlg.startMs || 0);
+                const dlgDurationMs = dlg.durationMs || 3000;
+                const leftPx = msToPx(dlgStartMs);
+                const widthPx = msToPx(dlgDurationMs);
+                const isSelected = dlg.characterInstanceId === selectedInstanceId;
+                const visemeCount = dlg.visemeCues?.length || 0;
+
+                return (
+                  <div
+                    key={`dlg-clip-${dlg.id}`}
+                    className={`ed-dialogue-block ${isSelected ? 'selected' : ''}`}
+                    style={{
+                      left: `${leftPx}px`,
+                      width: `${Math.max(30, widthPx)}px`,
+                      position: 'absolute',
+                      height: '32px',
+                      borderRadius: '4px',
+                      background: isSelected
+                        ? 'rgba(236, 72, 153, 0.35)'
+                        : 'rgba(236, 72, 153, 0.18)',
+                      border: isSelected
+                        ? '2px solid #ec4899'
+                        : '1px solid rgba(236, 72, 153, 0.45)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      padding: '0 8px',
+                      gap: '6px',
+                      fontSize: '11px',
+                      color: '#fbcfe8',
+                      cursor: 'pointer',
+                      overflow: 'hidden',
+                      whiteSpace: 'nowrap',
+                      boxShadow: isSelected ? '0 0 10px rgba(236, 72, 153, 0.5)' : undefined,
+                      zIndex: isSelected ? 5 : 2,
+                    }}
+                    onClick={() => {
+                      onSelectScene(scene.sceneId);
+                      if (dlg.characterInstanceId && onSelectInstance) {
+                        onSelectInstance(dlg.characterInstanceId);
+                      }
+                    }}
+                    title={`${dlg.characterName}: "${dlg.text}" (${dlg.speakingDirection || 'calm'}, ${visemeCount} visemes) - ${formatDurationHuman(dlgDurationMs)}`}
+                  >
+                    <span style={{ fontSize: '12px' }}>👄</span>
+                    <span style={{ fontWeight: 600 }}>{dlg.characterName}:</span>
+                    <span style={{ opacity: 0.9, fontStyle: 'italic' }}>"{dlg.text}"</span>
+                    {visemeCount > 0 && (
+                      <span
+                        style={{
+                          fontSize: '9px',
+                          fontWeight: 700,
+                          padding: '1px 4px',
+                          borderRadius: '3px',
+                          background: 'rgba(255, 255, 255, 0.12)',
+                          color: '#a7f3d0',
+                        }}
+                      >
+                        {visemeCount} visemes
+                      </span>
+                    )}
+                    <span style={{ fontSize: '10px', opacity: 0.8, fontFamily: 'monospace' }}>
+                      {formatDurationHuman(dlgDurationMs)}
+                    </span>
+                  </div>
+                );
+              });
+            })}
+          </div>
+
+          {/* Track 4: Narration Voice */}
           <div className="ed-track-row">
             {scenes.map((scene) => {
               if (!scene.narration && !scene.audioUrl) return null;

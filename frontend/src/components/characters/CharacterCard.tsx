@@ -49,6 +49,9 @@ export default function CharacterCard({
                   rightLegAngle: 0,
                   chestScaleY: 1,
                   activeAction: 'idle',
+                  expression: 'neutral',
+                  mouthState: 'rest',
+                  speaking: false,
                 }}
                 isSelected={false}
               />
