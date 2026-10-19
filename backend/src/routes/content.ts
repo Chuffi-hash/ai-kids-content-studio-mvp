@@ -1049,6 +1049,34 @@ contentRouter.post("/stories/:storyId/dialogue/generate-all", async (req, res) =
   }
 });
 
+// Regenerate dialogue audio for a specific character in a scene
+contentRouter.post("/scenes/:sceneId/characters/:characterId/regenerate-dialogue", async (req, res) => {
+  try {
+    const { sceneId, characterId } = req.params;
+    const { provider } = req.body || {};
+    const scene = await getSceneBySceneId(sceneId);
+    if (!scene) {
+      return res.status(404).json({ message: "Scene not found" });
+    }
+
+    const dialogueLines = await audioGenerationService.regenerateCharacterDialogueInScene(
+      sceneId,
+      characterId,
+      { provider }
+    );
+
+    return res.json({
+      success: true,
+      sceneId,
+      characterId,
+      dialogueLines,
+    });
+  } catch (error: any) {
+    console.error(`[Content] Failed to regenerate dialogue audio for character ${req.params.characterId} in scene ${req.params.sceneId}:`, error);
+    return res.status(500).json({ message: error.message || "Failed to regenerate character dialogue audio" });
+  }
+});
+
 // Delete a dialogue line from a scene
 contentRouter.delete("/scenes/:sceneId/dialogue/:dialogueId", async (req, res) => {
   try {

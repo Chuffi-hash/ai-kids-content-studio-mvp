@@ -294,4 +294,14 @@ export interface CustomCharacterAppearance {
   leftLeg?: LegLimbConfig;
   rightLeg?: LegLimbConfig;
   voiceConfig?: CharacterVoiceConfig;
+  planet?: PlanetCustomConfig;
+}
+
+export interface PlanetCustomConfig {
+  oceanColor?: string;
+  continentColor?: string;
+  landmassStyle?: 'earth' | 'islands' | 'pangaea';
+  atmosphereGlow?: 'cyan' | 'gold' | 'white' | 'none';
+  clouds?: boolean;
+  showHands?: boolean;
 }

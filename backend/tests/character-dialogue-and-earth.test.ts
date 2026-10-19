@@ -1,12 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import { getVectorRig } from "../src/services/animation/templates/default-characters.js";
-import { buildRigFromAppearance, CHARACTER_PRESETS } from "../src/services/animation/templates/custom-character-rig.js";
-import { extractFaceAnchors } from "../src/services/animation/face-renderer.js";
+import { buildRigFromAppearance, normalizeAppearance, CHARACTER_PRESETS } from "../src/services/animation/templates/custom-character-rig.js";
+import { extractFaceAnchors, getHeadShapesForPose } from "../src/services/animation/face-renderer.js";
 import { evaluatePose, CharacterInstance, AnimationClip } from "../src/services/animation/vector-animation.engine.js";
 import { CharacterResolutionService, ResolvedCharacterInfo } from "../src/services/story-generation/character-resolution.service.js";
 import { ScenePreparationService } from "../src/services/story-generation/scene-preparation.service.js";
-import { deleteCharacter } from "../src/services/database/database.service.js";
+import { createCharacter, getCharacterById, updateCharacter, deleteCharacter, createStory, createScene, deleteStory } from "../src/services/database/database.service.js";
+import { AudioGenerationService } from "../src/services/audio-generation/audio-generation.service.js";
+import { randomUUID } from "crypto";
 
 test("Talking Earth Rig - Default Template & Structure", () => {
   const earth = getVectorRig("earth");
@@ -231,4 +233,290 @@ test("Scene Preparation - Sequential Dialogue Timing & Viseme Generation", () =>
   // Verify expression cues were also generated
   assert.ok(animData.expressionCues, "expressionCues must be populated");
   assert.ok(animData.expressionCues.length >= 2, "Expression cues should be created for dialogue turns");
+});
+
+test("Talking Earth Rig - Continent Stability Across Expressions and Lip-Sync", () => {
+  const earth = getVectorRig("earth");
+  assert.ok(earth, "Earth rig must exist");
+
+  // Count base shapes with tag 'face_base' (globe, shading, and continents/clouds)
+  const baseShapes = earth.parts.head.shapes.filter((s: any) => s.tag === "face_base");
+  assert.ok(baseShapes.length >= 8, "Must have globe, shading, and multiple continents/clouds tagged face_base");
+
+  // Verify that across various emotions and visemes, the base shapes remain completely unchanged
+  const emotions = ["happy", "sad", "thinking", "excited", "surprised"] as const;
+  const visemes = ["AI", "E", "O", "U", "MBP", "FV", "L", "rest"] as const;
+
+  for (const emotion of emotions) {
+    for (const viseme of visemes) {
+      const dynamicShapes = getHeadShapesForPose(earth, {
+        expression: emotion,
+        mouthState: (viseme === "rest" ? "rest" : "open") as any,
+        speaking: viseme !== "rest",
+        torsoRotation: 0,
+        torsoScaleY: 1,
+        torsoPivotX: 0,
+        torsoPivotY: 0,
+        headRotation: 0,
+        headPivotX: 0,
+        headPivotY: 0,
+        leftArmRotation: 0,
+        rightArmRotation: 0,
+        leftForearmRotation: 0,
+        rightForearmRotation: 0,
+        leftLegRotation: 0,
+        rightLegRotation: 0,
+        bodyY: 0,
+        bodyX: 0,
+        bodyRotation: 0,
+        bounceOffset: 0,
+        scaleX: 1,
+        scaleY: 1,
+      });
+      const dynamicBaseShapes = dynamicShapes.filter((s: any) => s.tag === "face_base");
+      assert.strictEqual(
+        dynamicBaseShapes.length,
+        baseShapes.length,
+        `face_base shape count must stay identical during ${emotion} / ${viseme}`
+      );
+      // Verify first shape is ocean globe
+      assert.strictEqual(
+        (dynamicBaseShapes[0] as any).type,
+        "circle",
+        "Base globe shape must remain circle"
+      );
+    }
+  }
+});
+
+test("Talking Earth Rig - Customization Options (Ocean, Continents, Glow, Clouds, Gloves)", () => {
+  const customEarthApp = {
+    ...CHARACTER_PRESETS.earth.appearance,
+    planet: {
+      oceanColor: "#0284c7", // Azure ocean
+      continentColor: "#84cc16", // Lime continents
+      atmosphereGlow: "gold" as const,
+      clouds: false,
+      showHands: false,
+    },
+  };
+
+  const rig = buildRigFromAppearance("custom-earth-1", "Aura Earth", customEarthApp);
+  assert.strictEqual(rig.species, "planet");
+
+  // Verify custom ocean circle is present
+  const oceanShape = rig.parts.head.shapes.find(
+    (s: any) => s.type === "circle" && s.fill === "#0284c7"
+  );
+  assert.ok(oceanShape, "Rig must render customized ocean color");
+
+  // Verify custom continent color is present
+  const continentShape = rig.parts.head.shapes.find(
+    (s: any) => s.fill === "#84cc16"
+  );
+  assert.ok(continentShape, "Rig must render customized continent color");
+
+  // Verify clouds are disabled when clouds: false
+  const cloudShapes = rig.parts.head.shapes.filter(
+    (s: any) => s.stroke === "#ffffff" && s.strokeWidth >= 2.5
+  );
+  assert.strictEqual(cloudShapes.length, 0, "No clouds should be rendered when clouds: false");
+
+  // Verify hands are omitted when showHands: false
+  assert.strictEqual(rig.parts.leftArm.shapes.length, 0, "Left arm should be empty when showHands: false");
+  assert.strictEqual(rig.parts.rightArm.shapes.length, 0, "Right arm should be empty when showHands: false");
+});
+
+test("Per-Character Voice Assignment - Normalization & Independent Persistence", async () => {
+  // 1. normalizeAppearance preservation
+  const appWithVoice = {
+    ...CHARACTER_PRESETS.earth.appearance,
+    voiceConfig: {
+      voiceId: "bm_daniel",
+      speed: 1.05,
+      style: "serious" as const,
+      effect: "normal" as const,
+    },
+  };
+  const normalized = normalizeAppearance(appWithVoice);
+  assert.ok(normalized.voiceConfig, "normalizeAppearance must preserve voiceConfig");
+  assert.strictEqual(normalized.voiceConfig?.voiceId, "bm_daniel");
+  assert.strictEqual(normalized.voiceConfig?.speed, 1.05);
+
+  // 2. Independent DB persistence
+  const charId1 = `test-earth-${randomUUID()}`;
+  const charId2 = `test-bella-${randomUUID()}`;
+
+  const char1 = await createCharacter({
+    id: charId1,
+    name: "Independent Earth",
+    species: "planet",
+    personality: "Wise and ancient",
+    visualDescription: "Living talking globe",
+    canonicalAppearance: {
+      ...CHARACTER_PRESETS.earth.appearance,
+      voiceConfig: {
+        voiceId: "bm_daniel",
+        speed: 0.95,
+        style: "calm",
+        effect: "normal",
+      },
+    },
+  });
+
+  const char2 = await createCharacter({
+    id: charId2,
+    name: "Independent Bella",
+    species: "human",
+    personality: "Energetic girl",
+    visualDescription: "Girl in hoodie",
+    canonicalAppearance: {
+      ...CHARACTER_PRESETS.kid_girl.appearance,
+      voiceConfig: {
+        voiceId: "af_bella",
+        speed: 1.15,
+        style: "excited",
+        effect: "cartoon",
+      },
+    },
+  });
+
+  assert.strictEqual((char1.canonicalAppearance as any)?.voiceConfig?.voiceId, "bm_daniel");
+  assert.strictEqual((char2.canonicalAppearance as any)?.voiceConfig?.voiceId, "af_bella");
+
+  // Updating char1 voice must NOT affect char2
+  await updateCharacter(charId1, {
+    canonicalAppearance: {
+      ...(char1.canonicalAppearance as any),
+      voiceConfig: {
+        voiceId: "bm_daniel",
+        speed: 1.25,
+        style: "excited",
+        effect: "normal",
+      },
+    },
+  });
+
+  const fetched1 = await getCharacterById(charId1);
+  const fetched2 = await getCharacterById(charId2);
+
+  assert.strictEqual((fetched1?.canonicalAppearance as any)?.voiceConfig?.speed, 1.25);
+  assert.strictEqual((fetched2?.canonicalAppearance as any)?.voiceConfig?.voiceId, "af_bella");
+  assert.strictEqual((fetched2?.canonicalAppearance as any)?.voiceConfig?.speed, 1.15);
+
+  // Clean up
+  await deleteCharacter(charId1).catch(() => {});
+  await deleteCharacter(charId2).catch(() => {});
+});
+
+test("Dialogue Voice Resolution - Resolves by Character ID or Name with Fallbacks", async () => {
+  const audioService = new AudioGenerationService();
+
+  // Test 1: Fallback heuristic for Earth/Terra when no voice passed
+  const earthDialogue = await audioService.generateCharacterDialogueAudio({
+    sceneId: "scene-test-fallback",
+    characterName: "Terra",
+    text: "Welcome to the solar system!",
+  });
+  assert.strictEqual(earthDialogue.voice, "bm_daniel", "Earth/Terra must resolve to bm_daniel by default");
+
+  // Test 2: Fallback heuristic for Bear when no voice passed
+  const bearDialogue = await audioService.generateCharacterDialogueAudio({
+    sceneId: "scene-test-fallback",
+    characterName: "Pip the Bear",
+    text: "Look at the stars!",
+  });
+  assert.strictEqual(bearDialogue.voice, "bm_george", "Bear must resolve to bm_george by default");
+
+  // Test 3: Resolution from DB character record
+  const customCharId = `test-char-${randomUUID()}`;
+  await createCharacter({
+    id: customCharId,
+    name: "Doctor Cosmos",
+    species: "human",
+    personality: "Curious scientist",
+    visualDescription: "Scientist with telescope",
+    canonicalAppearance: {
+      ...CHARACTER_PRESETS.kid_boy.appearance,
+      voiceConfig: {
+        voiceId: "af_sky",
+        speed: 1.1,
+        style: "curious",
+        effect: "normal",
+      },
+    },
+  });
+
+  const resolvedDialogue = await audioService.generateCharacterDialogueAudio({
+    sceneId: "scene-test-db",
+    characterId: customCharId,
+    characterName: "Doctor Cosmos",
+    text: "Behold the constellation!",
+  });
+  assert.strictEqual(resolvedDialogue.voice, "af_sky", "Must resolve character-specific voiceConfig from DB");
+
+  await deleteCharacter(customCharId).catch(() => {});
+});
+
+test("Single Character Dialogue Regeneration - Updates matching character lines only", async () => {
+  const audioService = new AudioGenerationService();
+
+  const testStoryId = `story-regen-${randomUUID()}`;
+  const testSceneId = `scene-regen-${randomUUID()}`;
+
+  await createStory({
+    id: testStoryId,
+    storyId: testStoryId,
+    title: "Space Journey",
+    ageGroup: "6-8",
+  });
+
+  await createScene({
+    id: `scene-record-${randomUUID()}`,
+    storyId: testStoryId,
+    sceneId: testSceneId,
+    number: 1,
+    title: "Space Intro",
+    narration: "A voyage through the cosmos",
+    animationData: {
+      characterInstances: [],
+      dialogueLines: [
+        {
+          id: "diag-1",
+          characterId: "char-terra",
+          characterName: "Terra",
+          text: "I am planet Earth!",
+          voice: "bm_daniel",
+          startMs: 0,
+          durationMs: 2000,
+        },
+        {
+          id: "diag-2",
+          characterId: "char-pip",
+          characterName: "Pip",
+          text: "I am Pip the bear!",
+          voice: "bm_george",
+          audioUrl: "/storage/audio/original-pip.mp3",
+          startMs: 2500,
+          durationMs: 2000,
+        },
+      ],
+    } as any,
+  });
+
+  // Regenerate dialogue for Terra only
+  const updatedLines = await audioService.regenerateCharacterDialogueInScene(
+    testSceneId,
+    "Terra"
+  );
+
+  assert.strictEqual(updatedLines.length, 2);
+  const terraLine = updatedLines.find((l) => l.characterName === "Terra");
+  const pipLine = updatedLines.find((l) => l.characterName === "Pip");
+
+  assert.ok(terraLine?.audioUrl, "Terra line must have freshly generated audioUrl");
+  assert.strictEqual(pipLine?.audioUrl, "/storage/audio/original-pip.mp3", "Pip line audioUrl must remain untouched");
+
+  // Clean up
+  await deleteStory(testStoryId).catch(() => {});
 });

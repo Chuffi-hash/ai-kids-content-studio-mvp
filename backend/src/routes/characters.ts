@@ -23,11 +23,23 @@ const imageGenerationService = new ImageGenerationService(
 const storageService = new LocalStorageService();
 const providerType = process.env.IMAGE_PROVIDER || "mock";
 
+function enrichCharacterVoice(character: any) {
+  if (!character) return character;
+  const canonical = character.canonicalAppearance && typeof character.canonicalAppearance === 'object'
+    ? character.canonicalAppearance
+    : null;
+  const voiceConfig = canonical?.voiceConfig || character.voiceConfig || null;
+  return {
+    ...character,
+    voiceConfig,
+  };
+}
+
 // GET all characters
 characterRouter.get("/", async (_req, res) => {
   try {
     const characters = await getAllCharacters();
-    return res.json(characters);
+    return res.json(characters.map(enrichCharacterVoice));
   } catch (error) {
     console.error(error);
     return res.status(500).json({ message: "Failed to fetch characters" });
@@ -44,7 +56,7 @@ characterRouter.get("/:id", async (req, res) => {
       return res.status(404).json({ message: "Character not found" });
     }
 
-    return res.json(character);
+    return res.json(enrichCharacterVoice(character));
   } catch (error) {
     console.error(error);
     return res.status(500).json({ message: "Failed to fetch character" });
@@ -54,7 +66,7 @@ characterRouter.get("/:id", async (req, res) => {
 // POST create new character
 characterRouter.post("/", async (req, res) => {
   try {
-    const { name, species, personality, visualDescription, distinctiveFeatures, canonicalAppearance } = req.body;
+    const { name, species, personality, visualDescription, distinctiveFeatures, canonicalAppearance, voiceConfig } = req.body;
 
     if (!name || !name.trim()) {
       return res.status(400).json({
@@ -73,6 +85,14 @@ characterRouter.post("/", async (req, res) => {
       return res.status(409).json({ message: "Character with this name already exists" });
     }
 
+    let finalCanonical = canonicalAppearance || null;
+    if (voiceConfig) {
+      finalCanonical = {
+        ...(typeof finalCanonical === 'object' && finalCanonical !== null ? finalCanonical : {}),
+        voiceConfig,
+      };
+    }
+
     const character = await createCharacter({
       id: randomUUID(),
       name: trimmedName,
@@ -80,10 +100,10 @@ characterRouter.post("/", async (req, res) => {
       personality: resolvedPersonality,
       visualDescription: resolvedDescription,
       distinctiveFeatures: distinctiveFeatures || "",
-      canonicalAppearance: canonicalAppearance || null,
+      canonicalAppearance: finalCanonical,
     });
 
-    return res.status(201).json(character);
+    return res.status(201).json(enrichCharacterVoice(character));
   } catch (error: any) {
     if (error instanceof CharacterConflictError || error?.statusCode === 409) {
       return res.status(409).json({ message: error.message || "Character with this name already exists" });
@@ -122,7 +142,7 @@ characterRouter.post("/:id/duplicate", async (req, res) => {
       referenceImagePrompt: existing.referenceImagePrompt || undefined,
     });
 
-    return res.status(201).json(duplicated);
+    return res.status(201).json(enrichCharacterVoice(duplicated));
   } catch (error) {
     console.error("[Characters] Failed to duplicate character:", error);
     return res.status(500).json({ message: "Failed to duplicate character" });
@@ -133,7 +153,7 @@ characterRouter.post("/:id/duplicate", async (req, res) => {
 characterRouter.put("/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, species, personality, visualDescription, distinctiveFeatures, canonicalAppearance } = req.body;
+    const { name, species, personality, visualDescription, distinctiveFeatures, canonicalAppearance, voiceConfig } = req.body;
 
     const existing = await getCharacterById(id);
     if (!existing) {
@@ -149,10 +169,11 @@ characterRouter.put("/:id", async (req, res) => {
     }
 
     let updatedCanonical = canonicalAppearance !== undefined ? canonicalAppearance : existing.canonicalAppearance;
-    if (req.body.voiceConfig) {
+    const incomingVoice = voiceConfig || (canonicalAppearance && canonicalAppearance.voiceConfig);
+    if (incomingVoice) {
       updatedCanonical = {
         ...(typeof updatedCanonical === 'object' && updatedCanonical !== null ? updatedCanonical : {}),
-        voiceConfig: req.body.voiceConfig,
+        voiceConfig: incomingVoice,
       };
     }
 
@@ -165,7 +186,7 @@ characterRouter.put("/:id", async (req, res) => {
       canonicalAppearance: updatedCanonical,
     });
 
-    return res.json(character);
+    return res.json(enrichCharacterVoice(character));
   } catch (error: any) {
     if (error instanceof CharacterConflictError || error?.statusCode === 409) {
       return res.status(409).json({ message: error.message || "Character with this name already exists" });
