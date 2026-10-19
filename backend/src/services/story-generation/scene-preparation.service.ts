@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { StructuredScene } from './story-generation.types.js';
 import { ResolvedCharacterInfo } from './character-resolution.service.js';
 import {
@@ -5,6 +6,10 @@ import {
   CharacterInstance,
   AnimationClip,
   MotionPath,
+  SceneDialogue,
+  ExpressionCue,
+  FacialExpression,
+  SpeakingDirection,
 } from '../animation/vector-animation.engine.js';
 import {
   buildRigFromAppearance,
@@ -12,6 +17,7 @@ import {
   DEFAULT_APPEARANCE,
 } from '../animation/templates/custom-character-rig.js';
 import { estimateSpeechDurationMs } from '../timing/timing.service.js';
+import { generateVisemeCues } from '../audio-generation/viseme-generator.js';
 
 export type SupportedActionType = 'idle' | 'walk' | 'wave' | 'jump';
 
@@ -46,24 +52,12 @@ export class ScenePreparationService {
       const sceneNumber = sc.sceneNumber ?? index + 1;
       const order = index + 1;
 
-      // 1. Duration Calculation & Pacing
-      // Estimate narration speech duration
-      const speechDurationMs = estimateSpeechDurationMs(sc.narration);
-      // Minimum duration accounts for narration plus brief dialogue pauses
-      const minDurationMs = Math.max(4000, speechDurationMs + 1500);
-      const requestedDurationMs = (sc.durationSeconds || 15) * 1000;
-      const finalDurationMs = Math.max(minDurationMs, requestedDurationMs);
-
-      const startMs = runningTimeMs;
-      const endMs = startMs + finalDurationMs;
-      runningTimeMs = endMs;
-
-      // 2. Identify characters present in this scene
+      // 1. Identify characters present in this scene
       const sceneCharNames = new Set<string>();
-      for (const d of sc.dialogue) {
+      for (const d of (sc.dialogue || [])) {
         if (d.characterName) sceneCharNames.add(d.characterName.trim().toLowerCase());
       }
-      for (const a of sc.characterActions) {
+      for (const a of (sc.characterActions || [])) {
         if (a.characterName) sceneCharNames.add(a.characterName.trim().toLowerCase());
       }
 
@@ -82,7 +76,7 @@ export class ScenePreparationService {
 
       const characterIdsArray = sceneCharacters.map((c) => c.id);
 
-      // 3. Position characters on stage and construct CharacterInstances
+      // 2. Position characters on stage and construct CharacterInstances
       const characterInstances: CharacterInstance[] = [];
       const count = sceneCharacters.length;
 
@@ -102,7 +96,15 @@ export class ScenePreparationService {
         let app = char.canonicalAppearance;
         if (!app) {
           const sp = (char.species || 'human').toLowerCase();
-          if (sp.includes('bear')) {
+          const nm = (char.name || '').toLowerCase();
+          if (
+            sp.includes('planet') ||
+            sp.includes('earth') ||
+            nm.includes('earth') ||
+            nm.includes('terra')
+          ) {
+            app = CHARACTER_PRESETS.earth.appearance;
+          } else if (sp.includes('bear')) {
             app = CHARACTER_PRESETS.bear_cub.appearance;
           } else if (sp.includes('robot')) {
             app = CHARACTER_PRESETS.robot.appearance;
@@ -132,12 +134,132 @@ export class ScenePreparationService {
         });
       });
 
-      // 4. Map semantic actions to valid animation clips
+      // 3. Map structured dialogue and facial expression cues with sequential timing
+      const speechDurationMs = estimateSpeechDurationMs(sc.narration);
+      let currentDialogueStartMs = speechDurationMs > 0 ? speechDurationMs + 600 : 500;
+      const dialogueLines: SceneDialogue[] = [];
+      const expressionCues: ExpressionCue[] = [];
+
+      for (const d of (sc.dialogue || [])) {
+        if (!d.text || !d.text.trim()) continue;
+
+        const charNameLower = (d.characterName || '').trim().toLowerCase();
+        const matchedChar = sceneCharacters.find((c) => c.name.toLowerCase() === charNameLower);
+        const matchedInst = characterInstances.find(
+          (ci) => (ci.name || '').toLowerCase() === charNameLower
+        );
+
+        // Resolve voice configuration
+        let charVoice = 'af_heart';
+        const voiceConfig =
+          (matchedInst?.appearance as any)?.voiceConfig ||
+          (matchedChar?.canonicalAppearance as any)?.voiceConfig;
+        if (voiceConfig?.voiceId) {
+          charVoice = voiceConfig.voiceId;
+        } else if (
+          matchedChar?.species?.toLowerCase().includes('planet') ||
+          matchedChar?.species?.toLowerCase().includes('earth') ||
+          charNameLower.includes('earth') ||
+          charNameLower.includes('terra')
+        ) {
+          charVoice = 'bm_daniel';
+        } else if (matchedChar?.species?.toLowerCase().includes('bear')) {
+          charVoice = 'bm_george';
+        } else if (matchedChar?.species?.toLowerCase().includes('robot')) {
+          charVoice = 'bm_lewis';
+        } else if (matchedChar?.species?.toLowerCase().includes('boy')) {
+          charVoice = 'am_adam';
+        } else if (matchedChar?.species?.toLowerCase().includes('girl')) {
+          charVoice = 'af_bella';
+        }
+
+        // Map emotion to speaking direction and facial expression
+        const emotionLower = (d.emotion || 'cheerful').toLowerCase();
+        let speakingDirection: SpeakingDirection = 'cheerful';
+        let facialExpression: FacialExpression = 'happy';
+
+        if (emotionLower.includes('sad')) {
+          speakingDirection = 'sad';
+          facialExpression = 'sad';
+        } else if (emotionLower.includes('excit')) {
+          speakingDirection = 'excited';
+          facialExpression = 'happy';
+        } else if (emotionLower.includes('scare') || emotionLower.includes('fear')) {
+          speakingDirection = 'worried';
+          facialExpression = 'scared';
+        } else if (emotionLower.includes('worr')) {
+          speakingDirection = 'worried';
+          facialExpression = 'scared';
+        } else if (emotionLower.includes('angr')) {
+          speakingDirection = 'serious';
+          facialExpression = 'angry';
+        } else if (emotionLower.includes('curio')) {
+          speakingDirection = 'curious';
+          facialExpression = 'curious';
+        } else if (
+          emotionLower.includes('surpris') ||
+          emotionLower.includes('amaz') ||
+          emotionLower.includes('wonder')
+        ) {
+          speakingDirection = 'excited';
+          facialExpression = 'surprised';
+        } else if (emotionLower.includes('calm') || emotionLower.includes('gentle')) {
+          speakingDirection = 'calm';
+          facialExpression = 'neutral';
+        }
+
+        const lineDurationMs = Math.max(1500, estimateSpeechDurationMs(d.text));
+        const visemeCues = generateVisemeCues(d.text, lineDurationMs);
+
+        const dialogueItem: SceneDialogue = {
+          id: randomUUID(),
+          characterId: matchedChar?.id,
+          characterInstanceId: matchedInst?.instanceId,
+          characterName: d.characterName || 'Character',
+          text: d.text,
+          voice: charVoice,
+          speakingDirection,
+          speed: 1.0,
+          startMs: currentDialogueStartMs,
+          durationMs: lineDurationMs,
+          visemeCues,
+        };
+        dialogueLines.push(dialogueItem);
+
+        if (matchedInst) {
+          expressionCues.push({
+            id: randomUUID(),
+            instanceId: matchedInst.instanceId,
+            characterInstanceId: matchedInst.instanceId,
+            characterId: matchedInst.characterId,
+            expression: facialExpression,
+            startMs: currentDialogueStartMs,
+            durationMs: lineDurationMs + 400,
+          });
+        }
+
+        currentDialogueStartMs += lineDurationMs + 400;
+      }
+
+      // 4. Duration Calculation & Pacing
+      const minRequiredDurationMs = Math.max(
+        4000,
+        speechDurationMs + 1500,
+        currentDialogueStartMs + 600
+      );
+      const requestedDurationMs = (sc.durationSeconds || 15) * 1000;
+      const finalDurationMs = Math.max(minRequiredDurationMs, requestedDurationMs);
+
+      const startMs = runningTimeMs;
+      const endMs = startMs + finalDurationMs;
+      runningTimeMs = endMs;
+
+      // 5. Map semantic actions to valid animation clips
       const animationClips: AnimationClip[] = [];
 
       characterInstances.forEach((inst) => {
         const charName = (inst.name || '').toLowerCase();
-        const charAction = sc.characterActions.find(
+        const charAction = (sc.characterActions || []).find(
           (a) => a.characterName.trim().toLowerCase() === charName
         );
 
@@ -179,22 +301,24 @@ export class ScenePreparationService {
         animationClips.push(clip);
       });
 
-      // 5. Construct full VectorSceneData
+      // 6. Construct full VectorSceneData
       const animationData: VectorSceneData = {
         version: 1,
         viewport: { width: 1280, height: 720 },
         background: undefined,
         characterInstances,
         animationClips,
+        expressionCues,
+        dialogueLines,
       };
 
-      // Attach structured dialogue and actions to animationData for editor & inspector
-      (animationData as any).dialogue = sc.dialogue.map((d) => ({
+      // Attach structured dialogue and actions to animationData for editor & inspector backward compatibility
+      (animationData as any).dialogue = (sc.dialogue || []).map((d) => ({
         speaker: d.characterName,
         line: d.text,
         emotion: d.emotion,
       }));
-      (animationData as any).characterActions = sc.characterActions.map((a) => ({
+      (animationData as any).characterActions = (sc.characterActions || []).map((a) => ({
         characterName: a.characterName,
         action: a.action,
         pose: a.pose,

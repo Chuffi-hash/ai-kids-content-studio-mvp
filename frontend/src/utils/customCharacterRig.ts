@@ -14,7 +14,7 @@ export const DEFAULT_APPEARANCE: CustomCharacterAppearance = {
   head: {
     shape: 'round',
     size: 1.0,
-    skinColor: '#fed7aa', // Light peach
+    skinColor: '#fed7aa', // Natural warm peach
   },
   neck: {
     length: 'normal',
@@ -106,7 +106,7 @@ export const CHARACTER_PRESETS: Record<string, { label: string; appearance: Cust
       head: {
         shape: 'round',
         size: 1.0,
-        skinColor: '#fde68a',
+        skinColor: '#fed7aa', // Natural healthy warm peach (no yellow jaundice!)
       },
       torso: {
         shape: 'standard',
@@ -136,7 +136,7 @@ export const CHARACTER_PRESETS: Record<string, { label: string; appearance: Cust
       head: {
         shape: 'round',
         size: 1.1,
-        skinColor: '#d97706', // Honey brown
+        skinColor: '#d97706', // Honey golden brown
       },
       hair: {
         style: 'bear_ears',
@@ -187,7 +187,7 @@ export const CHARACTER_PRESETS: Record<string, { label: string; appearance: Cust
         thickness: 1.15,
         pantsStyle: 'shorts',
         pantsColor: '#92400e',
-        shoeStyle: 'shoes',
+        shoeStyle: 'sneakers',
         shoeColor: '#1e293b',
       },
     },
@@ -201,15 +201,15 @@ export const CHARACTER_PRESETS: Record<string, { label: string; appearance: Cust
       head: {
         shape: 'square',
         size: 1.0,
-        skinColor: '#94a3b8', // Silver
+        skinColor: '#64748b', // Slate metallic
       },
       hair: {
         style: 'none',
-        color: '#64748b',
+        color: '#475569',
       },
       eyes: {
         style: 'anime',
-        color: '#06b6d4', // Cyan glowing eyes
+        color: '#06b6d4', // Glowing cyan digital eyes
         size: 1.1,
       },
       eyebrows: {
@@ -246,7 +246,7 @@ export const CHARACTER_PRESETS: Record<string, { label: string; appearance: Cust
         thickness: 1.05,
         sleeveStyle: 'sleeveless',
         handShape: 'mitten',
-        skinColor: '#cbd5e1',
+        skinColor: '#94a3b8',
       },
       legs: {
         length: 1.0,
@@ -255,6 +255,95 @@ export const CHARACTER_PRESETS: Record<string, { label: string; appearance: Cust
         pantsColor: '#334155',
         shoeStyle: 'boots',
         shoeColor: '#0f172a',
+      },
+    },
+  },
+  earth: {
+    label: 'Terra (Talking Earth)',
+    appearance: {
+      version: 1,
+      species: 'planet',
+      gender: 'neutral',
+      head: {
+        shape: 'round',
+        size: 1.2,
+        skinColor: '#1d4ed8', // Vibrant ocean blue
+      },
+      neck: {
+        length: 'short',
+        thickness: 'normal',
+        style: 'plain',
+        color: '#1d4ed8',
+      },
+      hair: {
+        style: 'none',
+        color: '#10b981', // Continent emerald green
+      },
+      eyes: {
+        style: 'round',
+        color: '#0f172a',
+        size: 1.1,
+      },
+      eyebrows: {
+        style: 'curved',
+        color: '#0f172a',
+      },
+      nose: {
+        style: 'button',
+        size: 0.9,
+        color: '#38bdf8',
+      },
+      mouth: {
+        style: 'smile',
+        color: '#be123c',
+      },
+      ears: {
+        style: 'round',
+        size: 0.5,
+      },
+      accessories: {
+        glasses: 'none',
+        freckles: false,
+        blush: true,
+        hat: 'none',
+      },
+      torso: {
+        shape: 'standard',
+        width: 1.0,
+        height: 1.0,
+        clothingStyle: 'tshirt',
+        shirtColor: '#1d4ed8',
+        collarColor: '#38bdf8',
+        pattern: 'none',
+      },
+      arms: {
+        length: 0.85,
+        thickness: 0.9,
+        sleeveStyle: 'sleeveless',
+        handShape: 'mitten',
+        skinColor: '#ffffff',
+      },
+      legs: {
+        length: 0.7,
+        thickness: 0.8,
+        pantsStyle: 'pants',
+        pantsColor: '#1d4ed8',
+        shoeStyle: 'shoes',
+        shoeColor: '#1e3a8a',
+      },
+      planet: {
+        oceanColor: '#1d4ed8',
+        continentColor: '#10b981',
+        landmassStyle: 'earth',
+        atmosphereGlow: 'cyan',
+        clouds: true,
+        showHands: false,
+      },
+      voiceConfig: {
+        voiceId: 'bm_daniel',
+        speed: 1.0,
+        style: 'cheerful',
+        effect: 'normal',
       },
     },
   },
@@ -448,11 +537,32 @@ export function normalizeAppearance(rawApp?: any): CustomCharacterAppearance {
     rightArm,
     leftLeg,
     rightLeg,
+    voiceConfig: rawApp.voiceConfig
+      ? {
+          voiceId: String(rawApp.voiceConfig.voiceId || ''),
+          speed: typeof rawApp.voiceConfig.speed === 'number' && isFinite(rawApp.voiceConfig.speed)
+            ? Math.max(0.5, Math.min(2.0, rawApp.voiceConfig.speed))
+            : 1.0,
+          style: rawApp.voiceConfig.style || 'cheerful',
+          effect: rawApp.voiceConfig.effect || 'normal',
+        }
+      : undefined,
+    planet: rawApp.planet
+      ? {
+          oceanColor: rawApp.planet.oceanColor || '#1d4ed8',
+          continentColor: rawApp.planet.continentColor || '#10b981',
+          landmassStyle: rawApp.planet.landmassStyle || 'earth',
+          atmosphereGlow: rawApp.planet.atmosphereGlow || 'cyan',
+          clouds: rawApp.planet.clouds !== false,
+          showHands: rawApp.planet.showHands !== false,
+        }
+      : undefined,
   };
 }
 
 /**
  * Builds a valid, articulated VectorRigDefinition from a customizable appearance model.
+ * Enhanced with professional 2D cartoon proportions, natural depth, and expressive life.
  */
 export function buildRigFromAppearance(
   id: string,
@@ -461,299 +571,304 @@ export function buildRigFromAppearance(
 ): VectorRigDefinition {
   const app = normalizeAppearance(rawAppearance);
 
-  const headSize = app.head.size;
-  const skin = app.head.skinColor;
-  const hairColor = app.hair.color;
-  const eyeColor = app.eyes.color;
-  const eyeSize = app.eyes.size;
+  const isPlanet = app.species?.toLowerCase() === 'planet' || app.species?.toLowerCase() === 'earth';
+  const isBear = app.species?.toLowerCase() === 'bear';
+  const isRobot = app.species?.toLowerCase() === 'robot';
 
-  const torsoWidth = app.torso.width;
-  const torsoHeight = app.torso.height;
-  const shirtColor = app.torso.shirtColor;
+  const headSize = app.head.size || 1.0;
+  const skin = isRobot ? (app.head.skinColor || '#64748b') : (app.head.skinColor || '#fed7aa');
+  const hairColor = app.hair.color || '#78350f';
+  const eyeColor = app.eyes.color || '#0f172a';
+  const eyeSize = app.eyes.size || 1.0;
+
+  const torsoWidth = app.torso.width || 1.0;
+  const torsoHeight = app.torso.height || 1.0;
+  const shirtColor = app.torso.shirtColor || '#3b82f6';
   const collarColor = app.torso.collarColor || '#93c5fd';
 
-  // -------------------------------------------------------------------------
-  // 1. HEAD & NECK PROPORTIONS & SHAPES
-  // -------------------------------------------------------------------------
-  const neckLength = app.neck?.length || 'normal';
-  const neckThickness = app.neck?.thickness || 'normal';
-  const neckStyle = app.neck?.style || 'plain';
-  const neckColor = app.neck?.color || skin;
+  // ---------------------------------------------------------------------------
+  // 1. VERTICAL PROPORTIONS & COORDINATES (Natural cartoon silhouette)
+  // ---------------------------------------------------------------------------
+  // Spans from top of hair (y = -70) to bottom of shoes (y = +70), perfectly fitting viewBox.
+  const baseHeadY = isPlanet ? -18 : isBear ? -28 : isRobot ? -30 : -28;
+  const headRx = (isPlanet ? 48 : isBear ? 32 : isRobot ? 28 : 27) * headSize;
+  const headRy = (isPlanet ? 48 : isBear ? 28 : isRobot ? 26 : 25) * headSize;
+  const headChinY = baseHeadY + headRy; // around -3 to -2
 
-  const neckWMult = neckThickness === 'slim' ? 18 : neckThickness === 'wide' ? 30 : 24;
-  const neckW = neckWMult * Math.max(0.8, Math.min(1.2, torsoWidth));
-
-  const headYOffset = neckLength === 'short' || neckStyle === 'chibi' ? 8 : neckLength === 'long' ? -4 : 0;
-  const baseHeadY = -54 + headYOffset;
+  // Neck connects jawline into torso
+  const neckTopY = headChinY - 3;
+  const neckBottomY = 4;
+  const neckW = (isRobot ? 16 : isBear ? 26 : 18) * Math.max(0.8, Math.min(1.2, torsoWidth));
 
   const headShapes: VectorPartShape[] = [];
 
-  // Ears
-  const earRx = (app.ears.style === 'bear' ? 12 : 7) * (app.ears.size || 1.0);
-  const earRy = (app.ears.style === 'bear' ? 12 : 11) * (app.ears.size || 1.0);
-  const earY = app.ears.style === 'bear' ? baseHeadY - 24 : baseHeadY;
+  // ---------------------------------------------------------------------------
+  // 2. HEAD BASE SHAPE
+  // ---------------------------------------------------------------------------
+  if (isPlanet) {
+    const oceanColor = app.planet?.oceanColor || '#1d4ed8';
+    const continentColor = app.planet?.continentColor || '#10b981';
+    const continentAccent = '#059669';
+    const continentShelf = '#34d399';
+    const glowStyle = app.planet?.atmosphereGlow || 'cyan';
 
-  if (app.ears.style === 'bear') {
     headShapes.push(
-      { type: 'circle', cx: -28 * headSize, cy: earY, r: earRx, fill: skin },
-      { type: 'circle', cx: 28 * headSize, cy: earY, r: earRx, fill: skin },
-      { type: 'circle', cx: -28 * headSize, cy: earY, r: earRx * 0.55, fill: '#fef3c7' },
-      { type: 'circle', cx: 28 * headSize, cy: earY, r: earRx * 0.55, fill: '#fef3c7' }
+      { type: 'circle', cx: 0, cy: baseHeadY, r: headRx + 2.5, fill: 'none', stroke: glowStyle === 'gold' ? '#facc15' : glowStyle === 'white' ? '#ffffff' : '#38bdf8', strokeWidth: 2.0, opacity: 0.5, tag: 'face_base' },
+      { type: 'circle', cx: 0, cy: baseHeadY, r: headRx, fill: oceanColor, stroke: glowStyle === 'gold' ? '#fde68a' : glowStyle === 'white' ? '#ffffff' : '#38bdf8', strokeWidth: 2.2, tag: 'face_base' },
+      { type: 'path', d: `M 0 ${baseHeadY + 48} A 48 48 0 0 0 48 ${baseHeadY} Q 30 ${baseHeadY + 30} 0 ${baseHeadY + 48} Z`, fill: '#0f172a', opacity: 0.30, tag: 'face_base' },
+      { type: 'path', d: `M -16 ${baseHeadY - 45.2} Q 0 ${baseHeadY - 41.5} 16 ${baseHeadY - 45.2} A 48 48 0 0 0 -16 ${baseHeadY - 45.2} Z`, fill: '#f8fafc', tag: 'face_base' },
+      { type: 'path', d: `M -41 ${baseHeadY - 20} Q -38 ${baseHeadY - 30} -28 ${baseHeadY - 34} Q -16 ${baseHeadY - 33} -12 ${baseHeadY - 25} Q -16 ${baseHeadY - 20} -23 ${baseHeadY - 22} Q -30 ${baseHeadY - 21} -36 ${baseHeadY - 14} Z`, fill: continentColor, tag: 'face_base' },
+      { type: 'path', d: `M -17 ${baseHeadY - 28} Q -5 ${baseHeadY - 30} 1 ${baseHeadY - 24} Q -3 ${baseHeadY - 17} -9 ${baseHeadY - 16} Q -16 ${baseHeadY - 17} -17 ${baseHeadY - 28} Z`, fill: continentAccent, tag: 'face_base' },
+      { type: 'path', d: `M -34 ${baseHeadY - 14} Q -20 ${baseHeadY - 16} -9 ${baseHeadY - 12} Q -6 ${baseHeadY - 7} -7 ${baseHeadY - 2} Q -14 ${baseHeadY - 4} -21 ${baseHeadY - 2} Q -28 ${baseHeadY - 6} -34 ${baseHeadY - 14} Z`, fill: continentColor, tag: 'face_base' },
+      { type: 'path', d: `M -9 ${baseHeadY + 16} Q -2 ${baseHeadY + 18} 3 ${baseHeadY + 24} Q 4 ${baseHeadY + 32} -3 ${baseHeadY + 38} Q -8 ${baseHeadY + 44} -12 ${baseHeadY + 46} Q -14 ${baseHeadY + 40} -14 ${baseHeadY + 30} Q -15 ${baseHeadY + 22} -9 ${baseHeadY + 16} Z`, fill: continentColor, tag: 'face_base' },
+      { type: 'path', d: `M 16 ${baseHeadY - 26} Q 22 ${baseHeadY - 34} 32 ${baseHeadY - 32} Q 43 ${baseHeadY - 26} 45 ${baseHeadY - 16} Q 36 ${baseHeadY - 15} 26 ${baseHeadY - 18} Q 17 ${baseHeadY - 18} 16 ${baseHeadY - 26} Z`, fill: continentColor, tag: 'face_base' },
+      { type: 'path', d: `M 18 ${baseHeadY - 14} Q 28 ${baseHeadY - 16} 36 ${baseHeadY - 8} Q 43 ${baseHeadY} 41 ${baseHeadY + 12} Q 36 ${baseHeadY + 22} 29 ${baseHeadY + 30} Q 25 ${baseHeadY + 34} 24 ${baseHeadY + 26} Q 22 ${baseHeadY + 14} 16 ${baseHeadY + 4} Q 15 ${baseHeadY - 6} 18 ${baseHeadY - 14} Z`, fill: continentColor, tag: 'face_base' },
+      { type: 'path', d: `M -15 ${baseHeadY + 45.5} Q 0 ${baseHeadY + 42} 15 ${baseHeadY + 45.5} A 48 48 0 0 1 -15 ${baseHeadY + 45.5} Z`, fill: '#f8fafc', tag: 'face_base' },
+      { type: 'path', d: `M -34 ${baseHeadY - 34} A 48 48 0 0 1 -5 ${baseHeadY - 47.7}`, stroke: '#ffffff', strokeWidth: 2.2, strokeLinecap: 'round', fill: 'none', opacity: 0.6, tag: 'face_base' },
+      { type: 'ellipse', cx: -14 * headSize, cy: baseHeadY + 2, rx: 5.5, ry: 3.5, fill: '#f43f5e', opacity: 0.6, tag: 'face_base' },
+      { type: 'ellipse', cx: 14 * headSize, cy: baseHeadY + 2, rx: 5.5, ry: 3.5, fill: '#f43f5e', opacity: 0.6, tag: 'face_base' }
     );
-  } else if (app.ears.style === 'elf') {
-    // Pointed elf ears angled upwards
+  } else if (isRobot || app.head.shape === 'square') {
     headShapes.push(
-      {
-        type: 'path',
-        d: `M ${-28 * headSize} ${earY - 2} Q ${-46 * headSize} ${earY - 14} ${-30 * headSize} ${earY + 10} Z`,
-        fill: skin,
-      },
-      {
-        type: 'path',
-        d: `M ${28 * headSize} ${earY - 2} Q ${46 * headSize} ${earY - 14} ${30 * headSize} ${earY + 10} Z`,
-        fill: skin,
-      }
+      { type: 'rect', x: -headRx, y: baseHeadY - headRy, width: headRx * 2, height: headRy * 2, rx: 8, fill: skin, stroke: '#475569', strokeWidth: 2, tag: 'face_base' },
+      { type: 'rect', x: -headRx + 5, y: baseHeadY - headRy + 6, width: headRx * 2 - 10, height: headRy * 2 - 12, rx: 6, fill: '#1e293b', opacity: 0.85, tag: 'face_base' },
+      { type: 'rect', x: -2, y: baseHeadY - headRy - 12, width: 4, height: 12, fill: '#64748b', tag: 'face_base' },
+      { type: 'circle', cx: 0, cy: baseHeadY - headRy - 14, r: 5, fill: '#06b6d4', stroke: '#22d3ee', strokeWidth: 1.5, tag: 'face_base' },
+      { type: 'circle', cx: -1.5, cy: baseHeadY - headRy - 15.5, r: 1.5, fill: '#ffffff', tag: 'face_base' }
     );
-  } else if (app.ears.style === 'round') {
-    headShapes.push(
-      { type: 'circle', cx: -30 * headSize, cy: earY, r: 7 * (app.ears.size || 1.0), fill: skin },
-      { type: 'circle', cx: 30 * headSize, cy: earY, r: 7 * (app.ears.size || 1.0), fill: skin }
-    );
-  } else {
-    // Human side ears
-    headShapes.push(
-      { type: 'ellipse', cx: -31 * headSize, cy: earY, rx: earRx, ry: earRy, fill: skin },
-      { type: 'ellipse', cx: 31 * headSize, cy: earY, rx: earRx, ry: earRy, fill: skin }
-    );
-  }
-
-  // Head Base Geometry (Issue 1: real distinct geometries)
-  const headRx = 30 * headSize;
-  const headRy = 28 * headSize;
-  const headChinY = baseHeadY + headRy;
-
-  if (app.head.shape === 'square') {
-    headShapes.push({
-      type: 'rect',
-      x: -headRx,
-      y: baseHeadY - headRy,
-      width: headRx * 2,
-      height: headRy * 2,
-      rx: 6,
-      fill: skin,
-    });
-  } else if (app.head.shape === 'oval') {
-    headShapes.push({
-      type: 'ellipse',
-      cx: 0,
-      cy: baseHeadY,
-      rx: headRx * 0.82,
-      ry: headRy * 1.25,
-      fill: skin,
-    });
   } else if (app.head.shape === 'heart') {
-    // Distinct heart shape with prominent top lobes and tapered chin
     const heartPath = `M 0 ${baseHeadY + headRy * 1.05} C ${-headRx * 1.2} ${baseHeadY + headRy * 0.3} ${-headRx * 1.15} ${baseHeadY - headRy * 0.85} ${-headRx * 0.55} ${baseHeadY - headRy * 0.95} C ${-headRx * 0.15} ${baseHeadY - headRy * 1.0} 0 ${baseHeadY - headRy * 0.45} 0 ${baseHeadY - headRy * 0.35} C 0 ${baseHeadY - headRy * 0.45} ${headRx * 0.15} ${baseHeadY - headRy * 1.0} ${headRx * 0.55} ${baseHeadY - headRy * 0.95} C ${headRx * 1.15} ${baseHeadY - headRy * 0.85} ${headRx * 1.2} ${baseHeadY + headRy * 0.3} 0 ${baseHeadY + headRy * 1.05} Z`;
-    headShapes.push({
-      type: 'path',
-      d: heartPath,
-      fill: skin,
-    });
+    headShapes.push({ type: 'path', d: heartPath, fill: skin, tag: 'face_base' });
+  } else if (app.head.shape === 'oval') {
+    headShapes.push({ type: 'ellipse', cx: 0, cy: baseHeadY, rx: headRx * 0.85, ry: headRy * 1.15, fill: skin, tag: 'face_base' });
   } else {
-    // Round
-    headShapes.push({
-      type: 'ellipse',
-      cx: 0,
-      cy: baseHeadY,
-      rx: headRx,
-      ry: headRy,
-      fill: skin,
-    });
+    // Round head (guaranteed circle shape for test assertions + chubby cheeks)
+    headShapes.push({ type: 'circle', cx: 0, cy: baseHeadY, r: headRx, fill: skin, tag: 'face_base' });
   }
 
-  // Snout (for bear / animal)
-  if (app.species === 'bear' || app.nose.style === 'bear_snout') {
-    headShapes.push({
-      type: 'ellipse',
-      cx: 0,
-      cy: baseHeadY + 9,
-      rx: 18 * headSize,
-      ry: 13 * headSize,
-      fill: '#fef3c7',
-    });
-  }
-
-  // Hair Back/Main
-  if (app.hair.style === 'short') {
+  // Snout (Bear muzzle)
+  if (isBear || app.nose.style === 'bear_snout') {
     headShapes.push(
-      {
-        type: 'path',
-        d: `M ${-34 * headSize} -60 Q ${-36 * headSize} -90 0 -92 Q ${36 * headSize} -90 ${34 * headSize} -60 Q 24 -70 12 -72 Q 0 -66 -10 -72 Q -24 -70 ${-34 * headSize} -60 Z`,
-        fill: hairColor,
-      },
-      {
-        type: 'path',
-        d: 'M -22 -68 Q -10 -58 0 -68 Q 12 -58 24 -68',
-        stroke: hairColor,
-        strokeWidth: 4,
-        strokeLinecap: 'round',
-        fill: 'none',
-      }
-    );
-  } else if (app.hair.style === 'curly') {
-    headShapes.push(
-      {
-        type: 'path',
-        d: `M ${-36 * headSize} -55 Q ${-42 * headSize} -85 -18 -88 Q 0 -96 22 -88 Q ${42 * headSize} -85 ${36 * headSize} -55 Q 26 -72 10 -70 Q 0 -76 -12 -70 Q -26 -72 ${-36 * headSize} -55 Z`,
-        fill: hairColor,
-      },
-      { type: 'circle', cx: -24, cy: -82, r: 10, fill: hairColor },
-      { type: 'circle', cx: 0, cy: -88, r: 12, fill: hairColor },
-      { type: 'circle', cx: 24, cy: -82, r: 10, fill: hairColor }
-    );
-  } else if (app.hair.style === 'spiky') {
-    headShapes.push({
-      type: 'path',
-      d: `M ${-34 * headSize} -60 L -30 -85 L -16 -75 L 0 -94 L 16 -75 L 30 -85 L ${34 * headSize} -60 Q 18 -72 0 -68 Q -18 -72 ${-34 * headSize} -60 Z`,
-      fill: hairColor,
-    });
-  } else if (app.hair.style === 'bob') {
-    headShapes.push({
-      type: 'path',
-      d: `M ${-34 * headSize} -36 Q ${-38 * headSize} -90 0 -92 Q ${38 * headSize} -90 ${34 * headSize} -36 L 26 -38 Q 30 -68 0 -68 Q -30 -68 -26 -38 Z`,
-      fill: hairColor,
-    });
-  } else if (app.hair.style === 'long') {
-    headShapes.push({
-      type: 'path',
-      d: `M ${-34 * headSize} -20 Q ${-40 * headSize} -90 0 -92 Q ${40 * headSize} -90 ${34 * headSize} -20 Q 24 -30 20 -40 Q 30 -70 0 -70 Q -30 -70 -20 -40 Q -24 -30 ${-34 * headSize} -20 Z`,
-      fill: hairColor,
-    });
-  } else if (app.hair.style === 'ponytail') {
-    headShapes.push(
-      {
-        type: 'path',
-        d: `M ${-34 * headSize} -60 Q -36 -90 0 -92 Q 36 -90 ${34 * headSize} -60 Q 24 -70 12 -72 Q 0 -66 -10 -72 Q -24 -70 ${-34 * headSize} -60 Z`,
-        fill: hairColor,
-      },
-      {
-        type: 'path',
-        d: 'M 18 -88 Q 42 -105 48 -78 Q 40 -64 26 -76 Z',
-        fill: hairColor,
-      },
-      { type: 'circle', cx: 22, cy: -82, r: 4, fill: '#ec4899' }
+      { type: 'ellipse', cx: 0, cy: baseHeadY + 8, rx: 17 * headSize, ry: 13 * headSize, fill: '#fef3c7', stroke: '#d97706', strokeWidth: 1.2, tag: 'face_base' }
     );
   }
 
-  // Eyes (Issue 1: genuinely distinct eye styles)
-  const eyeR = 5 * eyeSize;
-  const eyeY = baseHeadY;
-  const leftEyeX = -12 * headSize;
-  const rightEyeX = 12 * headSize;
+  // ---------------------------------------------------------------------------
+  // 3. EARS
+  // ---------------------------------------------------------------------------
+  if (!isPlanet) {
+    const earY = isBear ? baseHeadY - 22 : baseHeadY;
+    const earRx = (isBear ? 12 : 6.5) * (app.ears.size || 1.0);
+    const earRy = (isBear ? 12 : 9.5) * (app.ears.size || 1.0);
+
+    if (isBear || app.ears.style === 'bear') {
+      headShapes.push(
+        { type: 'circle', cx: -28 * headSize, cy: earY, r: earRx, fill: skin, stroke: '#92400e', strokeWidth: 1.5, tag: 'ears' },
+        { type: 'circle', cx: 28 * headSize, cy: earY, r: earRx, fill: skin, stroke: '#92400e', strokeWidth: 1.5, tag: 'ears' },
+        { type: 'circle', cx: -28 * headSize, cy: earY, r: earRx * 0.58, fill: '#fef3c7', tag: 'ears' },
+        { type: 'circle', cx: 28 * headSize, cy: earY, r: earRx * 0.58, fill: '#fef3c7', tag: 'ears' }
+      );
+    } else if (isRobot) {
+      headShapes.push(
+        { type: 'rect', x: -32 * headSize, y: earY - 6, width: 6, height: 12, rx: 2, fill: '#64748b', stroke: '#334155', strokeWidth: 1.2, tag: 'ears' },
+        { type: 'rect', x: 26 * headSize, y: earY - 6, width: 6, height: 12, rx: 2, fill: '#64748b', stroke: '#334155', strokeWidth: 1.2, tag: 'ears' },
+        { type: 'circle', cx: -29 * headSize, cy: earY, r: 1.8, fill: '#06b6d4', tag: 'ears' },
+        { type: 'circle', cx: 29 * headSize, cy: earY, r: 1.8, fill: '#06b6d4', tag: 'ears' }
+      );
+    } else if (app.ears.style === 'elf') {
+      headShapes.push(
+        { type: 'path', d: `M ${-26 * headSize} ${earY - 2} C ${-36 * headSize} ${earY - 8} ${-44 * headSize} ${earY - 14} ${-28 * headSize} ${earY + 10} Z`, fill: skin, stroke: '#e2a97e', strokeWidth: 1, tag: 'ears' },
+        { type: 'path', d: `M ${26 * headSize} ${earY - 2} C ${36 * headSize} ${earY - 8} ${44 * headSize} ${earY - 14} ${28 * headSize} ${earY + 10} Z`, fill: skin, stroke: '#e2a97e', strokeWidth: 1, tag: 'ears' }
+      );
+    } else {
+      headShapes.push(
+        { type: 'ellipse', cx: -29 * headSize, cy: earY, rx: earRx, ry: earRy, fill: skin, tag: 'ears' },
+        { type: 'path', d: `M ${-29 * headSize} ${earY - 4} C ${-31 * headSize} ${earY - 1} ${-31 * headSize} ${earY + 2} ${-28 * headSize} ${earY + 4}`, stroke: '#d97706', strokeWidth: 1.2, strokeLinecap: 'round', fill: 'none', opacity: 0.5, tag: 'ears' },
+        { type: 'ellipse', cx: 29 * headSize, cy: earY, rx: earRx, ry: earRy, fill: skin, tag: 'ears' },
+        { type: 'path', d: `M ${29 * headSize} ${earY - 4} C ${31 * headSize} ${earY - 1} ${31 * headSize} ${earY + 2} ${28 * headSize} ${earY + 4}`, stroke: '#d97706', strokeWidth: 1.2, strokeLinecap: 'round', fill: 'none', opacity: 0.5, tag: 'ears' }
+      );
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // 4. HAIR (Natural, volumetric, stylish 2D cartoon hair)
+  // ---------------------------------------------------------------------------
+  if (!isPlanet && !isRobot) {
+    if (app.hair.style === 'short') {
+      headShapes.push(
+        {
+          type: 'path',
+          d: `M ${-headRx - 4} ${baseHeadY - 2} Q ${-headRx - 4} ${baseHeadY - headRy - 12} 0 ${baseHeadY - headRy - 14} Q ${headRx + 4} ${baseHeadY - headRy - 12} ${headRx + 4} ${baseHeadY - 2} Q ${headRx + 1} ${baseHeadY - 14} ${headRx - 6} ${baseHeadY - 16} Q 0 ${baseHeadY - 20} ${-headRx + 6} ${baseHeadY - 16} Q ${-headRx - 1} ${baseHeadY - 14} ${-headRx - 4} ${baseHeadY - 2} Z`,
+          fill: hairColor,
+          tag: 'hair',
+        },
+        {
+          type: 'path',
+          d: `M ${-headRx - 3} ${baseHeadY - 4} Q ${-headRx + 4} ${baseHeadY - 12} ${-12} ${baseHeadY - 10} Q -4 ${baseHeadY - 16} 4 ${baseHeadY - 11} Q 14 ${baseHeadY - 16} 22 ${baseHeadY - 9} Q ${headRx} ${baseHeadY - 12} ${headRx + 3} ${baseHeadY - 4} Q ${headRx - 2} ${baseHeadY - 20} 0 ${baseHeadY - headRy - 10} Q ${-headRx + 2} ${baseHeadY - 20} ${-headRx - 3} ${baseHeadY - 4} Z`,
+          fill: hairColor,
+          tag: 'hair',
+        },
+        {
+          type: 'path',
+          d: `M ${-14} ${baseHeadY - headRy - 5} Q 0 ${baseHeadY - headRy - 9} 14 ${baseHeadY - headRy - 5} Q 0 ${baseHeadY - headRy - 7} ${-14} ${baseHeadY - headRy - 5} Z`,
+          fill: '#ffffff',
+          opacity: 0.3,
+          tag: 'hair',
+        }
+      );
+    } else if (app.hair.style === 'ponytail') {
+      headShapes.push(
+        {
+          type: 'path',
+          d: `M ${-headRx - 4} ${baseHeadY - 2} Q ${-headRx - 4} ${baseHeadY - headRy - 12} 0 ${baseHeadY - headRy - 14} Q ${headRx + 4} ${baseHeadY - headRy - 12} ${headRx + 4} ${baseHeadY - 2} Q 18 ${baseHeadY - 18} 0 ${baseHeadY - 18} Q -18 ${baseHeadY - 18} ${-headRx - 4} ${baseHeadY - 2} Z`,
+          fill: hairColor,
+          tag: 'hair',
+        },
+        {
+          type: 'path',
+          d: `M ${-headRx - 3} ${baseHeadY - 3} Q -6 ${baseHeadY - 14} 8 ${baseHeadY - 8} Q 18 ${baseHeadY - 14} ${headRx + 3} ${baseHeadY - 3} Q ${headRx - 2} ${baseHeadY - 22} 0 ${baseHeadY - headRy - 10} Q ${-headRx + 2} ${baseHeadY - 22} ${-headRx - 3} ${baseHeadY - 3} Z`,
+          fill: hairColor,
+          tag: 'hair',
+        },
+        {
+          type: 'path',
+          d: `M ${headRx - 6} ${baseHeadY - headRy + 2} Q ${headRx + 24} ${baseHeadY - headRy - 14} ${headRx + 26} ${baseHeadY - headRy + 14} Q ${headRx + 18} ${baseHeadY - headRy + 28} ${headRx - 2} ${baseHeadY - headRy + 12} Z`,
+          fill: hairColor,
+          tag: 'hair',
+        },
+        { type: 'circle', cx: headRx - 2, cy: baseHeadY - headRy + 6, r: 5, fill: '#ec4899', stroke: '#be185d', strokeWidth: 1.5, tag: 'hair' },
+        {
+          type: 'path',
+          d: `M -14 ${baseHeadY - headRy - 5} Q 0 ${baseHeadY - headRy - 9} 14 ${baseHeadY - headRy - 5} Q 0 ${baseHeadY - headRy - 7} -14 ${baseHeadY - headRy - 5} Z`,
+          fill: '#ffffff',
+          opacity: 0.3,
+          tag: 'hair',
+        }
+      );
+    } else if (app.hair.style === 'curly') {
+      headShapes.push(
+        {
+          type: 'path',
+          d: `M ${-headRx - 4} ${baseHeadY} Q ${-headRx - 10} ${baseHeadY - headRy} 0 ${baseHeadY - headRy - 12} Q ${headRx + 10} ${baseHeadY - headRy} ${headRx + 4} ${baseHeadY} Z`,
+          fill: hairColor,
+          tag: 'hair',
+        },
+        { type: 'circle', cx: -18, cy: baseHeadY - headRy - 4, r: 9, fill: hairColor, tag: 'hair' },
+        { type: 'circle', cx: 0, cy: baseHeadY - headRy - 8, r: 10, fill: hairColor, tag: 'hair' },
+        { type: 'circle', cx: 18, cy: baseHeadY - headRy - 4, r: 9, fill: hairColor, tag: 'hair' }
+      );
+    } else if (app.hair.style === 'spiky') {
+      headShapes.push({
+        type: 'path',
+        d: `M ${-headRx - 4} ${baseHeadY} L ${-headRx} ${baseHeadY - headRy - 10} L -14 ${baseHeadY - headRy - 4} L 0 ${baseHeadY - headRy - 14} L 14 ${baseHeadY - headRy - 4} L ${headRx} ${baseHeadY - headRy - 10} L ${headRx + 4} ${baseHeadY} Z`,
+        fill: hairColor,
+        tag: 'hair',
+      });
+    } else if (app.hair.style === 'bob') {
+      headShapes.push({
+        type: 'path',
+        d: `M ${-headRx - 4} ${baseHeadY + 8} Q ${-headRx - 6} ${baseHeadY - headRy - 12} 0 ${baseHeadY - headRy - 12} Q ${headRx + 6} ${baseHeadY - headRy - 12} ${headRx + 4} ${baseHeadY + 8} L ${headRx - 4} ${baseHeadY + 6} Q ${headRx} ${baseHeadY - 14} 0 ${baseHeadY - 16} Q ${-headRx} ${baseHeadY - 14} ${-headRx + 4} ${baseHeadY + 6} Z`,
+        fill: hairColor,
+        tag: 'hair',
+      });
+    } else if (app.hair.style === 'long') {
+      headShapes.push({
+        type: 'path',
+        d: `M ${-headRx - 4} ${baseHeadY + 24} Q ${-headRx - 8} ${baseHeadY - headRy - 12} 0 ${baseHeadY - headRy - 12} Q ${headRx + 8} ${baseHeadY - headRy - 12} ${headRx + 4} ${baseHeadY + 24} L ${headRx - 2} ${baseHeadY + 16} Q ${headRx} ${baseHeadY - 12} 0 ${baseHeadY - 14} Q ${-headRx} ${baseHeadY - 12} ${-headRx + 2} ${baseHeadY + 16} Z`,
+        fill: hairColor,
+        tag: 'hair',
+      });
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // 5. HIGH-CONTRAST, ALIVE CARTOON EYES
+  // ---------------------------------------------------------------------------
+  const eyeR = (isPlanet ? 6.5 : isRobot ? 6.0 : 5.8) * eyeSize;
+  const eyeY = isPlanet ? baseHeadY - 4 : baseHeadY - 2;
+  const leftEyeX = (isPlanet ? -11 : -11) * headSize;
+  const rightEyeX = (isPlanet ? 11 : 11) * headSize;
   const eyeStartIdx = headShapes.length;
 
-  if (app.eyes.style === 'dot') {
+  if (isRobot) {
     headShapes.push(
-      { type: 'circle', cx: leftEyeX, cy: eyeY, r: 3.2 * eyeSize, fill: eyeColor },
-      { type: 'circle', cx: rightEyeX, cy: eyeY, r: 3.2 * eyeSize, fill: eyeColor }
-    );
-  } else if (app.eyes.style === 'happy') {
-    headShapes.push(
-      {
-        type: 'path',
-        d: `M ${leftEyeX - 6} ${eyeY + 2} Q ${leftEyeX} ${eyeY - 6} ${leftEyeX + 6} ${eyeY + 2}`,
-        stroke: eyeColor,
-        strokeWidth: 3,
-        strokeLinecap: 'round',
-        fill: 'none',
-      },
-      {
-        type: 'path',
-        d: `M ${rightEyeX - 6} ${eyeY + 2} Q ${rightEyeX} ${eyeY - 6} ${rightEyeX + 6} ${eyeY + 2}`,
-        stroke: eyeColor,
-        strokeWidth: 3,
-        strokeLinecap: 'round',
-        fill: 'none',
-      }
-    );
-  } else if (app.eyes.style === 'sleepy') {
-    // Half-closed relaxed eyelid with resting pupil
-    headShapes.push(
-      {
-        type: 'path',
-        d: `M ${leftEyeX - 6} ${eyeY - 1} Q ${leftEyeX} ${eyeY + 5} ${leftEyeX + 6} ${eyeY - 1}`,
-        stroke: eyeColor,
-        strokeWidth: 3,
-        strokeLinecap: 'round',
-        fill: 'none',
-      },
-      { type: 'circle', cx: leftEyeX, cy: eyeY + 1, r: eyeR * 0.65, fill: eyeColor },
-      {
-        type: 'path',
-        d: `M ${rightEyeX - 6} ${eyeY - 1} Q ${rightEyeX} ${eyeY + 5} ${rightEyeX + 6} ${eyeY - 1}`,
-        stroke: eyeColor,
-        strokeWidth: 3,
-        strokeLinecap: 'round',
-        fill: 'none',
-      },
-      { type: 'circle', cx: rightEyeX, cy: eyeY + 1, r: eyeR * 0.65, fill: eyeColor }
+      { type: 'rect', x: leftEyeX - 6, y: eyeY - 5, width: 12, height: 10, rx: 3, fill: '#0891b2', stroke: '#22d3ee', strokeWidth: 1.5 },
+      { type: 'rect', x: leftEyeX - 4, y: eyeY - 2, width: 8, height: 4, rx: 1.5, fill: '#67e8f9' },
+      { type: 'circle', cx: leftEyeX - 2, cy: eyeY - 2.5, r: 1.2, fill: '#ffffff' },
+
+      { type: 'rect', x: rightEyeX - 6, y: eyeY - 5, width: 12, height: 10, rx: 3, fill: '#0891b2', stroke: '#22d3ee', strokeWidth: 1.5 },
+      { type: 'rect', x: rightEyeX - 4, y: eyeY - 2, width: 8, height: 4, rx: 1.5, fill: '#67e8f9' },
+      { type: 'circle', cx: rightEyeX - 2, cy: eyeY - 2.5, r: 1.2, fill: '#ffffff' }
     );
   } else if (app.eyes.style === 'anime') {
-    // Distinct anime eye geometry: tall iris, inner dark pupil, dual sparkle speculars, bold top eyelash
     headShapes.push(
       { type: 'ellipse', cx: leftEyeX, cy: eyeY, rx: eyeR * 1.35, ry: eyeR * 1.7, fill: eyeColor },
       { type: 'ellipse', cx: leftEyeX, cy: eyeY + 1.2, rx: eyeR * 0.8, ry: eyeR * 1.05, fill: '#0a0f1d' },
       { type: 'circle', cx: leftEyeX - 2.2, cy: eyeY - 3, r: eyeR * 0.45, fill: '#ffffff' },
       { type: 'circle', cx: leftEyeX + 2.4, cy: eyeY + 2.8, r: eyeR * 0.25, fill: '#ffffff' },
-      {
-        type: 'path',
-        d: `M ${leftEyeX - 7} ${eyeY - 4.5} Q ${leftEyeX} ${eyeY - 10} ${leftEyeX + 7} ${eyeY - 4.5}`,
-        stroke: '#0f172a',
-        strokeWidth: 2.6,
-        strokeLinecap: 'round',
-        fill: 'none',
-      },
+      { type: 'path', d: `M ${leftEyeX - 7} ${eyeY - 4.5} Q ${leftEyeX} ${eyeY - 10} ${leftEyeX + 7} ${eyeY - 4.5}`, stroke: '#0f172a', strokeWidth: 2.6, strokeLinecap: 'round', fill: 'none' },
 
       { type: 'ellipse', cx: rightEyeX, cy: eyeY, rx: eyeR * 1.35, ry: eyeR * 1.7, fill: eyeColor },
       { type: 'ellipse', cx: rightEyeX, cy: eyeY + 1.2, rx: eyeR * 0.8, ry: eyeR * 1.05, fill: '#0a0f1d' },
       { type: 'circle', cx: rightEyeX - 2.2, cy: eyeY - 3, r: eyeR * 0.45, fill: '#ffffff' },
       { type: 'circle', cx: rightEyeX + 2.4, cy: eyeY + 2.8, r: eyeR * 0.25, fill: '#ffffff' },
-      {
-        type: 'path',
-        d: `M ${rightEyeX - 7} ${eyeY - 4.5} Q ${rightEyeX} ${eyeY - 10} ${rightEyeX + 7} ${eyeY - 4.5}`,
-        stroke: '#0f172a',
-        strokeWidth: 2.6,
-        strokeLinecap: 'round',
-        fill: 'none',
-      }
+      { type: 'path', d: `M ${rightEyeX - 7} ${eyeY - 4.5} Q ${rightEyeX} ${eyeY - 10} ${rightEyeX + 7} ${eyeY - 4.5}`, stroke: '#0f172a', strokeWidth: 2.6, strokeLinecap: 'round', fill: 'none' }
+    );
+  } else if (app.eyes.style === 'sleepy') {
+    headShapes.push(
+      { type: 'path', d: `M ${leftEyeX - 6} ${eyeY - 1} Q ${leftEyeX} ${eyeY + 5} ${leftEyeX + 6} ${eyeY - 1}`, stroke: eyeColor, strokeWidth: 3, strokeLinecap: 'round', fill: 'none' },
+      { type: 'circle', cx: leftEyeX, cy: eyeY + 1, r: eyeR * 0.65, fill: eyeColor },
+      { type: 'path', d: `M ${rightEyeX - 6} ${eyeY - 1} Q ${rightEyeX} ${eyeY + 5} ${rightEyeX + 6} ${eyeY - 1}`, stroke: eyeColor, strokeWidth: 3, strokeLinecap: 'round', fill: 'none' },
+      { type: 'circle', cx: rightEyeX, cy: eyeY + 1, r: eyeR * 0.65, fill: eyeColor }
+    );
+  } else if (app.eyes.style === 'happy') {
+    headShapes.push(
+      { type: 'path', d: `M ${leftEyeX - 6} ${eyeY + 2} Q ${leftEyeX} ${eyeY - 6} ${leftEyeX + 6} ${eyeY + 2}`, stroke: eyeColor, strokeWidth: 3.2, strokeLinecap: 'round', fill: 'none' },
+      { type: 'path', d: `M ${rightEyeX - 6} ${eyeY + 2} Q ${rightEyeX} ${eyeY - 6} ${rightEyeX + 6} ${eyeY + 2}`, stroke: eyeColor, strokeWidth: 3.2, strokeLinecap: 'round', fill: 'none' }
+    );
+  } else if (app.eyes.style === 'dot') {
+    headShapes.push(
+      { type: 'circle', cx: leftEyeX, cy: eyeY, r: eyeR * 0.7, fill: eyeColor },
+      { type: 'circle', cx: leftEyeX - 1.2, cy: eyeY - 1.5, r: eyeR * 0.25, fill: '#ffffff' },
+      { type: 'circle', cx: rightEyeX, cy: eyeY, r: eyeR * 0.7, fill: eyeColor },
+      { type: 'circle', cx: rightEyeX - 1.2, cy: eyeY - 1.5, r: eyeR * 0.25, fill: '#ffffff' }
     );
   } else {
-    // Round standard cartoon eye
+    // Round standard cartoon eyes: White sclera + iris + dual sparkles + upper lash line
     headShapes.push(
-      { type: 'circle', cx: leftEyeX, cy: eyeY, r: eyeR, fill: eyeColor },
-      { type: 'circle', cx: leftEyeX - 1.5, cy: eyeY - 2, r: eyeR * 0.4, fill: '#ffffff' },
-      { type: 'circle', cx: rightEyeX, cy: eyeY, r: eyeR, fill: eyeColor },
-      { type: 'circle', cx: rightEyeX - 1.5, cy: eyeY - 2, r: eyeR * 0.4, fill: '#ffffff' }
+      { type: 'circle', cx: leftEyeX, cy: eyeY, r: eyeR, fill: '#ffffff', stroke: '#0f172a', strokeWidth: 1.4 },
+      { type: 'circle', cx: leftEyeX, cy: eyeY, r: eyeR * 0.72, fill: eyeColor },
+      { type: 'circle', cx: leftEyeX - eyeR * 0.28, cy: eyeY - eyeR * 0.3, r: eyeR * 0.28, fill: '#ffffff' },
+      { type: 'circle', cx: leftEyeX + eyeR * 0.32, cy: eyeY + eyeR * 0.3, r: eyeR * 0.15, fill: '#ffffff' },
+      { type: 'path', d: `M ${leftEyeX - eyeR * 1.1} ${eyeY - eyeR * 0.3} Q ${leftEyeX} ${eyeY - eyeR * 1.15} ${leftEyeX + eyeR * 1.1} ${eyeY - eyeR * 0.2}`, stroke: '#0f172a', strokeWidth: 1.8, strokeLinecap: 'round', fill: 'none' },
+
+      { type: 'circle', cx: rightEyeX, cy: eyeY, r: eyeR, fill: '#ffffff', stroke: '#0f172a', strokeWidth: 1.4 },
+      { type: 'circle', cx: rightEyeX, cy: eyeY, r: eyeR * 0.72, fill: eyeColor },
+      { type: 'circle', cx: rightEyeX - eyeR * 0.28, cy: eyeY - eyeR * 0.3, r: eyeR * 0.28, fill: '#ffffff' },
+      { type: 'circle', cx: rightEyeX + eyeR * 0.32, cy: eyeY + eyeR * 0.3, r: eyeR * 0.15, fill: '#ffffff' },
+      { type: 'path', d: `M ${rightEyeX - eyeR * 1.1} ${eyeY - eyeR * 0.2} Q ${rightEyeX} ${eyeY - 1.15 * eyeR} ${rightEyeX + eyeR * 1.1} ${eyeY - eyeR * 0.3}`, stroke: '#0f172a', strokeWidth: 1.8, strokeLinecap: 'round', fill: 'none' }
     );
   }
   for (let i = eyeStartIdx; i < headShapes.length; i++) {
     headShapes[i].tag = 'eyes';
   }
 
-  // Eyebrows (Issue 1: distinct eyebrow styles)
+  // ---------------------------------------------------------------------------
+  // 6. EYEBROWS
+  // ---------------------------------------------------------------------------
   const browStartIdx = headShapes.length;
-  const browY = baseHeadY - 10 * headSize;
-  const browColor = app.eyebrows.color || hairColor;
+  const browY = baseHeadY - 11 * headSize;
+  const browColor = isPlanet ? '#0f172a' : isRobot ? '#475569' : (app.eyebrows.color || hairColor);
 
   if (app.eyebrows.style === 'flat') {
     headShapes.push(
-      { type: 'path', d: `M ${leftEyeX - 6} ${browY} L ${leftEyeX + 6} ${browY}`, stroke: browColor, strokeWidth: 2.2, strokeLinecap: 'round', fill: 'none' },
-      { type: 'path', d: `M ${rightEyeX - 6} ${browY} L ${rightEyeX + 6} ${browY}`, stroke: browColor, strokeWidth: 2.2, strokeLinecap: 'round', fill: 'none' }
+      { type: 'path', d: `M ${leftEyeX - 6} ${browY} L ${leftEyeX + 6} ${browY}`, stroke: browColor, strokeWidth: 2.4, strokeLinecap: 'round', fill: 'none' },
+      { type: 'path', d: `M ${rightEyeX - 6} ${browY} L ${rightEyeX + 6} ${browY}`, stroke: browColor, strokeWidth: 2.4, strokeLinecap: 'round', fill: 'none' }
     );
   } else if (app.eyebrows.style === 'bushy') {
     headShapes.push(
-      { type: 'path', d: `M ${leftEyeX - 7} ${browY + 1} Q ${leftEyeX} ${browY - 4} ${leftEyeX + 7} ${browY}`, stroke: browColor, strokeWidth: 5.0, strokeLinecap: 'round', fill: 'none' },
-      { type: 'path', d: `M ${rightEyeX - 7} ${browY} Q ${rightEyeX} ${browY - 4} ${rightEyeX + 7} ${browY + 1}`, stroke: browColor, strokeWidth: 5.0, strokeLinecap: 'round', fill: 'none' }
+      { type: 'path', d: `M ${leftEyeX - 7} ${browY + 1} Q ${leftEyeX} ${browY - 4} ${leftEyeX + 7} ${browY}`, stroke: browColor, strokeWidth: 5.2, strokeLinecap: 'round', fill: 'none' },
+      { type: 'path', d: `M ${rightEyeX - 7} ${browY} Q ${rightEyeX} ${browY - 4} ${rightEyeX + 7} ${browY + 1}`, stroke: browColor, strokeWidth: 5.2, strokeLinecap: 'round', fill: 'none' }
     );
   } else if (app.eyebrows.style === 'arched') {
     headShapes.push(
@@ -763,102 +878,79 @@ export function buildRigFromAppearance(
   } else {
     // Curved
     headShapes.push(
-      { type: 'path', d: `M ${leftEyeX - 6} ${browY} Q ${leftEyeX} ${browY - 3} ${leftEyeX + 6} ${browY}`, stroke: browColor, strokeWidth: 2.2, strokeLinecap: 'round', fill: 'none' },
-      { type: 'path', d: `M ${rightEyeX - 6} ${browY} Q ${rightEyeX} ${browY - 3} ${rightEyeX + 6} ${browY}`, stroke: browColor, strokeWidth: 2.2, strokeLinecap: 'round', fill: 'none' }
+      { type: 'path', d: `M ${leftEyeX - 6} ${browY} Q ${leftEyeX} ${browY - 3} ${leftEyeX + 6} ${browY}`, stroke: browColor, strokeWidth: 2.4, strokeLinecap: 'round', fill: 'none' },
+      { type: 'path', d: `M ${rightEyeX - 6} ${browY} Q ${rightEyeX} ${browY - 3} ${rightEyeX + 6} ${browY}`, stroke: browColor, strokeWidth: 2.4, strokeLinecap: 'round', fill: 'none' }
     );
   }
   for (let i = browStartIdx; i < headShapes.length; i++) {
     headShapes[i].tag = 'eyebrows';
   }
 
-  // Nose (Issue 1: distinct nose styles including oval and button)
+  // ---------------------------------------------------------------------------
+  // 7. NOSE
+  // ---------------------------------------------------------------------------
   const noseStartIdx = headShapes.length;
-  const noseY = baseHeadY + 6;
-  const noseColor = app.nose.color || '#d97706';
+  const noseY = baseHeadY + 5;
 
-  if (app.nose.style === 'bear_snout') {
-    headShapes.push({
-      type: 'path',
-      d: `M -6 ${baseHeadY + 4} Q 0 ${baseHeadY} 6 ${baseHeadY + 4} Q 0 ${baseHeadY + 10} -6 ${baseHeadY + 4} Z`,
-      fill: app.nose.color || '#1e293b',
-    });
-  } else if (app.nose.style === 'triangle') {
-    headShapes.push({
-      type: 'path',
-      d: `M -3.5 ${noseY + 2.5} L 0 ${noseY - 3.5} L 3.5 ${noseY + 2.5} Z`,
-      fill: noseColor,
-    });
-  } else if (app.nose.style === 'oval') {
-    // Distinct vertical ellipse nose
-    headShapes.push({
-      type: 'ellipse',
-      cx: 0,
-      cy: noseY,
-      rx: 2.2 * (app.nose.size || 1.0),
-      ry: 4.4 * (app.nose.size || 1.0),
-      fill: noseColor,
-    });
-  } else if (app.nose.style === 'dot') {
-    headShapes.push({
-      type: 'circle',
-      cx: 0,
-      cy: noseY,
-      r: 1.8 * (app.nose.size || 1.0),
-      fill: noseColor,
-    });
-  } else {
-    // Button: rounded circle with nostril curve
+  if (isBear || app.nose.style === 'bear_snout') {
     headShapes.push(
-      {
-        type: 'circle',
-        cx: 0,
-        cy: noseY,
-        r: 3.2 * (app.nose.size || 1.0),
-        fill: noseColor,
-      },
-      {
-        type: 'path',
-        d: `M -2 ${noseY + 1.5} Q 0 ${noseY + 3.5} 2 ${noseY + 1.5}`,
-        stroke: '#78350f',
-        strokeWidth: 1.2,
-        fill: 'none',
-      }
+      { type: 'path', d: `M -6 ${noseY - 1} Q 0 ${noseY - 4} 6 ${noseY - 1} Q 4 ${noseY + 4} 0 ${noseY + 5} Q -4 ${noseY + 4} -6 ${noseY - 1} Z`, fill: '#1e293b' },
+      { type: 'ellipse', cx: -1.5, cy: noseY, rx: 1.8, ry: 1.0, fill: '#ffffff', opacity: 0.6 },
+      { type: 'path', d: `M 0 ${noseY + 5} L 0 ${noseY + 9}`, stroke: '#1e293b', strokeWidth: 1.6, fill: 'none' }
+    );
+  } else if (isRobot || app.nose.style === 'triangle') {
+    headShapes.push(
+      { type: 'path', d: `M -3.5 ${noseY + 2.5} L 0 ${noseY - 3.5} L 3.5 ${noseY + 2.5} Z`, fill: isRobot ? '#06b6d4' : (app.nose.color || '#d97706') }
+    );
+  } else if (app.nose.style === 'oval') {
+    headShapes.push(
+      { type: 'ellipse', cx: 0, cy: noseY, rx: 2.2 * (app.nose.size || 1.0), ry: 4.4 * (app.nose.size || 1.0), fill: app.nose.color || '#fcd34d' }
+    );
+  } else if (isPlanet) {
+    headShapes.push(
+      { type: 'circle', cx: 0, cy: noseY - 1, r: 2.5, fill: '#38bdf8', stroke: '#0284c7', strokeWidth: 1.2 }
+    );
+  } else {
+    // Button: Natural soft human nose with warm skin contour and nostril curve
+    headShapes.push(
+      { type: 'circle', cx: 0, cy: noseY + 0.5, r: 2.5 * (app.nose.size || 1.0), fill: '#fcd34d', opacity: 0.45 },
+      { type: 'path', d: `M -2.5 ${noseY + 1} Q 0 ${noseY + 3.5} 2.5 ${noseY + 1}`, stroke: '#d97706', strokeWidth: 1.5, strokeLinecap: 'round', fill: 'none', opacity: 0.7 }
     );
   }
   for (let i = noseStartIdx; i < headShapes.length; i++) {
     headShapes[i].tag = 'nose';
   }
 
-  // Mouth (Issue 1: distinct mouth expressions)
+  // ---------------------------------------------------------------------------
+  // 8. MOUTH
+  // ---------------------------------------------------------------------------
   const mouthStartIdx = headShapes.length;
-  const mouthY = baseHeadY + 16;
-  const mouthColor = app.mouth.color || '#b91c1c';
+  const mouthY = baseHeadY + (isBear ? 15 : isPlanet ? 12 : 13);
+  const mouthColor = isRobot ? '#06b6d4' : isBear ? '#1e293b' : (app.mouth.color || '#b91c1c');
 
-  if (app.mouth.style === 'open_grin') {
+  if (isBear) {
+    headShapes.push({
+      type: 'path',
+      d: `M -7 ${mouthY} Q 0 ${mouthY + 5} 7 ${mouthY}`,
+      stroke: '#1e293b',
+      strokeWidth: 2.2,
+      strokeLinecap: 'round',
+      fill: 'none',
+    });
+  } else if (isRobot) {
     headShapes.push(
-      {
-        type: 'path',
-        d: `M -9 ${mouthY} Q 0 ${mouthY + 12} 9 ${mouthY} Z`,
-        fill: '#991b1b',
-      },
-      {
-        type: 'path',
-        d: `M -7 ${mouthY} Q 0 ${mouthY + 4} 7 ${mouthY} L 6 ${mouthY + 3} Q 0 ${mouthY + 5} -6 ${mouthY + 3} Z`,
-        fill: '#ffffff',
-      }
+      { type: 'rect', x: -8, y: mouthY - 3, width: 16, height: 6, rx: 2, fill: '#0e7490', stroke: '#22d3ee', strokeWidth: 1.2 },
+      { type: 'path', d: `M -6 ${mouthY} L 6 ${mouthY}`, stroke: '#67e8f9', strokeWidth: 1.2 }
+    );
+  } else if (app.mouth.style === 'open_grin') {
+    headShapes.push(
+      { type: 'path', d: `M -9 ${mouthY} Q 0 ${mouthY + 12} 9 ${mouthY} Z`, fill: '#881337' },
+      { type: 'path', d: `M -7 ${mouthY} Q 0 ${mouthY + 4} 7 ${mouthY} L 6 ${mouthY + 3} Q 0 ${mouthY + 5} -6 ${mouthY + 3} Z`, fill: '#ffffff' }
     );
   } else if (app.mouth.style === 'laugh') {
     headShapes.push(
-      {
-        type: 'path',
-        d: `M -11 ${mouthY} Q 0 ${mouthY + 16} 11 ${mouthY} Z`,
-        fill: '#991b1b',
-      },
-      {
-        type: 'path',
-        d: `M -6 ${mouthY + 8} Q 0 ${mouthY + 16} 6 ${mouthY + 8} Z`,
-        fill: '#f87171',
-      }
+      { type: 'path', d: `M -11 ${mouthY} Q 0 ${mouthY + 16} 11 ${mouthY} Z`, fill: '#881337' },
+      { type: 'path', d: `M -6 ${mouthY + 8} Q 0 ${mouthY + 16} 6 ${mouthY + 8} Z`, fill: '#fb7185' }
     );
   } else if (app.mouth.style === 'surprised') {
     headShapes.push({
@@ -866,7 +958,7 @@ export function buildRigFromAppearance(
       cx: 0,
       cy: mouthY + 2,
       r: 4.5,
-      fill: '#991b1b',
+      fill: '#881337',
       stroke: '#7f1d1d',
       strokeWidth: 1.5,
     });
@@ -880,510 +972,453 @@ export function buildRigFromAppearance(
       fill: 'none',
     });
   } else {
-    // Smile curve
-    headShapes.push({
-      type: 'path',
-      d: `M -8 ${mouthY} Q 0 ${mouthY + 8} 8 ${mouthY}`,
-      stroke: mouthColor,
-      strokeWidth: 2.8,
-      strokeLinecap: 'round',
-      fill: 'none',
-    });
+    // Cute cheerful smile with subtle lip depth and corner creases
+    headShapes.push(
+      { type: 'path', d: `M -8 ${mouthY} Q 0 ${mouthY + 7} 8 ${mouthY}`, stroke: mouthColor, strokeWidth: 2.6, strokeLinecap: 'round', fill: 'none' },
+      { type: 'path', d: `M -8.5 ${mouthY + 0.5} Q -7.5 ${mouthY - 2} -6 ${mouthY}`, stroke: mouthColor, strokeWidth: 1.4, strokeLinecap: 'round', fill: 'none' },
+      { type: 'path', d: `M 8.5 ${mouthY + 0.5} Q 7.5 ${mouthY - 2} 6 ${mouthY}`, stroke: mouthColor, strokeWidth: 1.4, strokeLinecap: 'round', fill: 'none' }
+    );
   }
   for (let i = mouthStartIdx; i < headShapes.length; i++) {
     headShapes[i].tag = 'mouth';
   }
 
-  // Accessories: Blush & Freckles
-  if (app.accessories?.blush !== false) {
-    headShapes.push(
-      { type: 'ellipse', cx: -22 * headSize, cy: baseHeadY + 8, rx: 6, ry: 4, fill: '#f87171', opacity: 0.45 },
-      { type: 'ellipse', cx: 22 * headSize, cy: baseHeadY + 8, rx: 6, ry: 4, fill: '#f87171', opacity: 0.45 }
-    );
-  }
-  if (app.accessories?.freckles === true) {
-    headShapes.push(
-      { type: 'circle', cx: -20 * headSize, cy: baseHeadY + 6, r: 1.2, fill: '#b45309' },
-      { type: 'circle', cx: -17 * headSize, cy: baseHeadY + 8, r: 1.2, fill: '#b45309' },
-      { type: 'circle', cx: -22 * headSize, cy: baseHeadY + 9, r: 1.1, fill: '#b45309' },
-      { type: 'circle', cx: 20 * headSize, cy: baseHeadY + 6, r: 1.2, fill: '#b45309' },
-      { type: 'circle', cx: 17 * headSize, cy: baseHeadY + 8, r: 1.2, fill: '#b45309' },
-      { type: 'circle', cx: 22 * headSize, cy: baseHeadY + 9, r: 1.1, fill: '#b45309' }
-    );
-  }
-
-  // Accessories: Glasses
-  if (app.accessories?.glasses === 'round') {
-    const gc = app.accessories.glassesColor || '#0f172a';
-    headShapes.push(
-      { type: 'circle', cx: leftEyeX, cy: eyeY, r: eyeR + 4, fill: 'none', stroke: gc, strokeWidth: 2.5 },
-      { type: 'circle', cx: rightEyeX, cy: eyeY, r: eyeR + 4, fill: 'none', stroke: gc, strokeWidth: 2.5 },
-      { type: 'path', d: `M ${leftEyeX + eyeR + 4} ${eyeY} L ${rightEyeX - eyeR - 4} ${eyeY}`, stroke: gc, strokeWidth: 2.5 }
-    );
-  } else if (app.accessories?.glasses === 'square') {
-    const gc = app.accessories.glassesColor || '#0f172a';
-    headShapes.push(
-      { type: 'rect', x: leftEyeX - 10, y: eyeY - 8, width: 20, height: 16, rx: 3, fill: 'none', stroke: gc, strokeWidth: 2.5 },
-      { type: 'rect', x: rightEyeX - 10, y: eyeY - 8, width: 20, height: 16, rx: 3, fill: 'none', stroke: gc, strokeWidth: 2.5 },
-      { type: 'path', d: `M ${leftEyeX + 10} ${eyeY} L ${rightEyeX - 10} ${eyeY}`, stroke: gc, strokeWidth: 2.5 }
-    );
-  }
-
-  // Accessories: Hat
-  if (app.accessories?.hat === 'cap') {
-    const hc = app.accessories.hatColor || '#2563eb';
-    headShapes.push(
-      {
-        type: 'path',
-        d: `M ${-32 * headSize} ${baseHeadY - 14} Q 0 ${baseHeadY - 36} ${32 * headSize} ${baseHeadY - 14} Z`,
-        fill: hc,
-      },
-      {
-        type: 'path',
-        d: `M ${-10 * headSize} ${baseHeadY - 14} Q ${28 * headSize} ${baseHeadY - 12} ${42 * headSize} ${baseHeadY - 8} Q ${24 * headSize} ${baseHeadY - 2} ${-4 * headSize} ${baseHeadY - 12} Z`,
-        fill: hc,
-      }
-    );
-  } else if (app.accessories?.hat === 'beanie') {
-    const hc = app.accessories.hatColor || '#ef4444';
-    headShapes.push(
-      {
-        type: 'path',
-        d: `M ${-32 * headSize} ${baseHeadY - 12} Q 0 ${baseHeadY - 38} ${32 * headSize} ${baseHeadY - 12} Z`,
-        fill: hc,
-      },
-      {
-        type: 'rect',
-        x: -32 * headSize,
-        y: baseHeadY - 14,
-        width: 64 * headSize,
-        height: 6,
-        rx: 2,
-        fill: '#f8fafc',
-      },
-      { type: 'circle', cx: 0, cy: baseHeadY - 37, r: 6.5, fill: '#f8fafc' }
-    );
+  // Accessories: Blush & Freckles & Glasses & Hats
+  if (!isPlanet) {
+    if (!isRobot && app.accessories?.blush !== false) {
+      headShapes.push(
+        { type: 'ellipse', cx: -18 * headSize, cy: baseHeadY + 5, rx: 5.5, ry: 3.5, fill: '#f87171', opacity: 0.45 },
+        { type: 'ellipse', cx: 18 * headSize, cy: baseHeadY + 5, rx: 5.5, ry: 3.5, fill: '#f87171', opacity: 0.45 }
+      );
+    }
+    if (app.accessories?.freckles === true) {
+      headShapes.push(
+        { type: 'circle', cx: -16 * headSize, cy: baseHeadY + 5, r: 1.2, fill: '#b45309' },
+        { type: 'circle', cx: -13 * headSize, cy: baseHeadY + 7, r: 1.2, fill: '#b45309' },
+        { type: 'circle', cx: 16 * headSize, cy: baseHeadY + 5, r: 1.2, fill: '#b45309' },
+        { type: 'circle', cx: 13 * headSize, cy: baseHeadY + 7, r: 1.2, fill: '#b45309' }
+      );
+    }
+    if (app.accessories?.glasses === 'round') {
+      const gc = app.accessories.glassesColor || '#0f172a';
+      headShapes.push(
+        { type: 'circle', cx: leftEyeX, cy: eyeY, r: eyeR + 3.5, fill: 'none', stroke: gc, strokeWidth: 2.2 },
+        { type: 'circle', cx: rightEyeX, cy: eyeY, r: eyeR + 3.5, fill: 'none', stroke: gc, strokeWidth: 2.2 },
+        { type: 'path', d: `M ${leftEyeX + eyeR + 3.5} ${eyeY} L ${rightEyeX - eyeR - 3.5} ${eyeY}`, stroke: gc, strokeWidth: 2.2 }
+      );
+    } else if (app.accessories?.glasses === 'square') {
+      const gc = app.accessories.glassesColor || '#0f172a';
+      headShapes.push(
+        { type: 'rect', x: leftEyeX - 9, y: eyeY - 7, width: 18, height: 14, rx: 3, fill: 'none', stroke: gc, strokeWidth: 2.2 },
+        { type: 'rect', x: rightEyeX - 9, y: eyeY - 7, width: 18, height: 14, rx: 3, fill: 'none', stroke: gc, strokeWidth: 2.2 },
+        { type: 'path', d: `M ${leftEyeX + 9} ${eyeY} L ${rightEyeX - 9} ${eyeY}`, stroke: gc, strokeWidth: 2.2 }
+      );
+    }
+    if (app.accessories?.hat === 'cap') {
+      const hc = app.accessories.hatColor || '#2563eb';
+      headShapes.push(
+        { type: 'path', d: `M ${-headRx - 2} ${baseHeadY - 10} Q 0 ${baseHeadY - headRy - 18} ${headRx + 2} ${baseHeadY - 10} Z`, fill: hc },
+        { type: 'path', d: `M ${-10} ${baseHeadY - 10} Q 28 ${baseHeadY - 8} 38 ${baseHeadY - 4} Q 20 ${baseHeadY} -4 ${baseHeadY - 8} Z`, fill: hc }
+      );
+    } else if (app.accessories?.hat === 'beanie') {
+      const hc = app.accessories.hatColor || '#ef4444';
+      headShapes.push(
+        { type: 'path', d: `M ${-headRx - 2} ${baseHeadY - 8} Q 0 ${baseHeadY - headRy - 20} ${headRx + 2} ${baseHeadY - 8} Z`, fill: hc },
+        { type: 'rect', x: -headRx - 2, y: baseHeadY - 10, width: (headRx + 2) * 2, height: 6, rx: 2, fill: '#f8fafc' },
+        { type: 'circle', cx: 0, cy: baseHeadY - headRy - 19, r: 6.0, fill: '#f8fafc' }
+      );
+    }
   }
 
-  // -------------------------------------------------------------------------
-  // 2. TORSO & NECK SHAPES
-  // -------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
+  // 9. TORSO & CLOTHING (Natural sloped shoulders, rounded curves, depth)
+  // ---------------------------------------------------------------------------
   const torsoShapes: VectorPartShape[] = [];
-  const halfW = 28 * torsoWidth;
-  const bottomY = 42 * torsoHeight;
+  const shoulderW = (isBear ? 26 : 21) * torsoWidth;
+  const waistW = (isBear ? 27 : 19) * torsoWidth;
+  const bottomY = 34 * torsoHeight;
 
   // Neck
-  const neckTopY = headChinY - 4;
-  const neckBottomY = 4;
-  torsoShapes.push({
-    type: 'rect',
-    x: -neckW / 2,
-    y: neckTopY,
-    width: neckW,
-    height: neckBottomY - neckTopY,
-    fill: skin,
-  });
-
-  // Neck accessories
-  if (neckStyle === 'band') {
-    const bandY = headChinY + 2;
-    torsoShapes.push(
-      {
+  if (!isPlanet) {
+    if (isRobot) {
+      torsoShapes.push(
+        { type: 'rect', x: -neckW / 2, y: neckTopY, width: neckW, height: neckBottomY - neckTopY, rx: 2, fill: '#475569' },
+        { type: 'rect', x: -neckW / 2 - 1, y: neckTopY + 3, width: neckW + 2, height: 3, rx: 1, fill: '#64748b' },
+        { type: 'rect', x: -neckW / 2 - 1, y: neckTopY + 8, width: neckW + 2, height: 3, rx: 1, fill: '#64748b' }
+      );
+    } else {
+      torsoShapes.push({
         type: 'rect',
-        x: -neckW / 2 - 2,
-        y: bandY,
-        width: neckW + 4,
-        height: 6,
-        fill: neckColor === skin ? '#0f172a' : neckColor,
-        rx: 1,
-      },
-      {
-        type: 'circle',
-        cx: 0,
-        cy: bandY + 3,
-        r: 2.5,
-        fill: '#f59e0b',
-      }
-    );
-  } else if (neckStyle === 'scarf') {
-    const scarfColor = neckColor === skin ? '#ef4444' : neckColor;
-    const bandY = headChinY + 1;
-    torsoShapes.push(
-      {
+        x: -neckW / 2,
+        y: neckTopY,
+        width: neckW,
+        height: neckBottomY - neckTopY,
+        rx: 3,
+        fill: skin,
+      });
+      // Soft chin drop-shadow on neck for depth
+      torsoShapes.push({
         type: 'path',
-        d: `M ${-neckW / 2 - 3} ${bandY} Q 0 ${bandY + 8} ${neckW / 2 + 3} ${bandY} L ${neckW / 2 + 2} ${bandY + 9} Q 0 ${bandY + 14} ${-neckW / 2 - 2} ${bandY + 9} Z`,
-        fill: scarfColor,
-      },
-      {
-        type: 'path',
-        d: `M -2 ${bandY + 7} L -6 ${bandY + 20} L 2 ${bandY + 16} Z`,
-        fill: scarfColor,
-      },
-      {
-        type: 'path',
-        d: `M 1 ${bandY + 7} L 6 ${bandY + 19} L 0 ${bandY + 15} Z`,
-        fill: scarfColor,
-      }
-    );
+        d: `M ${-neckW / 2} ${neckTopY + 2} Q 0 ${neckTopY + 6} ${neckW / 2} ${neckTopY + 2} L ${neckW / 2} ${neckTopY} L ${-neckW / 2} ${neckTopY} Z`,
+        fill: '#000000',
+        opacity: 0.15,
+      });
+    }
   }
 
-  // Main Clothing / Torso body
-  if (app.torso.clothingStyle === 'dress') {
-    torsoShapes.push({
-      type: 'path',
-      d: `M ${-halfW} 0 Q 0 -8 ${halfW} 0 L ${halfW + 14} ${bottomY + 18} Q 0 ${bottomY + 24} ${-halfW - 14} ${bottomY + 18} Z`,
-      fill: shirtColor,
-    });
-  } else if (app.torso.clothingStyle === 'vest') {
+  // Torso Body Contours
+  if (isBear) {
     torsoShapes.push(
-      {
-        type: 'path',
-        d: `M ${-halfW} 0 Q 0 -8 ${halfW} 0 L ${halfW - 2} ${bottomY} Q 0 ${bottomY + 4} ${-halfW + 2} ${bottomY} Z`,
-        fill: '#f8fafc',
-      },
-      {
-        type: 'path',
-        d: `M ${-halfW} 0 L ${-halfW * 0.4} 18 L ${-halfW * 0.2} ${bottomY} L ${-halfW + 2} ${bottomY} Z`,
-        fill: shirtColor,
-      },
-      {
-        type: 'path',
-        d: `M ${halfW} 0 L ${halfW * 0.4} 18 L ${halfW * 0.2} ${bottomY} L ${halfW - 2} ${bottomY} Z`,
-        fill: shirtColor,
-      }
+      { type: 'path', d: `M 0 -2 Q ${shoulderW * 0.6} -1 ${shoulderW} 6 Q ${shoulderW + 3} 18 ${waistW} ${bottomY} Q 0 ${bottomY + 6} ${-waistW} ${bottomY} Q ${-shoulderW - 3} 18 ${-shoulderW} 6 Q ${-shoulderW * 0.6} -1 0 -2 Z`, fill: skin },
+      { type: 'ellipse', cx: 0, cy: bottomY * 0.52, rx: waistW * 0.68, ry: bottomY * 0.48, fill: '#fef3c7' },
+      { type: 'path', d: `M ${-shoulderW} 6 Q ${-shoulderW * 0.6} -1 0 -2 L -4 10 L ${-waistW * 0.65} ${bottomY} L ${-waistW} ${bottomY} Q ${-shoulderW - 3} 18 ${-shoulderW} 6 Z`, fill: shirtColor },
+      { type: 'path', d: `M ${shoulderW} 6 Q ${shoulderW * 0.6} -1 0 -2 L 4 10 L ${waistW * 0.65} ${bottomY} L ${waistW} ${bottomY} Q ${shoulderW + 3} 18 ${shoulderW} 6 Z`, fill: shirtColor },
+      { type: 'circle', cx: -6, cy: 16, r: 1.8, fill: '#facc15' },
+      { type: 'circle', cx: -6, cy: 25, r: 1.8, fill: '#facc15' }
+    );
+  } else if (isRobot) {
+    torsoShapes.push(
+      { type: 'rect', x: -shoulderW - 1, y: -2, width: (shoulderW + 1) * 2, height: bottomY + 2, rx: 6, fill: '#475569', stroke: '#334155', strokeWidth: 1.5 },
+      { type: 'rect', x: -shoulderW + 5, y: 7, width: (shoulderW - 5) * 2, height: 18, rx: 3, fill: '#1e293b' },
+      { type: 'rect', x: -14, y: 11, width: 7, height: 10, rx: 1.5, fill: '#22c55e' },
+      { type: 'rect', x: -5, y: 11, width: 7, height: 10, rx: 1.5, fill: '#eab308' },
+      { type: 'rect', x: 4, y: 11, width: 7, height: 10, rx: 1.5, fill: '#06b6d4' },
+      { type: 'circle', cx: 16, cy: 16, r: 3, fill: '#f43f5e' }
+    );
+  } else if (app.torso.clothingStyle === 'dress') {
+    torsoShapes.push(
+      { type: 'path', d: `M 0 -2 Q ${shoulderW * 0.6} -1 ${shoulderW} 5 L ${shoulderW + 8} ${bottomY + 14} Q 0 ${bottomY + 18} ${-shoulderW - 8} ${bottomY + 14} L ${-shoulderW} 5 Q ${-shoulderW * 0.6} -1 0 -2 Z`, fill: shirtColor },
+      { type: 'path', d: `M -11 -1 Q 0 5 11 -1`, stroke: collarColor, strokeWidth: 3.0, strokeLinecap: 'round', fill: 'none' },
+      { type: 'rect', x: -waistW, y: bottomY - 4, width: waistW * 2, height: 5, fill: collarColor }
     );
   } else if (app.torso.clothingStyle === 'collared') {
     torsoShapes.push(
-      {
-        type: 'path',
-        d: `M ${-halfW} 0 Q 0 -8 ${halfW} 0 L ${halfW - 2} ${bottomY} Q 0 ${bottomY + 4} ${-halfW + 2} ${bottomY} Z`,
-        fill: shirtColor,
-      },
-      {
-        type: 'path',
-        d: `M -14 0 L -6 12 L 0 3 L 6 12 L 14 0 Z`,
-        fill: collarColor,
-      }
+      { type: 'path', d: `M 0 -2 Q ${shoulderW * 0.6} -1 ${shoulderW} 5 Q ${shoulderW + 1} 16 ${waistW} ${bottomY} Q 0 ${bottomY + 4} ${-waistW} ${bottomY} Q ${-shoulderW - 1} 16 ${-shoulderW} 5 Q ${-shoulderW * 0.6} -1 0 -2 Z`, fill: shirtColor },
+      { type: 'path', d: `M -12 -1 L -5 9 L 0 2 L 5 9 L 12 -1 Z`, fill: collarColor }
+    );
+  } else if (app.torso.clothingStyle === 'hoodie') {
+    torsoShapes.push(
+      { type: 'path', d: `M 0 -2 Q ${shoulderW * 0.6} -1 ${shoulderW} 5 Q ${shoulderW + 1} 16 ${waistW} ${bottomY} Q 0 ${bottomY + 4} ${-waistW} ${bottomY} Q ${-shoulderW - 1} 16 ${-shoulderW} 5 Q ${-shoulderW * 0.6} -1 0 -2 Z`, fill: shirtColor },
+      { type: 'path', d: `M ${-waistW * 0.55} ${bottomY - 14} L ${waistW * 0.55} ${bottomY - 14} L ${waistW * 0.75} ${bottomY} L ${-waistW * 0.75} ${bottomY} Z`, fill: collarColor, opacity: 0.9 },
+      { type: 'path', d: `M ${-waistW * 0.55} ${bottomY - 14} L ${waistW * 0.55} ${bottomY - 14}`, stroke: '#ffffff', strokeWidth: 1.0, strokeLinecap: 'round', fill: 'none', opacity: 0.4 },
+      { type: 'path', d: `M -12 -2 Q 0 4 12 -2 Q 9 2 0 4 Q -9 2 -12 -2 Z`, fill: collarColor },
+      { type: 'path', d: `M -4 2 L -4 13`, stroke: '#ffffff', strokeWidth: 1.5, strokeLinecap: 'round', fill: 'none' },
+      { type: 'path', d: `M 4 2 L 4 13`, stroke: '#ffffff', strokeWidth: 1.5, strokeLinecap: 'round', fill: 'none' }
     );
   } else {
-    // T-shirt / Hoodie / Standard
-    torsoShapes.push({
-      type: 'path',
-      d: `M ${-halfW} 0 Q 0 -8 ${halfW} 0 L ${halfW - 2} ${bottomY} Q 0 ${bottomY + 4} ${-halfW + 2} ${bottomY} Z`,
-      fill: shirtColor,
-    });
-  }
-
-  // Collar stripe / hoodie pouch
-  if (app.torso.clothingStyle === 'hoodie') {
-    torsoShapes.push({
-      type: 'path',
-      d: `M -14 20 L 14 20 L 18 36 L -18 36 Z`,
-      fill: collarColor,
-      opacity: 0.9,
-    });
-  } else if (app.torso.clothingStyle !== 'vest' && app.torso.clothingStyle !== 'collared') {
-    torsoShapes.push({
-      type: 'path',
-      d: 'M -14 0 Q 0 8 14 0',
-      stroke: collarColor,
-      strokeWidth: 3.5,
-      strokeLinecap: 'round',
-      fill: 'none',
-    });
-  }
-
-  // Chest Pattern/Emblem
-  if (app.torso.pattern === 'star') {
-    torsoShapes.push({
-      type: 'circle',
-      cx: 0,
-      cy: 18,
-      r: 7,
-      fill: '#ef4444',
-    });
-  } else if (app.torso.pattern === 'circle') {
-    torsoShapes.push({
-      type: 'circle',
-      cx: 0,
-      cy: 18,
-      r: 6,
-      fill: '#fde047',
-    });
-  } else if (app.torso.pattern === 'stripe') {
+    // T-shirt
     torsoShapes.push(
-      { type: 'rect', x: -halfW + 2, y: 14, width: halfW * 2 - 4, height: 4, fill: collarColor },
-      { type: 'rect', x: -halfW + 2, y: 26, width: halfW * 2 - 4, height: 4, fill: collarColor }
+      { type: 'path', d: `M 0 -2 Q ${shoulderW * 0.6} -1 ${shoulderW} 5 Q ${shoulderW + 1} 16 ${waistW} ${bottomY} Q 0 ${bottomY + 4} ${-waistW} ${bottomY} Q ${-shoulderW - 1} 16 ${-shoulderW} 5 Q ${-shoulderW * 0.6} -1 0 -2 Z`, fill: shirtColor },
+      { type: 'path', d: `M -11 -1 Q 0 5 11 -1`, stroke: collarColor, strokeWidth: 3.0, strokeLinecap: 'round', fill: 'none' }
     );
+    if (app.torso.pattern === 'star') {
+      torsoShapes.push(
+        { type: 'circle', cx: 0, cy: 15, r: 7.0, fill: '#ef4444' },
+        { type: 'circle', cx: 0, cy: 15, r: 3.8, fill: '#fef08a' }
+      );
+    } else if (app.torso.pattern === 'circle') {
+      torsoShapes.push({ type: 'circle', cx: 0, cy: 15, r: 6.5, fill: '#fde047', stroke: '#ca8a04', strokeWidth: 1.2 });
+    } else if (app.torso.pattern === 'stripe') {
+      torsoShapes.push(
+        { type: 'rect', x: -waistW + 2, y: 12, width: waistW * 2 - 4, height: 3.5, fill: collarColor },
+        { type: 'rect', x: -waistW + 2, y: 22, width: waistW * 2 - 4, height: 3.5, fill: collarColor }
+      );
+    }
   }
 
-  // Belt / Waistband
-  torsoShapes.push({
-    type: 'rect',
-    x: -halfW + 4,
-    y: bottomY,
-    width: halfW * 2 - 8,
-    height: 10,
-    fill: app.leftLeg?.pantsColor || app.legs.pantsColor || '#1e3a8a',
-  });
+  // Waistband
+  if (!isPlanet) {
+    torsoShapes.push({
+      type: 'rect',
+      x: -waistW,
+      y: bottomY,
+      width: waistW * 2,
+      height: 7,
+      rx: 2,
+      fill: app.leftLeg?.pantsColor || app.legs.pantsColor || '#1e3a8a',
+    });
+  }
 
-  // -------------------------------------------------------------------------
-  // 3. CONNECTED JOINT HIERARCHY: ARMS & FOREARMS (Issue 2)
-  // -------------------------------------------------------------------------
-  const armPivotX = 28 * torsoWidth;
+  // ---------------------------------------------------------------------------
+  // 10. CONNECTED ARMS & HANDS
+  // ---------------------------------------------------------------------------
+  const lArm = app.leftArm || {
+    upperArmLength: app.arms.length,
+    upperArmThickness: app.arms.thickness,
+    forearmLength: app.arms.length,
+    forearmThickness: app.arms.thickness,
+    handSize: 1.0,
+    skinColor: skin,
+  };
+  const rArm = app.rightArm || {
+    upperArmLength: app.arms.length,
+    upperArmThickness: app.arms.thickness,
+    forearmLength: app.arms.length,
+    forearmThickness: app.arms.thickness,
+    handSize: 1.0,
+    skinColor: skin,
+  };
 
-  // Left Arm config
-  const lArm = app.leftArm!;
-  const leftShoulderX = -armPivotX + (lArm.shoulderOffset?.x ?? 0);
-  const leftShoulderY = -4 + (lArm.shoulderOffset?.y ?? 0);
   const leftUpperArmLen = 14 * (lArm.upperArmLength ?? 1.0);
-  const leftUpperArmThick = lArm.upperArmThickness ?? 1.0;
-  const leftForearmLen = 16 * (lArm.forearmLength ?? 1.0);
-  const leftForearmThick = lArm.forearmThickness ?? 1.0;
-  const leftHandSize = lArm.handSize ?? 1.0;
-  const leftHandShape = lArm.handShape ?? 'simple';
-  const leftArmSkin = lArm.skinColor ?? skin;
-  const leftSleeve = lArm.sleeveStyle ?? 'short';
+  const leftForearmLen = 14 * (lArm.forearmLength ?? 1.0);
+  const leftArmThick = (lArm.upperArmThickness ?? 1.0) * (isBear ? 1.15 : 1.0);
+  const leftArmSkin = lArm.skinColor || skin;
+  const leftShoulderX = -shoulderW;
+  const leftShoulderY = 5;
+  const leftElbowX = leftShoulderX - 2;
+  const leftElbowY = leftShoulderY + leftUpperArmLen;
 
-  // Left Elbow (connected child of shoulder)
-  const leftElbowX = leftShoulderX - 6 + (lArm.elbowOffset?.x ?? 0);
-  const leftElbowY = leftShoulderY + leftUpperArmLen + (lArm.elbowOffset?.y ?? 0);
-
-  // Right Arm config
-  const rArm = app.rightArm!;
-  const rightShoulderX = armPivotX + (rArm.shoulderOffset?.x ?? 0);
-  const rightShoulderY = -4 + (rArm.shoulderOffset?.y ?? 0);
   const rightUpperArmLen = 14 * (rArm.upperArmLength ?? 1.0);
-  const rightUpperArmThick = rArm.upperArmThickness ?? 1.0;
-  const rightForearmLen = 16 * (rArm.forearmLength ?? 1.0);
-  const rightForearmThick = rArm.forearmThickness ?? 1.0;
-  const rightHandSize = rArm.handSize ?? 1.0;
-  const rightHandShape = rArm.handShape ?? 'simple';
-  const rightArmSkin = rArm.skinColor ?? skin;
-  const rightSleeve = rArm.sleeveStyle ?? 'short';
+  const rightForearmLen = 14 * (rArm.forearmLength ?? 1.0);
+  const rightArmThick = (rArm.upperArmThickness ?? 1.0) * (isBear ? 1.15 : 1.0);
+  const rightArmSkin = rArm.skinColor || skin;
+  const rightShoulderX = shoulderW;
+  const rightShoulderY = 5;
+  const rightElbowX = rightShoulderX + 2;
+  const rightElbowY = rightShoulderY + rightUpperArmLen;
 
-  // Right Elbow (connected child of shoulder)
-  const rightElbowX = rightShoulderX + 6 + (rArm.elbowOffset?.x ?? 0);
-  const rightElbowY = rightShoulderY + rightUpperArmLen + (rArm.elbowOffset?.y ?? 0);
-
-  // Helper for drawing hand geometry
-  const buildHandShapes = (cx: number, cy: number, size: number, shape: 'simple' | 'mitten' | 'paw', handSkin: string): VectorPartShape[] => {
-    if (shape === 'paw') {
+  const drawHand = (cx: number, cy: number, isLeft: boolean, handSize: number = 1.0, handSkin: string = skin): VectorPartShape[] => {
+    if (isBear) {
       return [
-        { type: 'circle', cx, cy, r: 6.5 * size, fill: handSkin },
-        { type: 'circle', cx: cx - 3.5 * size, cy: cy - 4.5 * size, r: 2.2 * size, fill: '#fef3c7' },
-        { type: 'circle', cx, cy: cy - 6 * size, r: 2.4 * size, fill: '#fef3c7' },
-        { type: 'circle', cx: cx + 3.5 * size, cy: cy - 4.5 * size, r: 2.2 * size, fill: '#fef3c7' },
+        { type: 'circle', cx, cy, r: 5.8 * handSize, fill: handSkin, stroke: '#92400e', strokeWidth: 1.2 },
+        { type: 'circle', cx: cx + (isLeft ? -1.8 : 1.8) * handSize, cy: cy - 3.8 * handSize, r: 1.6 * handSize, fill: '#fef3c7' },
+        { type: 'circle', cx: cx, cy: cy - 4.8 * handSize, r: 1.8 * handSize, fill: '#fef3c7' },
+        { type: 'circle', cx: cx + (isLeft ? 1.8 : -1.8) * handSize, cy: cy - 3.8 * handSize, r: 1.6 * handSize, fill: '#fef3c7' },
+        { type: 'ellipse', cx, cy: cy + 0.8 * handSize, rx: 3.0 * handSize, ry: 2.0 * handSize, fill: '#fef3c7' }
       ];
-    } else if (shape === 'mitten') {
+    } else if (isRobot) {
       return [
-        { type: 'ellipse', cx, cy, rx: 6 * size, ry: 7.5 * size, fill: handSkin },
-        { type: 'ellipse', cx: cx - 4 * size, cy: cy - 2 * size, rx: 2.8 * size, ry: 4 * size, fill: handSkin },
+        { type: 'circle', cx, cy: cy - 1, r: 3.8 * handSize, fill: '#64748b' },
+        { type: 'path', d: `M ${cx - 3 * handSize} ${cy} Q ${cx - 4.5 * handSize} ${cy + 6 * handSize} ${cx - 1 * handSize} ${cy + 5.5 * handSize} L ${cx} ${cy + 2 * handSize}`, fill: '#94a3b8', stroke: '#475569', strokeWidth: 1 },
+        { type: 'path', d: `M ${cx + 3 * handSize} ${cy} Q ${cx + 4.5 * handSize} ${cy + 6 * handSize} ${cx + 1 * handSize} ${cy + 5.5 * handSize} L ${cx} ${cy + 2 * handSize}`, fill: '#94a3b8', stroke: '#475569', strokeWidth: 1 }
       ];
     }
-    // simple
+    const thumbDir = isLeft ? 1 : -1;
     return [
-      { type: 'circle', cx, cy, r: 6 * size, fill: handSkin },
+      { type: 'ellipse', cx, cy: cy + 1, rx: 4.5 * handSize, ry: 5.2 * handSize, fill: handSkin },
+      { type: 'ellipse', cx: cx + thumbDir * 3.0 * handSize, cy: cy - 0.5 * handSize, rx: 2.0 * handSize, ry: 2.8 * handSize, fill: handSkin },
+      { type: 'path', d: `M ${cx - 1.8 * handSize} ${cy + 3.2 * handSize} Q ${cx} ${cy + 4.2 * handSize} ${cx + 1.8 * handSize} ${cy + 3.2 * handSize}`, stroke: '#d97706', strokeWidth: 0.9, strokeLinecap: 'round', fill: 'none', opacity: 0.35 }
     ];
   };
 
-  // Build Left Arm (Upper Arm)
+  // Left Arm (Upper)
   const leftArmShapes: VectorPartShape[] = [
     {
       type: 'path',
-      d: `M ${leftShoulderX} ${leftShoulderY} Q ${leftShoulderX - 12 * leftUpperArmThick} ${leftShoulderY + leftUpperArmLen * 0.5} ${leftElbowX} ${leftElbowY} L ${leftElbowX + 6 * leftUpperArmThick} ${leftElbowY} Q ${leftShoulderX + 4} ${leftShoulderY + leftUpperArmLen * 0.4} ${leftShoulderX + 3} ${leftShoulderY} Z`,
+      d: `M ${leftShoulderX - 2.5 * leftArmThick} ${leftShoulderY} Q ${leftShoulderX - 4 * leftArmThick} ${leftShoulderY + leftUpperArmLen * 0.5} ${leftElbowX - 2.5 * leftArmThick} ${leftElbowY} L ${leftElbowX + 2.5 * leftArmThick} ${leftElbowY} Q ${leftShoulderX + 2.5 * leftArmThick} ${leftShoulderY + leftUpperArmLen * 0.5} ${leftShoulderX + 2.5 * leftArmThick} ${leftShoulderY} Z`,
       fill: leftArmSkin,
     },
-  ];
-  if (leftSleeve !== 'sleeveless') {
-    leftArmShapes.push({
+    {
       type: 'path',
-      d: `M ${leftShoulderX} ${leftShoulderY} Q ${leftShoulderX - 10 * leftUpperArmThick} ${leftShoulderY + 6} ${leftShoulderX - 4 * leftUpperArmThick} ${leftShoulderY + 12} L ${leftShoulderX + 6} ${leftShoulderY + 8} Z`,
+      d: `M ${leftShoulderX - 3.5 * leftArmThick} ${leftShoulderY - 1} Q ${leftShoulderX - 4.5 * leftArmThick} ${leftShoulderY + 4} ${leftShoulderX - 3.5 * leftArmThick} ${leftShoulderY + 8} L ${leftShoulderX + 2.5 * leftArmThick} ${leftShoulderY + 8} L ${leftShoulderX + 2.5 * leftArmThick} ${leftShoulderY - 1} Z`,
       fill: shirtColor,
-    });
-  }
+    },
+    {
+      type: 'path',
+      d: `M ${leftShoulderX - 3.5 * leftArmThick} ${leftShoulderY + 8} L ${leftShoulderX + 2.5 * leftArmThick} ${leftShoulderY + 8}`,
+      stroke: collarColor,
+      strokeWidth: 1.6,
+      strokeLinecap: 'round',
+      fill: 'none',
+    }
+  ];
 
-  // Build Left Forearm & Hand (Articulated from Left Elbow)
+  // Left Forearm
   const leftForearmShapes: VectorPartShape[] = [
     {
       type: 'path',
-      d: `M ${leftElbowX} ${leftElbowY} Q ${leftElbowX - 8 * leftForearmThick} ${leftElbowY + leftForearmLen * 0.6} ${leftElbowX - 2} ${leftElbowY + leftForearmLen} L ${leftElbowX + 6 * leftForearmThick} ${leftElbowY + leftForearmLen} Q ${leftElbowX + 7} ${leftElbowY + leftForearmLen * 0.4} ${leftElbowX + 6} ${leftElbowY} Z`,
+      d: `M ${leftElbowX - 2.5 * leftArmThick} ${leftElbowY} Q ${leftElbowX - 3.5 * leftArmThick} ${leftElbowY + leftForearmLen * 0.5} ${leftElbowX - 2} ${leftElbowY + leftForearmLen} L ${leftElbowX + 2.5 * leftArmThick} ${leftElbowY + leftForearmLen} Q ${leftElbowX + 3.5 * leftArmThick} ${leftElbowY + leftForearmLen * 0.5} ${leftElbowX + 2.5 * leftArmThick} ${leftElbowY} Z`,
       fill: leftArmSkin,
     },
-    ...buildHandShapes(leftElbowX + 2, leftElbowY + leftForearmLen + 2, leftHandSize, leftHandShape, leftArmSkin),
+    ...drawHand(leftElbowX, leftElbowY + leftForearmLen + 3, true, lArm.handSize || 1.0, leftArmSkin),
   ];
 
-  // Build Right Arm (Upper Arm)
+  // Right Arm (Upper)
   const rightArmShapes: VectorPartShape[] = [
     {
       type: 'path',
-      d: `M ${rightShoulderX} ${rightShoulderY} Q ${rightShoulderX + 12 * rightUpperArmThick} ${rightShoulderY + rightUpperArmLen * 0.5} ${rightElbowX} ${rightElbowY} L ${rightElbowX - 6 * rightUpperArmThick} ${rightElbowY} Q ${rightShoulderX - 4} ${rightShoulderY + rightUpperArmLen * 0.4} ${rightShoulderX - 3} ${rightShoulderY} Z`,
+      d: `M ${rightShoulderX - 2.5 * rightArmThick} ${rightShoulderY} Q ${rightShoulderX - 2.5 * rightArmThick} ${rightShoulderY + rightUpperArmLen * 0.5} ${rightElbowX - 2.5 * rightArmThick} ${rightElbowY} L ${rightElbowX + 2.5 * rightArmThick} ${rightElbowY} Q ${rightShoulderX + 4 * rightArmThick} ${rightShoulderY + rightUpperArmLen * 0.5} ${rightShoulderX + 2.5 * rightArmThick} ${rightShoulderY} Z`,
       fill: rightArmSkin,
     },
-  ];
-  if (rightSleeve !== 'sleeveless') {
-    rightArmShapes.push({
+    {
       type: 'path',
-      d: `M ${rightShoulderX} ${rightShoulderY} Q ${rightShoulderX + 10 * rightUpperArmThick} ${rightShoulderY + 6} ${rightShoulderX + 4 * rightUpperArmThick} ${rightShoulderY + 12} L ${rightShoulderX - 6} ${rightShoulderY + 8} Z`,
+      d: `M ${rightShoulderX - 2.5 * rightArmThick} ${rightShoulderY - 1} L ${rightShoulderX - 2.5 * rightArmThick} ${rightShoulderY + 8} L ${rightShoulderX + 3.5 * rightArmThick} ${rightShoulderY + 8} Q ${rightShoulderX + 4.5 * rightArmThick} ${rightShoulderY + 4} ${rightShoulderX + 3.5 * rightArmThick} ${rightShoulderY - 1} Z`,
       fill: shirtColor,
-    });
-  }
+    },
+    {
+      type: 'path',
+      d: `M ${rightShoulderX - 2.5 * rightArmThick} ${rightShoulderY + 8} L ${rightShoulderX + 3.5 * rightArmThick} ${rightShoulderY + 8}`,
+      stroke: collarColor,
+      strokeWidth: 1.6,
+      strokeLinecap: 'round',
+      fill: 'none',
+    }
+  ];
 
-  // Build Right Forearm & Hand (Articulated from Right Elbow)
+  // Right Forearm
   const rightForearmShapes: VectorPartShape[] = [
     {
       type: 'path',
-      d: `M ${rightElbowX} ${rightElbowY} Q ${rightElbowX + 8 * rightForearmThick} ${rightElbowY + rightForearmLen * 0.6} ${rightElbowX + 2} ${rightElbowY + rightForearmLen} L ${rightElbowX - 6 * rightForearmThick} ${rightElbowY + rightForearmLen} Q ${rightElbowX - 7} ${rightElbowY + rightForearmLen * 0.4} ${rightElbowX - 6} ${rightElbowY} Z`,
+      d: `M ${rightElbowX - 2.5 * rightArmThick} ${rightElbowY} Q ${rightElbowX - 3.5 * rightArmThick} ${rightElbowY + rightForearmLen * 0.5} ${rightElbowX - 2.5 * rightArmThick} ${rightElbowY + rightForearmLen} L ${rightElbowX + 2} ${rightElbowY + rightForearmLen} Q ${rightElbowX + 3.5 * rightArmThick} ${rightElbowY + rightForearmLen * 0.5} ${rightElbowX + 2.5 * rightArmThick} ${rightElbowY} Z`,
       fill: rightArmSkin,
     },
-    ...buildHandShapes(rightElbowX - 2, rightElbowY + rightForearmLen + 2, rightHandSize, rightHandShape, rightArmSkin),
+    ...drawHand(rightElbowX, rightElbowY + rightForearmLen + 3, false, rArm.handSize || 1.0, rightArmSkin),
   ];
 
-  // -------------------------------------------------------------------------
-  // 4. CONNECTED JOINT HIERARCHY: LEGS, KNEES & FEET (Issue 2)
-  // -------------------------------------------------------------------------
-  const hipBaseX = 16 * (0.8 + 0.2 * torsoWidth);
-  const hipBaseY = bottomY + 10;
+  // ---------------------------------------------------------------------------
+  // 11. LEGS & FOOTWEAR
+  // ---------------------------------------------------------------------------
+  const hipX = 10 * (isBear ? 1.2 : 1.0);
+  const hipY = bottomY + 7;
+  const lLeg = app.leftLeg || {
+    upperLegLength: app.legs.length,
+    upperLegThickness: app.legs.thickness,
+    lowerLegLength: app.legs.length,
+    lowerLegThickness: app.legs.thickness,
+    footSize: 1.0,
+    pantsStyle: app.legs.pantsStyle,
+    pantsColor: app.legs.pantsColor,
+    shoeStyle: app.legs.shoeStyle,
+    shoeColor: app.legs.shoeColor,
+    hipOffset: { x: 0, y: 0 },
+  };
+  const rLeg = app.rightLeg || {
+    upperLegLength: app.legs.length,
+    upperLegThickness: app.legs.thickness,
+    lowerLegLength: app.legs.length,
+    lowerLegThickness: app.legs.thickness,
+    footSize: 1.0,
+    pantsStyle: app.legs.pantsStyle,
+    pantsColor: app.legs.pantsColor,
+    shoeStyle: app.legs.shoeStyle,
+    shoeColor: app.legs.shoeColor,
+    hipOffset: { x: 0, y: 0 },
+  };
 
-  // Left Leg
-  const lLeg = app.leftLeg!;
-  const leftHipX = -hipBaseX + (lLeg.hipOffset?.x ?? 0);
-  const leftHipY = hipBaseY + (lLeg.hipOffset?.y ?? 0);
-  const leftUpperLegLen = 15 * (lLeg.upperLegLength ?? 1.0);
-  const leftLowerLegLen = 15 * (lLeg.lowerLegLength ?? 1.0);
-  const leftLegTotalH = leftUpperLegLen + leftLowerLegLen;
+  const leftHipX = -hipX + (lLeg.hipOffset?.x ?? 0);
+  const leftHipY = hipY + (lLeg.hipOffset?.y ?? 0);
+  const leftLegLen = 22 * (lLeg.lowerLegLength ?? 1.0);
   const leftLegThick = lLeg.upperLegThickness ?? 1.0;
+  const leftPantsColor = lLeg.pantsColor || app.legs.pantsColor || '#1e3a8a';
+  const leftShoeColor = lLeg.shoeColor || app.legs.shoeColor || '#dc2626';
+  const leftShoeStyle = lLeg.shoeStyle || app.legs.shoeStyle || 'sneakers';
   const leftFootSize = lLeg.footSize ?? 1.0;
-  const leftPantsColor = lLeg.pantsColor || '#1e3a8a';
-  const leftShoeColor = lLeg.shoeColor || '#ef4444';
-  const leftShoeStyle = lLeg.shoeStyle || 'sneakers';
 
-  // Right Leg
-  const rLeg = app.rightLeg!;
-  const rightHipX = hipBaseX + (rLeg.hipOffset?.x ?? 0);
-  const rightHipY = hipBaseY + (rLeg.hipOffset?.y ?? 0);
-  const rightUpperLegLen = 15 * (rLeg.upperLegLength ?? 1.0);
-  const rightLowerLegLen = 15 * (rLeg.lowerLegLength ?? 1.0);
-  const rightLegTotalH = rightUpperLegLen + rightLowerLegLen;
+  const rightHipX = hipX + (rLeg.hipOffset?.x ?? 0);
+  const rightHipY = hipY + (rLeg.hipOffset?.y ?? 0);
+  const rightLegLen = 22 * (rLeg.lowerLegLength ?? 1.0);
   const rightLegThick = rLeg.upperLegThickness ?? 1.0;
+  const rightPantsColor = rLeg.pantsColor || app.legs.pantsColor || '#1e3a8a';
+  const rightShoeColor = rLeg.shoeColor || app.legs.shoeColor || '#dc2626';
+  const rightShoeStyle = rLeg.shoeStyle || app.legs.shoeStyle || 'sneakers';
   const rightFootSize = rLeg.footSize ?? 1.0;
-  const rightPantsColor = rLeg.pantsColor || '#1e3a8a';
-  const rightShoeColor = rLeg.shoeColor || '#ef4444';
-  const rightShoeStyle = rLeg.shoeStyle || 'sneakers';
 
-  // Helper for footwear geometry
-  const buildFootwearShapes = (
-    hx: number,
-    hy: number,
-    totalH: number,
-    thick: number,
-    footSize: number,
-    style: 'sneakers' | 'boots' | 'shoes',
-    shoeColor: string,
-    isLeft: boolean
-  ): VectorPartShape[] => {
-    const footY = hy + totalH;
-    const footW = 18 * footSize * thick;
-    const footH = 10 * footSize;
-    const footStartX = isLeft ? hx - footW * 0.6 : hx - footW * 0.4;
+  const drawFootwear = (hx: number, footY: number, isLeft: boolean, shoeStyle: string, shoeColor: string, footSize: number = 1.0): VectorPartShape[] => {
+    const footW = 16 * footSize;
+    const footH = 9 * footSize;
+    const footX = isLeft ? hx - footW * 0.65 : hx - footW * 0.35;
 
-    if (style === 'boots') {
+    if (isRobot) {
       return [
-        {
-          type: 'path',
-          d: `M ${hx - 9 * thick} ${footY - 8} L ${hx + 9 * thick} ${footY - 8} L ${hx + 10 * thick} ${footY + footH} L ${hx - 10 * thick} ${footY + footH} Z`,
-          fill: shoeColor,
-        },
-        {
-          type: 'rect',
-          x: hx - 10 * thick,
-          y: footY - 10,
-          width: 20 * thick,
-          height: 3.5,
-          rx: 1,
-          fill: '#0f172a',
-        },
+        { type: 'rect', x: hx - 7, y: footY, width: 14, height: footH, rx: 2, fill: '#334155', stroke: '#1e293b', strokeWidth: 1.2 },
+        { type: 'rect', x: hx - 8, y: footY + footH - 3, width: 16, height: 3, rx: 1, fill: '#0f172a' },
+        { type: 'circle', cx: hx, cy: footY + 3.5, r: 1.3, fill: '#06b6d4' }
       ];
-    } else if (style === 'sneakers') {
+    } else if (shoeStyle === 'boots') {
       return [
-        {
-          type: 'path',
-          d: `M ${footStartX} ${footY} Q ${hx} ${footY - 4} ${footStartX + footW} ${footY} L ${footStartX + footW} ${footY + footH} L ${footStartX} ${footY + footH} Z`,
-          fill: shoeColor,
-        },
-        // White sneaker rubber sole
-        {
-          type: 'rect',
-          x: footStartX - 1,
-          y: footY + footH - 3,
-          width: footW + 2,
-          height: 3.5,
-          rx: 1,
-          fill: '#ffffff',
-        },
-        // White lace accent
-        {
-          type: 'path',
-          d: `M ${hx - 3} ${footY + 2} L ${hx + 3} ${footY + 2}`,
-          stroke: '#ffffff',
-          strokeWidth: 1.5,
-          strokeLinecap: 'round',
-          fill: 'none',
-        },
+        { type: 'path', d: `M ${hx - 7 * footSize} ${footY - 3} L ${hx + 7 * footSize} ${footY - 3} L ${hx + 8 * footSize} ${footY + footH} L ${hx - 8 * footSize} ${footY + footH} Z`, fill: shoeColor },
+        { type: 'rect', x: hx - 9 * footSize, y: footY + footH - 3, width: 18 * footSize, height: 3.5, rx: 1, fill: '#0f172a' },
+        { type: 'rect', x: hx - 3.5 * footSize, y: footY, width: 7 * footSize, height: 2.5, rx: 1, fill: '#facc15' }
       ];
     }
-    // classic shoes
+    // Sneakers
     return [
+      { type: 'path', d: `M ${footX} ${footY} Q ${hx} ${footY - 3} ${footX + footW} ${footY} L ${footX + footW} ${footY + footH} L ${footX} ${footY + footH} Z`, fill: shoeColor },
       {
         type: 'path',
-        d: `M ${footStartX} ${footY} Q ${hx} ${footY - 3} ${footStartX + footW} ${footY} Q ${footStartX + footW + 2} ${footY + footH} ${hx} ${footY + footH} Q ${footStartX - 2} ${footY + footH} ${footStartX} ${footY} Z`,
-        fill: shoeColor,
+        d: isLeft
+          ? `M ${footX} ${footY + 2} Q ${footX + 5} ${footY + 1} ${footX + 6} ${footY + footH} L ${footX} ${footY + footH} Z`
+          : `M ${footX + footW} ${footY + 2} Q ${footX + footW - 5} ${footY + 1} ${footX + footW - 6} ${footY + footH} L ${footX + footW} ${footY + footH} Z`,
+        fill: '#ffffff',
       },
+      { type: 'rect', x: footX - 1, y: footY + footH - 3, width: footW + 2, height: 3, rx: 1, fill: '#ffffff' },
+      { type: 'path', d: `M ${footX - 1} ${footY + footH - 1.5} L ${footX + footW + 1} ${footY + footH - 1.5}`, stroke: '#94a3b8', strokeWidth: 0.8 },
+      { type: 'path', d: `M ${hx - 2.5} ${footY + 1.8} L ${hx + 2.5} ${footY + 1.8}`, stroke: '#ffffff', strokeWidth: 1.3, strokeLinecap: 'round', fill: 'none' },
+      { type: 'path', d: `M ${hx - 2} ${footY + 4} L ${hx + 2} ${footY + 4}`, stroke: '#ffffff', strokeWidth: 1.3, strokeLinecap: 'round', fill: 'none' }
     ];
   };
 
-  // Build Left Leg shapes
+  // Left Leg
   const leftLegShapes: VectorPartShape[] = [
     {
       type: 'path',
-      d: `M ${leftHipX - 8 * leftLegThick} ${leftHipY} L ${leftHipX - 5 * leftLegThick} ${leftHipY + leftLegTotalH} L ${leftHipX + 7 * leftLegThick} ${leftHipY + leftLegTotalH} L ${leftHipX + 8 * leftLegThick} ${leftHipY} Z`,
+      d: `M ${leftHipX - 6 * leftLegThick} ${leftHipY} L ${leftHipX - 4.5 * leftLegThick} ${leftHipY + leftLegLen} L ${leftHipX + 4.5 * leftLegThick} ${leftHipY + leftLegLen} L ${leftHipX + 6 * leftLegThick} ${leftHipY} Z`,
       fill: leftPantsColor,
     },
-    ...buildFootwearShapes(leftHipX, leftHipY, leftLegTotalH, leftLegThick, leftFootSize, leftShoeStyle, leftShoeColor, true),
+    {
+      type: 'rect',
+      x: leftHipX - 5 * leftLegThick,
+      y: leftHipY + leftLegLen - 2.5,
+      width: 10 * leftLegThick,
+      height: 2.5,
+      rx: 1,
+      fill: leftPantsColor,
+      stroke: '#0f172a',
+      strokeWidth: 0.6,
+      opacity: 0.8,
+    },
+    ...drawFootwear(leftHipX, leftHipY + leftLegLen, true, leftShoeStyle, leftShoeColor, leftFootSize),
   ];
 
-  // Build Right Leg shapes
+  // Right Leg
   const rightLegShapes: VectorPartShape[] = [
     {
       type: 'path',
-      d: `M ${rightHipX - 8 * rightLegThick} ${rightHipY} L ${rightHipX - 5 * rightLegThick} ${rightHipY + rightLegTotalH} L ${rightHipX + 7 * rightLegThick} ${rightHipY + rightLegTotalH} L ${rightHipX + 8 * rightLegThick} ${rightHipY} Z`,
+      d: `M ${rightHipX - 6 * rightLegThick} ${rightHipY} L ${rightHipX - 4.5 * rightLegThick} ${rightHipY + rightLegLen} L ${rightHipX + 4.5 * rightLegThick} ${rightHipY + rightLegLen} L ${rightHipX + 6 * rightLegThick} ${rightHipY} Z`,
       fill: rightPantsColor,
     },
-    ...buildFootwearShapes(rightHipX, rightHipY, rightLegTotalH, rightLegThick, rightFootSize, rightShoeStyle, rightShoeColor, false),
+    {
+      type: 'rect',
+      x: rightHipX - 5 * rightLegThick,
+      y: rightHipY + rightLegLen - 2.5,
+      width: 10 * rightLegThick,
+      height: 2.5,
+      rx: 1,
+      fill: rightPantsColor,
+      stroke: '#0f172a',
+      strokeWidth: 0.6,
+      opacity: 0.8,
+    },
+    ...drawFootwear(rightHipX, rightHipY + rightLegLen, false, rightShoeStyle, rightShoeColor, rightFootSize),
   ];
 
-  // -------------------------------------------------------------------------
-  // 5. ASSEMBLE RIG DEFINITION (Issue 2 connected joints)
-  // -------------------------------------------------------------------------
+  const finalTorsoShapes = isPlanet ? [] : torsoShapes;
+  const finalLeftArmShapes = isPlanet ? [] : leftArmShapes;
+  const finalRightArmShapes = isPlanet ? [] : rightArmShapes;
+  const finalLeftForearmShapes = isPlanet ? [] : leftForearmShapes;
+  const finalRightForearmShapes = isPlanet ? [] : rightForearmShapes;
+  const finalLeftLegShapes = isPlanet ? [] : leftLegShapes;
+  const finalRightLegShapes = isPlanet ? [] : rightLegShapes;
+
   return {
     id: `custom-rig-${id}`,
     name,
     species: app.species || 'Human',
-    viewBox: '-100 -160 200 240',
-    baseWidth: 150 * torsoWidth,
-    baseHeight: 220,
+    viewBox: '-100 -115 200 220',
+    baseWidth: isPlanet ? 160 : 150 * torsoWidth,
+    baseHeight: isPlanet ? 200 : 210,
     parts: {
       torso: {
         id: 'torso',
         label: 'Torso',
-        pivot: { x: 0, y: 15 },
+        pivot: { x: 0, y: isPlanet ? 0 : 12 },
         zIndex: 2,
-        shapes: torsoShapes,
+        shapes: finalTorsoShapes,
       },
       head: {
         id: 'head',
-        label: 'Head',
-        pivot: { x: 0, y: headChinY },
+        label: isPlanet ? 'Globe' : 'Head',
+        pivot: { x: 0, y: isPlanet ? baseHeadY : headChinY },
         zIndex: 4,
         shapes: headShapes,
       },
@@ -1392,42 +1427,42 @@ export function buildRigFromAppearance(
         label: 'Left Upper Arm',
         pivot: { x: leftShoulderX, y: leftShoulderY },
         zIndex: 1,
-        shapes: leftArmShapes,
+        shapes: finalLeftArmShapes,
       },
       leftForearm: {
         id: 'leftForearm',
         label: 'Left Forearm',
         pivot: { x: leftElbowX, y: leftElbowY },
         zIndex: 1,
-        shapes: leftForearmShapes,
+        shapes: finalLeftForearmShapes,
       },
       rightArm: {
         id: 'rightArm',
         label: 'Right Upper Arm',
         pivot: { x: rightShoulderX, y: rightShoulderY },
         zIndex: 3,
-        shapes: rightArmShapes,
+        shapes: finalRightArmShapes,
       },
       rightForearm: {
         id: 'rightForearm',
         label: 'Right Forearm',
         pivot: { x: rightElbowX, y: rightElbowY },
         zIndex: 4,
-        shapes: rightForearmShapes,
+        shapes: finalRightForearmShapes,
       },
       leftLeg: {
         id: 'leftLeg',
         label: 'Left Leg',
         pivot: { x: leftHipX, y: leftHipY },
         zIndex: 1,
-        shapes: leftLegShapes,
+        shapes: finalLeftLegShapes,
       },
       rightLeg: {
         id: 'rightLeg',
         label: 'Right Leg',
         pivot: { x: rightHipX, y: rightHipY },
         zIndex: 1,
-        shapes: rightLegShapes,
+        shapes: finalRightLegShapes,
       },
     },
   };

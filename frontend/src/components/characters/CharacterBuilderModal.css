@@ -227,22 +227,71 @@
   background: #0d1527;
 }
 
+.char-builder-tabs-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+  background: #111a2e;
+  border-bottom: 1px solid #1e293b;
+  width: 100%;
+  overflow: hidden;
+}
+
+.char-builder-tab-scroll-btn {
+  background: #111a2e;
+  border: none;
+  color: #94a3b8;
+  font-size: 16px;
+  line-height: 1;
+  width: 22px;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 2;
+  transition: all 0.15s;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.char-builder-tab-scroll-btn:hover {
+  color: #ffffff;
+  background: #1e293b;
+}
+
 .char-builder-tabs {
   display: flex;
   background: #111a2e;
-  border-bottom: 1px solid #1e293b;
-  overflow-x: hidden;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: #334155 transparent;
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+  flex: 1;
 }
 
 .char-builder-tabs::-webkit-scrollbar {
-  display: none;
+  height: 4px;
+}
+
+.char-builder-tabs::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.char-builder-tabs::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 2px;
+}
+
+.char-builder-tabs::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
 }
 
 .char-builder-tab {
-  flex: 1;
-  padding: 10px 4px;
+  flex: 0 0 auto;
+  padding: 10px 12px;
   font-size: 11px;
   font-weight: 600;
   color: #94a3b8;
@@ -254,7 +303,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 3px;
+  gap: 4px;
   transition: all 0.15s;
 }
 
