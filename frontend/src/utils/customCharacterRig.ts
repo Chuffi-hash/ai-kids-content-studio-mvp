@@ -658,180 +658,222 @@ export function buildRigFromAppearance(
     const glowStyle = app.planet?.atmosphereGlow || 'cyan';
     const hasClouds = app.planet?.clouds !== false;
 
-    // 1. Crisp Luminous Atmospheric Corona (Outer Space Halo, no dark fill disk!)
+    // 1. Crisp Luminous Atmospheric Corona (Radiant rim halo, NO dark gap!)
     if (glowStyle === 'gold') {
       headShapes.push(
-        { type: 'circle', cx: 0, cy: baseHeadY, r: headRx + 4, fill: 'none', stroke: '#facc15', strokeWidth: 2.5, opacity: 0.45, tag: 'face_base' },
-        { type: 'circle', cx: 0, cy: baseHeadY, r: headRx + 7, fill: 'none', stroke: '#fbbf24', strokeWidth: 1.8, opacity: 0.25, tag: 'face_base' }
+        { type: 'circle', cx: 0, cy: baseHeadY, r: headRx + 2.5, fill: 'none', stroke: '#facc15', strokeWidth: 2.0, opacity: 0.5, tag: 'face_base' }
       );
     } else if (glowStyle === 'white') {
       headShapes.push(
-        { type: 'circle', cx: 0, cy: baseHeadY, r: headRx + 4, fill: 'none', stroke: '#ffffff', strokeWidth: 2.2, opacity: 0.40, tag: 'face_base' },
-        { type: 'circle', cx: 0, cy: baseHeadY, r: headRx + 7, fill: 'none', stroke: '#cbd5e1', strokeWidth: 1.6, opacity: 0.22, tag: 'face_base' }
+        { type: 'circle', cx: 0, cy: baseHeadY, r: headRx + 2.5, fill: 'none', stroke: '#ffffff', strokeWidth: 2.0, opacity: 0.45, tag: 'face_base' }
       );
     } else if (glowStyle !== 'none') {
       headShapes.push(
-        { type: 'circle', cx: 0, cy: baseHeadY, r: headRx + 4, fill: 'none', stroke: '#38bdf8', strokeWidth: 2.5, opacity: 0.45, tag: 'face_base' },
-        { type: 'circle', cx: 0, cy: baseHeadY, r: headRx + 7, fill: 'none', stroke: '#60a5fa', strokeWidth: 1.8, opacity: 0.25, tag: 'face_base' }
+        { type: 'circle', cx: 0, cy: baseHeadY, r: headRx + 2.5, fill: 'none', stroke: '#38bdf8', strokeWidth: 2.0, opacity: 0.5, tag: 'face_base' }
       );
     }
 
-    // 2. Ocean Globe Base Sphere with 3D Radial Lighting
+    // 2. Ocean Globe Base Sphere with Luminous Atmospheric Perimeter
     headShapes.push({
       type: 'circle',
       cx: 0,
       cy: baseHeadY,
       r: headRx,
       fill: oceanColor,
-      stroke: glowStyle === 'gold' ? '#fde68a' : '#60a5fa',
-      strokeWidth: 1.2,
+      stroke: glowStyle === 'gold' ? '#fde68a' : glowStyle === 'white' ? '#ffffff' : '#38bdf8',
+      strokeWidth: 2.2,
       tag: 'face_base',
     });
 
-    // Upper-Left Atmosphere Rim Shine
+    // 3. 3D Spherical Volume Shadow on Lower-Right Horizon
+    headShapes.push({
+      type: 'path',
+      d: `M 0 ${baseHeadY + 48} A 48 48 0 0 0 48 ${baseHeadY} Q 30 ${baseHeadY + 30} 0 ${baseHeadY + 48} Z`,
+      fill: '#0f172a',
+      opacity: 0.30,
+      tag: 'face_base',
+    });
+
+    // 4. Arctic Ice Cap (Gentle, natural crown at the North Pole)
+    headShapes.push(
+      {
+        type: 'path',
+        d: `M -16 ${baseHeadY - 45.2} Q 0 ${baseHeadY - 41.5} 16 ${baseHeadY - 45.2} A 48 48 0 0 0 -16 ${baseHeadY - 45.2} Z`,
+        fill: '#f8fafc',
+        tag: 'face_base',
+      },
+      {
+        type: 'path',
+        d: `M -12 ${baseHeadY - 43.5} Q 0 ${baseHeadY - 40} 12 ${baseHeadY - 43.5}`,
+        stroke: '#cbd5e1',
+        strokeWidth: 1.0,
+        fill: 'none',
+        tag: 'face_base',
+      }
+    );
+
+    // 5. Greenland (Snowy North Atlantic Island)
+    headShapes.push({
+      type: 'path',
+      d: `M 3 ${baseHeadY - 41} Q 10 ${baseHeadY - 43} 13 ${baseHeadY - 36} Q 8 ${baseHeadY - 33} 3 ${baseHeadY - 41} Z`,
+      fill: '#f1f5f9',
+      stroke: '#cbd5e1',
+      strokeWidth: 0.8,
+      tag: 'face_base',
+    });
+
+    // 6. CONTINENTS (Authentic, organically placed Earth geography!)
+    // === NORTH AMERICA (Upper-West) ===
+    headShapes.push(
+      // Alaska & NW Canada
+      {
+        type: 'path',
+        d: `M -41 ${baseHeadY - 20} Q -38 ${baseHeadY - 30} -28 ${baseHeadY - 34} Q -16 ${baseHeadY - 33} -12 ${baseHeadY - 25} Q -16 ${baseHeadY - 20} -23 ${baseHeadY - 22} Q -30 ${baseHeadY - 21} -36 ${baseHeadY - 14} Z`,
+        fill: continentColor,
+        tag: 'face_base',
+      },
+      // Canada / Great Lakes East Coast
+      {
+        type: 'path',
+        d: `M -17 ${baseHeadY - 28} Q -5 ${baseHeadY - 30} 1 ${baseHeadY - 24} Q -3 ${baseHeadY - 17} -9 ${baseHeadY - 16} Q -16 ${baseHeadY - 17} -17 ${baseHeadY - 28} Z`,
+        fill: continentAccent,
+        tag: 'face_base',
+      },
+      // USA Main Body
+      {
+        type: 'path',
+        d: `M -34 ${baseHeadY - 14} Q -20 ${baseHeadY - 16} -9 ${baseHeadY - 12} Q -6 ${baseHeadY - 7} -7 ${baseHeadY - 2} Q -14 ${baseHeadY - 4} -21 ${baseHeadY - 2} Q -28 ${baseHeadY - 6} -34 ${baseHeadY - 14} Z`,
+        fill: continentColor,
+        tag: 'face_base',
+      },
+      // Florida Peninsula
+      {
+        type: 'path',
+        d: `M -7 ${baseHeadY - 4} Q -5 0 -8 ${baseHeadY + 2} Q -10 ${baseHeadY - 1} -7 ${baseHeadY - 4} Z`,
+        fill: continentAccent,
+        tag: 'face_base',
+      },
+      // Mexico & Central America
+      {
+        type: 'path',
+        d: `M -23 ${baseHeadY - 2} Q -17 ${baseHeadY + 4} -13 ${baseHeadY + 10} Q -11 ${baseHeadY + 14} -9 ${baseHeadY + 16} Q -12 ${baseHeadY + 16} -16 ${baseHeadY + 10} Q -21 ${baseHeadY + 4} -23 ${baseHeadY - 2} Z`,
+        fill: continentColor,
+        tag: 'face_base',
+      }
+    );
+
+    // === SOUTH AMERICA (Lower-West / Southwest) ===
+    headShapes.push(
+      // Iconic triangular continent: Brazil bulge, Andes spine, Patagonia
+      {
+        type: 'path',
+        d: `M -9 ${baseHeadY + 16} Q -2 ${baseHeadY + 18} 3 ${baseHeadY + 24} Q 4 ${baseHeadY + 32} -3 ${baseHeadY + 38} Q -8 ${baseHeadY + 44} -12 ${baseHeadY + 46} Q -14 ${baseHeadY + 40} -14 ${baseHeadY + 30} Q -15 ${baseHeadY + 22} -9 ${baseHeadY + 16} Z`,
+        fill: continentColor,
+        tag: 'face_base',
+      },
+      // Amazon Basin Green Highlight
+      {
+        type: 'path',
+        d: `M -5 ${baseHeadY + 20} Q 0 ${baseHeadY + 22} 2 ${baseHeadY + 27} Q -2 ${baseHeadY + 30} -5 ${baseHeadY + 20} Z`,
+        fill: continentShelf,
+        tag: 'face_base',
+      }
+    );
+
+    // === EURASIA (Upper-East) ===
+    headShapes.push(
+      // Scandinavia, Europe, and Asia
+      {
+        type: 'path',
+        d: `M 16 ${baseHeadY - 26} Q 22 ${baseHeadY - 34} 32 ${baseHeadY - 32} Q 43 ${baseHeadY - 26} 45 ${baseHeadY - 16} Q 36 ${baseHeadY - 15} 26 ${baseHeadY - 18} Q 17 ${baseHeadY - 18} 16 ${baseHeadY - 26} Z`,
+        fill: continentColor,
+        tag: 'face_base',
+      },
+      // British Isles
+      {
+        type: 'ellipse',
+        cx: 14,
+        cy: baseHeadY - 30,
+        rx: 2,
+        ry: 3.2,
+        fill: continentAccent,
+        tag: 'face_base',
+      }
+    );
+
+    // === AFRICA (Lower-East / Southeast) ===
+    headShapes.push(
+      // Sahara, West African Bulge, Horn of Africa, Cape
+      {
+        type: 'path',
+        d: `M 18 ${baseHeadY - 14} Q 28 ${baseHeadY - 16} 36 ${baseHeadY - 8} Q 43 ${baseHeadY} 41 ${baseHeadY + 12} Q 36 ${baseHeadY + 22} 29 ${baseHeadY + 30} Q 25 ${baseHeadY + 34} 24 ${baseHeadY + 26} Q 22 ${baseHeadY + 14} 16 ${baseHeadY + 4} Q 15 ${baseHeadY - 6} 18 ${baseHeadY - 14} Z`,
+        fill: continentColor,
+        tag: 'face_base',
+      },
+      // Horn of Africa Accent
+      {
+        type: 'path',
+        d: `M 38 ${baseHeadY + 4} Q 43 ${baseHeadY + 6} 42 ${baseHeadY + 11} Q 37 ${baseHeadY + 9} 38 ${baseHeadY + 4} Z`,
+        fill: continentAccent,
+        tag: 'face_base',
+      },
+      // Madagascar Island
+      {
+        type: 'path',
+        d: `M 38 ${baseHeadY + 18} Q 40 ${baseHeadY + 24} 37 ${baseHeadY + 28} Q 35 ${baseHeadY + 24} 38 ${baseHeadY + 18} Z`,
+        fill: continentColor,
+        tag: 'face_base',
+      }
+    );
+
+    // 7. Antarctica Ice Cap (Gentle, at the South Pole)
+    headShapes.push({
+      type: 'path',
+      d: `M -15 ${baseHeadY + 45.5} Q 0 ${baseHeadY + 42} 15 ${baseHeadY + 45.5} A 48 48 0 0 1 -15 ${baseHeadY + 45.5} Z`,
+      fill: '#f8fafc',
+      tag: 'face_base',
+    });
+
+    // 8. Soft Swirling Clouds (Wispy & angled across open oceans, away from face!)
+    if (hasClouds) {
+      headShapes.push(
+        // North Atlantic Cloud Arc
+        {
+          type: 'path',
+          d: `M 12 ${baseHeadY - 21} Q 21 ${baseHeadY - 25} 29 ${baseHeadY - 20} Q 21 ${baseHeadY - 17} 12 ${baseHeadY - 21} Z`,
+          fill: '#ffffff',
+          opacity: 0.8,
+          tag: 'face_base',
+        },
+        { type: 'circle', cx: 20, cy: baseHeadY - 21, r: 3.2, fill: '#ffffff', opacity: 0.8, tag: 'face_base' },
+        // South Pacific Cloud Arc
+        {
+          type: 'path',
+          d: `M -38 ${baseHeadY + 18} Q -28 ${baseHeadY + 14} -20 ${baseHeadY + 20} Q -30 ${baseHeadY + 22} -38 ${baseHeadY + 18} Z`,
+          fill: '#ffffff',
+          opacity: 0.75,
+          tag: 'face_base',
+        },
+        { type: 'circle', cx: -29, cy: baseHeadY + 18, r: 2.8, fill: '#ffffff', opacity: 0.75, tag: 'face_base' }
+      );
+    }
+
+    // 9. Upper-Left Atmospheric Sun Glint
     headShapes.push({
       type: 'path',
       d: `M -34 ${baseHeadY - 34} A 48 48 0 0 1 -5 ${baseHeadY - 47.7}`,
-      stroke: '#bfdbfe',
-      strokeWidth: 2.0,
+      stroke: '#ffffff',
+      strokeWidth: 2.2,
       strokeLinecap: 'round',
       fill: 'none',
       opacity: 0.6,
       tag: 'face_base',
     });
 
-    // 3. North & South Polar Ice Caps (Curved along the globe horizon)
-    // Arctic Ice Cap (North Pole)
+    // 10. Cute Blush Cheeks (Resting in the Clear Blue Ocean!)
     headShapes.push(
-      {
-        type: 'path',
-        d: `M -24 ${baseHeadY - 41.5} Q 0 ${baseHeadY - 35} 24 ${baseHeadY - 41.5} A 48 48 0 0 0 -24 ${baseHeadY - 41.5} Z`,
-        fill: '#f8fafc',
-        tag: 'face_base',
-      },
-      {
-        type: 'path',
-        d: `M -20 ${baseHeadY - 40} Q 0 ${baseHeadY - 35.5} 20 ${baseHeadY - 40}`,
-        stroke: '#bae6fd',
-        strokeWidth: 1.2,
-        strokeLinecap: 'round',
-        fill: 'none',
-        opacity: 0.8,
-        tag: 'face_base',
-      }
-    );
-
-    // Antarctic Ice Cap (South Pole)
-    headShapes.push(
-      {
-        type: 'path',
-        d: `M -22 ${baseHeadY + 42.6} Q 0 ${baseHeadY + 37} 22 ${baseHeadY + 42.6} A 48 48 0 0 1 -22 ${baseHeadY + 42.6} Z`,
-        fill: '#f8fafc',
-        tag: 'face_base',
-      },
-      {
-        type: 'path',
-        d: `M -18 ${baseHeadY + 41.5} Q 0 ${baseHeadY + 37.5} 18 ${baseHeadY + 41.5}`,
-        stroke: '#bae6fd',
-        strokeWidth: 1.2,
-        strokeLinecap: 'round',
-        fill: 'none',
-        opacity: 0.8,
-        tag: 'face_base',
-      }
-    );
-
-    // 4. World Continents (Hugging Perimeter Arcs, leaving Central Ocean Open for Face)
-    // North America (Upper-Left)
-    headShapes.push(
-      {
-        type: 'path',
-        d: `M -24 ${baseHeadY - 41.5} A 48 48 0 0 0 -47.8 ${baseHeadY - 4} Q -44 ${baseHeadY - 2} -38 ${baseHeadY - 6} Q -32 ${baseHeadY - 8} -28 ${baseHeadY - 16} Q -24 ${baseHeadY - 26} -28 ${baseHeadY - 36} Z`,
-        fill: continentColor,
-        tag: 'face_base',
-      },
-      {
-        type: 'path',
-        d: `M -40 ${baseHeadY - 5} Q -32 ${baseHeadY - 2} -29 ${baseHeadY + 5} L -34 ${baseHeadY + 7} Q -38 ${baseHeadY + 1} -45 ${baseHeadY - 1} Z`,
-        fill: continentColor,
-        tag: 'face_base',
-      }
-    );
-
-    // Greenland (Snowy island in North Atlantic)
-    headShapes.push({
-      type: 'path',
-      d: `M -14 ${baseHeadY - 37} Q -8 ${baseHeadY - 41} -4 ${baseHeadY - 35} Q -9 ${baseHeadY - 33} -14 ${baseHeadY - 37} Z`,
-      fill: '#e2e8f0',
-      stroke: '#bae6fd',
-      strokeWidth: 0.8,
-      tag: 'face_base',
-    });
-
-    // South America (Lower-Left)
-    headShapes.push({
-      type: 'path',
-      d: `M -34 ${baseHeadY + 6} Q -22 ${baseHeadY + 8} -20 ${baseHeadY + 16} Q -22 ${baseHeadY + 28} -28 ${baseHeadY + 38} A 48 48 0 0 1 -47.8 ${baseHeadY + 4} Q -40 ${baseHeadY + 10} -34 ${baseHeadY + 6} Z`,
-      fill: continentAccent,
-      tag: 'face_base',
-    });
-
-    // Europe & Asia (Eurasia - Upper East Side)
-    headShapes.push(
-      {
-        type: 'path',
-        d: `M 24 ${baseHeadY - 41.5} A 48 48 0 0 1 47.8 ${baseHeadY - 4} Q 40 ${baseHeadY - 7} 32 ${baseHeadY - 12} Q 24 ${baseHeadY - 17} 21 ${baseHeadY - 26} Q 18 ${baseHeadY - 34} 24 ${baseHeadY - 41.5} Z`,
-        fill: continentColor,
-        tag: 'face_base',
-      },
-      { type: 'ellipse', cx: 16, cy: baseHeadY - 28, rx: 2, ry: 3.2, fill: continentColor, tag: 'face_base' }
-    );
-
-    // Africa (Lower East Side)
-    headShapes.push(
-      {
-        type: 'path',
-        d: `M 22 ${baseHeadY - 2} Q 32 ${baseHeadY - 4} 42 ${baseHeadY + 2} A 48 48 0 0 1 22 ${baseHeadY + 42.6} Q 24 ${baseHeadY + 30} 22 ${baseHeadY + 18} Q 19 ${baseHeadY + 10} 22 ${baseHeadY - 2} Z`,
-        fill: continentAccent,
-        tag: 'face_base',
-      },
-      {
-        type: 'path',
-        d: `M 43 ${baseHeadY + 18} Q 45 ${baseHeadY + 25} 41 ${baseHeadY + 30}`,
-        stroke: continentColor,
-        strokeWidth: 2.2,
-        strokeLinecap: 'round',
-        fill: 'none',
-        tag: 'face_base',
-      }
-    );
-
-    // 5. Cute Soft Swirling Planet Clouds
-    if (hasClouds) {
-      headShapes.push(
-        {
-          type: 'path',
-          d: `M -10 ${baseHeadY - 24} Q 1 ${baseHeadY - 28} 12 ${baseHeadY - 24} Q 16 ${baseHeadY - 21} 8 ${baseHeadY - 20} Q -2 ${baseHeadY - 20} -10 ${baseHeadY - 24} Z`,
-          fill: '#ffffff',
-          opacity: 0.75,
-          tag: 'face_base',
-        },
-        { type: 'circle', cx: 0, cy: baseHeadY - 25, r: 3.2, fill: '#ffffff', opacity: 0.75, tag: 'face_base' },
-        {
-          type: 'path',
-          d: `M -12 ${baseHeadY + 25} Q 0 ${baseHeadY + 21} 12 ${baseHeadY + 25} Q 15 ${baseHeadY + 28} 8 ${baseHeadY + 29} Q -4 ${baseHeadY + 29} -12 ${baseHeadY + 25} Z`,
-          fill: '#ffffff',
-          opacity: 0.7,
-          tag: 'face_base',
-        },
-        { type: 'circle', cx: 1, cy: baseHeadY + 25, r: 3.0, fill: '#ffffff', opacity: 0.7, tag: 'face_base' }
-      );
-    }
-
-    // 6. Cute Blush Cheeks (Resting in the Clear Blue Ocean!)
-    headShapes.push(
-      { type: 'ellipse', cx: -19 * headSize, cy: baseHeadY - 1, rx: 5.5, ry: 3.5, fill: '#f43f5e', opacity: 0.6, tag: 'face_base' },
-      { type: 'ellipse', cx: 19 * headSize, cy: baseHeadY - 1, rx: 5.5, ry: 3.5, fill: '#f43f5e', opacity: 0.6, tag: 'face_base' }
+      { type: 'ellipse', cx: -14 * headSize, cy: baseHeadY + 2, rx: 5.5, ry: 3.5, fill: '#f43f5e', opacity: 0.6, tag: 'face_base' },
+      { type: 'ellipse', cx: 14 * headSize, cy: baseHeadY + 2, rx: 5.5, ry: 3.5, fill: '#f43f5e', opacity: 0.6, tag: 'face_base' }
     );
   } else if (app.head.shape === 'square') {
     headShapes.push({
@@ -947,8 +989,8 @@ export function buildRigFromAppearance(
   }
 
   // Eyes (Issue 1: genuinely distinct eye styles)
-  const eyeR = (isPlanet ? 5.2 : 5) * eyeSize;
-  const eyeY = isPlanet ? baseHeadY - 5 : baseHeadY;
+  const eyeR = (isPlanet ? 6.5 : 5) * eyeSize;
+  const eyeY = isPlanet ? baseHeadY - 4 : baseHeadY;
   const leftEyeX = (isPlanet ? -11 : -12) * headSize;
   const rightEyeX = (isPlanet ? 11 : 12) * headSize;
   const eyeStartIdx = headShapes.length;
@@ -1029,13 +1071,27 @@ export function buildRigFromAppearance(
       }
     );
   } else {
-    // Round standard cartoon eye
-    headShapes.push(
-      { type: 'circle', cx: leftEyeX, cy: eyeY, r: eyeR, fill: eyeColor },
-      { type: 'circle', cx: leftEyeX - 1.5, cy: eyeY - 2, r: eyeR * 0.4, fill: '#ffffff' },
-      { type: 'circle', cx: rightEyeX, cy: eyeY, r: eyeR, fill: eyeColor },
-      { type: 'circle', cx: rightEyeX - 1.5, cy: eyeY - 2, r: eyeR * 0.4, fill: '#ffffff' }
-    );
+    // Round standard cartoon eye (for Planet: crisp sclera with bright cartoon pupils and dual sparkles!)
+    if (isPlanet) {
+      headShapes.push(
+        { type: 'circle', cx: leftEyeX, cy: eyeY, r: eyeR, fill: '#ffffff', stroke: '#0f172a', strokeWidth: 1.5 },
+        { type: 'circle', cx: leftEyeX, cy: eyeY, r: eyeR * 0.7, fill: eyeColor || '#0f172a' },
+        { type: 'circle', cx: leftEyeX - 1.8, cy: eyeY - 2.0, r: eyeR * 0.28, fill: '#ffffff' },
+        { type: 'circle', cx: leftEyeX + 2.0, cy: eyeY + 1.8, r: eyeR * 0.14, fill: '#ffffff' },
+
+        { type: 'circle', cx: rightEyeX, cy: eyeY, r: eyeR, fill: '#ffffff', stroke: '#0f172a', strokeWidth: 1.5 },
+        { type: 'circle', cx: rightEyeX, cy: eyeY, r: eyeR * 0.7, fill: eyeColor || '#0f172a' },
+        { type: 'circle', cx: rightEyeX - 1.8, cy: eyeY - 2.0, r: eyeR * 0.28, fill: '#ffffff' },
+        { type: 'circle', cx: rightEyeX + 2.0, cy: eyeY + 1.8, r: eyeR * 0.14, fill: '#ffffff' }
+      );
+    } else {
+      headShapes.push(
+        { type: 'circle', cx: leftEyeX, cy: eyeY, r: eyeR, fill: eyeColor },
+        { type: 'circle', cx: leftEyeX - 1.5, cy: eyeY - 2, r: eyeR * 0.4, fill: '#ffffff' },
+        { type: 'circle', cx: rightEyeX, cy: eyeY, r: eyeR, fill: eyeColor },
+        { type: 'circle', cx: rightEyeX - 1.5, cy: eyeY - 2, r: eyeR * 0.4, fill: '#ffffff' }
+      );
+    }
   }
   for (let i = eyeStartIdx; i < headShapes.length; i++) {
     headShapes[i].tag = 'eyes';
@@ -1043,8 +1099,8 @@ export function buildRigFromAppearance(
 
   // Eyebrows (Issue 1: distinct eyebrow styles)
   const browStartIdx = headShapes.length;
-  const browY = isPlanet ? baseHeadY - 14 * headSize : baseHeadY - 10 * headSize;
-  const browColor = app.eyebrows.color || hairColor;
+  const browY = isPlanet ? baseHeadY - 13 * headSize : baseHeadY - 10 * headSize;
+  const browColor = isPlanet ? '#0f172a' : (app.eyebrows.color || hairColor);
 
   if (app.eyebrows.style === 'flat') {
     headShapes.push(
@@ -1074,8 +1130,8 @@ export function buildRigFromAppearance(
 
   // Nose (Issue 1: distinct nose styles including oval and button)
   const noseStartIdx = headShapes.length;
-  const noseY = isPlanet ? baseHeadY + 2.5 : baseHeadY + 6;
-  const noseColor = app.nose.color || '#d97706';
+  const noseY = isPlanet ? baseHeadY + 3 : baseHeadY + 6;
+  const noseColor = isPlanet ? '#38bdf8' : (app.nose.color || '#d97706');
 
   if (app.nose.style === 'bear_snout') {
     headShapes.push({
@@ -1114,13 +1170,13 @@ export function buildRigFromAppearance(
         type: 'circle',
         cx: 0,
         cy: noseY,
-        r: 3.2 * (app.nose.size || 1.0),
+        r: (isPlanet ? 2.5 : 3.2) * (app.nose.size || 1.0),
         fill: noseColor,
       },
       {
         type: 'path',
         d: `M -2 ${noseY + 1.5} Q 0 ${noseY + 3.5} 2 ${noseY + 1.5}`,
-        stroke: '#78350f',
+        stroke: isPlanet ? '#0284c7' : '#78350f',
         strokeWidth: 1.2,
         fill: 'none',
       }
@@ -1132,7 +1188,7 @@ export function buildRigFromAppearance(
 
   // Mouth (Issue 1: distinct mouth expressions)
   const mouthStartIdx = headShapes.length;
-  const mouthY = isPlanet ? baseHeadY + 10 : baseHeadY + 16;
+  const mouthY = isPlanet ? baseHeadY + 11 : baseHeadY + 16;
   const mouthColor = app.mouth.color || '#b91c1c';
 
   if (app.mouth.style === 'open_grin') {
@@ -1196,14 +1252,7 @@ export function buildRigFromAppearance(
   }
 
   // Accessories: Blush & Freckles & Hats
-  if (isPlanet) {
-    if (app.accessories?.blush !== false) {
-      headShapes.push(
-        { type: 'ellipse', cx: -24 * headSize, cy: baseHeadY + 5, rx: 7, ry: 4.5, fill: '#f43f5e', opacity: 0.45, tag: 'face_base' },
-        { type: 'ellipse', cx: 24 * headSize, cy: baseHeadY + 5, rx: 7, ry: 4.5, fill: '#f43f5e', opacity: 0.45, tag: 'face_base' }
-      );
-    }
-  } else {
+  if (!isPlanet) {
     if (app.accessories?.blush !== false) {
       headShapes.push(
         { type: 'ellipse', cx: -22 * headSize, cy: baseHeadY + 8, rx: 6, ry: 4, fill: '#f87171', opacity: 0.45 },
