@@ -470,7 +470,9 @@ export const CharacterBuilderModal: React.FC<CharacterBuilderModalProps> = ({
         {/* Top Header Bar */}
         <div className="char-builder-header">
           <div className="char-builder-header-left">
-            <span className="char-builder-badge">Vector Rig Studio</span>
+            <span className="char-builder-badge">
+              {character ? 'Edit Character' : 'Vector Rig Studio'}
+            </span>
             <input
               type="text"
               className="char-builder-name-input"

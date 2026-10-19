@@ -6,13 +6,11 @@ import {
   updateCharacter,
   deleteCharacter,
   duplicateCharacter,
-  generateCharacterReferenceImage,
 } from "../services/character.service";
 import CharacterLibraryHeader from "../components/characters/CharacterLibraryHeader";
 import CharacterToolbar from "../components/characters/CharacterToolbar";
 import CharacterGrid from "../components/characters/CharacterGrid";
 import CharacterEmptyState from "../components/characters/CharacterEmptyState";
-import CharacterModal from "../components/characters/CharacterModal";
 import CharacterBuilderModal from "../components/characters/CharacterBuilderModal";
 import { ConfirmModal } from "../components/common/ConfirmModal";
 import { CloseIcon } from "../components/common/Icons";
@@ -21,11 +19,7 @@ import "../components/characters/characters.css";
 export default function CharactersPage() {
   const [characters, setCharacters] = useState<Character[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showModal, setShowModal] = useState(false);
   const [showBuilderModal, setShowBuilderModal] = useState(false);
-  const [editingCharacter, setEditingCharacter] = useState<Character | null>(
-    null,
-  );
   const [builderCharacter, setBuilderCharacter] = useState<Character | null>(
     null,
   );
@@ -51,58 +45,6 @@ export default function CharactersPage() {
     }
   }
 
-  async function handleCreateCharacter(data: {
-    name: string;
-    species: string;
-    personality: string;
-    visualDescription: string;
-    distinctiveFeatures?: string;
-    canonicalAppearance?: any;
-  }) {
-    try {
-      setApiError(null);
-      await createCharacter(data);
-      setShowModal(false);
-      setEditingCharacter(null);
-      loadCharacters();
-    } catch (error) {
-      console.error("Failed to create character:", error);
-      setApiError("Failed to create character. Please try again.");
-    }
-  }
-
-  async function handleEditCharacterSubmit(data: {
-    name: string;
-    species: string;
-    personality: string;
-    visualDescription: string;
-    distinctiveFeatures?: string;
-    canonicalAppearance?: any;
-  }) {
-    if (!editingCharacter) return;
-    try {
-      setApiError(null);
-      await updateCharacter(editingCharacter.id, data);
-      setShowModal(false);
-      setEditingCharacter(null);
-      loadCharacters();
-    } catch (error) {
-      console.error("Failed to update character:", error);
-      setApiError("Failed to update character. Please try again.");
-    }
-  }
-
-  async function handleGenerateReference(characterId: string) {
-    try {
-      setApiError(null);
-      await generateCharacterReferenceImage(characterId);
-      loadCharacters();
-    } catch (error) {
-      console.error("Failed to generate reference image:", error);
-      setApiError("Failed to generate reference image. Please try again.");
-    }
-  }
-
   function handleDeleteCharacter(id: string, name: string) {
     setDeleteConfirm({ id, name });
   }
@@ -122,8 +64,7 @@ export default function CharactersPage() {
   }
 
   function handleEditCharacter(character: Character) {
-    setEditingCharacter(character);
-    setShowModal(true);
+    handleOpenBuilder(character);
   }
 
   function handleOpenBuilder(character?: Character | null) {
@@ -155,16 +96,6 @@ export default function CharactersPage() {
       console.error("Failed to duplicate character:", error);
       setApiError("Failed to duplicate character. Please try again.");
     }
-  }
-
-  function handleOpenModal() {
-    setEditingCharacter(null);
-    setShowModal(true);
-  }
-
-  function handleCloseModal() {
-    setShowModal(false);
-    setEditingCharacter(null);
   }
 
   function handleClearFilters() {
@@ -280,7 +211,7 @@ export default function CharactersPage() {
   return (
     <div className="character-library">
       <CharacterLibraryHeader
-        onCreateCharacter={handleOpenModal}
+        onCreateCharacter={() => handleOpenBuilder(null)}
         onOpenBuilder={() => handleOpenBuilder(null)}
       />
       <CharacterToolbar
@@ -316,22 +247,8 @@ export default function CharactersPage() {
           onCustomize={(char) => handleOpenBuilder(char)}
           onDuplicate={(char) => handleDuplicateCharacter(char.id)}
           onDelete={handleDeleteCharacter}
-          onGenerateReference={handleGenerateReference}
         />
       )}
-
-      <CharacterModal
-        isOpen={showModal}
-        character={editingCharacter}
-        onSubmit={
-          editingCharacter ? handleEditCharacterSubmit : handleCreateCharacter
-        }
-        onCancel={handleCloseModal}
-        onOpenBuilder={(char) => {
-          handleCloseModal();
-          handleOpenBuilder(char);
-        }}
-      />
 
       <CharacterBuilderModal
         isOpen={showBuilderModal}
