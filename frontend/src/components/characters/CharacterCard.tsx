@@ -21,19 +21,24 @@ export default function CharacterCard({
   onDelete,
 }: CharacterCardProps) {
   const hasCustomRig = character.canonicalAppearance?.version === 1;
+  const isPlanet = character.canonicalAppearance?.species?.toLowerCase() === 'planet';
+  const rig = hasCustomRig
+    ? buildRigFromAppearance(character.id, character.name, character.canonicalAppearance)
+    : null;
+  const cardViewBox = isPlanet ? '-58 -58 116 116' : '-75 -85 150 180';
 
   return (
     <div className="character-card">
       <div className="character-card-image" style={{ background: hasCustomRig ? '#080d1a' : undefined }}>
-        {hasCustomRig ? (
+        {hasCustomRig && rig ? (
           <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <svg viewBox="-90 -160 180 220" style={{ width: '90%', height: '90%' }}>
+            <svg viewBox={cardViewBox} style={{ width: '90%', height: '90%' }}>
               <VectorCharacterRenderer
-                rig={buildRigFromAppearance(character.id, character.name, character.canonicalAppearance)}
+                rig={rig}
                 pose={{
                   x: 0,
                   y: 0,
-                  scale: 0.85,
+                  scale: 1,
                   rotation: 0,
                   flipX: false,
                   torsoBobY: 0,
