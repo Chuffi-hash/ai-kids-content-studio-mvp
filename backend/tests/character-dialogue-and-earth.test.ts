@@ -430,9 +430,10 @@ test("Dialogue Voice Resolution - Resolves by Character ID or Name with Fallback
 
   // Test 3: Resolution from DB character record
   const customCharId = `test-char-${randomUUID()}`;
+  const cosmosName = `Doctor Cosmos ${randomUUID().slice(0, 6)}`;
   await createCharacter({
     id: customCharId,
-    name: "Doctor Cosmos",
+    name: cosmosName,
     species: "human",
     personality: "Curious scientist",
     visualDescription: "Scientist with telescope",
@@ -450,7 +451,7 @@ test("Dialogue Voice Resolution - Resolves by Character ID or Name with Fallback
   const resolvedDialogue = await audioService.generateCharacterDialogueAudio({
     sceneId: "scene-test-db",
     characterId: customCharId,
-    characterName: "Doctor Cosmos",
+    characterName: cosmosName,
     text: "Behold the constellation!",
   });
   assert.strictEqual(resolvedDialogue.voice, "af_sky", "Must resolve character-specific voiceConfig from DB");
