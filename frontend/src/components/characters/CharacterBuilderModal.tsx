@@ -190,12 +190,29 @@ export const CharacterBuilderModal: React.FC<CharacterBuilderModalProps> = ({
 
   const isPlanetSpecies = appearance.species === 'planet';
 
+  const tabsRef = useRef<HTMLDivElement | null>(null);
+
+  const scrollTabs = (offset: number) => {
+    if (tabsRef.current) {
+      tabsRef.current.scrollBy({ left: offset, behavior: 'smooth' });
+    }
+  };
+
   // Automatically switch tab if current tab is not applicable to planet
   useEffect(() => {
-    if (isPlanetSpecies && ['neck', 'hair', 'torso', 'legs'].includes(activeTab)) {
+    if (isPlanetSpecies && ['neck', 'hair', 'torso', 'arms', 'legs'].includes(activeTab)) {
       setActiveTab('head');
     }
   }, [isPlanetSpecies, activeTab]);
+
+  useEffect(() => {
+    if (tabsRef.current) {
+      const activeEl = tabsRef.current.querySelector('.char-builder-tab.active') as HTMLElement;
+      if (activeEl) {
+        activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+      }
+    }
+  }, [activeTab]);
 
   const handleAuditionVoice = async () => {
     try {
@@ -624,85 +641,113 @@ export const CharacterBuilderModal: React.FC<CharacterBuilderModalProps> = ({
         <div className="char-builder-content">
           {/* LEFT: Customizer Panel */}
           <div className="char-builder-controls-panel">
-            {/* Tab Navigation */}
-            <div className="char-builder-tabs">
+            {/* Tab Navigation with horizontal scrolling */}
+            <div className="char-builder-tabs-container">
               <button
                 type="button"
-                className={`char-builder-tab ${activeTab === 'identity' ? 'active' : ''}`}
-                onClick={() => setActiveTab('identity')}
+                className="char-builder-tab-scroll-btn left"
+                onClick={() => scrollTabs(-120)}
+                title="Scroll tabs left"
               >
-                🏷️ Identity
+                ‹
               </button>
-              <button
-                type="button"
-                className={`char-builder-tab ${activeTab === 'voice' ? 'active' : ''}`}
-                onClick={() => setActiveTab('voice')}
+              <div
+                className="char-builder-tabs"
+                ref={tabsRef}
+                onWheel={(e) => {
+                  if (e.deltaY !== 0) {
+                    e.currentTarget.scrollLeft += e.deltaY;
+                  }
+                }}
               >
-                🎙️ Voice
-              </button>
-              <button
-                type="button"
-                className={`char-builder-tab ${activeTab === 'head' ? 'active' : ''}`}
-                onClick={() => setActiveTab('head')}
-              >
-                {isPlanetSpecies ? '🌍 Globe' : '👤 Head'}
-              </button>
-              {!isPlanetSpecies && (
-                <>
-                  <button
-                    type="button"
-                    className={`char-builder-tab ${activeTab === 'neck' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('neck')}
-                  >
-                    🦒 Neck
-                  </button>
-                  <button
-                    type="button"
-                    className={`char-builder-tab ${activeTab === 'hair' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('hair')}
-                  >
-                    💇 Hair
-                  </button>
-                </>
-              )}
-              <button
-                type="button"
-                className={`char-builder-tab ${activeTab === 'face' ? 'active' : ''}`}
-                onClick={() => setActiveTab('face')}
-              >
-                👀 Face
-              </button>
-              {!isPlanetSpecies && (
                 <button
                   type="button"
-                  className={`char-builder-tab ${activeTab === 'torso' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('torso')}
+                  className={`char-builder-tab ${activeTab === 'identity' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('identity')}
                 >
-                  👕 Torso
+                  🏷️ Identity
                 </button>
-              )}
-              <button
-                type="button"
-                className={`char-builder-tab ${activeTab === 'arms' ? 'active' : ''}`}
-                onClick={() => setActiveTab('arms')}
-              >
-                {isPlanetSpecies ? '🧤 Hands' : '💪 Arms'}
-              </button>
-              {!isPlanetSpecies && (
                 <button
                   type="button"
-                  className={`char-builder-tab ${activeTab === 'legs' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('legs')}
+                  className={`char-builder-tab ${activeTab === 'voice' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('voice')}
                 >
-                  👖 Legs
+                  🎙️ Voice
                 </button>
-              )}
+                <button
+                  type="button"
+                  className={`char-builder-tab ${activeTab === 'head' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('head')}
+                >
+                  {isPlanetSpecies ? '🌍 Globe' : '👤 Head'}
+                </button>
+                {!isPlanetSpecies && (
+                  <>
+                    <button
+                      type="button"
+                      className={`char-builder-tab ${activeTab === 'neck' ? 'active' : ''}`}
+                      onClick={() => setActiveTab('neck')}
+                    >
+                      🦒 Neck
+                    </button>
+                    <button
+                      type="button"
+                      className={`char-builder-tab ${activeTab === 'hair' ? 'active' : ''}`}
+                      onClick={() => setActiveTab('hair')}
+                    >
+                      💇 Hair
+                    </button>
+                  </>
+                )}
+                <button
+                  type="button"
+                  className={`char-builder-tab ${activeTab === 'face' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('face')}
+                >
+                  👀 Face
+                </button>
+                {!isPlanetSpecies && (
+                  <button
+                    type="button"
+                    className={`char-builder-tab ${activeTab === 'torso' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('torso')}
+                  >
+                    👕 Torso
+                  </button>
+                )}
+                {!isPlanetSpecies && (
+                  <button
+                    type="button"
+                    className={`char-builder-tab ${activeTab === 'arms' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('arms')}
+                  >
+                    💪 Arms
+                  </button>
+                )}
+                {!isPlanetSpecies && (
+                  <button
+                    type="button"
+                    className={`char-builder-tab ${activeTab === 'legs' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('legs')}
+                  >
+                    👖 Legs
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className={`char-builder-tab ${activeTab === 'accessories' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('accessories')}
+                >
+                  👓 Extras
+                </button>
+              </div>
               <button
                 type="button"
-                className={`char-builder-tab ${activeTab === 'accessories' ? 'active' : ''}`}
-                onClick={() => setActiveTab('accessories')}
+                className="char-builder-tab-scroll-btn right"
+                onClick={() => scrollTabs(120)}
+                title="Scroll tabs right"
               >
-                👓 Extras
+                ›
               </button>
             </div>
 
