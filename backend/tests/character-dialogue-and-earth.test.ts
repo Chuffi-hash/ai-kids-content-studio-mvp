@@ -20,12 +20,12 @@ test("Talking Earth Rig - Default Template & Structure", () => {
   assert.ok(earth.parts.head, "Earth must have a head (globe) part");
   assert.ok(earth.parts.head.shapes.length > 5, "Earth head should have globe, continent, and facial shapes");
 
-  // Earth has floating gloved side hands, no legs/torso
+  // Earth has no hands/arms, no legs/torso
   assert.strictEqual(earth.parts.torso.shapes.length, 0, "Planet torso should be empty");
   assert.strictEqual(earth.parts.leftLeg.shapes.length, 0, "Planet left leg should be empty");
   assert.strictEqual(earth.parts.rightLeg.shapes.length, 0, "Planet right leg should be empty");
-  assert.ok(earth.parts.leftArm.shapes.length > 0, "Planet has floating left arm/glove");
-  assert.ok(earth.parts.rightArm.shapes.length > 0, "Planet has floating right arm/glove");
+  assert.strictEqual(earth.parts.leftArm.shapes.length, 0, "Planet has no arms/hands");
+  assert.strictEqual(earth.parts.rightArm.shapes.length, 0, "Planet has no arms/hands");
 
   // Verify tags for facial parts inside head
   const eyeShape = earth.parts.head.shapes.find((s) => (s as any).tag === "eyes");
@@ -46,8 +46,8 @@ test("Talking Earth Rig - Custom Rig Generation from Appearance", () => {
   assert.strictEqual(builtRig.species, "planet");
   assert.strictEqual(builtRig.parts.torso.shapes.length, 0);
   assert.ok(builtRig.parts.head.shapes.length > 0);
-  assert.ok(builtRig.parts.leftArm.shapes.length > 0);
-  assert.ok(builtRig.parts.rightArm.shapes.length > 0);
+  assert.strictEqual(builtRig.parts.leftArm.shapes.length, 0, "Planet rig has no arms/hands");
+  assert.strictEqual(builtRig.parts.rightArm.shapes.length, 0, "Planet rig has no arms/hands");
 });
 
 test("Talking Earth Rig - Face Anchors Extraction", () => {

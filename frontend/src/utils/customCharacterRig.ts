@@ -658,25 +658,25 @@ export function buildRigFromAppearance(
     const glowStyle = app.planet?.atmosphereGlow || 'cyan';
     const hasClouds = app.planet?.clouds !== false;
 
-    // 1. Atmosphere Soft Glow & Silhouette
-    if (glowStyle === 'cyan') {
+    // 1. Crisp Luminous Atmospheric Corona (Outer Space Halo, no dark fill disk!)
+    if (glowStyle === 'gold') {
       headShapes.push(
-        { type: 'circle', cx: 0, cy: baseHeadY, r: headRx + 8, fill: '#38bdf8', opacity: 0.16, tag: 'face_base' },
-        { type: 'circle', cx: 0, cy: baseHeadY, r: headRx + 4, fill: '#60a5fa', opacity: 0.26, tag: 'face_base' }
-      );
-    } else if (glowStyle === 'gold') {
-      headShapes.push(
-        { type: 'circle', cx: 0, cy: baseHeadY, r: headRx + 8, fill: '#facc15', opacity: 0.16, tag: 'face_base' },
-        { type: 'circle', cx: 0, cy: baseHeadY, r: headRx + 4, fill: '#fbbf24', opacity: 0.24, tag: 'face_base' }
+        { type: 'circle', cx: 0, cy: baseHeadY, r: headRx + 4, fill: 'none', stroke: '#facc15', strokeWidth: 2.5, opacity: 0.45, tag: 'face_base' },
+        { type: 'circle', cx: 0, cy: baseHeadY, r: headRx + 7, fill: 'none', stroke: '#fbbf24', strokeWidth: 1.8, opacity: 0.25, tag: 'face_base' }
       );
     } else if (glowStyle === 'white') {
       headShapes.push(
-        { type: 'circle', cx: 0, cy: baseHeadY, r: headRx + 8, fill: '#ffffff', opacity: 0.14, tag: 'face_base' },
-        { type: 'circle', cx: 0, cy: baseHeadY, r: headRx + 4, fill: '#e2e8f0', opacity: 0.22, tag: 'face_base' }
+        { type: 'circle', cx: 0, cy: baseHeadY, r: headRx + 4, fill: 'none', stroke: '#ffffff', strokeWidth: 2.2, opacity: 0.40, tag: 'face_base' },
+        { type: 'circle', cx: 0, cy: baseHeadY, r: headRx + 7, fill: 'none', stroke: '#cbd5e1', strokeWidth: 1.6, opacity: 0.22, tag: 'face_base' }
+      );
+    } else if (glowStyle !== 'none') {
+      headShapes.push(
+        { type: 'circle', cx: 0, cy: baseHeadY, r: headRx + 4, fill: 'none', stroke: '#38bdf8', strokeWidth: 2.5, opacity: 0.45, tag: 'face_base' },
+        { type: 'circle', cx: 0, cy: baseHeadY, r: headRx + 7, fill: 'none', stroke: '#60a5fa', strokeWidth: 1.8, opacity: 0.25, tag: 'face_base' }
       );
     }
 
-    // 2. Deep Vibrant Ocean Globe Body
+    // 2. Ocean Globe Base Sphere with 3D Radial Lighting
     headShapes.push({
       type: 'circle',
       cx: 0,
@@ -684,145 +684,154 @@ export function buildRigFromAppearance(
       r: headRx,
       fill: oceanColor,
       stroke: glowStyle === 'gold' ? '#fde68a' : '#60a5fa',
-      strokeWidth: 1.8,
+      strokeWidth: 1.2,
       tag: 'face_base',
     });
 
-    // 3. Spherical 3D Shading & Highlight
-    headShapes.push(
-      // Upper-left sphere highlight shine
-      {
-        type: 'ellipse',
-        cx: -headRx * 0.32,
-        cy: baseHeadY - headRx * 0.32,
-        rx: headRx * 0.52,
-        ry: headRx * 0.28,
-        fill: '#60a5fa',
-        opacity: 0.22,
-        tag: 'face_base',
-      },
-      // Lower-right sphere shadow curve for depth
-      {
-        type: 'path',
-        d: `M 0 ${baseHeadY + headRx} A ${headRx} ${headRx} 0 0 0 ${headRx} ${baseHeadY} Q ${headRx * 0.65} ${baseHeadY + headRx * 0.65} 0 ${baseHeadY + headRx} Z`,
-        fill: '#0f172a',
-        opacity: 0.22,
-        tag: 'face_base',
-      }
-    );
+    // Upper-Left Atmosphere Rim Shine
+    headShapes.push({
+      type: 'path',
+      d: `M -34 ${baseHeadY - 34} A 48 48 0 0 1 -5 ${baseHeadY - 47.7}`,
+      stroke: '#bfdbfe',
+      strokeWidth: 2.0,
+      strokeLinecap: 'round',
+      fill: 'none',
+      opacity: 0.6,
+      tag: 'face_base',
+    });
 
-    // 4. Coherent, Recognizable Earth Continents (Green Landmasses)
-    // North America & Greenland (Upper-left quadrant)
+    // 3. North & South Polar Ice Caps (Curved along the globe horizon)
+    // Arctic Ice Cap (North Pole)
     headShapes.push(
       {
         type: 'path',
-        d: `M ${-headRx * 0.76} ${baseHeadY - headRx * 0.52} Q ${-headRx * 0.5} ${baseHeadY - headRx * 0.8} ${-headRx * 0.2} ${baseHeadY - headRx * 0.68} Q ${-headRx * 0.08} ${baseHeadY - headRx * 0.46} ${-headRx * 0.22} ${baseHeadY - headRx * 0.2} Q ${-headRx * 0.36} ${baseHeadY - headRx * 0.06} ${-headRx * 0.56} ${baseHeadY - headRx * 0.1} Q ${-headRx * 0.78} ${baseHeadY - headRx * 0.24} ${-headRx * 0.76} ${baseHeadY - headRx * 0.52} Z`,
-        fill: continentColor,
+        d: `M -24 ${baseHeadY - 41.5} Q 0 ${baseHeadY - 35} 24 ${baseHeadY - 41.5} A 48 48 0 0 0 -24 ${baseHeadY - 41.5} Z`,
+        fill: '#f8fafc',
         tag: 'face_base',
       },
       {
         type: 'path',
-        d: `M ${-headRx * 0.72} ${baseHeadY - headRx * 0.48} Q ${-headRx * 0.48} ${baseHeadY - headRx * 0.72} ${-headRx * 0.24} ${baseHeadY - headRx * 0.62}`,
-        stroke: continentShelf,
-        strokeWidth: 2,
+        d: `M -20 ${baseHeadY - 40} Q 0 ${baseHeadY - 35.5} 20 ${baseHeadY - 40}`,
+        stroke: '#bae6fd',
+        strokeWidth: 1.2,
         strokeLinecap: 'round',
         fill: 'none',
-        opacity: 0.65,
+        opacity: 0.8,
         tag: 'face_base',
       }
     );
 
-    // South America (Lower-left quadrant)
+    // Antarctic Ice Cap (South Pole)
     headShapes.push(
       {
         type: 'path',
-        d: `M ${-headRx * 0.52} ${baseHeadY + headRx * 0.1} Q ${-headRx * 0.24} ${baseHeadY + headRx * 0.14} ${-headRx * 0.18} ${baseHeadY + headRx * 0.38} Q ${-headRx * 0.24} ${baseHeadY + headRx * 0.66} ${-headRx * 0.38} ${baseHeadY + headRx * 0.74} Q ${-headRx * 0.54} ${baseHeadY + headRx * 0.54} ${-headRx * 0.58} ${baseHeadY + headRx * 0.24} Z`,
-        fill: continentAccent,
-        tag: 'face_base',
-      }
-    );
-
-    // Eurasia (Upper-right quadrant)
-    headShapes.push(
-      {
-        type: 'path',
-        d: `M ${headRx * 0.14} ${baseHeadY - headRx * 0.68} Q ${headRx * 0.5} ${baseHeadY - headRx * 0.76} ${headRx * 0.78} ${baseHeadY - headRx * 0.44} Q ${headRx * 0.66} ${baseHeadY - headRx * 0.14} ${headRx * 0.42} ${baseHeadY - headRx * 0.18} Q ${headRx * 0.18} ${baseHeadY - headRx * 0.36} ${headRx * 0.14} ${baseHeadY - headRx * 0.68} Z`,
-        fill: continentColor,
+        d: `M -22 ${baseHeadY + 42.6} Q 0 ${baseHeadY + 37} 22 ${baseHeadY + 42.6} A 48 48 0 0 1 -22 ${baseHeadY + 42.6} Z`,
+        fill: '#f8fafc',
         tag: 'face_base',
       },
       {
         type: 'path',
-        d: `M ${headRx * 0.2} ${baseHeadY - headRx * 0.64} Q ${headRx * 0.48} ${baseHeadY - headRx * 0.7} ${headRx * 0.72} ${baseHeadY - headRx * 0.42}`,
-        stroke: continentShelf,
-        strokeWidth: 2,
+        d: `M -18 ${baseHeadY + 41.5} Q 0 ${baseHeadY + 37.5} 18 ${baseHeadY + 41.5}`,
+        stroke: '#bae6fd',
+        strokeWidth: 1.2,
         strokeLinecap: 'round',
         fill: 'none',
-        opacity: 0.65,
+        opacity: 0.8,
         tag: 'face_base',
       }
     );
 
-    // Africa (Center-right quadrant)
+    // 4. World Continents (Hugging Perimeter Arcs, leaving Central Ocean Open for Face)
+    // North America (Upper-Left)
     headShapes.push(
       {
         type: 'path',
-        d: `M ${headRx * 0.18} ${baseHeadY - headRx * 0.08} Q ${headRx * 0.48} ${baseHeadY - headRx * 0.1} ${headRx * 0.56} ${baseHeadY + headRx * 0.18} Q ${headRx * 0.46} ${baseHeadY + headRx * 0.54} ${headRx * 0.28} ${baseHeadY + headRx * 0.62} Q ${headRx * 0.14} ${baseHeadY + headRx * 0.28} ${headRx * 0.16} ${baseHeadY + headRx * 0.04} Z`,
-        fill: continentAccent,
-        tag: 'face_base',
-      }
-    );
-
-    // Australia & Pacific Archipelago (Lower-right quadrant)
-    headShapes.push(
-      {
-        type: 'path',
-        d: `M ${headRx * 0.54} ${baseHeadY + headRx * 0.44} Q ${headRx * 0.74} ${baseHeadY + headRx * 0.4} ${headRx * 0.76} ${baseHeadY + headRx * 0.62} Q ${headRx * 0.58} ${baseHeadY + headRx * 0.72} ${headRx * 0.52} ${baseHeadY + headRx * 0.54} Z`,
+        d: `M -24 ${baseHeadY - 41.5} A 48 48 0 0 0 -47.8 ${baseHeadY - 4} Q -44 ${baseHeadY - 2} -38 ${baseHeadY - 6} Q -32 ${baseHeadY - 8} -28 ${baseHeadY - 16} Q -24 ${baseHeadY - 26} -28 ${baseHeadY - 36} Z`,
         fill: continentColor,
         tag: 'face_base',
       },
-      { type: 'circle', cx: headRx * 0.74, cy: baseHeadY + headRx * 0.26, r: 3.5, fill: continentColor, tag: 'face_base' }
+      {
+        type: 'path',
+        d: `M -40 ${baseHeadY - 5} Q -32 ${baseHeadY - 2} -29 ${baseHeadY + 5} L -34 ${baseHeadY + 7} Q -38 ${baseHeadY + 1} -45 ${baseHeadY - 1} Z`,
+        fill: continentColor,
+        tag: 'face_base',
+      }
     );
 
-    // 5. Swirling White Clouds
+    // Greenland (Snowy island in North Atlantic)
+    headShapes.push({
+      type: 'path',
+      d: `M -14 ${baseHeadY - 37} Q -8 ${baseHeadY - 41} -4 ${baseHeadY - 35} Q -9 ${baseHeadY - 33} -14 ${baseHeadY - 37} Z`,
+      fill: '#e2e8f0',
+      stroke: '#bae6fd',
+      strokeWidth: 0.8,
+      tag: 'face_base',
+    });
+
+    // South America (Lower-Left)
+    headShapes.push({
+      type: 'path',
+      d: `M -34 ${baseHeadY + 6} Q -22 ${baseHeadY + 8} -20 ${baseHeadY + 16} Q -22 ${baseHeadY + 28} -28 ${baseHeadY + 38} A 48 48 0 0 1 -47.8 ${baseHeadY + 4} Q -40 ${baseHeadY + 10} -34 ${baseHeadY + 6} Z`,
+      fill: continentAccent,
+      tag: 'face_base',
+    });
+
+    // Europe & Asia (Eurasia - Upper East Side)
+    headShapes.push(
+      {
+        type: 'path',
+        d: `M 24 ${baseHeadY - 41.5} A 48 48 0 0 1 47.8 ${baseHeadY - 4} Q 40 ${baseHeadY - 7} 32 ${baseHeadY - 12} Q 24 ${baseHeadY - 17} 21 ${baseHeadY - 26} Q 18 ${baseHeadY - 34} 24 ${baseHeadY - 41.5} Z`,
+        fill: continentColor,
+        tag: 'face_base',
+      },
+      { type: 'ellipse', cx: 16, cy: baseHeadY - 28, rx: 2, ry: 3.2, fill: continentColor, tag: 'face_base' }
+    );
+
+    // Africa (Lower East Side)
+    headShapes.push(
+      {
+        type: 'path',
+        d: `M 22 ${baseHeadY - 2} Q 32 ${baseHeadY - 4} 42 ${baseHeadY + 2} A 48 48 0 0 1 22 ${baseHeadY + 42.6} Q 24 ${baseHeadY + 30} 22 ${baseHeadY + 18} Q 19 ${baseHeadY + 10} 22 ${baseHeadY - 2} Z`,
+        fill: continentAccent,
+        tag: 'face_base',
+      },
+      {
+        type: 'path',
+        d: `M 43 ${baseHeadY + 18} Q 45 ${baseHeadY + 25} 41 ${baseHeadY + 30}`,
+        stroke: continentColor,
+        strokeWidth: 2.2,
+        strokeLinecap: 'round',
+        fill: 'none',
+        tag: 'face_base',
+      }
+    );
+
+    // 5. Cute Soft Swirling Planet Clouds
     if (hasClouds) {
       headShapes.push(
         {
           type: 'path',
-          d: `M ${-headRx * 0.62} ${baseHeadY - headRx * 0.36} Q ${-headRx * 0.12} ${baseHeadY - headRx * 0.48} ${headRx * 0.42} ${baseHeadY - headRx * 0.32}`,
-          stroke: '#ffffff',
-          strokeWidth: 3.5,
-          strokeLinecap: 'round',
-          opacity: 0.55,
-          fill: 'none',
+          d: `M -10 ${baseHeadY - 24} Q 1 ${baseHeadY - 28} 12 ${baseHeadY - 24} Q 16 ${baseHeadY - 21} 8 ${baseHeadY - 20} Q -2 ${baseHeadY - 20} -10 ${baseHeadY - 24} Z`,
+          fill: '#ffffff',
+          opacity: 0.75,
           tag: 'face_base',
         },
+        { type: 'circle', cx: 0, cy: baseHeadY - 25, r: 3.2, fill: '#ffffff', opacity: 0.75, tag: 'face_base' },
         {
           type: 'path',
-          d: `M ${-headRx * 0.36} ${baseHeadY + headRx * 0.4} Q ${headRx * 0.16} ${baseHeadY + headRx * 0.28} ${headRx * 0.66} ${baseHeadY + headRx * 0.36}`,
-          stroke: '#ffffff',
-          strokeWidth: 3.0,
-          strokeLinecap: 'round',
-          opacity: 0.5,
-          fill: 'none',
+          d: `M -12 ${baseHeadY + 25} Q 0 ${baseHeadY + 21} 12 ${baseHeadY + 25} Q 15 ${baseHeadY + 28} 8 ${baseHeadY + 29} Q -4 ${baseHeadY + 29} -12 ${baseHeadY + 25} Z`,
+          fill: '#ffffff',
+          opacity: 0.7,
           tag: 'face_base',
         },
-        {
-          type: 'path',
-          d: `M ${-headRx * 0.18} ${baseHeadY - headRx * 0.64} Q 0 ${baseHeadY - headRx * 0.72} ${headRx * 0.22} ${baseHeadY - headRx * 0.62}`,
-          stroke: '#ffffff',
-          strokeWidth: 2.5,
-          strokeLinecap: 'round',
-          opacity: 0.45,
-          fill: 'none',
-          tag: 'face_base',
-        }
+        { type: 'circle', cx: 1, cy: baseHeadY + 25, r: 3.0, fill: '#ffffff', opacity: 0.7, tag: 'face_base' }
       );
     }
 
-    // 6. Cute Blush Cheeks on Lower Globe Sides
+    // 6. Cute Blush Cheeks (Resting in the Clear Blue Ocean!)
     headShapes.push(
-      { type: 'ellipse', cx: -26 * headSize, cy: baseHeadY + 6, rx: 7, ry: 4.5, fill: '#f43f5e', opacity: 0.45, tag: 'face_base' },
-      { type: 'ellipse', cx: 26 * headSize, cy: baseHeadY + 6, rx: 7, ry: 4.5, fill: '#f43f5e', opacity: 0.45, tag: 'face_base' }
+      { type: 'ellipse', cx: -19 * headSize, cy: baseHeadY - 1, rx: 5.5, ry: 3.5, fill: '#f43f5e', opacity: 0.6, tag: 'face_base' },
+      { type: 'ellipse', cx: 19 * headSize, cy: baseHeadY - 1, rx: 5.5, ry: 3.5, fill: '#f43f5e', opacity: 0.6, tag: 'face_base' }
     );
   } else if (app.head.shape === 'square') {
     headShapes.push({
@@ -938,10 +947,10 @@ export function buildRigFromAppearance(
   }
 
   // Eyes (Issue 1: genuinely distinct eye styles)
-  const eyeR = (isPlanet ? 6 : 5) * eyeSize;
-  const eyeY = isPlanet ? baseHeadY - 4 : baseHeadY;
-  const leftEyeX = (isPlanet ? -15 : -12) * headSize;
-  const rightEyeX = (isPlanet ? 15 : 12) * headSize;
+  const eyeR = (isPlanet ? 5.2 : 5) * eyeSize;
+  const eyeY = isPlanet ? baseHeadY - 5 : baseHeadY;
+  const leftEyeX = (isPlanet ? -11 : -12) * headSize;
+  const rightEyeX = (isPlanet ? 11 : 12) * headSize;
   const eyeStartIdx = headShapes.length;
 
   if (app.eyes.style === 'dot') {
@@ -1034,7 +1043,7 @@ export function buildRigFromAppearance(
 
   // Eyebrows (Issue 1: distinct eyebrow styles)
   const browStartIdx = headShapes.length;
-  const browY = isPlanet ? baseHeadY - 15 * headSize : baseHeadY - 10 * headSize;
+  const browY = isPlanet ? baseHeadY - 14 * headSize : baseHeadY - 10 * headSize;
   const browColor = app.eyebrows.color || hairColor;
 
   if (app.eyebrows.style === 'flat') {
@@ -1065,7 +1074,7 @@ export function buildRigFromAppearance(
 
   // Nose (Issue 1: distinct nose styles including oval and button)
   const noseStartIdx = headShapes.length;
-  const noseY = isPlanet ? baseHeadY + 4 : baseHeadY + 6;
+  const noseY = isPlanet ? baseHeadY + 2.5 : baseHeadY + 6;
   const noseColor = app.nose.color || '#d97706';
 
   if (app.nose.style === 'bear_snout') {
@@ -1123,7 +1132,7 @@ export function buildRigFromAppearance(
 
   // Mouth (Issue 1: distinct mouth expressions)
   const mouthStartIdx = headShapes.length;
-  const mouthY = isPlanet ? baseHeadY + 14 : baseHeadY + 16;
+  const mouthY = isPlanet ? baseHeadY + 10 : baseHeadY + 16;
   const mouthColor = app.mouth.color || '#b91c1c';
 
   if (app.mouth.style === 'open_grin') {
@@ -1669,24 +1678,8 @@ export function buildRigFromAppearance(
   const finalTorsoShapes: VectorPartShape[] = isPlanet ? [] : torsoShapes;
   const finalLeftLegShapes: VectorPartShape[] = isPlanet ? [] : leftLegShapes;
   const finalRightLegShapes: VectorPartShape[] = isPlanet ? [] : rightLegShapes;
-  const finalLeftArmShapes: VectorPartShape[] = isPlanet
-    ? (app.planet?.showHands === false
-      ? []
-      : [
-          { type: 'circle' as const, cx: -headRx - 10, cy: baseHeadY + 8, r: 10, fill: '#ffffff', stroke: '#cbd5e1', strokeWidth: 1.8 },
-          { type: 'ellipse' as const, cx: -headRx - 16, cy: baseHeadY + 4, rx: 5, ry: 4, fill: '#ffffff', stroke: '#cbd5e1', strokeWidth: 1.5 },
-          { type: 'ellipse' as const, cx: -headRx - 8, cy: baseHeadY + 15, rx: 7, ry: 3.5, fill: '#f1f5f9', stroke: '#cbd5e1', strokeWidth: 1.2 },
-        ])
-    : leftArmShapes;
-  const finalRightArmShapes: VectorPartShape[] = isPlanet
-    ? (app.planet?.showHands === false
-      ? []
-      : [
-          { type: 'circle' as const, cx: headRx + 10, cy: baseHeadY + 8, r: 10, fill: '#ffffff', stroke: '#cbd5e1', strokeWidth: 1.8 },
-          { type: 'ellipse' as const, cx: headRx + 16, cy: baseHeadY + 4, rx: 5, ry: 4, fill: '#ffffff', stroke: '#cbd5e1', strokeWidth: 1.5 },
-          { type: 'ellipse' as const, cx: headRx + 8, cy: baseHeadY + 15, rx: 7, ry: 3.5, fill: '#f1f5f9', stroke: '#cbd5e1', strokeWidth: 1.2 },
-        ])
-    : rightArmShapes;
+  const finalLeftArmShapes: VectorPartShape[] = isPlanet ? [] : leftArmShapes;
+  const finalRightArmShapes: VectorPartShape[] = isPlanet ? [] : rightArmShapes;
   const finalLeftForearmShapes: VectorPartShape[] = isPlanet ? [] : leftForearmShapes;
   const finalRightForearmShapes: VectorPartShape[] = isPlanet ? [] : rightForearmShapes;
 
