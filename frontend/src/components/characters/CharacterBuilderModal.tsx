@@ -790,13 +790,35 @@ export const CharacterBuilderModal: React.FC<CharacterBuilderModalProps> = ({
                                   style: 'none',
                                   color: a.planet?.continentColor || '#10b981',
                                 },
+                                eyes: {
+                                  ...a.eyes,
+                                  style: 'round',
+                                  size: 1.1,
+                                  color: '#0f172a',
+                                },
+                                eyebrows: {
+                                  ...a.eyebrows,
+                                  style: 'curved',
+                                  color: '#0f172a',
+                                },
+                                nose: {
+                                  ...a.nose,
+                                  style: 'button',
+                                  color: '#38bdf8',
+                                  size: 0.9,
+                                },
+                                mouth: {
+                                  ...a.mouth,
+                                  style: 'smile',
+                                  color: '#be123c',
+                                },
                                 planet: {
                                   oceanColor: a.planet?.oceanColor || '#1d4ed8',
                                   continentColor: a.planet?.continentColor || '#10b981',
                                   landmassStyle: a.planet?.landmassStyle || 'earth',
                                   atmosphereGlow: a.planet?.atmosphereGlow || 'cyan',
                                   clouds: a.planet?.clouds ?? true,
-                                  showHands: a.planet?.showHands ?? true,
+                                  showHands: false,
                                 },
                                 voiceConfig: {
                                   voiceId: a.voiceConfig?.voiceId && a.voiceConfig.voiceId !== 'af_heart' ? a.voiceConfig.voiceId : 'bm_daniel',
@@ -1120,13 +1142,35 @@ export const CharacterBuilderModal: React.FC<CharacterBuilderModalProps> = ({
                                   style: 'none',
                                   color: a.planet?.continentColor || '#10b981',
                                 },
+                                eyes: {
+                                  ...a.eyes,
+                                  style: 'round',
+                                  size: 1.1,
+                                  color: '#0f172a',
+                                },
+                                eyebrows: {
+                                  ...a.eyebrows,
+                                  style: 'curved',
+                                  color: '#0f172a',
+                                },
+                                nose: {
+                                  ...a.nose,
+                                  style: 'button',
+                                  color: '#38bdf8',
+                                  size: 0.9,
+                                },
+                                mouth: {
+                                  ...a.mouth,
+                                  style: 'smile',
+                                  color: '#be123c',
+                                },
                                 planet: {
                                   oceanColor: a.planet?.oceanColor || '#1d4ed8',
                                   continentColor: a.planet?.continentColor || '#10b981',
                                   landmassStyle: a.planet?.landmassStyle || 'earth',
                                   atmosphereGlow: a.planet?.atmosphereGlow || 'cyan',
                                   clouds: a.planet?.clouds ?? true,
-                                  showHands: a.planet?.showHands ?? true,
+                                  showHands: false,
                                 },
                                 voiceConfig: {
                                   voiceId: a.voiceConfig?.voiceId && a.voiceConfig.voiceId !== 'af_heart' ? a.voiceConfig.voiceId : 'bm_daniel',

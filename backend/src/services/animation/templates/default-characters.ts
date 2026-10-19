@@ -252,104 +252,125 @@ export const EARTH_THE_PLANET: VectorRigDefinition = {
       zIndex: 4,
       shapes: [
         // 1. Atmosphere soft outer glow
-        { type: 'circle', cx: 0, cy: -40, r: 52, fill: 'none', stroke: '#38bdf8', strokeWidth: 2.5, opacity: 0.45, tag: 'face_base' },
-        { type: 'circle', cx: 0, cy: -40, r: 55, fill: 'none', stroke: '#60a5fa', strokeWidth: 1.8, opacity: 0.25, tag: 'face_base' },
+        { type: 'circle', cx: 0, cy: -40, r: 50.5, fill: 'none', stroke: '#38bdf8', strokeWidth: 2.0, opacity: 0.5, tag: 'face_base' },
 
         // 2. Base Ocean Globe
-        { type: 'circle', cx: 0, cy: -40, r: 48, fill: '#1d4ed8', stroke: '#60a5fa', strokeWidth: 1.2, tag: 'face_base' },
+        { type: 'circle', cx: 0, cy: -40, r: 48, fill: '#1d4ed8', stroke: '#38bdf8', strokeWidth: 2.2, tag: 'face_base' },
+
+        // 3D Spherical Volume Shadow on Lower-Right Horizon
+        { type: 'path', d: 'M 0 8 A 48 48 0 0 0 48 -40 Q 30 -10 0 8 Z', fill: '#0f172a', opacity: 0.30, tag: 'face_base' },
 
         // Upper-Left Atmosphere Rim Shine
-        { type: 'path', d: 'M -34 -74 A 48 48 0 0 1 -5 -87.7', stroke: '#bfdbfe', strokeWidth: 2.0, strokeLinecap: 'round', fill: 'none', opacity: 0.6, tag: 'face_base' },
+        { type: 'path', d: 'M -34 -74 A 48 48 0 0 1 -5 -87.7', stroke: '#ffffff', strokeWidth: 2.2, strokeLinecap: 'round', fill: 'none', opacity: 0.6, tag: 'face_base' },
 
         // 3. Polar Ice Caps
         // Arctic Ice Cap (North Pole)
-        { type: 'path', d: 'M -24 -81.5 Q 0 -75 24 -81.5 A 48 48 0 0 0 -24 -81.5 Z', fill: '#f8fafc', tag: 'face_base' },
-        { type: 'path', d: 'M -20 -80 Q 0 -75.5 20 -80', stroke: '#bae6fd', strokeWidth: 1.2, strokeLinecap: 'round', fill: 'none', opacity: 0.8, tag: 'face_base' },
-
-        // Antarctic Ice Cap (South Pole)
-        { type: 'path', d: 'M -22 2.6 Q 0 -3 22 2.6 A 48 48 0 0 1 -22 2.6 Z', fill: '#f8fafc', tag: 'face_base' },
-        { type: 'path', d: 'M -18 1.5 Q 0 -2.5 18 1.5', stroke: '#bae6fd', strokeWidth: 1.2, strokeLinecap: 'round', fill: 'none', opacity: 0.8, tag: 'face_base' },
-
-        // 4. World Continents (Hugging perimeter, leaving central ocean open for face)
-        // North America (Upper-Left)
-        {
-          type: 'path',
-          d: 'M -24 -81.5 A 48 48 0 0 0 -47.8 -44 Q -44 -42 -38 -46 Q -32 -48 -28 -56 Q -24 -66 -28 -76 Z',
-          fill: '#10b981',
-          tag: 'face_base',
-        },
-        {
-          type: 'path',
-          d: 'M -40 -45 Q -32 -42 -29 -35 L -34 -33 Q -38 -39 -45 -41 Z',
-          fill: '#10b981',
-          tag: 'face_base',
-        },
+        { type: 'path', d: 'M -16 -85.2 Q 0 -81.5 16 -85.2 A 48 48 0 0 0 -16 -85.2 Z', fill: '#f8fafc', tag: 'face_base' },
+        { type: 'path', d: 'M -12 -83.5 Q 0 -80 12 -83.5', stroke: '#cbd5e1', strokeWidth: 1.0, fill: 'none', tag: 'face_base' },
 
         // Greenland (Snowy island in North Atlantic)
+        { type: 'path', d: 'M 3 -81 Q 10 -83 13 -76 Q 8 -73 3 -81 Z', fill: '#f1f5f9', stroke: '#cbd5e1', strokeWidth: 0.8, tag: 'face_base' },
+
+        // 4. World Continents (Authentic, organically placed Earth geography!)
+        // North America (Upper-West)
         {
           type: 'path',
-          d: 'M -14 -77 Q -8 -81 -4 -75 Q -9 -73 -14 -77 Z',
-          fill: '#e2e8f0',
-          stroke: '#bae6fd',
-          strokeWidth: 0.8,
+          d: 'M -41 -60 Q -38 -70 -28 -74 Q -16 -73 -12 -65 Q -16 -60 -23 -62 Q -30 -61 -36 -54 Z',
+          fill: '#10b981',
+          tag: 'face_base',
+        },
+        {
+          type: 'path',
+          d: 'M -17 -68 Q -5 -70 1 -64 Q -3 -57 -9 -56 Q -16 -57 -17 -68 Z',
+          fill: '#059669',
+          tag: 'face_base',
+        },
+        {
+          type: 'path',
+          d: 'M -34 -54 Q -20 -56 -9 -52 Q -6 -47 -7 -42 Q -14 -44 -21 -42 Q -28 -46 -34 -54 Z',
+          fill: '#10b981',
+          tag: 'face_base',
+        },
+        {
+          type: 'path',
+          d: 'M -7 -44 Q -5 -40 -8 -38 Q -10 -41 -7 -44 Z',
+          fill: '#059669',
+          tag: 'face_base',
+        },
+        {
+          type: 'path',
+          d: 'M -23 -42 Q -17 -36 -13 -30 Q -11 -26 -9 -24 Q -12 -24 -16 -30 Q -21 -36 -23 -42 Z',
+          fill: '#10b981',
           tag: 'face_base',
         },
 
-        // South America (Lower-Left)
+        // South America (Lower-West / Southwest)
         {
           type: 'path',
-          d: 'M -34 -34 Q -22 -32 -20 -24 Q -22 -12 -28 -2 A 48 48 0 0 1 -47.8 -36 Q -40 -30 -34 -34 Z',
-          fill: '#059669',
+          d: 'M -9 -24 Q -2 -22 3 -16 Q 4 -8 -3 -2 Q -8 4 -12 6 Q -14 0 -14 -10 Q -15 -18 -9 -24 Z',
+          fill: '#10b981',
+          tag: 'face_base',
+        },
+        {
+          type: 'path',
+          d: 'M -5 -20 Q 0 -18 2 -13 Q -2 -10 -5 -20 Z',
+          fill: '#34d399',
           tag: 'face_base',
         },
 
         // Europe & Asia (Eurasia - Upper East Side)
         {
           type: 'path',
-          d: 'M 24 -81.5 A 48 48 0 0 1 47.8 -44 Q 40 -47 32 -52 Q 24 -57 21 -66 Q 18 -74 24 -81.5 Z',
+          d: 'M 16 -66 Q 22 -74 32 -72 Q 43 -66 45 -56 Q 36 -55 26 -58 Q 17 -58 16 -66 Z',
           fill: '#10b981',
           tag: 'face_base',
         },
-        { type: 'ellipse', cx: 16, cy: -68, rx: 2, ry: 3.2, fill: '#10b981', tag: 'face_base' },
+        { type: 'ellipse', cx: 14, cy: -70, rx: 2, ry: 3.2, fill: '#059669', tag: 'face_base' },
 
         // Africa (Lower East Side)
         {
           type: 'path',
-          d: 'M 22 -42 Q 32 -44 42 -38 A 48 48 0 0 1 22 2.6 Q 24 -10 22 -22 Q 19 -30 22 -42 Z',
+          d: 'M 18 -54 Q 28 -56 36 -48 Q 43 -40 41 -28 Q 36 -18 29 -10 Q 25 -6 24 -14 Q 22 -26 16 -36 Q 15 -46 18 -54 Z',
+          fill: '#10b981',
+          tag: 'face_base',
+        },
+        {
+          type: 'path',
+          d: 'M 38 -36 Q 43 -34 42 -29 Q 37 -31 38 -36 Z',
           fill: '#059669',
           tag: 'face_base',
         },
         {
           type: 'path',
-          d: 'M 43 -22 Q 45 -15 41 -10',
-          stroke: '#10b981',
-          strokeWidth: 2.2,
-          strokeLinecap: 'round',
-          fill: 'none',
+          d: 'M 38 -22 Q 40 -16 37 -12 Q 35 -16 38 -22 Z',
+          fill: '#10b981',
           tag: 'face_base',
         },
 
-        // 5. Cute Soft Swirling Planet Clouds
+        // Antarctic Ice Cap (South Pole)
+        { type: 'path', d: 'M -15 5.5 Q 0 2 15 5.5 A 48 48 0 0 1 -15 5.5 Z', fill: '#f8fafc', tag: 'face_base' },
+
+        // 5. Soft Swirling Clouds (Wispy & angled across open oceans, away from face!)
         {
           type: 'path',
-          d: 'M -10 -64 Q 1 -68 12 -64 Q 16 -61 8 -60 Q -2 -60 -10 -64 Z',
+          d: 'M 12 -61 Q 21 -65 29 -60 Q 21 -57 12 -61 Z',
+          fill: '#ffffff',
+          opacity: 0.8,
+          tag: 'face_base',
+        },
+        { type: 'circle', cx: 20, cy: -61, r: 3.2, fill: '#ffffff', opacity: 0.8, tag: 'face_base' },
+        {
+          type: 'path',
+          d: 'M -38 -22 Q -28 -26 -20 -20 Q -30 -18 -38 -22 Z',
           fill: '#ffffff',
           opacity: 0.75,
           tag: 'face_base',
         },
-        { type: 'circle', cx: 0, cy: -65, r: 3.2, fill: '#ffffff', opacity: 0.75, tag: 'face_base' },
-        {
-          type: 'path',
-          d: 'M -12 -15 Q 0 -19 12 -15 Q 15 -12 8 -11 Q -4 -11 -12 -15 Z',
-          fill: '#ffffff',
-          opacity: 0.7,
-          tag: 'face_base',
-        },
-        { type: 'circle', cx: 1, cy: -15, r: 3.0, fill: '#ffffff', opacity: 0.7, tag: 'face_base' },
+        { type: 'circle', cx: -29, cy: -22, r: 2.8, fill: '#ffffff', opacity: 0.75, tag: 'face_base' },
 
-        // 6. Cute Blush Cheeks on Lower Globe Sides (Resting in the Clear Blue Ocean!)
-        { type: 'ellipse', cx: -19, cy: -41, rx: 5.5, ry: 3.5, fill: '#f43f5e', opacity: 0.6, tag: 'face_base' },
-        { type: 'ellipse', cx: 19, cy: -41, rx: 5.5, ry: 3.5, fill: '#f43f5e', opacity: 0.6, tag: 'face_base' },
+        // 6. Cute Blush Cheeks (Resting in the Clear Blue Ocean!)
+        { type: 'ellipse', cx: -14, cy: -38, rx: 5.5, ry: 3.5, fill: '#f43f5e', opacity: 0.6, tag: 'face_base' },
+        { type: 'ellipse', cx: 14, cy: -38, rx: 5.5, ry: 3.5, fill: '#f43f5e', opacity: 0.6, tag: 'face_base' },
 
         // 7. Eyebrows
         {
