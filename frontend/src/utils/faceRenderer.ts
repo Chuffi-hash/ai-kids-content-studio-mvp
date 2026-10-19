@@ -47,6 +47,21 @@ export function extractFaceAnchors(rig: VectorRigDefinition): FaceFeatureAnchors
     browColor = '#78350f';
     mouthY = -40;
     mouthColor = '#1e293b';
+  } else if (
+    rig.species?.toLowerCase() === 'planet' ||
+    rig.species?.toLowerCase() === 'earth' ||
+    rig.id?.includes('earth') ||
+    rig.id?.includes('terra')
+  ) {
+    headCenterY = -40;
+    eyeY = -44;
+    leftEyeX = -15;
+    rightEyeX = 15;
+    eyeRadius = 6;
+    browY = -55;
+    browColor = '#0f172a';
+    mouthY = -26;
+    mouthColor = '#be123c';
   }
 
   // Detect anchors from existing shapes if available
@@ -56,7 +71,11 @@ export function extractFaceAnchors(rig: VectorRigDefinition): FaceFeatureAnchors
     const rightEye = eyeShapes.find((s) => s.cx !== undefined && s.cx > 0);
     if (leftEye && leftEye.cx !== undefined) leftEyeX = leftEye.cx;
     if (rightEye && rightEye.cx !== undefined) rightEyeX = rightEye.cx;
-    if (leftEye && leftEye.cy !== undefined) eyeY = leftEye.cy;
+    if (leftEye && leftEye.cy !== undefined) {
+      eyeY = leftEye.cy;
+      browY = eyeY - 11;
+      mouthY = eyeY + 18;
+    }
     if (leftEye && leftEye.r !== undefined) eyeRadius = leftEye.r;
     const filledEye = eyeShapes.find((s) => s.fill && s.fill !== '#ffffff' && s.fill !== 'none');
     if (filledEye && filledEye.fill) eyeColor = filledEye.fill;

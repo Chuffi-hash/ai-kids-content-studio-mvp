@@ -230,13 +230,190 @@ export const SAMMY_THE_KID: VectorRigDefinition = {
   },
 };
 
+export const EARTH_THE_PLANET: VectorRigDefinition = {
+  id: 'char-rig-earth-planet',
+  name: 'Terra the Earth',
+  species: 'Planet',
+  viewBox: '-100 -160 200 240',
+  baseWidth: 160,
+  baseHeight: 200,
+  parts: {
+    torso: {
+      id: 'torso',
+      label: 'Torso',
+      pivot: { x: 0, y: 0 },
+      zIndex: 2,
+      shapes: [],
+    },
+    head: {
+      id: 'head',
+      label: 'Globe',
+      pivot: { x: 0, y: -40 },
+      zIndex: 4,
+      shapes: [
+        // Atmosphere soft glow
+        { type: 'circle', cx: 0, cy: -40, r: 52, fill: '#38bdf8', opacity: 0.22, tag: 'face_base' },
+        { type: 'circle', cx: 0, cy: -40, r: 49, fill: '#60a5fa', opacity: 0.28, tag: 'face_base' },
+        // Deep vibrant ocean globe
+        { type: 'circle', cx: 0, cy: -40, r: 46, fill: '#1d4ed8', tag: 'face_base' },
+        // Continents / Green Landmasses
+        // North-West continent (North America stylized)
+        {
+          type: 'path',
+          d: 'M -32 -60 Q -18 -74 -4 -64 Q -8 -48 -22 -44 Q -32 -48 -32 -60 Z',
+          fill: '#10b981',
+          tag: 'face_base',
+        },
+        // South-West continent (South America stylized)
+        {
+          type: 'path',
+          d: 'M -26 -34 Q -14 -32 -10 -16 Q -20 -4 -28 -14 Q -30 -26 -26 -34 Z',
+          fill: '#059669',
+          tag: 'face_base',
+        },
+        // North-East continent (Eurasia stylized)
+        {
+          type: 'path',
+          d: 'M 6 -68 Q 30 -72 38 -54 Q 30 -40 16 -46 Q 4 -52 6 -68 Z',
+          fill: '#10b981',
+          tag: 'face_base',
+        },
+        // South-East continent (Africa / Australia stylized)
+        {
+          type: 'path',
+          d: 'M 10 -38 Q 28 -34 32 -18 Q 22 -6 12 -16 Q 8 -26 10 -38 Z',
+          fill: '#059669',
+          tag: 'face_base',
+        },
+        // Swirling white clouds
+        {
+          type: 'path',
+          d: 'M -28 -68 Q 0 -60 26 -70',
+          stroke: '#ffffff',
+          strokeWidth: 3,
+          strokeLinecap: 'round',
+          opacity: 0.45,
+          fill: 'none',
+          tag: 'face_base',
+        },
+        {
+          type: 'path',
+          d: 'M -18 -8 Q 10 -14 28 -8',
+          stroke: '#ffffff',
+          strokeWidth: 2.5,
+          strokeLinecap: 'round',
+          opacity: 0.4,
+          fill: 'none',
+          tag: 'face_base',
+        },
+        // Cute blush cheeks on globe
+        { type: 'ellipse', cx: -26, cy: -34, rx: 7, ry: 4.5, fill: '#f43f5e', opacity: 0.45, tag: 'face_base' },
+        { type: 'ellipse', cx: 26, cy: -34, rx: 7, ry: 4.5, fill: '#f43f5e', opacity: 0.45, tag: 'face_base' },
+        // Eyebrows
+        {
+          type: 'path',
+          d: 'M -21 -55 Q -14 -60 -7 -55',
+          stroke: '#0f172a',
+          strokeWidth: 2.8,
+          strokeLinecap: 'round',
+          fill: 'none',
+          tag: 'eyebrows',
+        },
+        {
+          type: 'path',
+          d: 'M 7 -55 Q 14 -60 21 -55',
+          stroke: '#0f172a',
+          strokeWidth: 2.8,
+          strokeLinecap: 'round',
+          fill: 'none',
+          tag: 'eyebrows',
+        },
+        // Eyes: Big friendly cartoon eyes
+        { type: 'ellipse', cx: -14, cy: -44, rx: 6, ry: 7, fill: '#ffffff', tag: 'eyes' },
+        { type: 'circle', cx: -14, cy: -44, r: 4.5, fill: '#0f172a', tag: 'eyes' },
+        { type: 'circle', cx: -15.5, cy: -46.5, r: 1.8, fill: '#ffffff', tag: 'eyes' },
+        { type: 'circle', cx: -12.5, cy: -42, r: 1.0, fill: '#ffffff', tag: 'eyes' },
+        { type: 'ellipse', cx: 14, cy: -44, rx: 6, ry: 7, fill: '#ffffff', tag: 'eyes' },
+        { type: 'circle', cx: 14, cy: -44, r: 4.5, fill: '#0f172a', tag: 'eyes' },
+        { type: 'circle', cx: 12.5, cy: -46.5, r: 1.8, fill: '#ffffff', tag: 'eyes' },
+        { type: 'circle', cx: 15.5, cy: -42, r: 1.0, fill: '#ffffff', tag: 'eyes' },
+        // Nose: cute stylized button nose
+        { type: 'circle', cx: 0, cy: -36, r: 2.8, fill: '#38bdf8', tag: 'nose' },
+        {
+          type: 'path',
+          d: 'M -2 -34.5 Q 0 -33 2 -34.5',
+          stroke: '#0284c7',
+          strokeWidth: 1.2,
+          strokeLinecap: 'round',
+          fill: 'none',
+          tag: 'nose',
+        },
+        // Mouth: Friendly open smile
+        {
+          type: 'path',
+          d: 'M -10 -26 Q 0 -17 10 -26 Q 0 -22 -10 -26 Z',
+          fill: '#be123c',
+          stroke: '#9f1239',
+          strokeWidth: 1.5,
+          tag: 'mouth',
+        },
+        {
+          type: 'path',
+          d: 'M -5 -21 Q 0 -18 5 -21 Q 0 -24 -5 -21 Z',
+          fill: '#fda4af',
+          tag: 'mouth',
+        },
+      ],
+    },
+    leftArm: {
+      id: 'leftArm',
+      label: 'Left Arm & Glove',
+      pivot: { x: -50, y: -35 },
+      zIndex: 1,
+      shapes: [
+        { type: 'circle', cx: -54, cy: -32, r: 9, fill: '#ffffff', stroke: '#cbd5e1', strokeWidth: 1.5 },
+        { type: 'ellipse', cx: -60, cy: -36, rx: 4, ry: 3, fill: '#ffffff', stroke: '#cbd5e1', strokeWidth: 1.2 },
+      ],
+    },
+    rightArm: {
+      id: 'rightArm',
+      label: 'Right Upper Arm',
+      pivot: { x: 50, y: -35 },
+      zIndex: 3,
+      shapes: [
+        { type: 'circle', cx: 54, cy: -32, r: 9, fill: '#ffffff', stroke: '#cbd5e1', strokeWidth: 1.5 },
+        { type: 'ellipse', cx: 60, cy: -36, rx: 4, ry: 3, fill: '#ffffff', stroke: '#cbd5e1', strokeWidth: 1.2 },
+      ],
+    },
+    leftLeg: {
+      id: 'leftLeg',
+      label: 'Left Leg',
+      pivot: { x: 0, y: 0 },
+      zIndex: 1,
+      shapes: [],
+    },
+    rightLeg: {
+      id: 'rightLeg',
+      label: 'Right Leg',
+      pivot: { x: 0, y: 0 },
+      zIndex: 1,
+      shapes: [],
+    },
+  },
+};
+
 export const DEFAULT_VECTOR_RIGS: Record<string, VectorRigDefinition> = {
   [PIP_THE_BEAR.id]: PIP_THE_BEAR,
   [SAMMY_THE_KID.id]: SAMMY_THE_KID,
+  [EARTH_THE_PLANET.id]: EARTH_THE_PLANET,
   pip_the_bear: PIP_THE_BEAR,
   sammy_the_kid: SAMMY_THE_KID,
+  earth_the_planet: EARTH_THE_PLANET,
   pip: PIP_THE_BEAR,
   sammy: SAMMY_THE_KID,
+  earth: EARTH_THE_PLANET,
+  terra: EARTH_THE_PLANET,
+  planet: EARTH_THE_PLANET,
 };
 
 export function getVectorRig(rigId?: string): VectorRigDefinition {
@@ -245,3 +422,4 @@ export function getVectorRig(rigId?: string): VectorRigDefinition {
   }
   return PIP_THE_BEAR;
 }
+

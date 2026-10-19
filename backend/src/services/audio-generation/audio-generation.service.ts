@@ -5,7 +5,7 @@ import { execFile } from 'child_process';
 import { randomUUID } from 'crypto';
 // @ts-ignore
 import ffprobeStatic from '@ffprobe-installer/ffprobe';
-import { updateScene, createSceneVersion, getSceneBySceneId, getCharacterById } from '../database/database.service.js';
+import { updateScene, createSceneVersion, getSceneBySceneId, getCharacterById, getScenesByStoryId } from '../database/database.service.js';
 import { TTSProviderFactory } from './tts-provider.factory.js';
 import { AudioEffectType, SupportedVoice } from './tts-provider.interface.js';
 import { generateVisemeCues } from './viseme-generator.js';
@@ -274,10 +274,23 @@ export class AudioGenerationService {
 
     // Default voice heuristics based on species/name if still not set
     if (!voiceToUse) {
-      if (characterId?.includes('pip') || characterName.toLowerCase().includes('bear')) {
+      const lowerName = (characterName || '').toLowerCase();
+      const lowerId = (characterId || '').toLowerCase();
+      if (
+        lowerId.includes('earth') ||
+        lowerName.includes('earth') ||
+        lowerName.includes('terra') ||
+        lowerName.includes('planet')
+      ) {
+        voiceToUse = 'bm_daniel';
+      } else if (lowerId.includes('pip') || lowerName.includes('bear')) {
         voiceToUse = 'bm_george';
-      } else if (characterId?.includes('sammy') || characterName.toLowerCase().includes('kid')) {
+      } else if (lowerId.includes('sammy') || lowerName.includes('kid') || lowerName.includes('boy')) {
         voiceToUse = 'am_adam';
+      } else if (lowerName.includes('robot')) {
+        voiceToUse = 'bm_lewis';
+      } else if (lowerName.includes('girl')) {
+        voiceToUse = 'af_bella';
       } else {
         voiceToUse = 'af_heart';
       }
@@ -359,6 +372,105 @@ export class AudioGenerationService {
     };
 
     return dialogueItem;
+  }
+
+  /**
+   * Batch generates speech audio for all dialogue lines in a scene,
+   * updates viseme cues, and saves the updated dialogue lines to the scene.
+   */
+  async generateAllSceneDialogues(
+    sceneId: string,
+    options: {
+      provider?: string;
+      effect?: AudioEffectType;
+      forceRegenerate?: boolean;
+    } = {}
+  ): Promise<SceneDialogue[]> {
+    const scene = await getSceneBySceneId(sceneId);
+    if (!scene) {
+      throw new Error(`Scene not found: ${sceneId}`);
+    }
+
+    const animData = (scene as any).animationData;
+    if (!animData || !Array.isArray(animData.dialogueLines) || animData.dialogueLines.length === 0) {
+      return [];
+    }
+
+    const updatedDialogueLines = [...animData.dialogueLines];
+
+    for (let i = 0; i < updatedDialogueLines.length; i++) {
+      const line = updatedDialogueLines[i];
+      if (!line.text || !line.text.trim()) continue;
+
+      // If audio already exists and we are not forcing regeneration, verify file existence
+      if (line.audioUrl && !options.forceRegenerate) {
+        const localRel = line.audioUrl.startsWith('/') ? line.audioUrl.slice(1) : line.audioUrl;
+        const absPath = path.join(process.cwd(), localRel);
+        if (fs.existsSync(absPath)) {
+          continue;
+        }
+      }
+
+      try {
+        const generated = await this.generateCharacterDialogueAudio({
+          sceneId: scene.sceneId,
+          characterId: line.characterId,
+          characterInstanceId: line.characterInstanceId,
+          characterName: line.characterName,
+          text: line.text,
+          voice: line.voice,
+          speakingDirection: line.speakingDirection,
+          speed: line.speed,
+          startMs: line.startMs,
+          effect: options.effect || 'normal',
+          provider: options.provider,
+        });
+
+        // Preserve original id and startMs
+        generated.id = line.id || generated.id;
+        generated.startMs = typeof line.startMs === 'number' ? line.startMs : generated.startMs;
+        updatedDialogueLines[i] = generated;
+      } catch (err) {
+        console.error(`[AudioGeneration] Failed generating dialogue audio for line "${line.text}":`, err);
+      }
+    }
+
+    // Save updated dialogue lines to scene
+    await updateScene(scene.sceneId, {
+      animationData: {
+        ...animData,
+        dialogueLines: updatedDialogueLines,
+      },
+    });
+
+    return updatedDialogueLines;
+  }
+
+  /**
+   * Batch generates dialogue audio for all scenes across an entire story.
+   */
+  async generateAllStoryDialogues(
+    storyId: string,
+    options: {
+      provider?: string;
+      effect?: AudioEffectType;
+      forceRegenerate?: boolean;
+    } = {}
+  ): Promise<{ sceneId: string; dialogues: SceneDialogue[] }[]> {
+    const scenes = await getScenesByStoryId(storyId);
+    const results: { sceneId: string; dialogues: SceneDialogue[] }[] = [];
+
+    for (const scene of scenes) {
+      try {
+        const dialogues = await this.generateAllSceneDialogues(scene.sceneId, options);
+        results.push({ sceneId: scene.sceneId, dialogues });
+      } catch (err) {
+        console.error(`[AudioGeneration] Error generating dialogues for scene ${scene.sceneId}:`, err);
+        results.push({ sceneId: scene.sceneId, dialogues: [] });
+      }
+    }
+
+    return results;
   }
 
   /**

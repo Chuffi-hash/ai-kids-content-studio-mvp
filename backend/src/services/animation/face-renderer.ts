@@ -23,7 +23,7 @@ export interface FaceFeatureAnchors {
  * Extracts facial feature anchor coordinates and colors from a rig's head definition.
  */
 export function extractFaceAnchors(rig: VectorRigDefinition): FaceFeatureAnchors {
-  const headShapes = rig.parts?.head?.shapes || [];
+  const headShapes: VectorPartShape[] = rig.parts?.head?.shapes || [];
 
   // Default fallbacks (canonical proportions)
   let headCenterY = -54;
@@ -47,6 +47,21 @@ export function extractFaceAnchors(rig: VectorRigDefinition): FaceFeatureAnchors
     browColor = '#78350f';
     mouthY = -40;
     mouthColor = '#1e293b';
+  } else if (
+    rig.species?.toLowerCase() === 'planet' ||
+    rig.species?.toLowerCase() === 'earth' ||
+    rig.id?.includes('earth') ||
+    rig.id?.includes('terra')
+  ) {
+    headCenterY = -40;
+    eyeY = -44;
+    leftEyeX = -15;
+    rightEyeX = 15;
+    eyeRadius = 6;
+    browY = -55;
+    browColor = '#0f172a';
+    mouthY = -26;
+    mouthColor = '#be123c';
   }
 
   // Detect anchors from existing shapes if available
@@ -56,7 +71,11 @@ export function extractFaceAnchors(rig: VectorRigDefinition): FaceFeatureAnchors
     const rightEye = eyeShapes.find((s) => s.cx !== undefined && s.cx > 0);
     if (leftEye && leftEye.cx !== undefined) leftEyeX = leftEye.cx;
     if (rightEye && rightEye.cx !== undefined) rightEyeX = rightEye.cx;
-    if (leftEye && leftEye.cy !== undefined) eyeY = leftEye.cy;
+    if (leftEye && leftEye.cy !== undefined) {
+      eyeY = leftEye.cy;
+      browY = eyeY - 11;
+      mouthY = eyeY + 18;
+    }
     if (leftEye && leftEye.r !== undefined) eyeRadius = leftEye.r;
     const filledEye = eyeShapes.find((s) => s.fill && s.fill !== '#ffffff' && s.fill !== 'none');
     if (filledEye && filledEye.fill) eyeColor = filledEye.fill;
@@ -693,7 +712,7 @@ export function getHeadShapesForPose(
   rig: VectorRigDefinition,
   pose: EvaluatedPose
 ): VectorPartShape[] {
-  const baseShapes = rig.parts?.head?.shapes || [];
+  const baseShapes: VectorPartShape[] = rig.parts?.head?.shapes || [];
 
   const expr = pose.expression || 'neutral';
   const mouth = pose.mouthState || 'rest';
@@ -704,19 +723,19 @@ export function getHeadShapesForPose(
     return baseShapes;
   }
 
-  const hasTags = baseShapes.some((s) => s.tag === 'eyes' || s.tag === 'mouth' || s.tag === 'eyebrows');
+  const hasTags = baseShapes.some((s: VectorPartShape) => s.tag === 'eyes' || s.tag === 'mouth' || s.tag === 'eyebrows');
   const anchors = extractFaceAnchors(rig);
 
   let nonFaceShapes: VectorPartShape[];
   if (hasTags) {
     // Filter out static facial features by tag
     nonFaceShapes = baseShapes.filter(
-      (s) => s.tag !== 'eyebrows' && s.tag !== 'eyes' && s.tag !== 'mouth'
+      (s: VectorPartShape) => s.tag !== 'eyebrows' && s.tag !== 'eyes' && s.tag !== 'mouth'
     );
   } else {
     // Untagged rig fallback heuristic:
     // Remove static eyes, brows, and mouth so they do not overlap dynamic features
-    nonFaceShapes = baseShapes.filter((s) => {
+    nonFaceShapes = baseShapes.filter((s: VectorPartShape) => {
       // 1. Circles or ellipses in the eye zone
       if ((s.type === 'circle' || s.type === 'ellipse') && s.cy !== undefined) {
         const radius = s.type === 'circle' ? (s.r ?? 999) : Math.max(s.rx ?? 999, s.ry ?? 999);
@@ -727,15 +746,15 @@ export function getHeadShapesForPose(
       // 2. Paths in brow, eye or mouth zone
       if (s.type === 'path') {
         const d = s.d || '';
-        const nums = d.match(/-?\d+(\.\d+)?/g)?.map(Number) || [];
-        const nearBrow = nums.some((n) => Math.abs(n - anchors.browY) <= 6);
-        const nearMouth = nums.some((n) => Math.abs(n - anchors.mouthY) <= 7);
-        const nearEye = nums.some((n) => Math.abs(n - anchors.eyeY) <= 6);
+        const nums: number[] = d.match(/-?\d+(\.\d+)?/g)?.map(Number) || [];
+        const nearBrow = nums.some((n: number) => Math.abs(n - anchors.browY) <= 6);
+        const nearMouth = nums.some((n: number) => Math.abs(n - anchors.mouthY) <= 7);
+        const nearEye = nums.some((n: number) => Math.abs(n - anchors.eyeY) <= 6);
         if ((!s.fill || s.fill === 'none') && (nearBrow || nearMouth || nearEye)) {
           return false;
         }
         if (s.fill && s.fill !== 'none' && nearMouth) {
-          const isSmall = !nums.some((n) => Math.abs(n) > 30);
+          const isSmall = !nums.some((n: number) => Math.abs(n) > 30);
           if (isSmall) return false;
         }
       }
