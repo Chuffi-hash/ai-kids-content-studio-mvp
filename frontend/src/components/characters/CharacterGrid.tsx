@@ -7,7 +7,6 @@ interface CharacterGridProps {
   onCustomize?: (character: Character) => void;
   onDuplicate?: (character: Character) => void;
   onDelete: (id: string, name: string) => void;
-  onGenerateReference?: (characterId: string) => void;
 }
 
 export default function CharacterGrid({
@@ -16,7 +15,6 @@ export default function CharacterGrid({
   onCustomize,
   onDuplicate,
   onDelete,
-  onGenerateReference,
 }: CharacterGridProps) {
   return (
     <div className="character-grid">
@@ -28,7 +26,6 @@ export default function CharacterGrid({
           onCustomize={onCustomize ? () => onCustomize(character) : undefined}
           onDuplicate={onDuplicate ? () => onDuplicate(character) : undefined}
           onDelete={() => onDelete(character.id, character.name)}
-          onGenerateReference={onGenerateReference ? () => onGenerateReference(character.id) : undefined}
         />
       ))}
     </div>
