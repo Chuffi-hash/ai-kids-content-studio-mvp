@@ -19,6 +19,7 @@ import {
   removeSceneBackground,
   fetchStoryBackgrounds,
   StoryBackgroundImage,
+  generateAllSceneDialogueAudios,
 } from '../../services/editor.service';
 import {
   AlertTriangleIcon,
@@ -195,22 +196,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
       .catch((err) => console.warn('Could not load TTS voices:', err));
   }, []);
 
-  // Character-aware voice recommendation: adapt voice/effect based on scene characters
-  useEffect(() => {
-    const instances = scene?.animationData?.characterInstances || [];
-    if (instances.length > 0) {
-      const first = instances[0];
-      const matchChar = characters.find((c) => c.name.toLowerCase() === first.name.toLowerCase());
-      const charSpecies = (first.appearance?.species || matchChar?.species || '').toLowerCase();
-      if (charSpecies.includes('robot')) {
-        setVoiceEffect('robot');
-        if (selectedProvider === 'kokoro') setSelectedVoice('am_fenrir');
-      } else if (charSpecies.includes('bear') || charSpecies.includes('animal')) {
-        setVoiceEffect('cartoon');
-        if (selectedProvider === 'kokoro') setSelectedVoice('bm_george');
-      }
-    }
-  }, [scene?.sceneId]);
+  // Scene narrator voice is configured independently from scene character voices
 
   const handlePreviewVoice = async () => {
     try {
@@ -326,6 +312,38 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
       ? current.filter((id) => id !== charId)
       : [...current, charId];
     onUpdateScene(scene.sceneId, { characterIds: next });
+  };
+
+  const [isBatchGeneratingDialogue, setIsBatchGeneratingDialogue] = useState(false);
+
+  const handleBatchGenerateDialogueAudio = async () => {
+    if (!scene?.sceneId) return;
+    setIsBatchGeneratingDialogue(true);
+    try {
+      const res = await generateAllSceneDialogueAudios(scene.sceneId);
+      if (res.success && res.dialogueLines) {
+        if (onUpdateAnimationData && scene.animationData) {
+          onUpdateAnimationData(scene.sceneId, {
+            ...scene.animationData,
+            dialogueLines: res.dialogueLines,
+          });
+        }
+        onUpdateScene(scene.sceneId, {
+          ...(scene.animationData
+            ? {
+                animationData: {
+                  ...scene.animationData,
+                  dialogueLines: res.dialogueLines,
+                },
+              }
+            : {}),
+        });
+      }
+    } catch (err: any) {
+      console.error('Failed to generate dialogue audio:', err);
+    } finally {
+      setIsBatchGeneratingDialogue(false);
+    }
   };
 
   const dialogueList: Array<{ speaker: string; text: string }> =
@@ -795,7 +813,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span style={{ fontSize: '11px', fontWeight: 700, color: '#c4b5fd', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                🎙️ Voice Studio
+                🎙️ Scene Narrator Voice Studio
               </span>
               <span
                 style={{
@@ -852,7 +870,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
             {/* Voice Selection & Preview */}
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3px' }}>
-                <label style={{ fontSize: '10px', color: 'var(--ed-text-muted)' }}>Speaker Voice</label>
+                <label style={{ fontSize: '10px', color: 'var(--ed-text-muted)' }}>Scene Narrator Voice</label>
                 <button
                   type="button"
                   className="ed-tool-btn"
@@ -960,10 +978,10 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
               />
             </div>
 
-            {/* Character Voice Style / Effect Pills */}
+            {/* Narrator Voice Style / Effect Pills */}
             <div>
               <label style={{ fontSize: '10px', color: 'var(--ed-text-muted)', display: 'block', marginBottom: '4px' }}>
-                Character Voice Style & Audio Effect
+                Narrator Voice Style & Audio Effect
               </label>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
                 <button
@@ -1485,72 +1503,134 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
         <div className="ed-field-group">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <label className="ed-field-label">Structured Dialogue</label>
-            <button
-              type="button"
-              className="ed-tool-btn primary"
-              style={{ fontSize: '10px', padding: '2px 6px' }}
-              onClick={() => {
-                const defaultSpeaker = characters[0]?.name || (characterInstances[0]?.name) || 'Narrator';
-                handleUpdateDialogue([...dialogueList, { speaker: defaultSpeaker, text: '' }]);
-              }}
-            >
-              + Add Line
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              {(dialogueList.length > 0 || (scene.animationData?.dialogueLines?.length || 0) > 0) && (
+                <button
+                  type="button"
+                  className="ed-tool-btn primary"
+                  style={{ fontSize: '10px', padding: '2px 8px' }}
+                  disabled={isBatchGeneratingDialogue}
+                  onClick={handleBatchGenerateDialogueAudio}
+                  title="Generate Kokoro-82M speech audio for all dialogue lines in this scene"
+                >
+                  {isBatchGeneratingDialogue ? '⏳ Generating Audio...' : '⚡ Generate All Audio'}
+                </button>
+              )}
+              <button
+                type="button"
+                className="ed-tool-btn"
+                style={{ fontSize: '10px', padding: '2px 6px' }}
+                onClick={() => {
+                  const defaultSpeaker = characters[0]?.name || (characterInstances[0]?.name) || 'Narrator';
+                  handleUpdateDialogue([...dialogueList, { speaker: defaultSpeaker, text: '' }]);
+                }}
+              >
+                + Add Line
+              </button>
+            </div>
           </div>
 
           {dialogueList.length > 0 ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              {dialogueList.map((dlg, idx) => (
-                <div
-                  key={idx}
-                  style={{
-                    background: 'var(--ed-bg)',
-                    padding: '8px',
-                    borderRadius: '6px',
-                    border: '1px solid var(--ed-border)',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '4px',
-                  }}
-                >
-                  <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                    <input
-                      className="ed-input"
-                      style={{ flex: '0 0 100px', fontSize: '11px', padding: '3px 6px' }}
-                      value={dlg.speaker}
-                      placeholder="Speaker"
-                      onChange={(e) => {
-                        const updated = [...dialogueList];
-                        updated[idx] = { ...updated[idx], speaker: e.target.value };
-                        handleUpdateDialogue(updated);
-                      }}
-                    />
-                    <input
-                      className="ed-input"
-                      style={{ flex: 1, fontSize: '11px', padding: '3px 6px' }}
-                      value={dlg.text}
-                      placeholder="Dialogue line..."
-                      onChange={(e) => {
-                        const updated = [...dialogueList];
-                        updated[idx] = { ...updated[idx], text: e.target.value };
-                        handleUpdateDialogue(updated);
-                      }}
-                    />
-                    <button
-                      type="button"
-                      className="ed-tool-btn"
-                      style={{ color: '#f87171', padding: '3px 5px' }}
-                      onClick={() => {
-                        const updated = dialogueList.filter((_, i) => i !== idx);
-                        handleUpdateDialogue(updated);
-                      }}
-                      title="Delete dialogue line"
-                    >
-                      <TrashIcon size={11} />
-                    </button>
+              {dialogueList.map((dlg, idx) => {
+                const matchingLine = (scene.animationData?.dialogueLines || []).find(
+                  (l) => l.text === dlg.text && l.characterName === dlg.speaker
+                ) || scene.animationData?.dialogueLines?.[idx];
+                const hasAudio = Boolean(matchingLine?.audioUrl);
+
+                return (
+                  <div
+                    key={idx}
+                    style={{
+                      background: 'var(--ed-bg)',
+                      padding: '8px',
+                      borderRadius: '6px',
+                      border: '1px solid var(--ed-border)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '4px',
+                    }}
+                  >
+                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                      <input
+                        className="ed-input"
+                        style={{ flex: '0 0 100px', fontSize: '11px', padding: '3px 6px' }}
+                        value={dlg.speaker}
+                        placeholder="Speaker"
+                        onChange={(e) => {
+                          const updated = [...dialogueList];
+                          updated[idx] = { ...updated[idx], speaker: e.target.value };
+                          handleUpdateDialogue(updated);
+                        }}
+                      />
+                      <input
+                        className="ed-input"
+                        style={{ flex: 1, fontSize: '11px', padding: '3px 6px' }}
+                        value={dlg.text}
+                        placeholder="Dialogue line..."
+                        onChange={(e) => {
+                          const updated = [...dialogueList];
+                          updated[idx] = { ...updated[idx], text: e.target.value };
+                          handleUpdateDialogue(updated);
+                        }}
+                      />
+                      <button
+                        type="button"
+                        className="ed-tool-btn"
+                        style={{ color: '#f87171', padding: '3px 5px' }}
+                        onClick={() => {
+                          const updated = dialogueList.filter((_, i) => i !== idx);
+                          handleUpdateDialogue(updated);
+                        }}
+                        title="Delete dialogue line"
+                      >
+                        <TrashIcon size={11} />
+                      </button>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '2px', fontSize: '10px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        {hasAudio ? (
+                          <span
+                            style={{
+                              padding: '1px 6px',
+                              borderRadius: '3px',
+                              background: 'rgba(59, 130, 246, 0.15)',
+                              color: '#60a5fa',
+                              fontWeight: 600,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '3px',
+                            }}
+                            title="Dialogue audio file ready"
+                          >
+                            🔊 Audio Ready
+                          </span>
+                        ) : (
+                          <span
+                            style={{
+                              padding: '1px 6px',
+                              borderRadius: '3px',
+                              background: 'rgba(239, 68, 68, 0.15)',
+                              color: '#f87171',
+                              fontWeight: 600,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '3px',
+                            }}
+                            title="No audio generated yet — click 'Generate All Audio'"
+                          >
+                            🔇 Audio Pending
+                          </span>
+                        )}
+                        {matchingLine?.voice && (
+                          <span style={{ color: 'var(--ed-text-muted)' }}>Voice: {matchingLine.voice}</span>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div style={{ fontSize: '11px', color: 'var(--ed-text-muted)', fontStyle: 'italic' }}>

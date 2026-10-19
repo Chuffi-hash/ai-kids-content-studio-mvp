@@ -93,7 +93,14 @@ export class CharacterResolutionService {
       const speciesLower = (genChar.species || 'human').toLowerCase();
       let initialAppearance: any = undefined;
 
-      if (speciesLower.includes('bear')) {
+      if (
+        speciesLower.includes('planet') ||
+        speciesLower.includes('earth') ||
+        lowerName.includes('earth') ||
+        lowerName.includes('terra')
+      ) {
+        initialAppearance = CHARACTER_PRESETS.earth.appearance;
+      } else if (speciesLower.includes('bear')) {
         initialAppearance = CHARACTER_PRESETS.bear_cub.appearance;
       } else if (speciesLower.includes('robot')) {
         initialAppearance = CHARACTER_PRESETS.robot.appearance;

@@ -72,14 +72,29 @@ export function evaluateCharacterPose(
   let chestScaleY = 1.0;
   let activeAction: AnimationActionType = 'idle';
 
+  const isPlanet =
+    instance.appearance?.species?.toLowerCase() === 'planet' ||
+    instance.appearance?.species?.toLowerCase() === 'earth' ||
+    instance.customRig?.species?.toLowerCase() === 'planet' ||
+    instance.customRig?.species?.toLowerCase() === 'earth' ||
+    instance.characterId?.includes('earth') ||
+    Boolean(instance.name?.toLowerCase().includes('earth'));
+
   if (!activeClip) {
-    // If no clip is currently active, compute gentle idle breathing
+    // If no clip is currently active, compute gentle idle breathing / floating
     activeAction = 'idle';
     const tSec = sceneRelativeMs / 1000;
-    chestScaleY = 1.0 + 0.02 * Math.sin(2 * Math.PI * 0.6 * tSec);
-    headAngle = 1.5 * Math.sin(2 * Math.PI * 0.4 * tSec);
-    leftArmAngle = 6 + 2 * Math.sin(2 * Math.PI * 0.6 * tSec);
-    rightArmAngle = -6 - 2 * Math.sin(2 * Math.PI * 0.6 * tSec);
+    if (isPlanet) {
+      torsoBobY = 8 * Math.sin(2 * Math.PI * 0.5 * tSec);
+      headAngle = 2.5 * Math.sin(2 * Math.PI * 0.3 * tSec);
+      leftArmAngle = 4 + 2 * Math.sin(2 * Math.PI * 0.5 * tSec);
+      rightArmAngle = -4 - 2 * Math.sin(2 * Math.PI * 0.5 * tSec);
+    } else {
+      chestScaleY = 1.0 + 0.02 * Math.sin(2 * Math.PI * 0.6 * tSec);
+      headAngle = 1.5 * Math.sin(2 * Math.PI * 0.4 * tSec);
+      leftArmAngle = 6 + 2 * Math.sin(2 * Math.PI * 0.6 * tSec);
+      rightArmAngle = -6 - 2 * Math.sin(2 * Math.PI * 0.6 * tSec);
+    }
   } else {
     activeAction = activeClip.action;
     const clipOffsetMs = sceneRelativeMs - activeClip.startMs;
@@ -95,13 +110,21 @@ export function evaluateCharacterPose(
         const strideFreq = 1.6 * speed;
         const phase = 2 * Math.PI * strideFreq * (clipOffsetMs / 1000);
 
-        leftLegAngle = 28 * Math.sin(phase);
-        rightLegAngle = -28 * Math.sin(phase);
-        leftArmAngle = -20 * Math.sin(phase);
-        rightArmAngle = 20 * Math.sin(phase);
-        torsoBobY = -7 * Math.abs(Math.sin(phase));
-        torsoAngle = 2.5 * Math.sin(phase);
-        headAngle = -2 * Math.sin(phase);
+        if (isPlanet) {
+          torsoBobY = -10 * Math.sin(phase);
+          torsoAngle = 3 * Math.sin(phase * 0.7);
+          headAngle = 2.5 * Math.sin(phase);
+          leftArmAngle = 5 + 3 * Math.sin(phase);
+          rightArmAngle = -5 - 3 * Math.sin(phase);
+        } else {
+          leftLegAngle = 28 * Math.sin(phase);
+          rightLegAngle = -28 * Math.sin(phase);
+          leftArmAngle = -20 * Math.sin(phase);
+          rightArmAngle = 20 * Math.sin(phase);
+          torsoBobY = -7 * Math.abs(Math.sin(phase));
+          torsoAngle = 2.5 * Math.sin(phase);
+          headAngle = -2 * Math.sin(phase);
+        }
 
         // Motion Path walking vs In-Place walking
         if (activeClip.motionMode === 'motion_path' && activeClip.motionPath) {
@@ -136,12 +159,20 @@ export function evaluateCharacterPose(
         const waveFreq = 3.2 * speed;
         const phase = 2 * Math.PI * waveFreq * (clipOffsetMs / 1000);
 
-        // Right arm raised with oscillating forearm/hand
-        rightArmAngle = -135;
-        rightForearmAngle = -20 + 26 * Math.sin(phase);
-        leftArmAngle = 8 + 2 * Math.sin(phase * 0.3);
-        torsoAngle = -2;
-        headAngle = -4;
+        if (isPlanet) {
+          rightArmAngle = -35 + 20 * Math.sin(phase);
+          rightForearmAngle = 0;
+          leftArmAngle = 6 + 2 * Math.sin(phase * 0.3);
+          torsoBobY = 4 * Math.sin(phase * 0.5);
+          headAngle = -3;
+        } else {
+          // Right arm raised with oscillating forearm/hand
+          rightArmAngle = -135;
+          rightForearmAngle = -20 + 26 * Math.sin(phase);
+          leftArmAngle = 8 + 2 * Math.sin(phase * 0.3);
+          torsoAngle = -2;
+          headAngle = -4;
+        }
         break;
       }
 
@@ -181,10 +212,18 @@ export function evaluateCharacterPose(
       default: {
         const idleFreq = 0.6 * speed;
         const phase = 2 * Math.PI * idleFreq * (clipOffsetMs / 1000);
-        chestScaleY = 1.0 + 0.025 * Math.sin(phase);
-        headAngle = 2 * Math.sin(phase * 0.7);
-        leftArmAngle = 6 + 2 * Math.sin(phase);
-        rightArmAngle = -6 - 2 * Math.sin(phase);
+        if (isPlanet) {
+          torsoBobY = 8 * Math.sin(phase);
+          headAngle = 2.5 * Math.sin(phase * 0.7);
+          leftArmAngle = 6 + 4 * Math.sin(phase);
+          rightArmAngle = -6 - 4 * Math.sin(phase);
+          chestScaleY = 1.0 + 0.015 * Math.sin(phase * 0.5);
+        } else {
+          chestScaleY = 1.0 + 0.025 * Math.sin(phase);
+          headAngle = 2 * Math.sin(phase * 0.7);
+          leftArmAngle = 6 + 2 * Math.sin(phase);
+          rightArmAngle = -6 - 2 * Math.sin(phase);
+        }
         break;
       }
     }

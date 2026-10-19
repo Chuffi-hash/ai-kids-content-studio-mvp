@@ -965,12 +965,25 @@ contentRouter.post("/scenes/:sceneId/dialogue/generate", async (req, res) => {
     // Update scene animationData.dialogueLines if animationData exists
     if ((scene as any).animationData) {
       const animData = (scene as any).animationData;
-      const existingLines = Array.isArray(animData.dialogueLines) ? animData.dialogueLines : [];
-      const updatedLines = [...existingLines, dialogue];
+      const existingLines = Array.isArray(animData.dialogueLines) ? [...animData.dialogueLines] : [];
+      const lineId = req.body.id || req.body.dialogueId;
+      const matchIdx = existingLines.findIndex((l: any) =>
+        (lineId && l.id === lineId) ||
+        (l.characterName === dialogue.characterName && l.text === dialogue.text)
+      );
+      if (matchIdx >= 0) {
+        existingLines[matchIdx] = {
+          ...existingLines[matchIdx],
+          ...dialogue,
+          id: existingLines[matchIdx].id || dialogue.id,
+        };
+      } else {
+        existingLines.push(dialogue);
+      }
       await updateScene(scene.sceneId, {
         animationData: {
           ...animData,
-          dialogueLines: updatedLines,
+          dialogueLines: existingLines,
         },
       });
     }
@@ -983,6 +996,84 @@ contentRouter.post("/scenes/:sceneId/dialogue/generate", async (req, res) => {
   } catch (error: any) {
     console.error(`[Content] Failed to generate dialogue audio for scene ${req.params.sceneId}:`, error);
     return res.status(500).json({ message: error.message || "Failed to generate dialogue audio" });
+  }
+});
+
+// Batch generate dialogue audio for all dialogue lines in a scene
+contentRouter.post("/scenes/:sceneId/dialogue/generate-all", async (req, res) => {
+  try {
+    const { sceneId } = req.params;
+    const { provider, effect, forceRegenerate } = req.body || {};
+    const scene = await getSceneBySceneId(sceneId);
+    if (!scene) {
+      return res.status(404).json({ message: "Scene not found" });
+    }
+
+    const dialogueLines = await audioGenerationService.generateAllSceneDialogues(sceneId, {
+      provider,
+      effect,
+      forceRegenerate: Boolean(forceRegenerate),
+    });
+
+    return res.json({
+      success: true,
+      sceneId,
+      dialogueLines,
+    });
+  } catch (error: any) {
+    console.error(`[Content] Failed to batch generate dialogue audio for scene ${req.params.sceneId}:`, error);
+    return res.status(500).json({ message: error.message || "Failed to batch generate dialogue audio" });
+  }
+});
+
+// Batch generate dialogue audio for all scenes across an entire story
+contentRouter.post("/stories/:storyId/dialogue/generate-all", async (req, res) => {
+  try {
+    const { storyId } = req.params;
+    const { provider, effect, forceRegenerate } = req.body || {};
+
+    const results = await audioGenerationService.generateAllStoryDialogues(storyId, {
+      provider,
+      effect,
+      forceRegenerate: Boolean(forceRegenerate),
+    });
+
+    return res.json({
+      success: true,
+      storyId,
+      results,
+    });
+  } catch (error: any) {
+    console.error(`[Content] Failed to batch generate dialogue audio for story ${req.params.storyId}:`, error);
+    return res.status(500).json({ message: error.message || "Failed to batch generate story dialogue audio" });
+  }
+});
+
+// Regenerate dialogue audio for a specific character in a scene
+contentRouter.post("/scenes/:sceneId/characters/:characterId/regenerate-dialogue", async (req, res) => {
+  try {
+    const { sceneId, characterId } = req.params;
+    const { provider } = req.body || {};
+    const scene = await getSceneBySceneId(sceneId);
+    if (!scene) {
+      return res.status(404).json({ message: "Scene not found" });
+    }
+
+    const dialogueLines = await audioGenerationService.regenerateCharacterDialogueInScene(
+      sceneId,
+      characterId,
+      { provider }
+    );
+
+    return res.json({
+      success: true,
+      sceneId,
+      characterId,
+      dialogueLines,
+    });
+  } catch (error: any) {
+    console.error(`[Content] Failed to regenerate dialogue audio for character ${req.params.characterId} in scene ${req.params.sceneId}:`, error);
+    return res.status(500).json({ message: error.message || "Failed to regenerate character dialogue audio" });
   }
 });
 

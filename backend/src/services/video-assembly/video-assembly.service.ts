@@ -187,6 +187,22 @@ export class VideoAssemblyService {
 
         const segmentPath = path.join(jobTempDir, `scene-${i}.mp4`);
 
+        // Collect valid dialogue audio files for the scene
+        const dialogueAudios: Array<{ path: string; startMs: number }> = [];
+        if (Array.isArray((scene as any).animationData?.dialogueLines)) {
+          for (const line of (scene as any).animationData.dialogueLines) {
+            if (line.audioUrl) {
+              const resolved = this.resolveLocalPath(line.audioUrl);
+              if (fs.existsSync(resolved)) {
+                dialogueAudios.push({
+                  path: resolved,
+                  startMs: Math.max(0, line.startMs || 0),
+                });
+              }
+            }
+          }
+        }
+
         // Case 0: Vector character animation exists
         if ((scene as any).animationData && (scene as any).animationData.characterInstances?.length > 0) {
           await this.renderVectorAnimationSceneSegment({
@@ -207,6 +223,7 @@ export class VideoAssemblyService {
                     : (scene as any).animationData.background,
             },
             audioPath: audioPath && fs.existsSync(audioPath) ? audioPath : null,
+            dialogueAudios,
             durationSec,
             width,
             height,
@@ -222,6 +239,7 @@ export class VideoAssemblyService {
             ffmpegPath,
             videoPath: videoClipPath,
             audioPath: audioPath && fs.existsSync(audioPath) ? audioPath : null,
+            dialogueAudios,
             durationSec,
             width,
             height,
@@ -235,6 +253,7 @@ export class VideoAssemblyService {
             ffmpegPath,
             imagePath,
             audioPath: audioPath && fs.existsSync(audioPath) ? audioPath : null,
+            dialogueAudios,
             durationSec,
             width,
             height,
@@ -248,6 +267,7 @@ export class VideoAssemblyService {
             title: scene.title || `Scene ${sceneNum}`,
             narration: scene.narration || '',
             audioPath: audioPath && fs.existsSync(audioPath) ? audioPath : null,
+            dialogueAudios,
             durationSec,
             width,
             height,
@@ -380,12 +400,121 @@ export class VideoAssemblyService {
   }
 
   /**
+   * Builds FFmpeg audio input arguments, filtergraph, and stream mappings
+   * for mixing narration and character dialogue lines into any scene video segment.
+   */
+  private buildAudioMixFfmpegArgs(options: {
+    videoInputCount: number;
+    audioPath: string | null;
+    dialogueAudios: Array<{ path: string; startMs: number }>;
+    videoFilter?: string;
+  }): {
+    audioInputArgs: string[];
+    filterComplexArgs: string[];
+    mapArgs: string[];
+  } {
+    const { videoInputCount, audioPath, dialogueAudios, videoFilter } = options;
+    const hasNarration = Boolean(audioPath && fs.existsSync(audioPath));
+    const hasDialogue = dialogueAudios.length > 0;
+
+    const filterParts: string[] = [];
+    if (videoFilter) {
+      filterParts.push(`[0:v]${videoFilter}[vout]`);
+    }
+
+    if (hasNarration && hasDialogue) {
+      const audioInputArgs = ['-i', audioPath!, ...dialogueAudios.flatMap((d) => ['-i', d.path])];
+      filterParts.push(`[${videoInputCount}:a]aresample=44100[a_narr]`);
+      const mixInputs: string[] = ['[a_narr]'];
+
+      dialogueAudios.forEach((d, idx) => {
+        const inputIdx = videoInputCount + 1 + idx;
+        const safeDelay = Math.max(1, d.startMs || 0);
+        const label = `[a_dlg${idx}]`;
+        filterParts.push(`[${inputIdx}:a]adelay=${safeDelay}|${safeDelay},aresample=44100${label}`);
+        mixInputs.push(label);
+      });
+
+      filterParts.push(
+        `${mixInputs.join('')}amix=inputs=${mixInputs.length}:dropout_transition=0:duration=longest,apad[aout]`
+      );
+
+      return {
+        audioInputArgs,
+        filterComplexArgs: ['-filter_complex', filterParts.join(';')],
+        mapArgs: ['-map', videoFilter ? '[vout]' : '0:v', '-map', '[aout]'],
+      };
+    } else if (hasNarration && !hasDialogue) {
+      const audioInputArgs = ['-i', audioPath!];
+      if (videoFilter) {
+        filterParts.push(`[${videoInputCount}:a]apad,aresample=44100[aout]`);
+        return {
+          audioInputArgs,
+          filterComplexArgs: ['-filter_complex', filterParts.join(';')],
+          mapArgs: ['-map', '[vout]', '-map', '[aout]'],
+        };
+      } else {
+        return {
+          audioInputArgs,
+          filterComplexArgs: ['-af', 'apad,aresample=44100'],
+          mapArgs: ['-map', '0:v', '-map', `${videoInputCount}:a`],
+        };
+      }
+    } else if (!hasNarration && hasDialogue) {
+      const audioInputArgs = dialogueAudios.flatMap((d) => ['-i', d.path]);
+      const mixInputs: string[] = [];
+
+      dialogueAudios.forEach((d, idx) => {
+        const inputIdx = videoInputCount + idx;
+        const safeDelay = Math.max(1, d.startMs || 0);
+        const label = `[a_dlg${idx}]`;
+        filterParts.push(`[${inputIdx}:a]adelay=${safeDelay}|${safeDelay},aresample=44100${label}`);
+        mixInputs.push(label);
+      });
+
+      if (dialogueAudios.length === 1) {
+        filterParts.push(`[a_dlg0]apad[aout]`);
+      } else {
+        filterParts.push(
+          `${mixInputs.join('')}amix=inputs=${mixInputs.length}:dropout_transition=0:duration=longest,apad[aout]`
+        );
+      }
+
+      return {
+        audioInputArgs,
+        filterComplexArgs: ['-filter_complex', filterParts.join(';')],
+        mapArgs: ['-map', videoFilter ? '[vout]' : '0:v', '-map', '[aout]'],
+      };
+    } else {
+      const audioInputArgs = [
+        '-f', 'lavfi',
+        '-i', 'anullsrc=channel_layout=stereo:sample_rate=44100',
+      ];
+      if (videoFilter) {
+        filterParts.push(`[${videoInputCount}:a]aresample=44100[aout]`);
+        return {
+          audioInputArgs,
+          filterComplexArgs: ['-filter_complex', filterParts.join(';')],
+          mapArgs: ['-map', '[vout]', '-map', '[aout]'],
+        };
+      } else {
+        return {
+          audioInputArgs,
+          filterComplexArgs: [],
+          mapArgs: ['-map', '0:v', '-map', `${videoInputCount}:a`],
+        };
+      }
+    }
+  }
+
+  /**
    * Renders an individual scene segment from vector animation data using Resvg and FFmpeg
    */
   private async renderVectorAnimationSceneSegment(options: {
     ffmpegPath: string;
     animationData: any;
     audioPath: string | null;
+    dialogueAudios?: Array<{ path: string; startMs: number }>;
     durationSec: number;
     width: number;
     height: number;
@@ -398,6 +527,7 @@ export class VideoAssemblyService {
       ffmpegPath,
       animationData,
       audioPath,
+      dialogueAudios: passedDialogueAudios,
       durationSec,
       width,
       height,
@@ -430,8 +560,8 @@ export class VideoAssemblyService {
     }
 
     // Collect valid dialogue audio files
-    const dialogueAudios: Array<{ path: string; startMs: number }> = [];
-    if (Array.isArray(animationData.dialogueLines)) {
+    const dialogueAudios = passedDialogueAudios ? [...passedDialogueAudios] : [];
+    if (!passedDialogueAudios && Array.isArray(animationData.dialogueLines)) {
       for (const line of animationData.dialogueLines) {
         if (line.audioUrl) {
           const resolved = this.resolveLocalPath(line.audioUrl);
@@ -446,121 +576,29 @@ export class VideoAssemblyService {
     }
 
     const framePattern = path.join(framesDir, 'frame_%05d.png');
+    const { audioInputArgs, filterComplexArgs, mapArgs } = this.buildAudioMixFfmpegArgs({
+      videoInputCount: 1,
+      audioPath,
+      dialogueAudios,
+    });
+
     const args: string[] = [
       '-y',
       '-framerate', String(fps),
       '-i', framePattern,
+      ...audioInputArgs,
+      ...filterComplexArgs,
+      ...mapArgs,
+      '-t', String(durationSec),
+      '-c:v', 'libx264',
+      '-preset', 'veryfast',
+      '-c:a', 'aac',
+      '-b:a', '192k',
+      '-ar', '44100',
+      '-ac', '2',
+      '-pix_fmt', 'yuv420p',
+      outputPath,
     ];
-
-    const hasNarration = Boolean(audioPath && fs.existsSync(audioPath));
-
-    if (hasNarration && dialogueAudios.length > 0) {
-      // Input 1 is narration
-      args.push('-i', audioPath!);
-      // Inputs 2..(2 + dialogueAudios.length - 1) are dialogue lines
-      dialogueAudios.forEach((d) => args.push('-i', d.path));
-
-      // Build filter_complex: delay each dialogue track, then amix all
-      const filterParts: string[] = [];
-      filterParts.push(`[1:a]aresample=44100[a_narr]`);
-
-      const mixInputs: string[] = ['[a_narr]'];
-      dialogueAudios.forEach((d, idx) => {
-        const inputIdx = 2 + idx;
-        const delay = d.startMs;
-        const label = `[a_dlg${idx}]`;
-        filterParts.push(`[${inputIdx}:a]adelay=${delay}|${delay},aresample=44100${label}`);
-        mixInputs.push(label);
-      });
-
-      filterParts.push(
-        `${mixInputs.join('')}amix=inputs=${mixInputs.length}:dropout_transition=0:duration=longest,apad[aout]`
-      );
-
-      args.push(
-        '-filter_complex', filterParts.join(';'),
-        '-map', '0:v',
-        '-map', '[aout]',
-        '-t', String(durationSec),
-        '-c:v', 'libx264',
-        '-preset', 'veryfast',
-        '-c:a', 'aac',
-        '-b:a', '192k',
-        '-ar', '44100',
-        '-ac', '2',
-        '-pix_fmt', 'yuv420p',
-        outputPath
-      );
-    } else if (hasNarration && dialogueAudios.length === 0) {
-      args.push('-i', audioPath!);
-      args.push(
-        '-t', String(durationSec),
-        '-map', '0:v',
-        '-map', '1:a',
-        '-c:v', 'libx264',
-        '-preset', 'veryfast',
-        '-af', 'apad,aresample=44100',
-        '-c:a', 'aac',
-        '-b:a', '192k',
-        '-ar', '44100',
-        '-ac', '2',
-        '-pix_fmt', 'yuv420p',
-        outputPath
-      );
-    } else if (!hasNarration && dialogueAudios.length > 0) {
-      // Only dialogue lines, no narration
-      dialogueAudios.forEach((d) => args.push('-i', d.path));
-
-      const filterParts: string[] = [];
-      const mixInputs: string[] = [];
-      dialogueAudios.forEach((d, idx) => {
-        const inputIdx = 1 + idx;
-        const delay = d.startMs;
-        const label = `[a_dlg${idx}]`;
-        filterParts.push(`[${inputIdx}:a]adelay=${delay}|${delay},aresample=44100${label}`);
-        mixInputs.push(label);
-      });
-
-      if (dialogueAudios.length === 1) {
-        filterParts.push(`[a_dlg0]apad[aout]`);
-      } else {
-        filterParts.push(
-          `${mixInputs.join('')}amix=inputs=${mixInputs.length}:dropout_transition=0:duration=longest,apad[aout]`
-        );
-      }
-
-      args.push(
-        '-filter_complex', filterParts.join(';'),
-        '-map', '0:v',
-        '-map', '[aout]',
-        '-t', String(durationSec),
-        '-c:v', 'libx264',
-        '-preset', 'veryfast',
-        '-c:a', 'aac',
-        '-b:a', '192k',
-        '-ar', '44100',
-        '-ac', '2',
-        '-pix_fmt', 'yuv420p',
-        outputPath
-      );
-    } else {
-      // Neither narration nor dialogue audio
-      args.push(
-        '-f', 'lavfi',
-        '-i', 'anullsrc=channel_layout=stereo:sample_rate=44100',
-        '-t', String(durationSec),
-        '-map', '0:v',
-        '-map', '1:a',
-        '-c:v', 'libx264',
-        '-preset', 'veryfast',
-        '-c:a', 'aac',
-        '-b:a', '192k',
-        '-ar', '44100',
-        '-ac', '2',
-        '-pix_fmt', 'yuv420p',
-        outputPath
-      );
-    }
 
     await execFileAsync(ffmpegPath, args);
   }
@@ -572,55 +610,51 @@ export class VideoAssemblyService {
     ffmpegPath: string;
     videoPath: string;
     audioPath: string | null;
+    dialogueAudios?: Array<{ path: string; startMs: number }>;
     durationSec: number;
     width: number;
     height: number;
     fps: number;
     outputPath: string;
   }): Promise<void> {
-    const { ffmpegPath, videoPath, audioPath, durationSec, width, height, fps, outputPath } = options;
+    const {
+      ffmpegPath,
+      videoPath,
+      audioPath,
+      dialogueAudios = [],
+      durationSec,
+      width,
+      height,
+      fps,
+      outputPath,
+    } = options;
 
     const vf = `scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2,format=yuv420p`;
+    const { audioInputArgs, filterComplexArgs, mapArgs } = this.buildAudioMixFfmpegArgs({
+      videoInputCount: 1,
+      audioPath,
+      dialogueAudios,
+      videoFilter: vf,
+    });
 
-    const args: string[] = ['-y', '-stream_loop', '-1', '-i', videoPath];
-
-    if (audioPath) {
-      args.push('-i', audioPath);
-      args.push(
-        '-t', String(durationSec),
-        '-vf', vf,
-        '-r', String(fps),
-        '-map', '0:v',
-        '-map', '1:a',
-        '-c:v', 'libx264',
-        '-preset', 'veryfast',
-        '-af', 'apad,aresample=44100',
-        '-c:a', 'aac',
-        '-b:a', '192k',
-        '-ar', '44100',
-        '-ac', '2',
-        '-pix_fmt', 'yuv420p',
-        outputPath
-      );
-    } else {
-      args.push(
-        '-f', 'lavfi',
-        '-i', 'anullsrc=channel_layout=stereo:sample_rate=44100',
-        '-t', String(durationSec),
-        '-vf', vf,
-        '-r', String(fps),
-        '-map', '0:v',
-        '-map', '1:a',
-        '-c:v', 'libx264',
-        '-preset', 'veryfast',
-        '-c:a', 'aac',
-        '-b:a', '192k',
-        '-ar', '44100',
-        '-ac', '2',
-        '-pix_fmt', 'yuv420p',
-        outputPath
-      );
-    }
+    const args: string[] = [
+      '-y',
+      '-stream_loop', '-1',
+      '-i', videoPath,
+      ...audioInputArgs,
+      ...filterComplexArgs,
+      ...mapArgs,
+      '-t', String(durationSec),
+      '-r', String(fps),
+      '-c:v', 'libx264',
+      '-preset', 'veryfast',
+      '-c:a', 'aac',
+      '-b:a', '192k',
+      '-ar', '44100',
+      '-ac', '2',
+      '-pix_fmt', 'yuv420p',
+      outputPath,
+    ];
 
     await execFileAsync(ffmpegPath, args);
   }
@@ -632,55 +666,51 @@ export class VideoAssemblyService {
     ffmpegPath: string;
     imagePath: string;
     audioPath: string | null;
+    dialogueAudios?: Array<{ path: string; startMs: number }>;
     durationSec: number;
     width: number;
     height: number;
     fps: number;
     outputPath: string;
   }): Promise<void> {
-    const { ffmpegPath, imagePath, audioPath, durationSec, width, height, fps, outputPath } = options;
+    const {
+      ffmpegPath,
+      imagePath,
+      audioPath,
+      dialogueAudios = [],
+      durationSec,
+      width,
+      height,
+      fps,
+      outputPath,
+    } = options;
 
     const vf = `scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2,format=yuv420p`;
+    const { audioInputArgs, filterComplexArgs, mapArgs } = this.buildAudioMixFfmpegArgs({
+      videoInputCount: 1,
+      audioPath,
+      dialogueAudios,
+      videoFilter: vf,
+    });
 
-    const args: string[] = ['-y', '-loop', '1', '-i', imagePath];
-
-    if (audioPath) {
-      args.push('-i', audioPath);
-      args.push(
-        '-t', String(durationSec),
-        '-vf', vf,
-        '-r', String(fps),
-        '-map', '0:v',
-        '-map', '1:a',
-        '-c:v', 'libx264',
-        '-preset', 'veryfast',
-        '-af', 'apad,aresample=44100',
-        '-c:a', 'aac',
-        '-b:a', '192k',
-        '-ar', '44100',
-        '-ac', '2',
-        '-pix_fmt', 'yuv420p',
-        outputPath
-      );
-    } else {
-      args.push(
-        '-f', 'lavfi',
-        '-i', 'anullsrc=channel_layout=stereo:sample_rate=44100',
-        '-t', String(durationSec),
-        '-vf', vf,
-        '-r', String(fps),
-        '-map', '0:v',
-        '-map', '1:a',
-        '-c:v', 'libx264',
-        '-preset', 'veryfast',
-        '-c:a', 'aac',
-        '-b:a', '192k',
-        '-ar', '44100',
-        '-ac', '2',
-        '-pix_fmt', 'yuv420p',
-        outputPath
-      );
-    }
+    const args: string[] = [
+      '-y',
+      '-loop', '1',
+      '-i', imagePath,
+      ...audioInputArgs,
+      ...filterComplexArgs,
+      ...mapArgs,
+      '-t', String(durationSec),
+      '-r', String(fps),
+      '-c:v', 'libx264',
+      '-preset', 'veryfast',
+      '-c:a', 'aac',
+      '-b:a', '192k',
+      '-ar', '44100',
+      '-ac', '2',
+      '-pix_fmt', 'yuv420p',
+      outputPath,
+    ];
 
     await execFileAsync(ffmpegPath, args);
   }
@@ -693,53 +723,47 @@ export class VideoAssemblyService {
     title: string;
     narration: string;
     audioPath: string | null;
+    dialogueAudios?: Array<{ path: string; startMs: number }>;
     durationSec: number;
     width: number;
     height: number;
     fps: number;
     outputPath: string;
   }): Promise<void> {
-    const { ffmpegPath, audioPath, durationSec, width, height, fps, outputPath } = options;
+    const {
+      ffmpegPath,
+      audioPath,
+      dialogueAudios = [],
+      durationSec,
+      width,
+      height,
+      fps,
+      outputPath,
+    } = options;
+
+    const { audioInputArgs, filterComplexArgs, mapArgs } = this.buildAudioMixFfmpegArgs({
+      videoInputCount: 1,
+      audioPath,
+      dialogueAudios,
+    });
 
     const args: string[] = [
       '-y',
       '-f', 'lavfi',
       '-i', `color=c=0x18181b:s=${width}x${height}:d=${durationSec}:r=${fps}`,
+      ...audioInputArgs,
+      ...filterComplexArgs,
+      ...mapArgs,
+      '-t', String(durationSec),
+      '-c:v', 'libx264',
+      '-preset', 'veryfast',
+      '-c:a', 'aac',
+      '-b:a', '192k',
+      '-ar', '44100',
+      '-ac', '2',
+      '-pix_fmt', 'yuv420p',
+      outputPath,
     ];
-
-    if (audioPath) {
-      args.push('-i', audioPath);
-      args.push(
-        '-t', String(durationSec),
-        '-map', '0:v',
-        '-map', '1:a',
-        '-c:v', 'libx264',
-        '-preset', 'veryfast',
-        '-af', 'apad,aresample=44100',
-        '-c:a', 'aac',
-        '-b:a', '192k',
-        '-ar', '44100',
-        '-ac', '2',
-        '-pix_fmt', 'yuv420p',
-        outputPath
-      );
-    } else {
-      args.push(
-        '-f', 'lavfi',
-        '-i', 'anullsrc=channel_layout=stereo:sample_rate=44100',
-        '-t', String(durationSec),
-        '-map', '0:v',
-        '-map', '1:a',
-        '-c:v', 'libx264',
-        '-preset', 'veryfast',
-        '-c:a', 'aac',
-        '-b:a', '192k',
-        '-ar', '44100',
-        '-ac', '2',
-        '-pix_fmt', 'yuv420p',
-        outputPath
-      );
-    }
 
     await execFileAsync(ffmpegPath, args);
   }

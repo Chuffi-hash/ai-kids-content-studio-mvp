@@ -17,6 +17,7 @@ import { TrashIcon, CheckIcon, PlayIcon, PauseIcon, SparklesIcon, MicIcon } from
 import { resolveAssetUrl } from '../../../utils/urlHelper';
 import {
   generateSceneDialogueAudio,
+  generateAllSceneDialogueAudios,
   deleteSceneDialogue,
   previewVoice,
 } from '../../../services/editor.service';
@@ -408,6 +409,28 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
     });
   };
 
+  const [isBatchGenerating, setIsBatchGenerating] = useState<boolean>(false);
+
+  const handleGenerateAllDialogues = async () => {
+    if (!sceneId) return;
+    setIsBatchGenerating(true);
+    setDialogueError(null);
+    try {
+      const res = await generateAllSceneDialogueAudios(sceneId);
+      if (res.success && res.dialogueLines) {
+        onUpdateAnimationData({
+          ...animationData,
+          dialogueLines: res.dialogueLines,
+        });
+      }
+    } catch (err: any) {
+      console.error('Failed to batch generate dialogue audio:', err);
+      setDialogueError(err.message || 'Failed to generate dialogue audios');
+    } finally {
+      setIsBatchGenerating(false);
+    }
+  };
+
   return (
     <div className="char-animation-inspector" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
       {/* 1. Header / Identity */}
@@ -604,9 +627,23 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
       <div className="ed-inspector-section">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
           <label className="ed-field-label" style={{ margin: 0 }}>Dialogue & Lip-Sync</label>
-          <span style={{ fontSize: '11px', color: 'var(--ed-text-muted)' }}>
-            {characterDialogues.length} line{characterDialogues.length !== 1 ? 's' : ''}
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '11px', color: 'var(--ed-text-muted)' }}>
+              {characterDialogues.length} line{characterDialogues.length !== 1 ? 's' : ''}
+            </span>
+            {characterDialogues.length > 0 && (
+              <button
+                type="button"
+                className="ed-tool-btn primary"
+                disabled={isBatchGenerating}
+                onClick={handleGenerateAllDialogues}
+                style={{ fontSize: '10px', padding: '2px 8px' }}
+                title="Synthesize Kokoro-82M speech audio for all dialogue lines in this scene"
+              >
+                {isBatchGenerating ? '⏳ Generating...' : '⚡ Generate All Audio'}
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Existing Dialogue Lines */}
@@ -657,6 +694,34 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      {dlg.audioUrl ? (
+                        <span
+                          style={{
+                            padding: '1px 5px',
+                            borderRadius: '3px',
+                            background: 'rgba(59, 130, 246, 0.15)',
+                            color: '#60a5fa',
+                            fontWeight: 600,
+                          }}
+                          title="Audio file ready"
+                        >
+                          🔊 Audio
+                        </span>
+                      ) : (
+                        <span
+                          style={{
+                            padding: '1px 5px',
+                            borderRadius: '3px',
+                            background: 'rgba(239, 68, 68, 0.15)',
+                            color: '#f87171',
+                            fontWeight: 600,
+                          }}
+                          title="No audio generated yet — click Generate All Audio"
+                        >
+                          🔇 No Audio
+                        </span>
+                      )}
+
                       {visemeCount > 0 ? (
                         <span
                           style={{
@@ -667,7 +732,7 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
                             fontWeight: 600,
                           }}
                         >
-                          👄 {visemeCount} visemes
+                          👄 {visemeCount}v
                         </span>
                       ) : (
                         <span style={{ color: '#f59e0b' }}>No visemes</span>

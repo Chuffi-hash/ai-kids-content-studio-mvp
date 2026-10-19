@@ -26,27 +26,42 @@ export function extractFaceAnchors(rig: VectorRigDefinition): FaceFeatureAnchors
   const headShapes = rig.parts?.head?.shapes || [];
 
   // Default fallbacks (canonical proportions)
-  let headCenterY = -54;
-  let eyeY = -54;
-  let leftEyeX = -12;
-  let rightEyeX = 12;
-  let eyeRadius = 5;
+  let headCenterY = -28;
+  let eyeY = -30;
+  let leftEyeX = -11;
+  let rightEyeX = 11;
+  let eyeRadius = 5.5;
   let eyeColor = '#0f172a';
-  let browY = -64;
+  let browY = -39;
   let browColor = '#78350f';
-  let mouthY = -38;
+  let mouthY = -15;
   let mouthColor = '#b91c1c';
 
   if (rig.species?.toLowerCase() === 'bear' || rig.id?.includes('pip')) {
-    headCenterY = -52;
-    eyeY = -58;
-    leftEyeX = -14;
-    rightEyeX = 14;
-    eyeRadius = 4.5;
-    browY = -67;
+    headCenterY = -28;
+    eyeY = -30;
+    leftEyeX = -12;
+    rightEyeX = 12;
+    eyeRadius = 5.0;
+    browY = -39;
     browColor = '#78350f';
-    mouthY = -40;
+    mouthY = -13;
     mouthColor = '#1e293b';
+  } else if (
+    rig.species?.toLowerCase() === 'planet' ||
+    rig.species?.toLowerCase() === 'earth' ||
+    rig.id?.includes('earth') ||
+    rig.id?.includes('terra')
+  ) {
+    headCenterY = -18;
+    eyeY = -22;
+    leftEyeX = -11;
+    rightEyeX = 11;
+    eyeRadius = 6.5;
+    browY = -31;
+    browColor = '#0f172a';
+    mouthY = -6;
+    mouthColor = '#be123c';
   }
 
   // Detect anchors from existing shapes if available
@@ -56,7 +71,11 @@ export function extractFaceAnchors(rig: VectorRigDefinition): FaceFeatureAnchors
     const rightEye = eyeShapes.find((s) => s.cx !== undefined && s.cx > 0);
     if (leftEye && leftEye.cx !== undefined) leftEyeX = leftEye.cx;
     if (rightEye && rightEye.cx !== undefined) rightEyeX = rightEye.cx;
-    if (leftEye && leftEye.cy !== undefined) eyeY = leftEye.cy;
+    if (leftEye && leftEye.cy !== undefined) {
+      eyeY = leftEye.cy;
+      browY = eyeY - 11;
+      mouthY = eyeY + 18;
+    }
     if (leftEye && leftEye.r !== undefined) eyeRadius = leftEye.r;
     const filledEye = eyeShapes.find((s) => s.fill && s.fill !== '#ffffff' && s.fill !== 'none');
     if (filledEye && filledEye.fill) eyeColor = filledEye.fill;
@@ -462,12 +481,19 @@ export function generateDynamicFaceShapes(
 
     case 'neutral':
     default:
-      // Standard cartoon eyes
+      // High-contrast expressive 2D cartoon eyes: white sclera + iris + dual sparkles + upper lash line
       shapes.push(
-        { type: 'circle', cx: leftEyeX, cy: eyeY, r, fill: eyeColor, tag: 'eyes' },
-        { type: 'circle', cx: leftEyeX - 1.5, cy: eyeY - 2, r: r * 0.38, fill: '#ffffff', tag: 'eyes' },
-        { type: 'circle', cx: rightEyeX, cy: eyeY, r, fill: eyeColor, tag: 'eyes' },
-        { type: 'circle', cx: rightEyeX - 1.5, cy: eyeY - 2, r: r * 0.38, fill: '#ffffff', tag: 'eyes' }
+        { type: 'circle', cx: leftEyeX, cy: eyeY, r, fill: '#ffffff', stroke: '#0f172a', strokeWidth: 1.4, tag: 'eyes' },
+        { type: 'circle', cx: leftEyeX, cy: eyeY, r: r * 0.72, fill: eyeColor, tag: 'eyes' },
+        { type: 'circle', cx: leftEyeX - r * 0.28, cy: eyeY - r * 0.3, r: r * 0.28, fill: '#ffffff', tag: 'eyes' },
+        { type: 'circle', cx: leftEyeX + r * 0.32, cy: eyeY + r * 0.3, r: r * 0.15, fill: '#ffffff', tag: 'eyes' },
+        { type: 'path', d: `M ${leftEyeX - r * 1.1} ${eyeY - r * 0.3} Q ${leftEyeX} ${eyeY - r * 1.15} ${leftEyeX + r * 1.1} ${eyeY - r * 0.2}`, stroke: '#0f172a', strokeWidth: 1.8, strokeLinecap: 'round', fill: 'none', tag: 'eyes' },
+
+        { type: 'circle', cx: rightEyeX, cy: eyeY, r, fill: '#ffffff', stroke: '#0f172a', strokeWidth: 1.4, tag: 'eyes' },
+        { type: 'circle', cx: rightEyeX, cy: eyeY, r: r * 0.72, fill: eyeColor, tag: 'eyes' },
+        { type: 'circle', cx: rightEyeX - r * 0.28, cy: eyeY - r * 0.3, r: r * 0.28, fill: '#ffffff', tag: 'eyes' },
+        { type: 'circle', cx: rightEyeX + r * 0.32, cy: eyeY + r * 0.3, r: r * 0.15, fill: '#ffffff', tag: 'eyes' },
+        { type: 'path', d: `M ${rightEyeX - r * 1.1} ${eyeY - r * 0.2} Q ${rightEyeX} ${eyeY - 1.15 * r} ${rightEyeX + r * 1.1} ${eyeY - r * 0.3}`, stroke: '#0f172a', strokeWidth: 1.8, strokeLinecap: 'round', fill: 'none', tag: 'eyes' }
       );
       break;
   }
@@ -668,16 +694,36 @@ export function generateDynamicFaceShapes(
 
       case 'neutral':
       default:
-        // Canonical resting curve
-        shapes.push({
-          type: 'path',
-          d: `M -7 ${mouthY} Q 0 ${mouthY + 2} 7 ${mouthY}`,
-          stroke: mouthColor,
-          strokeWidth: 2.5,
-          strokeLinecap: 'round',
-          fill: 'none',
-          tag: 'mouth',
-        });
+        // Canonical resting smile with subtle corner creases
+        shapes.push(
+          {
+            type: 'path',
+            d: `M -7 ${mouthY} Q 0 ${mouthY + 3.5} 7 ${mouthY}`,
+            stroke: mouthColor,
+            strokeWidth: 2.5,
+            strokeLinecap: 'round',
+            fill: 'none',
+            tag: 'mouth',
+          },
+          {
+            type: 'path',
+            d: `M -7.5 ${mouthY - 1} L -6.5 ${mouthY + 1.2}`,
+            stroke: mouthColor,
+            strokeWidth: 1.8,
+            strokeLinecap: 'round',
+            fill: 'none',
+            tag: 'mouth',
+          },
+          {
+            type: 'path',
+            d: `M 7.5 ${mouthY - 1} L 6.5 ${mouthY + 1.2}`,
+            stroke: mouthColor,
+            strokeWidth: 1.8,
+            strokeLinecap: 'round',
+            fill: 'none',
+            tag: 'mouth',
+          }
+        );
         break;
     }
   }

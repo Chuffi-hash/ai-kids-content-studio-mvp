@@ -17,6 +17,8 @@ import {
 import { evaluateCharacterPose } from '../../utils/animationEngine';
 import { VectorCharacterRenderer } from '../editor/animation/VectorCharacterRenderer';
 import { Character } from '../../services/character.service';
+import { previewVoice } from '../../services/editor.service';
+import { resolveAssetUrl } from '../../utils/urlHelper';
 import { CloseIcon, SparklesIcon, CheckIcon } from '../common/Icons';
 import './CharacterBuilderModal.css';
 
@@ -37,6 +39,7 @@ interface CharacterBuilderModalProps {
 
 type BuilderTab =
   | 'identity'
+  | 'voice'
   | 'head'
   | 'neck'
   | 'hair'
@@ -48,6 +51,7 @@ type BuilderTab =
 
 export const ALL_SPECIES = [
   'human',
+  'planet',
   'bear',
   'animal',
   'robot',
@@ -108,7 +112,14 @@ export function resolveInitialAppearance(character?: Character | null): {
   const nm = (character?.name || '').toLowerCase();
   let basePreset = CHARACTER_PRESETS.kid_boy.appearance;
 
-  if (sp.includes('bear') || nm.includes('bear') || nm.includes('pip')) {
+  if (
+    sp.includes('planet') ||
+    sp.includes('earth') ||
+    nm.includes('earth') ||
+    nm.includes('terra')
+  ) {
+    basePreset = CHARACTER_PRESETS.earth.appearance;
+  } else if (sp.includes('bear') || nm.includes('bear') || nm.includes('pip')) {
     basePreset = CHARACTER_PRESETS.bear_cub.appearance;
   } else if (sp.includes('robot') || nm.includes('robot') || nm.includes('sparky')) {
     basePreset = CHARACTER_PRESETS.robot.appearance;
@@ -171,6 +182,65 @@ export const CharacterBuilderModal: React.FC<CharacterBuilderModalProps> = ({
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [isDuplicating, setIsDuplicating] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Voice audition preview state
+  const [isPreviewingVoice, setIsPreviewingVoice] = useState<boolean>(false);
+  const [previewAudioUrl, setPreviewAudioUrl] = useState<string | null>(null);
+  const previewAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  const isPlanetSpecies = appearance.species === 'planet';
+
+  const tabsRef = useRef<HTMLDivElement | null>(null);
+
+  const scrollTabs = (offset: number) => {
+    if (tabsRef.current) {
+      tabsRef.current.scrollBy({ left: offset, behavior: 'smooth' });
+    }
+  };
+
+  // Automatically switch tab if current tab is not applicable to planet
+  useEffect(() => {
+    if (isPlanetSpecies && ['neck', 'hair', 'torso', 'arms', 'legs'].includes(activeTab)) {
+      setActiveTab('head');
+    }
+  }, [isPlanetSpecies, activeTab]);
+
+  useEffect(() => {
+    if (tabsRef.current) {
+      const activeEl = tabsRef.current.querySelector('.char-builder-tab.active') as HTMLElement;
+      if (activeEl) {
+        activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+      }
+    }
+  }, [activeTab]);
+
+  const handleAuditionVoice = async () => {
+    try {
+      setIsPreviewingVoice(true);
+      const effectiveVoice = appearance.voiceConfig?.voiceId || (
+        appearance.species === 'planet' ? 'bm_daniel' :
+        appearance.species === 'bear' ? 'bm_george' :
+        appearance.species === 'robot' ? 'bm_lewis' :
+        appearance.gender === 'girl' ? 'af_bella' : 'am_adam'
+      );
+      const sampleText = `Hello! I'm ${name || 'your friend'}, and I'm ready to tell our story!`;
+      const res = await previewVoice({
+        voice: effectiveVoice,
+        speed: appearance.voiceConfig?.speed ?? 1.0,
+        effect: appearance.voiceConfig?.effect || 'normal',
+        sampleText,
+      });
+      setPreviewAudioUrl(res.audioUrl);
+      const audio = new Audio(resolveAssetUrl(res.audioUrl));
+      previewAudioRef.current = audio;
+      await audio.play();
+    } catch (err: any) {
+      console.error('Failed to preview character voice:', err);
+      alert(`Voice preview failed: ${err.message || String(err)}`);
+    } finally {
+      setIsPreviewingVoice(false);
+    }
+  };
 
   // Animation preview clock
   const [previewTimeMs, setPreviewTimeMs] = useState<number>(0);
@@ -571,70 +641,113 @@ export const CharacterBuilderModal: React.FC<CharacterBuilderModalProps> = ({
         <div className="char-builder-content">
           {/* LEFT: Customizer Panel */}
           <div className="char-builder-controls-panel">
-            {/* Tab Navigation */}
-            <div className="char-builder-tabs">
+            {/* Tab Navigation with horizontal scrolling */}
+            <div className="char-builder-tabs-container">
               <button
                 type="button"
-                className={`char-builder-tab ${activeTab === 'identity' ? 'active' : ''}`}
-                onClick={() => setActiveTab('identity')}
+                className="char-builder-tab-scroll-btn left"
+                onClick={() => scrollTabs(-120)}
+                title="Scroll tabs left"
               >
-                🏷️ Identity
+                ‹
               </button>
+              <div
+                className="char-builder-tabs"
+                ref={tabsRef}
+                onWheel={(e) => {
+                  if (e.deltaY !== 0) {
+                    e.currentTarget.scrollLeft += e.deltaY;
+                  }
+                }}
+              >
+                <button
+                  type="button"
+                  className={`char-builder-tab ${activeTab === 'identity' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('identity')}
+                >
+                  🏷️ Identity
+                </button>
+                <button
+                  type="button"
+                  className={`char-builder-tab ${activeTab === 'voice' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('voice')}
+                >
+                  🎙️ Voice
+                </button>
+                <button
+                  type="button"
+                  className={`char-builder-tab ${activeTab === 'head' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('head')}
+                >
+                  {isPlanetSpecies ? '🌍 Globe' : '👤 Head'}
+                </button>
+                {!isPlanetSpecies && (
+                  <>
+                    <button
+                      type="button"
+                      className={`char-builder-tab ${activeTab === 'neck' ? 'active' : ''}`}
+                      onClick={() => setActiveTab('neck')}
+                    >
+                      🦒 Neck
+                    </button>
+                    <button
+                      type="button"
+                      className={`char-builder-tab ${activeTab === 'hair' ? 'active' : ''}`}
+                      onClick={() => setActiveTab('hair')}
+                    >
+                      💇 Hair
+                    </button>
+                  </>
+                )}
+                <button
+                  type="button"
+                  className={`char-builder-tab ${activeTab === 'face' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('face')}
+                >
+                  👀 Face
+                </button>
+                {!isPlanetSpecies && (
+                  <button
+                    type="button"
+                    className={`char-builder-tab ${activeTab === 'torso' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('torso')}
+                  >
+                    👕 Torso
+                  </button>
+                )}
+                {!isPlanetSpecies && (
+                  <button
+                    type="button"
+                    className={`char-builder-tab ${activeTab === 'arms' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('arms')}
+                  >
+                    💪 Arms
+                  </button>
+                )}
+                {!isPlanetSpecies && (
+                  <button
+                    type="button"
+                    className={`char-builder-tab ${activeTab === 'legs' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('legs')}
+                  >
+                    👖 Legs
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className={`char-builder-tab ${activeTab === 'accessories' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('accessories')}
+                >
+                  👓 Extras
+                </button>
+              </div>
               <button
                 type="button"
-                className={`char-builder-tab ${activeTab === 'head' ? 'active' : ''}`}
-                onClick={() => setActiveTab('head')}
+                className="char-builder-tab-scroll-btn right"
+                onClick={() => scrollTabs(120)}
+                title="Scroll tabs right"
               >
-                👤 Head
-              </button>
-              <button
-                type="button"
-                className={`char-builder-tab ${activeTab === 'neck' ? 'active' : ''}`}
-                onClick={() => setActiveTab('neck')}
-              >
-                🦒 Neck
-              </button>
-              <button
-                type="button"
-                className={`char-builder-tab ${activeTab === 'hair' ? 'active' : ''}`}
-                onClick={() => setActiveTab('hair')}
-              >
-                💇 Hair
-              </button>
-              <button
-                type="button"
-                className={`char-builder-tab ${activeTab === 'face' ? 'active' : ''}`}
-                onClick={() => setActiveTab('face')}
-              >
-                👀 Face
-              </button>
-              <button
-                type="button"
-                className={`char-builder-tab ${activeTab === 'torso' ? 'active' : ''}`}
-                onClick={() => setActiveTab('torso')}
-              >
-                👕 Torso
-              </button>
-              <button
-                type="button"
-                className={`char-builder-tab ${activeTab === 'arms' ? 'active' : ''}`}
-                onClick={() => setActiveTab('arms')}
-              >
-                💪 Arms
-              </button>
-              <button
-                type="button"
-                className={`char-builder-tab ${activeTab === 'legs' ? 'active' : ''}`}
-                onClick={() => setActiveTab('legs')}
-              >
-                👖 Legs
-              </button>
-              <button
-                type="button"
-                className={`char-builder-tab ${activeTab === 'accessories' ? 'active' : ''}`}
-                onClick={() => setActiveTab('accessories')}
-              >
-                👓 Extras
+                ›
               </button>
             </div>
 
@@ -663,7 +776,63 @@ export const CharacterBuilderModal: React.FC<CharacterBuilderModalProps> = ({
                           type="button"
                           className={`char-pill-btn ${appearance.species === s ? 'active' : ''}`}
                           onClick={() => {
-                            updateAppearance((a) => ({ ...a, species: s }));
+                            if (s === 'planet') {
+                              updateAppearance((a) => ({
+                                ...a,
+                                species: 'planet',
+                                head: {
+                                  ...a.head,
+                                  shape: 'round',
+                                  skinColor: a.planet?.oceanColor || '#1d4ed8',
+                                },
+                                hair: {
+                                  ...a.hair,
+                                  style: 'none',
+                                  color: a.planet?.continentColor || '#10b981',
+                                },
+                                eyes: {
+                                  ...a.eyes,
+                                  style: 'round',
+                                  size: 1.1,
+                                  color: '#0f172a',
+                                },
+                                eyebrows: {
+                                  ...a.eyebrows,
+                                  style: 'curved',
+                                  color: '#0f172a',
+                                },
+                                nose: {
+                                  ...a.nose,
+                                  style: 'button',
+                                  color: '#38bdf8',
+                                  size: 0.9,
+                                },
+                                mouth: {
+                                  ...a.mouth,
+                                  style: 'smile',
+                                  color: '#be123c',
+                                },
+                                planet: {
+                                  oceanColor: a.planet?.oceanColor || '#1d4ed8',
+                                  continentColor: a.planet?.continentColor || '#10b981',
+                                  landmassStyle: a.planet?.landmassStyle || 'earth',
+                                  atmosphereGlow: a.planet?.atmosphereGlow || 'cyan',
+                                  clouds: a.planet?.clouds ?? true,
+                                  showHands: false,
+                                },
+                                voiceConfig: {
+                                  voiceId: a.voiceConfig?.voiceId && a.voiceConfig.voiceId !== 'af_heart' ? a.voiceConfig.voiceId : 'bm_daniel',
+                                  speed: a.voiceConfig?.speed ?? 1.0,
+                                  style: a.voiceConfig?.style ?? 'cheerful',
+                                  effect: a.voiceConfig?.effect ?? 'normal',
+                                },
+                              }));
+                              if (['neck', 'hair', 'torso', 'legs'].includes(activeTab)) {
+                                setActiveTab('head');
+                              }
+                            } else {
+                              updateAppearance((a) => ({ ...a, species: s }));
+                            }
                             setSpecies(s.charAt(0).toUpperCase() + s.slice(1));
                           }}
                         >
@@ -716,7 +885,238 @@ export const CharacterBuilderModal: React.FC<CharacterBuilderModalProps> = ({
                 </div>
               )}
 
-              {/* 1. HEAD TAB */}
+              {/* VOICE TAB */}
+              {activeTab === 'voice' && (
+                <div className="char-builder-section">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                    <div>
+                      <div style={{ fontSize: '13px', fontWeight: 600, color: '#f8fafc' }}>
+                        🎙️ Voice Configuration for "{name || 'Character'}"
+                      </div>
+                      <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>
+                        Independent Kokoro-82M neural voice for character dialogue
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="char-builder-btn secondary"
+                      style={{ fontSize: '11px', padding: '4px 10px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                      onClick={handleAuditionVoice}
+                      disabled={isPreviewingVoice}
+                    >
+                      {isPreviewingVoice ? '⏳ Generating...' : '🔊 Audition Voice'}
+                    </button>
+                  </div>
+
+                  {previewAudioUrl && (
+                    <div
+                      style={{
+                        marginBottom: '10px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        background: 'rgba(139, 92, 246, 0.15)',
+                        padding: '6px 10px',
+                        borderRadius: '6px',
+                        border: '1px solid rgba(139, 92, 246, 0.35)',
+                      }}
+                    >
+                      <button
+                        type="button"
+                        className="char-builder-icon-btn"
+                        style={{ width: '24px', height: '24px', padding: 0 }}
+                        onClick={() => {
+                          if (previewAudioRef.current) {
+                            previewAudioRef.current.currentTime = 0;
+                            previewAudioRef.current.play();
+                          }
+                        }}
+                        title="Replay audition sample"
+                      >
+                        ▶
+                      </button>
+                      <span style={{ fontSize: '11px', color: '#e2e8f0', flex: 1 }}>
+                        Auditioning voice for <strong>{name || 'Character'}</strong>
+                      </span>
+                      <button
+                        type="button"
+                        style={{
+                          background: 'transparent',
+                          border: 'none',
+                          color: '#94a3b8',
+                          cursor: 'pointer',
+                          fontSize: '12px',
+                        }}
+                        onClick={() => setPreviewAudioUrl(null)}
+                        title="Dismiss"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  )}
+
+                  <div className="char-control-group">
+                    <label>Kokoro-82M Voice Assignment</label>
+                    <div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '8px' }}>
+                      Select the persistent default voice used when this character speaks dialogue in any scene:
+                    </div>
+                    <div className="char-pill-row">
+                      {[
+                        { id: 'bm_daniel', name: 'Daniel (Earth / Deep / Mentor)' },
+                        { id: 'af_bella', name: 'Bella (Energetic Girl)' },
+                        { id: 'am_adam', name: 'Adam (Playful Boy)' },
+                        { id: 'bm_george', name: 'George (Warm Bear)' },
+                        { id: 'bm_lewis', name: 'Lewis (Robot / Tech)' },
+                        { id: 'af_heart', name: 'Heart (Warm Narrator)' },
+                        { id: 'af_nicole', name: 'Nicole (Curious)' },
+                        { id: 'af_sky', name: 'Sky (Cheerful)' },
+                      ].map((v) => {
+                        const currentVoice = appearance.voiceConfig?.voiceId || (
+                          appearance.species === 'planet' ? 'bm_daniel' :
+                          appearance.species === 'bear' ? 'bm_george' :
+                          appearance.species === 'robot' ? 'bm_lewis' :
+                          appearance.gender === 'girl' ? 'af_bella' : 'am_adam'
+                        );
+                        return (
+                          <button
+                            key={v.id}
+                            type="button"
+                            className={`char-pill-btn ${currentVoice === v.id ? 'active' : ''}`}
+                            onClick={() =>
+                              updateAppearance((a) => ({
+                                ...a,
+                                voiceConfig: {
+                                  speed: a.voiceConfig?.speed ?? 1.0,
+                                  style: a.voiceConfig?.style ?? 'cheerful',
+                                  effect: a.voiceConfig?.effect ?? 'normal',
+                                  voiceId: v.id,
+                                },
+                              }))
+                            }
+                          >
+                            {v.name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="char-control-group">
+                    <label>
+                      Speaking Pace: {((appearance.voiceConfig?.speed ?? 1.0)).toFixed(2)}x
+                    </label>
+                    <input
+                      type="range"
+                      min="0.7"
+                      max="1.4"
+                      step="0.05"
+                      value={appearance.voiceConfig?.speed ?? 1.0}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value);
+                        updateAppearance((a) => {
+                          const currentVoice = a.voiceConfig?.voiceId || (
+                            a.species === 'planet' ? 'bm_daniel' :
+                            a.species === 'bear' ? 'bm_george' :
+                            a.species === 'robot' ? 'bm_lewis' :
+                            a.gender === 'girl' ? 'af_bella' : 'am_adam'
+                          );
+                          return {
+                            ...a,
+                            voiceConfig: {
+                              voiceId: currentVoice,
+                              style: a.voiceConfig?.style ?? 'cheerful',
+                              effect: a.voiceConfig?.effect ?? 'normal',
+                              speed: val,
+                            },
+                          };
+                        });
+                      }}
+                      className="char-builder-slider"
+                    />
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#64748b' }}>
+                      <span>Slower (0.7x)</span>
+                      <span>Default (1.0x)</span>
+                      <span>Faster (1.4x)</span>
+                    </div>
+                  </div>
+
+                  <div className="char-control-group">
+                    <label>Default Speaking Style</label>
+                    <select
+                      className="char-builder-input"
+                      value={appearance.voiceConfig?.style || 'cheerful'}
+                      onChange={(e) => {
+                        const val = e.target.value as any;
+                        updateAppearance((a) => {
+                          const currentVoice = a.voiceConfig?.voiceId || (
+                            a.species === 'planet' ? 'bm_daniel' :
+                            a.species === 'bear' ? 'bm_george' :
+                            a.species === 'robot' ? 'bm_lewis' :
+                            a.gender === 'girl' ? 'af_bella' : 'am_adam'
+                          );
+                          return {
+                            ...a,
+                            voiceConfig: {
+                              voiceId: currentVoice,
+                              speed: a.voiceConfig?.speed ?? 1.0,
+                              effect: a.voiceConfig?.effect ?? 'normal',
+                              style: val,
+                            },
+                          };
+                        });
+                      }}
+                    >
+                      <option value="cheerful">Cheerful & Friendly</option>
+                      <option value="excited">Excited & Eager</option>
+                      <option value="calm">Calm & Gentle</option>
+                      <option value="curious">Curious & Inquiring</option>
+                      <option value="worried">Worried / Shy</option>
+                      <option value="sad">Sad / Soft</option>
+                      <option value="serious">Serious / Brave</option>
+                    </select>
+                  </div>
+
+                  <div className="char-control-group">
+                    <label>Audio Processing Effect</label>
+                    <div className="char-pill-row">
+                      {[
+                        { id: 'normal', label: 'Normal Clean' },
+                        { id: 'cartoon', label: 'Cartoon Pitch (+3 semitones)' },
+                        { id: 'robot', label: 'Robotic Vocoder' },
+                      ].map((eff) => (
+                        <button
+                          key={eff.id}
+                          type="button"
+                          className={`char-pill-btn ${(appearance.voiceConfig?.effect || 'normal') === eff.id ? 'active' : ''}`}
+                          onClick={() => {
+                            updateAppearance((a) => {
+                              const currentVoice = a.voiceConfig?.voiceId || (
+                                a.species === 'planet' ? 'bm_daniel' :
+                                a.species === 'bear' ? 'bm_george' :
+                                a.species === 'robot' ? 'bm_lewis' :
+                                a.gender === 'girl' ? 'af_bella' : 'am_adam'
+                              );
+                              return {
+                                ...a,
+                                voiceConfig: {
+                                  voiceId: currentVoice,
+                                  speed: a.voiceConfig?.speed ?? 1.0,
+                                  style: a.voiceConfig?.style ?? 'cheerful',
+                                  effect: eff.id as any,
+                                },
+                              };
+                            });
+                          }}
+                        >
+                          {eff.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 1. HEAD / GLOBE TAB */}
               {activeTab === 'head' && (
                 <div className="char-builder-section">
                   <div className="char-control-group">
@@ -728,7 +1128,63 @@ export const CharacterBuilderModal: React.FC<CharacterBuilderModalProps> = ({
                           type="button"
                           className={`char-pill-btn ${appearance.species === s ? 'active' : ''}`}
                           onClick={() => {
-                            updateAppearance((a) => ({ ...a, species: s }));
+                            if (s === 'planet') {
+                              updateAppearance((a) => ({
+                                ...a,
+                                species: 'planet',
+                                head: {
+                                  ...a.head,
+                                  shape: 'round',
+                                  skinColor: a.planet?.oceanColor || '#1d4ed8',
+                                },
+                                hair: {
+                                  ...a.hair,
+                                  style: 'none',
+                                  color: a.planet?.continentColor || '#10b981',
+                                },
+                                eyes: {
+                                  ...a.eyes,
+                                  style: 'round',
+                                  size: 1.1,
+                                  color: '#0f172a',
+                                },
+                                eyebrows: {
+                                  ...a.eyebrows,
+                                  style: 'curved',
+                                  color: '#0f172a',
+                                },
+                                nose: {
+                                  ...a.nose,
+                                  style: 'button',
+                                  color: '#38bdf8',
+                                  size: 0.9,
+                                },
+                                mouth: {
+                                  ...a.mouth,
+                                  style: 'smile',
+                                  color: '#be123c',
+                                },
+                                planet: {
+                                  oceanColor: a.planet?.oceanColor || '#1d4ed8',
+                                  continentColor: a.planet?.continentColor || '#10b981',
+                                  landmassStyle: a.planet?.landmassStyle || 'earth',
+                                  atmosphereGlow: a.planet?.atmosphereGlow || 'cyan',
+                                  clouds: a.planet?.clouds ?? true,
+                                  showHands: false,
+                                },
+                                voiceConfig: {
+                                  voiceId: a.voiceConfig?.voiceId && a.voiceConfig.voiceId !== 'af_heart' ? a.voiceConfig.voiceId : 'bm_daniel',
+                                  speed: a.voiceConfig?.speed ?? 1.0,
+                                  style: a.voiceConfig?.style ?? 'cheerful',
+                                  effect: a.voiceConfig?.effect ?? 'normal',
+                                },
+                              }));
+                              if (['neck', 'hair', 'torso', 'legs'].includes(activeTab)) {
+                                setActiveTab('head');
+                              }
+                            } else {
+                              updateAppearance((a) => ({ ...a, species: s }));
+                            }
                             setSpecies(s.charAt(0).toUpperCase() + s.slice(1));
                           }}
                         >
@@ -738,98 +1194,324 @@ export const CharacterBuilderModal: React.FC<CharacterBuilderModalProps> = ({
                     </div>
                   </div>
 
-                  <div className="char-control-group">
-                    <label>Head Shape</label>
-                    <div className="char-pill-row">
-                      {(['round', 'oval', 'square', 'heart'] as const).map((shape) => (
-                        <button
-                          key={shape}
-                          type="button"
-                          className={`char-pill-btn ${appearance.head.shape === shape ? 'active' : ''}`}
-                          onClick={() =>
+                  {appearance.species === 'planet' ? (
+                    <>
+                      <div className="char-control-group">
+                        <label>Globe Size: {appearance.head.size.toFixed(2)}x</label>
+                        <input
+                          type="range"
+                          min="0.8"
+                          max="1.4"
+                          step="0.05"
+                          value={appearance.head.size}
+                          onChange={(e) => {
+                            const val = parseFloat(e.target.value);
                             updateAppearance((a) => ({
                               ...a,
-                              head: { ...a.head, shape },
-                            }))
-                          }
-                        >
-                          {shape}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="char-control-group">
-                    <label>Head Size: {appearance.head.size.toFixed(2)}x</label>
-                    <input
-                      type="range"
-                      min="0.8"
-                      max="1.3"
-                      step="0.05"
-                      value={appearance.head.size}
-                      onChange={(e) => {
-                        const val = parseFloat(e.target.value);
-                        updateAppearance((a) => ({
-                          ...a,
-                          head: { ...a.head, size: val },
-                        }));
-                      }}
-                    />
-                  </div>
-
-                  <div className="char-control-group">
-                    <label>Skin Tone</label>
-                    <div className="char-swatch-row">
-                      {COLOR_SWATCHES.skin.map((col) => (
-                        <button
-                          key={col}
-                          type="button"
-                          className={`char-color-swatch ${appearance.head.skinColor === col ? 'active' : ''}`}
-                          style={{ backgroundColor: col }}
-                          onClick={() =>
-                            updateAppearance((a) => ({
-                              ...a,
-                              head: { ...a.head, skinColor: col },
-                              arms: { ...a.arms, skinColor: col },
-                            }))
-                          }
+                              head: { ...a.head, size: val },
+                            }));
+                          }}
                         />
-                      ))}
-                      <input
-                        type="color"
-                        value={appearance.head.skinColor}
-                        onChange={(e) =>
-                          updateAppearance((a) => ({
-                            ...a,
-                            head: { ...a.head, skinColor: e.target.value },
-                            arms: { ...a.arms, skinColor: e.target.value },
-                          }))
-                        }
-                        className="char-color-picker"
-                      />
-                    </div>
-                  </div>
+                      </div>
 
-                  <div className="char-control-group">
-                    <label>Ears Style</label>
-                    <div className="char-pill-row">
-                      {(['human', 'round', 'bear', 'elf'] as const).map((ear) => (
-                        <button
-                          key={ear}
-                          type="button"
-                          className={`char-pill-btn ${appearance.ears.style === ear ? 'active' : ''}`}
-                          onClick={() =>
+                      {/* Ocean Water Color */}
+                      <div className="char-control-group">
+                        <label>🌊 Ocean Water Color</label>
+                        <div className="char-swatch-row">
+                          {[
+                            '#1d4ed8',
+                            '#0284c7',
+                            '#0f766e',
+                            '#4338ca',
+                            '#1e3a8a',
+                            '#6d28d9',
+                            '#059669',
+                          ].map((col) => (
+                            <button
+                              key={col}
+                              type="button"
+                              className={`char-color-swatch ${(appearance.planet?.oceanColor || appearance.head.skinColor) === col ? 'active' : ''}`}
+                              style={{ backgroundColor: col }}
+                              onClick={() =>
+                                updateAppearance((a) => ({
+                                  ...a,
+                                  head: { ...a.head, skinColor: col },
+                                  planet: {
+                                    ...(a.planet || {
+                                      continentColor: '#10b981',
+                                      atmosphereGlow: 'cyan',
+                                      clouds: true,
+                                      showHands: true,
+                                    }),
+                                    oceanColor: col,
+                                  },
+                                }))
+                              }
+                            />
+                          ))}
+                          <input
+                            type="color"
+                            value={appearance.planet?.oceanColor || appearance.head.skinColor || '#1d4ed8'}
+                            onChange={(e) => {
+                              const col = e.target.value;
+                              updateAppearance((a) => ({
+                                ...a,
+                                head: { ...a.head, skinColor: col },
+                                planet: {
+                                  ...(a.planet || {
+                                    continentColor: '#10b981',
+                                    atmosphereGlow: 'cyan',
+                                    clouds: true,
+                                    showHands: true,
+                                  }),
+                                  oceanColor: col,
+                                },
+                              }));
+                            }}
+                            className="char-color-picker"
+                            title="Custom ocean color"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Continent Land Color */}
+                      <div className="char-control-group">
+                        <label>🌱 Continent Landmass Color</label>
+                        <div className="char-swatch-row">
+                          {[
+                            '#10b981',
+                            '#059669',
+                            '#15803d',
+                            '#84cc16',
+                            '#ca8a04',
+                            '#d97706',
+                            '#475569',
+                          ].map((col) => (
+                            <button
+                              key={col}
+                              type="button"
+                              className={`char-color-swatch ${(appearance.planet?.continentColor || appearance.hair.color) === col ? 'active' : ''}`}
+                              style={{ backgroundColor: col }}
+                              onClick={() =>
+                                updateAppearance((a) => ({
+                                  ...a,
+                                  hair: { ...a.hair, color: col },
+                                  planet: {
+                                    ...(a.planet || {
+                                      oceanColor: '#1d4ed8',
+                                      atmosphereGlow: 'cyan',
+                                      clouds: true,
+                                      showHands: true,
+                                    }),
+                                    continentColor: col,
+                                  },
+                                }))
+                              }
+                            />
+                          ))}
+                          <input
+                            type="color"
+                            value={appearance.planet?.continentColor || appearance.hair.color || '#10b981'}
+                            onChange={(e) => {
+                              const col = e.target.value;
+                              updateAppearance((a) => ({
+                                ...a,
+                                hair: { ...a.hair, color: col },
+                                planet: {
+                                  ...(a.planet || {
+                                    oceanColor: '#1d4ed8',
+                                    atmosphereGlow: 'cyan',
+                                    clouds: true,
+                                    showHands: true,
+                                  }),
+                                  continentColor: col,
+                                },
+                              }));
+                            }}
+                            className="char-color-picker"
+                            title="Custom continent color"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Atmosphere Glow */}
+                      <div className="char-control-group">
+                        <label>✨ Atmosphere Outer Glow</label>
+                        <div className="char-pill-row">
+                          {[
+                            { id: 'cyan', label: 'Glowing Cyan' },
+                            { id: 'gold', label: 'Golden Sun' },
+                            { id: 'white', label: 'Soft White' },
+                            { id: 'none', label: 'No Glow' },
+                          ].map((opt) => (
+                            <button
+                              key={opt.id}
+                              type="button"
+                              className={`char-pill-btn ${(appearance.planet?.atmosphereGlow || 'cyan') === opt.id ? 'active' : ''}`}
+                              onClick={() =>
+                                updateAppearance((a) => ({
+                                  ...a,
+                                  planet: {
+                                    ...(a.planet || {
+                                      oceanColor: '#1d4ed8',
+                                      continentColor: '#10b981',
+                                      clouds: true,
+                                      showHands: true,
+                                    }),
+                                    atmosphereGlow: opt.id as any,
+                                  },
+                                }))
+                              }
+                            >
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Swirling Clouds Toggle */}
+                      <div className="char-control-group">
+                        <label>☁️ Atmosphere Clouds</label>
+                        <div className="char-pill-row">
+                          <button
+                            type="button"
+                            className={`char-pill-btn ${(appearance.planet?.clouds ?? true) ? 'active' : ''}`}
+                            onClick={() =>
+                              updateAppearance((a) => ({
+                                ...a,
+                                planet: {
+                                  ...(a.planet || {
+                                    oceanColor: '#1d4ed8',
+                                    continentColor: '#10b981',
+                                    atmosphereGlow: 'cyan',
+                                    showHands: true,
+                                  }),
+                                  clouds: true,
+                                },
+                              }))
+                            }
+                          >
+                            ☁️ Clouds ON
+                          </button>
+                          <button
+                            type="button"
+                            className={`char-pill-btn ${!(appearance.planet?.clouds ?? true) ? 'active' : ''}`}
+                            onClick={() =>
+                              updateAppearance((a) => ({
+                                ...a,
+                                planet: {
+                                  ...(a.planet || {
+                                    oceanColor: '#1d4ed8',
+                                    continentColor: '#10b981',
+                                    atmosphereGlow: 'cyan',
+                                    showHands: true,
+                                  }),
+                                  clouds: false,
+                                },
+                              }))
+                            }
+                          >
+                            Clear Skies OFF
+                          </button>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="char-control-group">
+                        <label>Head Shape</label>
+                        <div className="char-pill-row">
+                          {(['round', 'oval', 'square', 'heart'] as const).map((shape) => (
+                            <button
+                              key={shape}
+                              type="button"
+                              className={`char-pill-btn ${appearance.head.shape === shape ? 'active' : ''}`}
+                              onClick={() =>
+                                updateAppearance((a) => ({
+                                  ...a,
+                                  head: { ...a.head, shape },
+                                }))
+                              }
+                            >
+                              {shape}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="char-control-group">
+                        <label>Head Size: {appearance.head.size.toFixed(2)}x</label>
+                        <input
+                          type="range"
+                          min="0.8"
+                          max="1.3"
+                          step="0.05"
+                          value={appearance.head.size}
+                          onChange={(e) => {
+                            const val = parseFloat(e.target.value);
                             updateAppearance((a) => ({
                               ...a,
-                              ears: { ...a.ears, style: ear },
-                            }))
-                          }
-                        >
-                          {ear}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+                              head: { ...a.head, size: val },
+                            }));
+                          }}
+                        />
+                      </div>
+
+                      <div className="char-control-group">
+                        <label>Skin Tone</label>
+                        <div className="char-swatch-row">
+                          {COLOR_SWATCHES.skin.map((col) => (
+                            <button
+                              key={col}
+                              type="button"
+                              className={`char-color-swatch ${appearance.head.skinColor === col ? 'active' : ''}`}
+                              style={{ backgroundColor: col }}
+                              onClick={() =>
+                                updateAppearance((a) => ({
+                                  ...a,
+                                  head: { ...a.head, skinColor: col },
+                                  arms: { ...a.arms, skinColor: col },
+                                }))
+                              }
+                            />
+                          ))}
+                          <input
+                            type="color"
+                            value={appearance.head.skinColor}
+                            onChange={(e) =>
+                              updateAppearance((a) => ({
+                                ...a,
+                                head: { ...a.head, skinColor: e.target.value },
+                                arms: { ...a.arms, skinColor: e.target.value },
+                              }))
+                            }
+                            className="char-color-picker"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="char-control-group">
+                        <label>Ears Style</label>
+                        <div className="char-pill-row">
+                          {(['human', 'round', 'bear', 'elf'] as const).map((ear) => (
+                            <button
+                              key={ear}
+                              type="button"
+                              className={`char-pill-btn ${appearance.ears.style === ear ? 'active' : ''}`}
+                              onClick={() =>
+                                updateAppearance((a) => ({
+                                  ...a,
+                                  ears: { ...a.ears, style: ear },
+                                }))
+                              }
+                            >
+                              {ear}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
 
@@ -1223,7 +1905,58 @@ export const CharacterBuilderModal: React.FC<CharacterBuilderModalProps> = ({
               {/* 5. ARMS TAB */}
               {activeTab === 'arms' && (
                 <div className="char-builder-section">
-                  <div className="char-symmetry-bar">
+                  {appearance.species === 'planet' ? (
+                    <div className="char-control-group">
+                      <label>🧤 Floating Cartoon Hands</label>
+                      <div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '8px' }}>
+                        Toggle floating white cartoon gloves for the talking Earth character:
+                      </div>
+                      <div className="char-pill-row">
+                        <button
+                          type="button"
+                          className={`char-pill-btn ${(appearance.planet?.showHands ?? true) ? 'active' : ''}`}
+                          onClick={() =>
+                            updateAppearance((a) => ({
+                              ...a,
+                              planet: {
+                                ...(a.planet || {
+                                  oceanColor: '#1d4ed8',
+                                  continentColor: '#10b981',
+                                  atmosphereGlow: 'cyan',
+                                  clouds: true,
+                                }),
+                                showHands: true,
+                              },
+                            }))
+                          }
+                        >
+                          🧤 White Gloves ON
+                        </button>
+                        <button
+                          type="button"
+                          className={`char-pill-btn ${!(appearance.planet?.showHands ?? true) ? 'active' : ''}`}
+                          onClick={() =>
+                            updateAppearance((a) => ({
+                              ...a,
+                              planet: {
+                                ...(a.planet || {
+                                  oceanColor: '#1d4ed8',
+                                  continentColor: '#10b981',
+                                  atmosphereGlow: 'cyan',
+                                  clouds: true,
+                                }),
+                                showHands: false,
+                              },
+                            }))
+                          }
+                        >
+                          Pure Globe (No Hands)
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="char-symmetry-bar">
                     <span className="char-symmetry-label">Arm Symmetry</span>
                     <div className="char-pill-row">
                       <button
@@ -1408,6 +2141,8 @@ export const CharacterBuilderModal: React.FC<CharacterBuilderModalProps> = ({
                       </>
                     );
                   })()}
+                    </>
+                  )}
                 </div>
               )}
 

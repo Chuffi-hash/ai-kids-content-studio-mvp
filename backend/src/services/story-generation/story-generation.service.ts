@@ -12,6 +12,7 @@ import { StoryPersistenceService } from './story-persistence.service.js';
 import { prisma } from '../database/database.service.js';
 import { estimateSpeechDurationMs } from '../timing/timing.service.js';
 import { VectorSceneData } from '../animation/vector-animation.engine.js';
+import { AudioGenerationService } from '../audio-generation/audio-generation.service.js';
 
 export class StoryGenerationService {
   /**
@@ -47,12 +48,22 @@ export class StoryGenerationService {
     );
 
     // 4. Persist Story, Characters, and Scenes inside an atomic transaction
-    return await StoryPersistenceService.persistNewStory(
+    const persistedResult = await StoryPersistenceService.persistNewStory(
       structuredStory,
       preparedScenes,
       resolvedCharacters,
       input
     );
+
+    // 5. Best-effort initial generation of dialogue audio for all prepared scenes
+    try {
+      const audioGen = new AudioGenerationService();
+      await audioGen.generateAllStoryDialogues(persistedResult.storyId);
+    } catch (err) {
+      console.warn(`[StoryGeneration] Initial dialogue audio generation notice:`, err);
+    }
+
+    return persistedResult;
   }
 
   /**
