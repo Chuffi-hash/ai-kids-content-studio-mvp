@@ -196,22 +196,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
       .catch((err) => console.warn('Could not load TTS voices:', err));
   }, []);
 
-  // Character-aware voice recommendation: adapt voice/effect based on scene characters
-  useEffect(() => {
-    const instances = scene?.animationData?.characterInstances || [];
-    if (instances.length > 0) {
-      const first = instances[0];
-      const matchChar = characters.find((c) => c.name.toLowerCase() === first.name.toLowerCase());
-      const charSpecies = (first.appearance?.species || matchChar?.species || '').toLowerCase();
-      if (charSpecies.includes('robot')) {
-        setVoiceEffect('robot');
-        if (selectedProvider === 'kokoro') setSelectedVoice('am_fenrir');
-      } else if (charSpecies.includes('bear') || charSpecies.includes('animal')) {
-        setVoiceEffect('cartoon');
-        if (selectedProvider === 'kokoro') setSelectedVoice('bm_george');
-      }
-    }
-  }, [scene?.sceneId]);
+  // Scene narrator voice is configured independently from scene character voices
 
   const handlePreviewVoice = async () => {
     try {
@@ -828,7 +813,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span style={{ fontSize: '11px', fontWeight: 700, color: '#c4b5fd', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                🎙️ Voice Studio
+                🎙️ Scene Narrator Voice Studio
               </span>
               <span
                 style={{
@@ -885,7 +870,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
             {/* Voice Selection & Preview */}
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3px' }}>
-                <label style={{ fontSize: '10px', color: 'var(--ed-text-muted)' }}>Speaker Voice</label>
+                <label style={{ fontSize: '10px', color: 'var(--ed-text-muted)' }}>Scene Narrator Voice</label>
                 <button
                   type="button"
                   className="ed-tool-btn"
@@ -993,10 +978,10 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
               />
             </div>
 
-            {/* Character Voice Style / Effect Pills */}
+            {/* Narrator Voice Style / Effect Pills */}
             <div>
               <label style={{ fontSize: '10px', color: 'var(--ed-text-muted)', display: 'block', marginBottom: '4px' }}>
-                Character Voice Style & Audio Effect
+                Narrator Voice Style & Audio Effect
               </label>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
                 <button

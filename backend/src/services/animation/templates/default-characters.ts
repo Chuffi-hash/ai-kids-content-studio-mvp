@@ -251,65 +251,125 @@ export const EARTH_THE_PLANET: VectorRigDefinition = {
       pivot: { x: 0, y: -40 },
       zIndex: 4,
       shapes: [
-        // Atmosphere soft glow
-        { type: 'circle', cx: 0, cy: -40, r: 52, fill: '#38bdf8', opacity: 0.22, tag: 'face_base' },
-        { type: 'circle', cx: 0, cy: -40, r: 49, fill: '#60a5fa', opacity: 0.28, tag: 'face_base' },
-        // Deep vibrant ocean globe
+        // 1. Atmosphere soft outer glow
+        { type: 'circle', cx: 0, cy: -40, r: 56, fill: '#38bdf8', opacity: 0.22, tag: 'face_base' },
+        { type: 'circle', cx: 0, cy: -40, r: 51, fill: '#60a5fa', opacity: 0.28, tag: 'face_base' },
+        { type: 'circle', cx: 0, cy: -40, r: 47, fill: 'none', stroke: '#bae6fd', strokeWidth: 1.2, opacity: 0.5, tag: 'face_base' },
+
+        // 2. Base Ocean Globe
         { type: 'circle', cx: 0, cy: -40, r: 46, fill: '#1d4ed8', tag: 'face_base' },
-        // Continents / Green Landmasses
-        // North-West continent (North America stylized)
+
+        // 3. Spherical 3D Shading
+        // Lower-right ambient depth shadow crescent
         {
           type: 'path',
-          d: 'M -32 -60 Q -18 -74 -4 -64 Q -8 -48 -22 -44 Q -32 -48 -32 -60 Z',
+          d: 'M -23 -0.5 C 5 12 36 -4 44.5 -25 C 46 -33 46 -40 45 -48 C 45 -22 25 1 -8 4 C -16 4 -20 2 -23 -0.5 Z',
+          fill: '#0f172a',
+          opacity: 0.28,
+          tag: 'face_base',
+        },
+        // Upper-left soft sun highlight
+        { type: 'ellipse', cx: -18, cy: -62, rx: 16, ry: 9, fill: '#ffffff', opacity: 0.2, tag: 'face_base' },
+
+        // 4. Coherent Continental Landmasses
+        // North America & Greenland (Upper-left quadrant)
+        {
+          type: 'path',
+          d: 'M -34 -62 Q -22 -75 -11 -67 Q -8 -50 -18 -45 Q -27 -47 -32 -56 Z',
           fill: '#10b981',
           tag: 'face_base',
         },
-        // South-West continent (South America stylized)
         {
           type: 'path',
-          d: 'M -26 -34 Q -14 -32 -10 -16 Q -20 -4 -28 -14 Q -30 -26 -26 -34 Z',
+          d: 'M -33 -62 Q -22 -73 -11 -68',
+          stroke: '#6ee7b7',
+          strokeWidth: 2,
+          strokeLinecap: 'round',
+          fill: 'none',
+          opacity: 0.65,
+          tag: 'face_base',
+        },
+
+        // South America (Lower-left quadrant)
+        {
+          type: 'path',
+          d: 'M -24 -35 Q -11 -33 -8 -22 Q -11 -10 -17 -6 Q -25 -15 -27 -29 Z',
           fill: '#059669',
           tag: 'face_base',
         },
-        // North-East continent (Eurasia stylized)
+
+        // Eurasia (Upper-right quadrant)
         {
           type: 'path',
-          d: 'M 6 -68 Q 30 -72 38 -54 Q 30 -40 16 -46 Q 4 -52 6 -68 Z',
+          d: 'M 6 -71 Q 23 -75 36 -60 Q 30 -46 19 -48 Q 8 -56 6 -71 Z',
           fill: '#10b981',
           tag: 'face_base',
         },
-        // South-East continent (Africa / Australia stylized)
         {
           type: 'path',
-          d: 'M 10 -38 Q 28 -34 32 -18 Q 22 -6 12 -16 Q 8 -26 10 -38 Z',
+          d: 'M 9 -69 Q 22 -72 33 -59',
+          stroke: '#6ee7b7',
+          strokeWidth: 2,
+          strokeLinecap: 'round',
+          fill: 'none',
+          opacity: 0.65,
+          tag: 'face_base',
+        },
+
+        // Africa (Center-right quadrant)
+        {
+          type: 'path',
+          d: 'M 8 -44 Q 22 -45 26 -32 Q 21 -15 13 -11 Q 6 -27 7 -38 Z',
           fill: '#059669',
           tag: 'face_base',
         },
-        // Swirling white clouds
+
+        // Australia & Pacific Archipelago (Lower-right quadrant)
         {
           type: 'path',
-          d: 'M -28 -68 Q 0 -60 26 -70',
+          d: 'M 25 -20 Q 34 -22 35 -11 Q 27 -7 24 -15 Z',
+          fill: '#10b981',
+          tag: 'face_base',
+        },
+        { type: 'circle', cx: 34, cy: -28, r: 3.5, fill: '#10b981', tag: 'face_base' },
+
+        // 5. Swirling White Clouds (3 bands)
+        {
+          type: 'path',
+          d: 'M -28 -56 Q -5 -62 19 -55',
           stroke: '#ffffff',
-          strokeWidth: 3,
+          strokeWidth: 3.5,
+          strokeLinecap: 'round',
+          opacity: 0.55,
+          fill: 'none',
+          tag: 'face_base',
+        },
+        {
+          type: 'path',
+          d: 'M -16 -21 Q 7 -27 30 -23',
+          stroke: '#ffffff',
+          strokeWidth: 3.0,
+          strokeLinecap: 'round',
+          opacity: 0.5,
+          fill: 'none',
+          tag: 'face_base',
+        },
+        {
+          type: 'path',
+          d: 'M -8 -69 Q 0 -73 10 -68',
+          stroke: '#ffffff',
+          strokeWidth: 2.5,
           strokeLinecap: 'round',
           opacity: 0.45,
           fill: 'none',
           tag: 'face_base',
         },
-        {
-          type: 'path',
-          d: 'M -18 -8 Q 10 -14 28 -8',
-          stroke: '#ffffff',
-          strokeWidth: 2.5,
-          strokeLinecap: 'round',
-          opacity: 0.4,
-          fill: 'none',
-          tag: 'face_base',
-        },
-        // Cute blush cheeks on globe
+
+        // 6. Cute Blush Cheeks on Lower Globe Sides
         { type: 'ellipse', cx: -26, cy: -34, rx: 7, ry: 4.5, fill: '#f43f5e', opacity: 0.45, tag: 'face_base' },
         { type: 'ellipse', cx: 26, cy: -34, rx: 7, ry: 4.5, fill: '#f43f5e', opacity: 0.45, tag: 'face_base' },
-        // Eyebrows
+
+        // 7. Eyebrows
         {
           type: 'path',
           d: 'M -21 -55 Q -14 -60 -7 -55',
@@ -328,7 +388,8 @@ export const EARTH_THE_PLANET: VectorRigDefinition = {
           fill: 'none',
           tag: 'eyebrows',
         },
-        // Eyes: Big friendly cartoon eyes
+
+        // 8. Eyes: Big friendly cartoon eyes
         { type: 'ellipse', cx: -14, cy: -44, rx: 6, ry: 7, fill: '#ffffff', tag: 'eyes' },
         { type: 'circle', cx: -14, cy: -44, r: 4.5, fill: '#0f172a', tag: 'eyes' },
         { type: 'circle', cx: -15.5, cy: -46.5, r: 1.8, fill: '#ffffff', tag: 'eyes' },
@@ -337,7 +398,8 @@ export const EARTH_THE_PLANET: VectorRigDefinition = {
         { type: 'circle', cx: 14, cy: -44, r: 4.5, fill: '#0f172a', tag: 'eyes' },
         { type: 'circle', cx: 12.5, cy: -46.5, r: 1.8, fill: '#ffffff', tag: 'eyes' },
         { type: 'circle', cx: 15.5, cy: -42, r: 1.0, fill: '#ffffff', tag: 'eyes' },
-        // Nose: cute stylized button nose
+
+        // 9. Stylized button nose
         { type: 'circle', cx: 0, cy: -36, r: 2.8, fill: '#38bdf8', tag: 'nose' },
         {
           type: 'path',
@@ -348,7 +410,8 @@ export const EARTH_THE_PLANET: VectorRigDefinition = {
           fill: 'none',
           tag: 'nose',
         },
-        // Mouth: Friendly open smile
+
+        // 10. Mouth: Friendly open smile
         {
           type: 'path',
           d: 'M -10 -26 Q 0 -17 10 -26 Q 0 -22 -10 -26 Z',
@@ -371,8 +434,9 @@ export const EARTH_THE_PLANET: VectorRigDefinition = {
       pivot: { x: -50, y: -35 },
       zIndex: 1,
       shapes: [
-        { type: 'circle', cx: -54, cy: -32, r: 9, fill: '#ffffff', stroke: '#cbd5e1', strokeWidth: 1.5 },
-        { type: 'ellipse', cx: -60, cy: -36, rx: 4, ry: 3, fill: '#ffffff', stroke: '#cbd5e1', strokeWidth: 1.2 },
+        { type: 'circle', cx: -56, cy: -32, r: 10, fill: '#ffffff', stroke: '#cbd5e1', strokeWidth: 1.8 },
+        { type: 'ellipse', cx: -62, cy: -36, rx: 5, ry: 4, fill: '#ffffff', stroke: '#cbd5e1', strokeWidth: 1.5 },
+        { type: 'ellipse', cx: -54, cy: -25, rx: 7, ry: 3.5, fill: '#f1f5f9', stroke: '#cbd5e1', strokeWidth: 1.2 },
       ],
     },
     rightArm: {
@@ -381,8 +445,9 @@ export const EARTH_THE_PLANET: VectorRigDefinition = {
       pivot: { x: 50, y: -35 },
       zIndex: 3,
       shapes: [
-        { type: 'circle', cx: 54, cy: -32, r: 9, fill: '#ffffff', stroke: '#cbd5e1', strokeWidth: 1.5 },
-        { type: 'ellipse', cx: 60, cy: -36, rx: 4, ry: 3, fill: '#ffffff', stroke: '#cbd5e1', strokeWidth: 1.2 },
+        { type: 'circle', cx: 56, cy: -32, r: 10, fill: '#ffffff', stroke: '#cbd5e1', strokeWidth: 1.8 },
+        { type: 'ellipse', cx: 62, cy: -36, rx: 5, ry: 4, fill: '#ffffff', stroke: '#cbd5e1', strokeWidth: 1.5 },
+        { type: 'ellipse', cx: 54, cy: -25, rx: 7, ry: 3.5, fill: '#f1f5f9', stroke: '#cbd5e1', strokeWidth: 1.2 },
       ],
     },
     leftLeg: {
