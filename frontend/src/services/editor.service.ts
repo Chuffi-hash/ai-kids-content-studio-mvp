@@ -604,6 +604,27 @@ export async function generateSceneDialogueAudio(
 }
 
 /**
+ * Batch generates character dialogue audio for all dialogue lines in a scene.
+ */
+export async function generateAllSceneDialogueAudios(
+  sceneId: string,
+  options?: { provider?: string; effect?: string; forceRegenerate?: boolean }
+): Promise<{ success: boolean; sceneId: string; dialogueLines: SceneDialogue[] }> {
+  const res = await fetch(`${API_URL}/api/content/scenes/${sceneId}/dialogue/generate-all`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(options || {}),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.message || 'Failed to generate dialogue audios');
+  }
+
+  return res.json();
+}
+
+/**
  * Removes a dialogue line from a scene.
  */
 export async function deleteSceneDialogue(

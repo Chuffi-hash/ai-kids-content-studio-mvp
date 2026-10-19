@@ -37,6 +37,7 @@ interface CharacterBuilderModalProps {
 
 type BuilderTab =
   | 'identity'
+  | 'voice'
   | 'head'
   | 'neck'
   | 'hair'
@@ -48,6 +49,7 @@ type BuilderTab =
 
 export const ALL_SPECIES = [
   'human',
+  'planet',
   'bear',
   'animal',
   'robot',
@@ -108,7 +110,14 @@ export function resolveInitialAppearance(character?: Character | null): {
   const nm = (character?.name || '').toLowerCase();
   let basePreset = CHARACTER_PRESETS.kid_boy.appearance;
 
-  if (sp.includes('bear') || nm.includes('bear') || nm.includes('pip')) {
+  if (
+    sp.includes('planet') ||
+    sp.includes('earth') ||
+    nm.includes('earth') ||
+    nm.includes('terra')
+  ) {
+    basePreset = CHARACTER_PRESETS.earth.appearance;
+  } else if (sp.includes('bear') || nm.includes('bear') || nm.includes('pip')) {
     basePreset = CHARACTER_PRESETS.bear_cub.appearance;
   } else if (sp.includes('robot') || nm.includes('robot') || nm.includes('sparky')) {
     basePreset = CHARACTER_PRESETS.robot.appearance;
@@ -582,6 +591,13 @@ export const CharacterBuilderModal: React.FC<CharacterBuilderModalProps> = ({
               </button>
               <button
                 type="button"
+                className={`char-builder-tab ${activeTab === 'voice' ? 'active' : ''}`}
+                onClick={() => setActiveTab('voice')}
+              >
+                🎙️ Voice
+              </button>
+              <button
+                type="button"
                 className={`char-builder-tab ${activeTab === 'head' ? 'active' : ''}`}
                 onClick={() => setActiveTab('head')}
               >
@@ -711,6 +727,137 @@ export const CharacterBuilderModal: React.FC<CharacterBuilderModalProps> = ({
                         onChange={(e) => setPersonality(e.target.value)}
                         placeholder="e.g. Brave, cheerful, loyal and adventurous..."
                       />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* VOICE TAB */}
+              {activeTab === 'voice' && (
+                <div className="char-builder-section">
+                  <div className="char-control-group">
+                    <label>Kokoro-82M Voice Assignment</label>
+                    <div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '8px' }}>
+                      Select the persistent default voice used when this character speaks dialogue in any scene:
+                    </div>
+                    <div className="char-pill-row">
+                      {[
+                        { id: 'bm_daniel', name: 'Daniel (Earth / Deep / Mentor)' },
+                        { id: 'af_bella', name: 'Bella (Energetic Girl)' },
+                        { id: 'am_adam', name: 'Adam (Playful Boy)' },
+                        { id: 'bm_george', name: 'George (Warm Bear)' },
+                        { id: 'bm_lewis', name: 'Lewis (Robot / Tech)' },
+                        { id: 'af_heart', name: 'Heart (Warm Narrator)' },
+                        { id: 'af_nicole', name: 'Nicole (Curious)' },
+                        { id: 'af_sky', name: 'Sky (Cheerful)' },
+                      ].map((v) => {
+                        const currentVoice = appearance.voiceConfig?.voiceId || (
+                          appearance.species === 'planet' ? 'bm_daniel' :
+                          appearance.species === 'bear' ? 'bm_george' :
+                          appearance.species === 'robot' ? 'bm_lewis' :
+                          appearance.gender === 'girl' ? 'af_bella' : 'am_adam'
+                        );
+                        return (
+                          <button
+                            key={v.id}
+                            type="button"
+                            className={`char-pill-btn ${currentVoice === v.id ? 'active' : ''}`}
+                            onClick={() =>
+                              updateAppearance((a) => ({
+                                ...a,
+                                voiceConfig: {
+                                  ...(a.voiceConfig || {}),
+                                  voiceId: v.id,
+                                },
+                              }))
+                            }
+                          >
+                            {v.name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="char-control-group">
+                    <label>
+                      Speaking Pace: {((appearance.voiceConfig?.speed ?? 1.0)).toFixed(2)}x
+                    </label>
+                    <input
+                      type="range"
+                      min="0.7"
+                      max="1.4"
+                      step="0.05"
+                      value={appearance.voiceConfig?.speed ?? 1.0}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value);
+                        updateAppearance((a) => ({
+                          ...a,
+                          voiceConfig: {
+                            ...(a.voiceConfig || { voiceId: 'af_heart' }),
+                            speed: val,
+                          },
+                        }));
+                      }}
+                      className="char-builder-slider"
+                    />
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#64748b' }}>
+                      <span>Slower (0.7x)</span>
+                      <span>Default (1.0x)</span>
+                      <span>Faster (1.4x)</span>
+                    </div>
+                  </div>
+
+                  <div className="char-control-group">
+                    <label>Default Speaking Style</label>
+                    <select
+                      className="char-builder-input"
+                      value={appearance.voiceConfig?.style || 'cheerful'}
+                      onChange={(e) =>
+                        updateAppearance((a) => ({
+                          ...a,
+                          voiceConfig: {
+                            ...(a.voiceConfig || { voiceId: 'af_heart' }),
+                            style: e.target.value as any,
+                          },
+                        }))
+                      }
+                    >
+                      <option value="cheerful">Cheerful & Friendly</option>
+                      <option value="excited">Excited & Eager</option>
+                      <option value="calm">Calm & Gentle</option>
+                      <option value="curious">Curious & Inquiring</option>
+                      <option value="worried">Worried / Shy</option>
+                      <option value="sad">Sad / Soft</option>
+                      <option value="serious">Serious / Brave</option>
+                    </select>
+                  </div>
+
+                  <div className="char-control-group">
+                    <label>Audio Processing Effect</label>
+                    <div className="char-pill-row">
+                      {[
+                        { id: 'normal', label: 'Normal Clean' },
+                        { id: 'cartoon', label: 'Cartoon Pitch (+3 semitones)' },
+                        { id: 'robot', label: 'Robotic Vocoder' },
+                      ].map((eff) => (
+                        <button
+                          key={eff.id}
+                          type="button"
+                          className={`char-pill-btn ${(appearance.voiceConfig?.effect || 'normal') === eff.id ? 'active' : ''}`}
+                          onClick={() =>
+                            updateAppearance((a) => ({
+                              ...a,
+                              voiceConfig: {
+                                ...(a.voiceConfig || { voiceId: 'af_heart' }),
+                                effect: eff.id as any,
+                              },
+                            }))
+                          }
+                        >
+                          {eff.label}
+                        </button>
+                      ))}
                     </div>
                   </div>
                 </div>

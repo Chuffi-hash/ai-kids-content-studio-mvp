@@ -258,6 +258,87 @@ export const CHARACTER_PRESETS: Record<string, { label: string; appearance: Cust
       },
     },
   },
+  earth: {
+    label: 'Terra (Talking Earth)',
+    appearance: {
+      version: 1,
+      species: 'planet',
+      gender: 'neutral',
+      head: {
+        shape: 'round',
+        size: 1.2,
+        skinColor: '#1d4ed8', // Vibrant ocean blue
+      },
+      neck: {
+        length: 'short',
+        thickness: 'normal',
+        style: 'plain',
+        color: '#1d4ed8',
+      },
+      hair: {
+        style: 'none',
+        color: '#10b981', // Continent emerald green
+      },
+      eyes: {
+        style: 'round',
+        color: '#0f172a',
+        size: 1.1,
+      },
+      eyebrows: {
+        style: 'curved',
+        color: '#0f172a',
+      },
+      nose: {
+        style: 'button',
+        size: 0.9,
+        color: '#38bdf8',
+      },
+      mouth: {
+        style: 'smile',
+        color: '#be123c',
+      },
+      ears: {
+        style: 'round',
+        size: 0.5,
+      },
+      accessories: {
+        glasses: 'none',
+        freckles: false,
+        blush: true,
+        hat: 'none',
+      },
+      torso: {
+        shape: 'standard',
+        width: 1.0,
+        height: 1.0,
+        clothingStyle: 'tshirt',
+        shirtColor: '#1d4ed8',
+        collarColor: '#38bdf8',
+        pattern: 'none',
+      },
+      arms: {
+        length: 0.85,
+        thickness: 0.9,
+        sleeveStyle: 'sleeveless',
+        handShape: 'mitten',
+        skinColor: '#ffffff',
+      },
+      legs: {
+        length: 0.7,
+        thickness: 0.8,
+        pantsStyle: 'pants',
+        pantsColor: '#1d4ed8',
+        shoeStyle: 'shoes',
+        shoeColor: '#1e3a8a',
+      },
+      voiceConfig: {
+        voiceId: 'bm_daniel',
+        speed: 1.0,
+        style: 'cheerful',
+        effect: 'normal',
+      },
+    },
+  },
 };
 
 /**
@@ -483,56 +564,113 @@ export function buildRigFromAppearance(
   const neckWMult = neckThickness === 'slim' ? 18 : neckThickness === 'wide' ? 30 : 24;
   const neckW = neckWMult * Math.max(0.8, Math.min(1.2, torsoWidth));
 
-  const headYOffset = neckLength === 'short' || neckStyle === 'chibi' ? 8 : neckLength === 'long' ? -4 : 0;
-  const baseHeadY = -54 + headYOffset;
+  const isPlanet = app.species?.toLowerCase() === 'planet' || app.species?.toLowerCase() === 'earth';
+  const headYOffset = isPlanet ? 14 : (neckLength === 'short' || neckStyle === 'chibi' ? 8 : neckLength === 'long' ? -4 : 0);
+  const baseHeadY = isPlanet ? -40 : -54 + headYOffset;
 
   const headShapes: VectorPartShape[] = [];
 
-  // Ears
-  const earRx = (app.ears.style === 'bear' ? 12 : 7) * (app.ears.size || 1.0);
-  const earRy = (app.ears.style === 'bear' ? 12 : 11) * (app.ears.size || 1.0);
-  const earY = app.ears.style === 'bear' ? baseHeadY - 24 : baseHeadY;
+  // Ears (Skip for planet)
+  if (!isPlanet) {
+    const earRx = (app.ears.style === 'bear' ? 12 : 7) * (app.ears.size || 1.0);
+    const earRy = (app.ears.style === 'bear' ? 12 : 11) * (app.ears.size || 1.0);
+    const earY = app.ears.style === 'bear' ? baseHeadY - 24 : baseHeadY;
 
-  if (app.ears.style === 'bear') {
+    if (app.ears.style === 'bear') {
+      headShapes.push(
+        { type: 'circle', cx: -28 * headSize, cy: earY, r: earRx, fill: skin },
+        { type: 'circle', cx: 28 * headSize, cy: earY, r: earRx, fill: skin },
+        { type: 'circle', cx: -28 * headSize, cy: earY, r: earRx * 0.55, fill: '#fef3c7' },
+        { type: 'circle', cx: 28 * headSize, cy: earY, r: earRx * 0.55, fill: '#fef3c7' }
+      );
+    } else if (app.ears.style === 'elf') {
+      headShapes.push(
+        {
+          type: 'path',
+          d: `M ${-28 * headSize} ${earY - 2} Q ${-46 * headSize} ${earY - 14} ${-30 * headSize} ${earY + 10} Z`,
+          fill: skin,
+        },
+        {
+          type: 'path',
+          d: `M ${28 * headSize} ${earY - 2} Q ${46 * headSize} ${earY - 14} ${30 * headSize} ${earY + 10} Z`,
+          fill: skin,
+        }
+      );
+    } else if (app.ears.style === 'round') {
+      headShapes.push(
+        { type: 'circle', cx: -30 * headSize, cy: earY, r: 7 * (app.ears.size || 1.0), fill: skin },
+        { type: 'circle', cx: 30 * headSize, cy: earY, r: 7 * (app.ears.size || 1.0), fill: skin }
+      );
+    } else {
+      headShapes.push(
+        { type: 'ellipse', cx: -31 * headSize, cy: earY, rx: earRx, ry: earRy, fill: skin },
+        { type: 'ellipse', cx: 31 * headSize, cy: earY, rx: earRx, ry: earRy, fill: skin }
+      );
+    }
+  }
+
+  // Head Base Geometry
+  const headRx = (isPlanet ? 46 : 30) * headSize;
+  const headRy = (isPlanet ? 46 : 28) * headSize;
+  const headChinY = baseHeadY + headRy;
+
+  if (isPlanet) {
+    // Atmosphere soft rim glow
     headShapes.push(
-      { type: 'circle', cx: -28 * headSize, cy: earY, r: earRx, fill: skin },
-      { type: 'circle', cx: 28 * headSize, cy: earY, r: earRx, fill: skin },
-      { type: 'circle', cx: -28 * headSize, cy: earY, r: earRx * 0.55, fill: '#fef3c7' },
-      { type: 'circle', cx: 28 * headSize, cy: earY, r: earRx * 0.55, fill: '#fef3c7' }
+      { type: 'circle', cx: 0, cy: baseHeadY, r: headRx + 6, fill: '#38bdf8', opacity: 0.22, tag: 'face_base' },
+      { type: 'circle', cx: 0, cy: baseHeadY, r: headRx + 3, fill: '#60a5fa', opacity: 0.28, tag: 'face_base' },
+      { type: 'circle', cx: 0, cy: baseHeadY, r: headRx, fill: skin || '#1d4ed8', tag: 'face_base' }
     );
-  } else if (app.ears.style === 'elf') {
-    // Pointed elf ears angled upwards
+    // Green continents / Landmasses
+    const continent1 = app.hair.color || '#10b981';
+    const continent2 = '#059669';
     headShapes.push(
       {
         type: 'path',
-        d: `M ${-28 * headSize} ${earY - 2} Q ${-46 * headSize} ${earY - 14} ${-30 * headSize} ${earY + 10} Z`,
-        fill: skin,
+        d: `M ${-headRx * 0.7} ${baseHeadY - headRx * 0.43} Q ${-headRx * 0.39} ${baseHeadY - headRx * 0.74} ${-headRx * 0.09} ${baseHeadY - headRx * 0.52} Q ${-headRx * 0.17} ${baseHeadY - headRx * 0.17} ${-headRx * 0.48} ${baseHeadY - headRx * 0.09} Q ${-headRx * 0.7} ${baseHeadY - headRx * 0.17} ${-headRx * 0.7} ${baseHeadY - headRx * 0.43} Z`,
+        fill: continent1,
+        tag: 'face_base',
       },
       {
         type: 'path',
-        d: `M ${28 * headSize} ${earY - 2} Q ${46 * headSize} ${earY - 14} ${30 * headSize} ${earY + 10} Z`,
-        fill: skin,
+        d: `M ${-headRx * 0.57} ${baseHeadY + headRx * 0.13} Q ${-headRx * 0.3} ${baseHeadY + headRx * 0.17} ${-headRx * 0.22} ${baseHeadY + headRx * 0.52} Q ${-headRx * 0.43} ${baseHeadY + headRx * 0.78} ${-headRx * 0.61} ${baseHeadY + headRx * 0.57} Z`,
+        fill: continent2,
+        tag: 'face_base',
+      },
+      {
+        type: 'path',
+        d: `M ${headRx * 0.13} ${baseHeadY - headRx * 0.61} Q ${headRx * 0.65} ${baseHeadY - headRx * 0.7} ${headRx * 0.83} ${baseHeadY - headRx * 0.3} Q ${headRx * 0.65} ${baseHeadY - headRx * 0.09} ${headRx * 0.35} ${baseHeadY - headRx * 0.17} Q ${headRx * 0.09} ${baseHeadY - headRx * 0.35} ${headRx * 0.13} ${baseHeadY - headRx * 0.61} Z`,
+        fill: continent1,
+        tag: 'face_base',
+      },
+      {
+        type: 'path',
+        d: `M ${headRx * 0.22} ${baseHeadY + headRx * 0.09} Q ${headRx * 0.61} ${baseHeadY + headRx * 0.17} ${headRx * 0.7} ${baseHeadY + headRx * 0.48} Q ${headRx * 0.48} ${baseHeadY + headRx * 0.74} ${headRx * 0.26} ${baseHeadY + headRx * 0.52} Z`,
+        fill: continent2,
+        tag: 'face_base',
+      },
+      {
+        type: 'path',
+        d: `M ${-headRx * 0.6} ${baseHeadY - headRx * 0.6} Q 0 ${baseHeadY - headRx * 0.45} ${headRx * 0.55} ${baseHeadY - headRx * 0.65}`,
+        stroke: '#ffffff',
+        strokeWidth: 3,
+        strokeLinecap: 'round',
+        opacity: 0.45,
+        fill: 'none',
+        tag: 'face_base',
+      },
+      {
+        type: 'path',
+        d: `M ${-headRx * 0.4} ${baseHeadY + headRx * 0.7} Q ${headRx * 0.2} ${baseHeadY + headRx * 0.55} ${headRx * 0.6} ${baseHeadY + headRx * 0.7}`,
+        stroke: '#ffffff',
+        strokeWidth: 2.5,
+        strokeLinecap: 'round',
+        opacity: 0.4,
+        fill: 'none',
+        tag: 'face_base',
       }
     );
-  } else if (app.ears.style === 'round') {
-    headShapes.push(
-      { type: 'circle', cx: -30 * headSize, cy: earY, r: 7 * (app.ears.size || 1.0), fill: skin },
-      { type: 'circle', cx: 30 * headSize, cy: earY, r: 7 * (app.ears.size || 1.0), fill: skin }
-    );
-  } else {
-    // Human side ears
-    headShapes.push(
-      { type: 'ellipse', cx: -31 * headSize, cy: earY, rx: earRx, ry: earRy, fill: skin },
-      { type: 'ellipse', cx: 31 * headSize, cy: earY, rx: earRx, ry: earRy, fill: skin }
-    );
-  }
-
-  // Head Base Geometry (Issue 1: real distinct geometries)
-  const headRx = 30 * headSize;
-  const headRy = 28 * headSize;
-  const headChinY = baseHeadY + headRy;
-
-  if (app.head.shape === 'square') {
+  } else if (app.head.shape === 'square') {
     headShapes.push({
       type: 'rect',
       x: -headRx,
@@ -552,7 +690,6 @@ export function buildRigFromAppearance(
       fill: skin,
     });
   } else if (app.head.shape === 'heart') {
-    // Distinct heart shape with prominent top lobes and tapered chin
     const heartPath = `M 0 ${baseHeadY + headRy * 1.05} C ${-headRx * 1.2} ${baseHeadY + headRy * 0.3} ${-headRx * 1.15} ${baseHeadY - headRy * 0.85} ${-headRx * 0.55} ${baseHeadY - headRy * 0.95} C ${-headRx * 0.15} ${baseHeadY - headRy * 1.0} 0 ${baseHeadY - headRy * 0.45} 0 ${baseHeadY - headRy * 0.35} C 0 ${baseHeadY - headRy * 0.45} ${headRx * 0.15} ${baseHeadY - headRy * 1.0} ${headRx * 0.55} ${baseHeadY - headRy * 0.95} C ${headRx * 1.15} ${baseHeadY - headRy * 0.85} ${headRx * 1.2} ${baseHeadY + headRy * 0.3} 0 ${baseHeadY + headRy * 1.05} Z`;
     headShapes.push({
       type: 'path',
@@ -560,7 +697,6 @@ export function buildRigFromAppearance(
       fill: skin,
     });
   } else {
-    // Round
     headShapes.push({
       type: 'ellipse',
       cx: 0,
@@ -572,7 +708,7 @@ export function buildRigFromAppearance(
   }
 
   // Snout (for bear / animal)
-  if (app.species === 'bear' || app.nose.style === 'bear_snout') {
+  if (!isPlanet && (app.species === 'bear' || app.nose.style === 'bear_snout')) {
     headShapes.push({
       type: 'ellipse',
       cx: 0,
@@ -583,73 +719,75 @@ export function buildRigFromAppearance(
     });
   }
 
-  // Hair Back/Main
-  if (app.hair.style === 'short') {
-    headShapes.push(
-      {
+  // Hair Back/Main (Skip for planet)
+  if (!isPlanet) {
+    if (app.hair.style === 'short') {
+      headShapes.push(
+        {
+          type: 'path',
+          d: `M ${-34 * headSize} -60 Q ${-36 * headSize} -90 0 -92 Q ${36 * headSize} -90 ${34 * headSize} -60 Q 24 -70 12 -72 Q 0 -66 -10 -72 Q -24 -70 ${-34 * headSize} -60 Z`,
+          fill: hairColor,
+        },
+        {
+          type: 'path',
+          d: 'M -22 -68 Q -10 -58 0 -68 Q 12 -58 24 -68',
+          stroke: hairColor,
+          strokeWidth: 4,
+          strokeLinecap: 'round',
+          fill: 'none',
+        }
+      );
+    } else if (app.hair.style === 'curly') {
+      headShapes.push(
+        {
+          type: 'path',
+          d: `M ${-36 * headSize} -55 Q ${-42 * headSize} -85 -18 -88 Q 0 -96 22 -88 Q ${42 * headSize} -85 ${36 * headSize} -55 Q 26 -72 10 -70 Q 0 -76 -12 -70 Q -26 -72 ${-36 * headSize} -55 Z`,
+          fill: hairColor,
+        },
+        { type: 'circle', cx: -24, cy: -82, r: 10, fill: hairColor },
+        { type: 'circle', cx: 0, cy: -88, r: 12, fill: hairColor },
+        { type: 'circle', cx: 24, cy: -82, r: 10, fill: hairColor }
+      );
+    } else if (app.hair.style === 'spiky') {
+      headShapes.push({
         type: 'path',
-        d: `M ${-34 * headSize} -60 Q ${-36 * headSize} -90 0 -92 Q ${36 * headSize} -90 ${34 * headSize} -60 Q 24 -70 12 -72 Q 0 -66 -10 -72 Q -24 -70 ${-34 * headSize} -60 Z`,
+        d: `M ${-34 * headSize} -60 L -30 -85 L -16 -75 L 0 -94 L 16 -75 L 30 -85 L ${34 * headSize} -60 Q 18 -72 0 -68 Q -18 -72 ${-34 * headSize} -60 Z`,
         fill: hairColor,
-      },
-      {
+      });
+    } else if (app.hair.style === 'bob') {
+      headShapes.push({
         type: 'path',
-        d: 'M -22 -68 Q -10 -58 0 -68 Q 12 -58 24 -68',
-        stroke: hairColor,
-        strokeWidth: 4,
-        strokeLinecap: 'round',
-        fill: 'none',
-      }
-    );
-  } else if (app.hair.style === 'curly') {
-    headShapes.push(
-      {
-        type: 'path',
-        d: `M ${-36 * headSize} -55 Q ${-42 * headSize} -85 -18 -88 Q 0 -96 22 -88 Q ${42 * headSize} -85 ${36 * headSize} -55 Q 26 -72 10 -70 Q 0 -76 -12 -70 Q -26 -72 ${-36 * headSize} -55 Z`,
+        d: `M ${-34 * headSize} -36 Q ${-38 * headSize} -90 0 -92 Q ${38 * headSize} -90 ${34 * headSize} -36 L 26 -38 Q 30 -68 0 -68 Q -30 -68 -26 -38 Z`,
         fill: hairColor,
-      },
-      { type: 'circle', cx: -24, cy: -82, r: 10, fill: hairColor },
-      { type: 'circle', cx: 0, cy: -88, r: 12, fill: hairColor },
-      { type: 'circle', cx: 24, cy: -82, r: 10, fill: hairColor }
-    );
-  } else if (app.hair.style === 'spiky') {
-    headShapes.push({
-      type: 'path',
-      d: `M ${-34 * headSize} -60 L -30 -85 L -16 -75 L 0 -94 L 16 -75 L 30 -85 L ${34 * headSize} -60 Q 18 -72 0 -68 Q -18 -72 ${-34 * headSize} -60 Z`,
-      fill: hairColor,
-    });
-  } else if (app.hair.style === 'bob') {
-    headShapes.push({
-      type: 'path',
-      d: `M ${-34 * headSize} -36 Q ${-38 * headSize} -90 0 -92 Q ${38 * headSize} -90 ${34 * headSize} -36 L 26 -38 Q 30 -68 0 -68 Q -30 -68 -26 -38 Z`,
-      fill: hairColor,
-    });
-  } else if (app.hair.style === 'long') {
-    headShapes.push({
-      type: 'path',
-      d: `M ${-34 * headSize} -20 Q ${-40 * headSize} -90 0 -92 Q ${40 * headSize} -90 ${34 * headSize} -20 Q 24 -30 20 -40 Q 30 -70 0 -70 Q -30 -70 -20 -40 Q -24 -30 ${-34 * headSize} -20 Z`,
-      fill: hairColor,
-    });
-  } else if (app.hair.style === 'ponytail') {
-    headShapes.push(
-      {
+      });
+    } else if (app.hair.style === 'long') {
+      headShapes.push({
         type: 'path',
-        d: `M ${-34 * headSize} -60 Q -36 -90 0 -92 Q 36 -90 ${34 * headSize} -60 Q 24 -70 12 -72 Q 0 -66 -10 -72 Q -24 -70 ${-34 * headSize} -60 Z`,
+        d: `M ${-34 * headSize} -20 Q ${-40 * headSize} -90 0 -92 Q ${40 * headSize} -90 ${34 * headSize} -20 Q 24 -30 20 -40 Q 30 -70 0 -70 Q -30 -70 -20 -40 Q -24 -30 ${-34 * headSize} -20 Z`,
         fill: hairColor,
-      },
-      {
-        type: 'path',
-        d: 'M 18 -88 Q 42 -105 48 -78 Q 40 -64 26 -76 Z',
-        fill: hairColor,
-      },
-      { type: 'circle', cx: 22, cy: -82, r: 4, fill: '#ec4899' }
-    );
+      });
+    } else if (app.hair.style === 'ponytail') {
+      headShapes.push(
+        {
+          type: 'path',
+          d: `M ${-34 * headSize} -60 Q -36 -90 0 -92 Q 36 -90 ${34 * headSize} -60 Q 24 -70 12 -72 Q 0 -66 -10 -72 Q -24 -70 ${-34 * headSize} -60 Z`,
+          fill: hairColor,
+        },
+        {
+          type: 'path',
+          d: 'M 18 -88 Q 42 -105 48 -78 Q 40 -64 26 -76 Z',
+          fill: hairColor,
+        },
+        { type: 'circle', cx: 22, cy: -82, r: 4, fill: '#ec4899' }
+      );
+    }
   }
 
   // Eyes (Issue 1: genuinely distinct eye styles)
-  const eyeR = 5 * eyeSize;
-  const eyeY = baseHeadY;
-  const leftEyeX = -12 * headSize;
-  const rightEyeX = 12 * headSize;
+  const eyeR = (isPlanet ? 6 : 5) * eyeSize;
+  const eyeY = isPlanet ? baseHeadY - 4 : baseHeadY;
+  const leftEyeX = (isPlanet ? -15 : -12) * headSize;
+  const rightEyeX = (isPlanet ? 15 : 12) * headSize;
   const eyeStartIdx = headShapes.length;
 
   if (app.eyes.style === 'dot') {
@@ -742,7 +880,7 @@ export function buildRigFromAppearance(
 
   // Eyebrows (Issue 1: distinct eyebrow styles)
   const browStartIdx = headShapes.length;
-  const browY = baseHeadY - 10 * headSize;
+  const browY = isPlanet ? baseHeadY - 15 * headSize : baseHeadY - 10 * headSize;
   const browColor = app.eyebrows.color || hairColor;
 
   if (app.eyebrows.style === 'flat') {
@@ -773,7 +911,7 @@ export function buildRigFromAppearance(
 
   // Nose (Issue 1: distinct nose styles including oval and button)
   const noseStartIdx = headShapes.length;
-  const noseY = baseHeadY + 6;
+  const noseY = isPlanet ? baseHeadY + 4 : baseHeadY + 6;
   const noseColor = app.nose.color || '#d97706';
 
   if (app.nose.style === 'bear_snout') {
@@ -831,7 +969,7 @@ export function buildRigFromAppearance(
 
   // Mouth (Issue 1: distinct mouth expressions)
   const mouthStartIdx = headShapes.length;
-  const mouthY = baseHeadY + 16;
+  const mouthY = isPlanet ? baseHeadY + 14 : baseHeadY + 16;
   const mouthColor = app.mouth.color || '#b91c1c';
 
   if (app.mouth.style === 'open_grin') {
@@ -894,75 +1032,84 @@ export function buildRigFromAppearance(
     headShapes[i].tag = 'mouth';
   }
 
-  // Accessories: Blush & Freckles
-  if (app.accessories?.blush !== false) {
-    headShapes.push(
-      { type: 'ellipse', cx: -22 * headSize, cy: baseHeadY + 8, rx: 6, ry: 4, fill: '#f87171', opacity: 0.45 },
-      { type: 'ellipse', cx: 22 * headSize, cy: baseHeadY + 8, rx: 6, ry: 4, fill: '#f87171', opacity: 0.45 }
-    );
-  }
-  if (app.accessories?.freckles === true) {
-    headShapes.push(
-      { type: 'circle', cx: -20 * headSize, cy: baseHeadY + 6, r: 1.2, fill: '#b45309' },
-      { type: 'circle', cx: -17 * headSize, cy: baseHeadY + 8, r: 1.2, fill: '#b45309' },
-      { type: 'circle', cx: -22 * headSize, cy: baseHeadY + 9, r: 1.1, fill: '#b45309' },
-      { type: 'circle', cx: 20 * headSize, cy: baseHeadY + 6, r: 1.2, fill: '#b45309' },
-      { type: 'circle', cx: 17 * headSize, cy: baseHeadY + 8, r: 1.2, fill: '#b45309' },
-      { type: 'circle', cx: 22 * headSize, cy: baseHeadY + 9, r: 1.1, fill: '#b45309' }
-    );
-  }
+  // Accessories: Blush & Freckles & Hats
+  if (isPlanet) {
+    if (app.accessories?.blush !== false) {
+      headShapes.push(
+        { type: 'ellipse', cx: -24 * headSize, cy: baseHeadY + 5, rx: 7, ry: 4.5, fill: '#f43f5e', opacity: 0.45, tag: 'face_base' },
+        { type: 'ellipse', cx: 24 * headSize, cy: baseHeadY + 5, rx: 7, ry: 4.5, fill: '#f43f5e', opacity: 0.45, tag: 'face_base' }
+      );
+    }
+  } else {
+    if (app.accessories?.blush !== false) {
+      headShapes.push(
+        { type: 'ellipse', cx: -22 * headSize, cy: baseHeadY + 8, rx: 6, ry: 4, fill: '#f87171', opacity: 0.45 },
+        { type: 'ellipse', cx: 22 * headSize, cy: baseHeadY + 8, rx: 6, ry: 4, fill: '#f87171', opacity: 0.45 }
+      );
+    }
+    if (app.accessories?.freckles === true) {
+      headShapes.push(
+        { type: 'circle', cx: -20 * headSize, cy: baseHeadY + 6, r: 1.2, fill: '#b45309' },
+        { type: 'circle', cx: -17 * headSize, cy: baseHeadY + 8, r: 1.2, fill: '#b45309' },
+        { type: 'circle', cx: -22 * headSize, cy: baseHeadY + 9, r: 1.1, fill: '#b45309' },
+        { type: 'circle', cx: 20 * headSize, cy: baseHeadY + 6, r: 1.2, fill: '#b45309' },
+        { type: 'circle', cx: 17 * headSize, cy: baseHeadY + 8, r: 1.2, fill: '#b45309' },
+        { type: 'circle', cx: 22 * headSize, cy: baseHeadY + 9, r: 1.1, fill: '#b45309' }
+      );
+    }
 
-  // Accessories: Glasses
-  if (app.accessories?.glasses === 'round') {
-    const gc = app.accessories.glassesColor || '#0f172a';
-    headShapes.push(
-      { type: 'circle', cx: leftEyeX, cy: eyeY, r: eyeR + 4, fill: 'none', stroke: gc, strokeWidth: 2.5 },
-      { type: 'circle', cx: rightEyeX, cy: eyeY, r: eyeR + 4, fill: 'none', stroke: gc, strokeWidth: 2.5 },
-      { type: 'path', d: `M ${leftEyeX + eyeR + 4} ${eyeY} L ${rightEyeX - eyeR - 4} ${eyeY}`, stroke: gc, strokeWidth: 2.5 }
-    );
-  } else if (app.accessories?.glasses === 'square') {
-    const gc = app.accessories.glassesColor || '#0f172a';
-    headShapes.push(
-      { type: 'rect', x: leftEyeX - 10, y: eyeY - 8, width: 20, height: 16, rx: 3, fill: 'none', stroke: gc, strokeWidth: 2.5 },
-      { type: 'rect', x: rightEyeX - 10, y: eyeY - 8, width: 20, height: 16, rx: 3, fill: 'none', stroke: gc, strokeWidth: 2.5 },
-      { type: 'path', d: `M ${leftEyeX + 10} ${eyeY} L ${rightEyeX - 10} ${eyeY}`, stroke: gc, strokeWidth: 2.5 }
-    );
-  }
+    // Accessories: Glasses
+    if (app.accessories?.glasses === 'round') {
+      const gc = app.accessories.glassesColor || '#0f172a';
+      headShapes.push(
+        { type: 'circle', cx: leftEyeX, cy: eyeY, r: eyeR + 4, fill: 'none', stroke: gc, strokeWidth: 2.5 },
+        { type: 'circle', cx: rightEyeX, cy: eyeY, r: eyeR + 4, fill: 'none', stroke: gc, strokeWidth: 2.5 },
+        { type: 'path', d: `M ${leftEyeX + eyeR + 4} ${eyeY} L ${rightEyeX - eyeR - 4} ${eyeY}`, stroke: gc, strokeWidth: 2.5 }
+      );
+    } else if (app.accessories?.glasses === 'square') {
+      const gc = app.accessories.glassesColor || '#0f172a';
+      headShapes.push(
+        { type: 'rect', x: leftEyeX - 10, y: eyeY - 8, width: 20, height: 16, rx: 3, fill: 'none', stroke: gc, strokeWidth: 2.5 },
+        { type: 'rect', x: rightEyeX - 10, y: eyeY - 8, width: 20, height: 16, rx: 3, fill: 'none', stroke: gc, strokeWidth: 2.5 },
+        { type: 'path', d: `M ${leftEyeX + 10} ${eyeY} L ${rightEyeX - 10} ${eyeY}`, stroke: gc, strokeWidth: 2.5 }
+      );
+    }
 
-  // Accessories: Hat
-  if (app.accessories?.hat === 'cap') {
-    const hc = app.accessories.hatColor || '#2563eb';
-    headShapes.push(
-      {
-        type: 'path',
-        d: `M ${-32 * headSize} ${baseHeadY - 14} Q 0 ${baseHeadY - 36} ${32 * headSize} ${baseHeadY - 14} Z`,
-        fill: hc,
-      },
-      {
-        type: 'path',
-        d: `M ${-10 * headSize} ${baseHeadY - 14} Q ${28 * headSize} ${baseHeadY - 12} ${42 * headSize} ${baseHeadY - 8} Q ${24 * headSize} ${baseHeadY - 2} ${-4 * headSize} ${baseHeadY - 12} Z`,
-        fill: hc,
-      }
-    );
-  } else if (app.accessories?.hat === 'beanie') {
-    const hc = app.accessories.hatColor || '#ef4444';
-    headShapes.push(
-      {
-        type: 'path',
-        d: `M ${-32 * headSize} ${baseHeadY - 12} Q 0 ${baseHeadY - 38} ${32 * headSize} ${baseHeadY - 12} Z`,
-        fill: hc,
-      },
-      {
-        type: 'rect',
-        x: -32 * headSize,
-        y: baseHeadY - 14,
-        width: 64 * headSize,
-        height: 6,
-        rx: 2,
-        fill: '#f8fafc',
-      },
-      { type: 'circle', cx: 0, cy: baseHeadY - 37, r: 6.5, fill: '#f8fafc' }
-    );
+    // Accessories: Hat
+    if (app.accessories?.hat === 'cap') {
+      const hc = app.accessories.hatColor || '#2563eb';
+      headShapes.push(
+        {
+          type: 'path',
+          d: `M ${-32 * headSize} ${baseHeadY - 14} Q 0 ${baseHeadY - 36} ${32 * headSize} ${baseHeadY - 14} Z`,
+          fill: hc,
+        },
+        {
+          type: 'path',
+          d: `M ${-10 * headSize} ${baseHeadY - 14} Q ${28 * headSize} ${baseHeadY - 12} ${42 * headSize} ${baseHeadY - 8} Q ${24 * headSize} ${baseHeadY - 2} ${-4 * headSize} ${baseHeadY - 12} Z`,
+          fill: hc,
+        }
+      );
+    } else if (app.accessories?.hat === 'beanie') {
+      const hc = app.accessories.hatColor || '#ef4444';
+      headShapes.push(
+        {
+          type: 'path',
+          d: `M ${-32 * headSize} ${baseHeadY - 12} Q 0 ${baseHeadY - 38} ${32 * headSize} ${baseHeadY - 12} Z`,
+          fill: hc,
+        },
+        {
+          type: 'rect',
+          x: -32 * headSize,
+          y: baseHeadY - 14,
+          width: 64 * headSize,
+          height: 6,
+          rx: 2,
+          fill: '#f8fafc',
+        },
+        { type: 'circle', cx: 0, cy: baseHeadY - 37, r: 6.5, fill: '#f8fafc' }
+      );
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -1365,69 +1512,87 @@ export function buildRigFromAppearance(
   // -------------------------------------------------------------------------
   // 5. ASSEMBLE RIG DEFINITION (Issue 2 connected joints)
   // -------------------------------------------------------------------------
+  const finalTorsoShapes: VectorPartShape[] = isPlanet ? [] : torsoShapes;
+  const finalLeftLegShapes: VectorPartShape[] = isPlanet ? [] : leftLegShapes;
+  const finalRightLegShapes: VectorPartShape[] = isPlanet ? [] : rightLegShapes;
+  const finalLeftArmShapes: VectorPartShape[] = isPlanet
+    ? [
+        { type: 'circle' as const, cx: -54, cy: baseHeadY + 8, r: 9, fill: '#ffffff', stroke: '#cbd5e1', strokeWidth: 1.5 },
+        { type: 'ellipse' as const, cx: -60, cy: baseHeadY + 4, rx: 4, ry: 3, fill: '#ffffff', stroke: '#cbd5e1', strokeWidth: 1.2 },
+      ]
+    : leftArmShapes;
+  const finalRightArmShapes: VectorPartShape[] = isPlanet
+    ? [
+        { type: 'circle' as const, cx: 54, cy: baseHeadY + 8, r: 9, fill: '#ffffff', stroke: '#cbd5e1', strokeWidth: 1.5 },
+        { type: 'ellipse' as const, cx: 60, cy: baseHeadY + 4, rx: 4, ry: 3, fill: '#ffffff', stroke: '#cbd5e1', strokeWidth: 1.2 },
+      ]
+    : rightArmShapes;
+  const finalLeftForearmShapes: VectorPartShape[] = isPlanet ? [] : leftForearmShapes;
+  const finalRightForearmShapes: VectorPartShape[] = isPlanet ? [] : rightForearmShapes;
+
   return {
     id: `custom-rig-${id}`,
     name,
     species: app.species || 'Human',
     viewBox: '-100 -160 200 240',
-    baseWidth: 150 * torsoWidth,
-    baseHeight: 220,
+    baseWidth: isPlanet ? 160 : 150 * torsoWidth,
+    baseHeight: isPlanet ? 200 : 220,
     parts: {
       torso: {
         id: 'torso',
         label: 'Torso',
-        pivot: { x: 0, y: 15 },
+        pivot: { x: 0, y: isPlanet ? 0 : 15 },
         zIndex: 2,
-        shapes: torsoShapes,
+        shapes: finalTorsoShapes,
       },
       head: {
         id: 'head',
-        label: 'Head',
-        pivot: { x: 0, y: headChinY },
+        label: isPlanet ? 'Globe' : 'Head',
+        pivot: { x: 0, y: isPlanet ? baseHeadY : headChinY },
         zIndex: 4,
         shapes: headShapes,
       },
       leftArm: {
         id: 'leftArm',
-        label: 'Left Upper Arm',
-        pivot: { x: leftShoulderX, y: leftShoulderY },
+        label: isPlanet ? 'Left Arm & Glove' : 'Left Upper Arm',
+        pivot: { x: isPlanet ? -50 : leftShoulderX, y: isPlanet ? baseHeadY + 5 : leftShoulderY },
         zIndex: 1,
-        shapes: leftArmShapes,
+        shapes: finalLeftArmShapes,
       },
       leftForearm: {
         id: 'leftForearm',
         label: 'Left Forearm',
         pivot: { x: leftElbowX, y: leftElbowY },
         zIndex: 1,
-        shapes: leftForearmShapes,
+        shapes: finalLeftForearmShapes,
       },
       rightArm: {
         id: 'rightArm',
-        label: 'Right Upper Arm',
-        pivot: { x: rightShoulderX, y: rightShoulderY },
+        label: isPlanet ? 'Right Arm & Glove' : 'Right Upper Arm',
+        pivot: { x: isPlanet ? 50 : rightShoulderX, y: isPlanet ? baseHeadY + 5 : rightShoulderY },
         zIndex: 3,
-        shapes: rightArmShapes,
+        shapes: finalRightArmShapes,
       },
       rightForearm: {
         id: 'rightForearm',
         label: 'Right Forearm',
         pivot: { x: rightElbowX, y: rightElbowY },
         zIndex: 4,
-        shapes: rightForearmShapes,
+        shapes: finalRightForearmShapes,
       },
       leftLeg: {
         id: 'leftLeg',
         label: 'Left Leg',
-        pivot: { x: leftHipX, y: leftHipY },
+        pivot: { x: isPlanet ? 0 : leftHipX, y: isPlanet ? 0 : leftHipY },
         zIndex: 1,
-        shapes: leftLegShapes,
+        shapes: finalLeftLegShapes,
       },
       rightLeg: {
         id: 'rightLeg',
         label: 'Right Leg',
-        pivot: { x: rightHipX, y: rightHipY },
+        pivot: { x: isPlanet ? 0 : rightHipX, y: isPlanet ? 0 : rightHipY },
         zIndex: 1,
-        shapes: rightLegShapes,
+        shapes: finalRightLegShapes,
       },
     },
   };
