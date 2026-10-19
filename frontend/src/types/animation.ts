@@ -26,6 +26,7 @@ export interface CharacterInstance {
   zIndex: number;
   customRig?: VectorRigDefinition;
   appearance?: CustomCharacterAppearance;
+  expression?: FacialExpression;
 }
 
 export type AnimationActionType = 'idle' | 'walk' | 'wave' | 'jump';
@@ -61,6 +62,7 @@ export interface VectorPartShape {
   strokeLinejoin?: 'round' | 'miter' | 'bevel';
   opacity?: number;
   transform?: string;
+  tag?: 'face_base' | 'eyebrows' | 'eyes' | 'mouth' | 'nose' | 'hair' | 'ears' | 'accessories' | string;
 }
 
 export interface VectorRigPart {
@@ -69,6 +71,65 @@ export interface VectorRigPart {
   pivot: { x: number; y: number };
   zIndex: number;
   shapes: VectorPartShape[];
+}
+
+export type FacialExpression =
+  | 'neutral'
+  | 'happy'
+  | 'sad'
+  | 'angry'
+  | 'surprised'
+  | 'scared'
+  | 'confused'
+  | 'curious';
+
+export type MouthShape = 'rest' | 'open' | 'wide' | 'round' | 'closed';
+
+export type SpeakingDirection =
+  | 'cheerful'
+  | 'excited'
+  | 'calm'
+  | 'sad'
+  | 'worried'
+  | 'curious'
+  | 'serious';
+
+export interface ExpressionCue {
+  id?: string;
+  instanceId?: string;
+  characterInstanceId?: string;
+  characterId?: string;
+  expression: FacialExpression;
+  startMs: number;
+  durationMs: number;
+}
+
+export interface VisemeCue {
+  timeMs: number;
+  shape: MouthShape;
+  durationMs: number;
+}
+
+export interface SceneDialogue {
+  id: string;
+  characterId?: string;
+  characterInstanceId?: string;
+  characterName: string;
+  text: string;
+  voice?: string;
+  speakingDirection?: SpeakingDirection;
+  speed?: number;
+  audioUrl?: string;
+  startMs: number;
+  durationMs: number;
+  visemeCues?: VisemeCue[];
+}
+
+export interface CharacterVoiceConfig {
+  voiceId: string;
+  speed?: number;
+  style?: SpeakingDirection;
+  effect?: 'normal' | 'cartoon' | 'robot';
 }
 
 export interface VectorRigDefinition {
@@ -101,6 +162,8 @@ export interface VectorSceneData {
   animationClips: AnimationClip[];
   dialogue?: Array<{ speaker: string; text: string }>;
   characterActions?: Array<{ characterName: string; action: string; pose?: string }>;
+  expressionCues?: ExpressionCue[];
+  dialogueLines?: SceneDialogue[];
 }
 
 export interface EvaluatedCharacterPose {
@@ -120,6 +183,9 @@ export interface EvaluatedCharacterPose {
   rightLegAngle: number;
   chestScaleY: number;
   activeAction: AnimationActionType;
+  expression?: FacialExpression;
+  mouthState?: MouthShape;
+  speaking?: boolean;
 }
 
 export interface ArmLimbConfig {
@@ -151,7 +217,7 @@ export interface LegLimbConfig {
 
 export interface CustomCharacterAppearance {
   version: 1;
-  species: 'human' | 'bear' | 'robot' | 'animal';
+  species: 'human' | 'bear' | 'robot' | 'animal' | 'alien' | 'fantasy_creature' | 'plant' | 'object' | 'other' | string;
   gender?: 'neutral' | 'boy' | 'girl';
   head: {
     shape: 'round' | 'oval' | 'square' | 'heart';
@@ -227,4 +293,5 @@ export interface CustomCharacterAppearance {
   rightArm?: ArmLimbConfig;
   leftLeg?: LegLimbConfig;
   rightLeg?: LegLimbConfig;
+  voiceConfig?: CharacterVoiceConfig;
 }

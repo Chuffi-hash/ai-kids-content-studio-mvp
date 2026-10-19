@@ -839,11 +839,41 @@ contentRouter.post("/scenes/:sceneId/versions/:versionId/restore", async (req, r
   }
 });
 
+// Get available TTS voices, provider status, and effects
+contentRouter.get("/tts/voices", async (_req, res) => {
+  try {
+    const info = await audioGenerationService.getVoices();
+    return res.json(info);
+  } catch (err: any) {
+    console.error("[Content] Failed to fetch voices catalogue:", err);
+    return res.status(500).json({ message: err.message || "Failed to fetch voices" });
+  }
+});
+
+// Preview voice with sample speech and effect
+contentRouter.post("/tts/preview", async (req, res) => {
+  try {
+    const { voice, provider, speed, effect, sampleText, lang } = req.body;
+    const result = await audioGenerationService.previewVoice({
+      voice,
+      provider,
+      speed: speed ? parseFloat(speed) : undefined,
+      effect,
+      sampleText,
+      lang,
+    });
+    return res.json({ success: true, ...result });
+  } catch (error: any) {
+    console.error("[Content] Voice preview failed:", error);
+    return res.status(500).json({ message: error.message || "Failed to generate voice preview" });
+  }
+});
+
 // Real voice / narration generation endpoint
 contentRouter.post("/scenes/:sceneId/voice", async (req, res) => {
   try {
     const { sceneId } = req.params;
-    const { narration, lang } = req.body;
+    const { narration, lang, provider, voice, speed, effect } = req.body;
 
     const scene = await getSceneBySceneId(sceneId);
     if (!scene) {
@@ -859,6 +889,10 @@ contentRouter.post("/scenes/:sceneId/voice", async (req, res) => {
       sceneId,
       narration: textToSpeak,
       lang: lang || "en",
+      provider,
+      voice,
+      speed: speed ? parseFloat(speed) : undefined,
+      effect,
     });
 
     return res.json({
@@ -866,6 +900,9 @@ contentRouter.post("/scenes/:sceneId/voice", async (req, res) => {
       sceneId,
       audioUrl: result.audioUrl,
       durationMs: result.durationMs,
+      provider: result.provider,
+      voice: result.voice,
+      effect: result.effect,
     });
   } catch (error: any) {
     console.error(`[Content] Voice generation failed for scene ${req.params.sceneId}:`, error);
@@ -882,6 +919,97 @@ contentRouter.delete("/scenes/:sceneId/voice", async (req, res) => {
   } catch (error: any) {
     console.error(`[Content] Failed to remove narration audio for scene ${req.params.sceneId}:`, error);
     return res.status(500).json({ message: error.message || "Failed to remove narration audio" });
+  }
+});
+
+// Generate dialogue audio with Kokoro-82M TTS and lip-sync viseme cues
+contentRouter.post("/scenes/:sceneId/dialogue/generate", async (req, res) => {
+  try {
+    const { sceneId } = req.params;
+    const {
+      characterId,
+      characterInstanceId,
+      characterName,
+      text,
+      voice,
+      speakingDirection,
+      speed,
+      startMs,
+      effect,
+      provider,
+    } = req.body;
+
+    if (!text || !text.trim()) {
+      return res.status(400).json({ message: "Dialogue text is required" });
+    }
+
+    const scene = await getSceneBySceneId(sceneId);
+    if (!scene) {
+      return res.status(404).json({ message: "Scene not found" });
+    }
+
+    const dialogue = await audioGenerationService.generateCharacterDialogueAudio({
+      sceneId,
+      characterId,
+      characterInstanceId,
+      characterName: characterName || "Character",
+      text,
+      voice,
+      speakingDirection,
+      speed: speed ? parseFloat(speed) : undefined,
+      startMs: typeof startMs === "number" ? startMs : 0,
+      effect,
+      provider,
+    });
+
+    // Update scene animationData.dialogueLines if animationData exists
+    if ((scene as any).animationData) {
+      const animData = (scene as any).animationData;
+      const existingLines = Array.isArray(animData.dialogueLines) ? animData.dialogueLines : [];
+      const updatedLines = [...existingLines, dialogue];
+      await updateScene(scene.sceneId, {
+        animationData: {
+          ...animData,
+          dialogueLines: updatedLines,
+        },
+      });
+    }
+
+    return res.json({
+      success: true,
+      sceneId,
+      dialogue,
+    });
+  } catch (error: any) {
+    console.error(`[Content] Failed to generate dialogue audio for scene ${req.params.sceneId}:`, error);
+    return res.status(500).json({ message: error.message || "Failed to generate dialogue audio" });
+  }
+});
+
+// Delete a dialogue line from a scene
+contentRouter.delete("/scenes/:sceneId/dialogue/:dialogueId", async (req, res) => {
+  try {
+    const { sceneId, dialogueId } = req.params;
+    const scene = await getSceneBySceneId(sceneId);
+    if (!scene) {
+      return res.status(404).json({ message: "Scene not found" });
+    }
+
+    if ((scene as any).animationData?.dialogueLines) {
+      const animData = (scene as any).animationData;
+      const filtered = animData.dialogueLines.filter((d: any) => d.id !== dialogueId);
+      await updateScene(scene.sceneId, {
+        animationData: {
+          ...animData,
+          dialogueLines: filtered,
+        },
+      });
+    }
+
+    return res.json({ success: true, sceneId, dialogueId });
+  } catch (error: any) {
+    console.error(`[Content] Failed to delete dialogue line for scene ${req.params.sceneId}:`, error);
+    return res.status(500).json({ message: error.message || "Failed to delete dialogue line" });
   }
 });
 
@@ -1175,3 +1303,284 @@ contentRouter.post("/scenes/:sceneId/image", async (req, res) => {
     });
   }
 });
+
+// =========================================================================
+// Scene Background Management Routes (Phase 1)
+// =========================================================================
+
+/**
+ * Validates image buffer using magic bytes and length.
+ */
+function validateImageBuffer(buffer: Buffer): { valid: boolean; mimeType?: string; ext?: string; error?: string } {
+  if (!buffer || buffer.length < 8) {
+    return { valid: false, error: 'File is empty or too small to be a valid image' };
+  }
+  const MAX_SIZE = 15 * 1024 * 1024; // 15MB limit
+  if (buffer.length > MAX_SIZE) {
+    return { valid: false, error: `Image file exceeds maximum allowed size of 15MB (${(buffer.length / (1024 * 1024)).toFixed(1)}MB)` };
+  }
+
+  // PNG magic bytes: 89 50 4E 47 0D 0A 1A 0A
+  const isPng =
+    buffer[0] === 0x89 &&
+    buffer[1] === 0x50 &&
+    buffer[2] === 0x4e &&
+    buffer[3] === 0x47 &&
+    buffer[4] === 0x0d &&
+    buffer[5] === 0x0a &&
+    buffer[6] === 0x1a &&
+    buffer[7] === 0x0a;
+
+  // JPEG magic bytes: FF D8 FF
+  const isJpeg =
+    buffer[0] === 0xff &&
+    buffer[1] === 0xd8 &&
+    buffer[2] === 0xff;
+
+  if (isPng) {
+    return { valid: true, mimeType: 'image/png', ext: 'png' };
+  }
+  if (isJpeg) {
+    return { valid: true, mimeType: 'image/jpeg', ext: 'jpg' };
+  }
+
+  return { valid: false, error: 'Only valid PNG and JPEG image formats are supported' };
+}
+
+// 1. Upload a scene background image
+contentRouter.post("/scenes/:sceneId/background/upload", async (req, res) => {
+  try {
+    const { sceneId } = req.params;
+    const { data, fileData, image, filename: clientFilename, fit: rawFit } = req.body;
+
+    const base64Input = data || fileData || image;
+    if (!base64Input || typeof base64Input !== 'string') {
+      return res.status(400).json({ message: "Image data (base64 string or data URI) is required" });
+    }
+
+    const scene = await getSceneBySceneId(sceneId);
+    if (!scene) {
+      return res.status(404).json({ message: `Scene not found: ${sceneId}` });
+    }
+
+    // Strip data URI prefix if present
+    const cleanBase64 = base64Input.replace(/^data:image\/[a-zA-Z0-9.+_-]+;base64,/, '');
+    const buffer = Buffer.from(cleanBase64, 'base64');
+
+    const validation = validateImageBuffer(buffer);
+    if (!validation.valid || !validation.mimeType || !validation.ext) {
+      return res.status(400).json({ message: validation.error || "Invalid image file" });
+    }
+
+    const fit: 'cover' | 'contain' = rawFit === 'contain' ? 'contain' : 'cover';
+    const timestamp = Date.now();
+    const storageFilename = `bg-${scene.storyId}-${scene.sceneId}-${timestamp}-${randomUUID().slice(0, 6)}.${validation.ext}`;
+
+    const { url } = await storageService.saveFile(buffer, storageFilename, validation.mimeType);
+
+    // Synchronize scene.imageUrl and scene.animationData.background
+    const currentAnim = (scene.animationData || {}) as any;
+    const updatedAnimData = {
+      ...currentAnim,
+      background: {
+        imageUrl: url,
+        fit,
+      },
+    };
+
+    const updatedScene = await updateScene(scene.sceneId, {
+      imageUrl: url,
+      animationData: updatedAnimData,
+    });
+
+    // Create record in Image table so it is tracked in story images
+    const imageId = randomUUID();
+    await createImage({
+      id: imageId,
+      sceneId: scene.sceneId,
+      provider: 'upload',
+      model: 'user',
+      prompt: clientFilename ? `User upload: ${clientFilename}` : 'Uploaded scene background',
+      storageKey: storageFilename,
+      imageUrl: url,
+      width: 1280,
+      height: 720,
+      status: 'completed',
+    });
+
+    // Create scene version for history tracking
+    await createSceneVersion({
+      id: randomUUID(),
+      sceneId: scene.sceneId,
+      prompt: `Background uploaded: ${clientFilename || storageFilename} (fit: ${fit})`,
+      imageUrl: url,
+      cameraDirection: scene.cameraDirection,
+      narration: scene.narration,
+    });
+
+    return res.json({
+      success: true,
+      sceneId: scene.sceneId,
+      background: {
+        imageUrl: url,
+        fit,
+      },
+      scene: updatedScene,
+    });
+  } catch (error: any) {
+    console.error("[Content] Failed to upload scene background:", error);
+    return res.status(500).json({ message: error.message || "Failed to upload scene background" });
+  }
+});
+
+// 2. Assign existing image or update background fit mode
+contentRouter.put("/scenes/:sceneId/background", async (req, res) => {
+  try {
+    const { sceneId } = req.params;
+    const { imageUrl, fit: rawFit } = req.body;
+
+    const scene = await getSceneBySceneId(sceneId);
+    if (!scene) {
+      return res.status(404).json({ message: `Scene not found: ${sceneId}` });
+    }
+
+    const currentAnim = (scene.animationData || {}) as any;
+    const currentBgUrl = currentAnim.background?.imageUrl || scene.imageUrl;
+
+    const targetUrl = imageUrl || currentBgUrl;
+    if (!targetUrl) {
+      return res.status(400).json({ message: "imageUrl is required when no existing background is present" });
+    }
+
+    // Validate URL format (must be relative /storage/ or absolute http/https)
+    if (typeof targetUrl !== 'string' || (!targetUrl.startsWith('/storage/') && !targetUrl.startsWith('http://') && !targetUrl.startsWith('https://'))) {
+      return res.status(400).json({ message: "Invalid image URL format" });
+    }
+
+    // If local storage URL, ensure file exists on disk
+    if (targetUrl.startsWith('/storage/')) {
+      const localPath = path.join(process.cwd(), targetUrl.replace(/^\//, ''));
+      if (!fs.existsSync(localPath)) {
+        return res.status(400).json({ message: "Specified background image does not exist on server storage" });
+      }
+    }
+
+    const fit: 'cover' | 'contain' = rawFit === 'contain' ? 'contain' : (rawFit === 'cover' ? 'cover' : (currentAnim.background?.fit || 'cover'));
+
+    const updatedAnimData = {
+      ...currentAnim,
+      background: {
+        imageUrl: targetUrl,
+        fit,
+      },
+    };
+
+    const updatedScene = await updateScene(scene.sceneId, {
+      imageUrl: targetUrl,
+      animationData: updatedAnimData,
+    });
+
+    return res.json({
+      success: true,
+      sceneId: scene.sceneId,
+      background: {
+        imageUrl: targetUrl,
+        fit,
+      },
+      scene: updatedScene,
+    });
+  } catch (error: any) {
+    console.error("[Content] Failed to update scene background:", error);
+    return res.status(500).json({ message: error.message || "Failed to update scene background" });
+  }
+});
+
+// 3. Remove scene background and restore default stage
+contentRouter.delete("/scenes/:sceneId/background", async (req, res) => {
+  try {
+    const { sceneId } = req.params;
+
+    const scene = await getSceneBySceneId(sceneId);
+    if (!scene) {
+      return res.status(404).json({ message: `Scene not found: ${sceneId}` });
+    }
+
+    const currentAnim = (scene.animationData || {}) as any;
+    const { background: _removed, ...restAnim } = currentAnim;
+
+    const updatedScene = await updateScene(scene.sceneId, {
+      imageUrl: null,
+      animationData: restAnim,
+    });
+
+    return res.json({
+      success: true,
+      sceneId: scene.sceneId,
+      message: "Background removed. Default stage restored.",
+      scene: updatedScene,
+    });
+  } catch (error: any) {
+    console.error("[Content] Failed to remove scene background:", error);
+    return res.status(500).json({ message: error.message || "Failed to remove scene background" });
+  }
+});
+
+// 4. List all available backgrounds across scenes in a story
+contentRouter.get("/story/:storyId/backgrounds", async (req, res) => {
+  try {
+    const { storyId } = req.params;
+    const scenes = await getScenesByStoryId(storyId, false);
+
+    const backgroundsMap = new Map<string, { imageUrl: string; sceneId: string; sceneTitle: string; sceneNumber?: number; prompt?: string; createdAt?: Date }>();
+
+    for (const sc of scenes) {
+      // Check animationData background
+      const animBg = (sc.animationData as any)?.background?.imageUrl;
+      if (animBg && !backgroundsMap.has(animBg)) {
+        backgroundsMap.set(animBg, {
+          imageUrl: animBg,
+          sceneId: sc.sceneId,
+          sceneTitle: sc.title || `Scene ${sc.number}`,
+          sceneNumber: sc.number,
+          prompt: sc.visualPrompt || sc.narration || undefined,
+        });
+      }
+
+      // Check scene.imageUrl
+      if (sc.imageUrl && !backgroundsMap.has(sc.imageUrl)) {
+        backgroundsMap.set(sc.imageUrl, {
+          imageUrl: sc.imageUrl,
+          sceneId: sc.sceneId,
+          sceneTitle: sc.title || `Scene ${sc.number}`,
+          sceneNumber: sc.number,
+          prompt: sc.visualPrompt || sc.narration || undefined,
+        });
+      }
+
+      // Check scene versions
+      if (Array.isArray(sc.versions)) {
+        for (const ver of sc.versions) {
+          if (ver.imageUrl && !backgroundsMap.has(ver.imageUrl)) {
+            backgroundsMap.set(ver.imageUrl, {
+              imageUrl: ver.imageUrl,
+              sceneId: sc.sceneId,
+              sceneTitle: sc.title || `Scene ${sc.number}`,
+              sceneNumber: sc.number,
+              prompt: ver.prompt || undefined,
+              createdAt: ver.createdAt,
+            });
+          }
+        }
+      }
+    }
+
+    return res.json({
+      success: true,
+      backgrounds: Array.from(backgroundsMap.values()),
+    });
+  } catch (error: any) {
+    console.error("[Content] Failed to list story backgrounds:", error);
+    return res.status(500).json({ message: error.message || "Failed to list story backgrounds" });
+  }
+});
+

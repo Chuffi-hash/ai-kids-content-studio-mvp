@@ -1,7 +1,7 @@
 import React from "react";
 import { Character } from "../../services/character.service";
 import { DeleteButton } from '../common/DeleteButton';
-import { UserIcon, EditIcon, SparklesIcon } from '../common/Icons';
+import { UserIcon, EditIcon } from '../common/Icons';
 import { VectorCharacterRenderer } from '../editor/animation/VectorCharacterRenderer';
 import { buildRigFromAppearance } from '../../utils/customCharacterRig';
 
@@ -11,7 +11,6 @@ interface CharacterCardProps {
   onCustomize?: () => void;
   onDuplicate?: () => void;
   onDelete?: () => void;
-  onGenerateReference?: () => void;
 }
 
 export default function CharacterCard({
@@ -20,7 +19,6 @@ export default function CharacterCard({
   onCustomize,
   onDuplicate,
   onDelete,
-  onGenerateReference,
 }: CharacterCardProps) {
   const hasCustomRig = character.canonicalAppearance?.version === 1;
 
@@ -49,6 +47,9 @@ export default function CharacterCard({
                   rightLegAngle: 0,
                   chestScaleY: 1,
                   activeAction: 'idle',
+                  expression: 'neutral',
+                  mouthState: 'rest',
+                  speaking: false,
                 }}
                 isSelected={false}
               />
@@ -66,7 +67,7 @@ export default function CharacterCard({
               <UserIcon size={36} color="var(--color-text-faint)" />
             </div>
             <div className="placeholder-text">Character Reference</div>
-            <div className="placeholder-subtext">Customize in Rig Builder or generate an image</div>
+            <div className="placeholder-subtext">Customize in Character Studio</div>
           </div>
         )}
       </div>
@@ -74,15 +75,16 @@ export default function CharacterCard({
         <div className="character-card-header">
           <h3>{character.name}</h3>
           <div className="character-card-actions">
-            {onCustomize && (
+            {onEdit && (
               <button
                 type="button"
                 className="btn btn-primary btn-sm"
-                onClick={onCustomize}
-                title={`Open Vector Rig Studio for ${character.name}`}
+                onClick={onEdit}
+                title={`Edit ${character.name}`}
                 style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '11px', padding: '3px 8px' }}
               >
-                <span>Rig Studio</span>
+                <EditIcon size={12} />
+                <span>Edit</span>
               </button>
             )}
             {onDuplicate && (
@@ -94,18 +96,6 @@ export default function CharacterCard({
                 style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '11px', padding: '3px 8px' }}
               >
                 <span>Duplicate</span>
-              </button>
-            )}
-            {onEdit && (
-              <button
-                type="button"
-                className="btn btn-ghost btn-sm"
-                onClick={onEdit}
-                title={`Edit ${character.name}`}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}
-              >
-                <EditIcon size={13} />
-                <span>Edit</span>
               </button>
             )}
             {onDelete && (
@@ -130,30 +120,6 @@ export default function CharacterCard({
             </p>
           </div>
         )}
-        <div className="character-card-footer">
-          {onGenerateReference && !character.referenceImageUrl && (
-            <button
-              type="button"
-              className="btn btn-primary btn-sm"
-              onClick={onGenerateReference}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-            >
-              <SparklesIcon size={14} />
-              <span>Generate Image</span>
-            </button>
-          )}
-          {onGenerateReference && character.referenceImageUrl && (
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
-              onClick={onGenerateReference}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-            >
-              <SparklesIcon size={14} />
-              <span>Regenerate Image</span>
-            </button>
-          )}
-        </div>
       </div>
     </div>
   );

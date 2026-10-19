@@ -14,3 +14,11 @@ backend/storage/**
 **/storage/temp/**
 **/storage/images/**
 **/storage/music/**
+
+# Model weights and cache (never commit to git)
+models/**
+backend/models/**
+*.onnx
+*.bin
+*.pt
+*.safetensors

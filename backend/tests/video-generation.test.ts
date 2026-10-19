@@ -6,7 +6,7 @@ import path from 'node:path';
 import { getVideoGenerationProvider } from '../src/services/production/production-provider.factory.js';
 import { FFmpegVideoProvider } from '../src/services/production/video-generation/providers/ffmpeg-video.provider.js';
 import { AIVideoProvider } from '../src/services/production/video-generation/providers/ai-video.provider.js';
-import { getAllStories, createScene, getSceneBySceneId, updateScene, deleteScene } from '../src/services/database/database.service.js';
+import { getAllStories, createStory, deleteStory, createScene, getSceneBySceneId, updateScene, deleteScene } from '../src/services/database/database.service.js';
 import { randomUUID } from 'crypto';
 
 test('Video Generation - Provider Factory', () => {
@@ -89,41 +89,46 @@ test('Video Generation - FFmpeg Ken Burns Video Rendering with Audio and Faststa
 });
 
 test('Database - Image and Video Asset Separation', async () => {
-  const stories = await getAllStories();
-  assert.ok(stories.length > 0, 'Must have at least one story in database for test');
-  const persistentStory = stories.find((s) => !s.storyId.startsWith('story-test-')) || stories[0];
-  const validStoryId = persistentStory.storyId;
+  const isolatedStoryId = `story-media-iso-${randomUUID().slice(0, 8)}`;
+  await createStory({
+    storyId: isolatedStoryId,
+    title: 'Media Asset Separation Test Story',
+    logline: 'An adventurous journey into media separation',
+  });
 
   const testSceneId = `test-media-${randomUUID().slice(0, 8)}`;
   const initialImageUrl = '/storage/images/scene-test-initial.png';
   const newVideoUrl = '/storage/videos/scene-test-video.mp4';
 
-  // 1. Create scene with initial image
-  await createScene({
-    id: randomUUID(),
-    sceneId: testSceneId,
-    storyId: validStoryId,
-    title: 'Media Asset Separation Test',
-    number: 998,
-    order: 998,
-    startMs: 0,
-    endMs: 5000,
-    imageUrl: initialImageUrl,
-    generationStatus: 'completed',
-  });
+  try {
+    // 1. Create scene with initial image
+    await createScene({
+      id: randomUUID(),
+      sceneId: testSceneId,
+      storyId: isolatedStoryId,
+      title: 'Media Asset Separation Test',
+      number: 998,
+      order: 998,
+      startMs: 0,
+      endMs: 5000,
+      imageUrl: initialImageUrl,
+      generationStatus: 'completed',
+    });
 
-  // 2. Attach videoUrl to scene without losing imageUrl
-  const updated = await updateScene(testSceneId, {
-    videoUrl: newVideoUrl,
-  });
+    // 2. Attach videoUrl to scene without losing imageUrl
+    const updated = await updateScene(testSceneId, {
+      videoUrl: newVideoUrl,
+    });
 
-  assert.strictEqual(updated.imageUrl, initialImageUrl, 'Original scene image must NOT be overwritten when video is added');
-  assert.strictEqual(updated.videoUrl, newVideoUrl, 'Video URL must be properly attached to scene');
+    assert.strictEqual(updated.imageUrl, initialImageUrl, 'Original scene image must NOT be overwritten when video is added');
+    assert.strictEqual(updated.videoUrl, newVideoUrl, 'Video URL must be properly attached to scene');
 
-  const retrieved = await getSceneBySceneId(testSceneId);
-  assert.strictEqual(retrieved?.imageUrl, initialImageUrl, 'Persisted scene must retain image URL');
-  assert.strictEqual(retrieved?.videoUrl, newVideoUrl, 'Persisted scene must retain video URL');
-
-  // Clean up
-  await deleteScene(testSceneId);
+    const retrieved = await getSceneBySceneId(testSceneId);
+    assert.strictEqual(retrieved?.imageUrl, initialImageUrl, 'Persisted scene must retain image URL');
+    assert.strictEqual(retrieved?.videoUrl, newVideoUrl, 'Persisted scene must retain video URL');
+  } finally {
+    // Clean up
+    await deleteScene(testSceneId);
+    await deleteStory(isolatedStoryId);
+  }
 });

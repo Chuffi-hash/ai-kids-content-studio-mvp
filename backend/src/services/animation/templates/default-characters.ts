@@ -17,6 +17,7 @@ export interface VectorPartShape {
   strokeLinejoin?: 'round' | 'miter' | 'bevel';
   opacity?: number;
   transform?: string;
+  tag?: 'face_base' | 'eyebrows' | 'eyes' | 'mouth' | 'nose' | 'hair' | 'ears' | 'accessories' | string;
 }
 
 export interface VectorRigPart {
@@ -72,20 +73,20 @@ export const PIP_THE_BEAR: VectorRigDefinition = {
       pivot: { x: 0, y: -26 },
       zIndex: 4,
       shapes: [
-        { type: 'circle', cx: -32, cy: -75, r: 15, fill: '#b45309' },
-        { type: 'circle', cx: -32, cy: -75, r: 8, fill: '#fde68a' },
-        { type: 'circle', cx: 32, cy: -75, r: 15, fill: '#b45309' },
-        { type: 'circle', cx: 32, cy: -75, r: 8, fill: '#fde68a' },
-        { type: 'ellipse', cx: 0, cy: -52, rx: 38, ry: 32, fill: '#d97706' },
-        { type: 'ellipse', cx: 0, cy: -44, rx: 20, ry: 15, fill: '#fef3c7' },
-        { type: 'path', d: 'M -6 -50 Q 0 -54 6 -50 Q 0 -44 -6 -50 Z', fill: '#1e293b' },
-        { type: 'path', d: 'M -8 -40 Q 0 -34 8 -40', stroke: '#1e293b', strokeWidth: 2.5, strokeLinecap: 'round', fill: 'none' },
-        { type: 'circle', cx: -14, cy: -58, r: 4.5, fill: '#0f172a' },
-        { type: 'circle', cx: -15.5, cy: -60, r: 1.8, fill: '#ffffff' },
-        { type: 'circle', cx: 14, cy: -58, r: 4.5, fill: '#0f172a' },
-        { type: 'circle', cx: 12.5, cy: -60, r: 1.8, fill: '#ffffff' },
-        { type: 'ellipse', cx: -25, cy: -46, rx: 6, ry: 4, fill: '#f87171', opacity: 0.5 },
-        { type: 'ellipse', cx: 25, cy: -46, rx: 6, ry: 4, fill: '#f87171', opacity: 0.5 },
+        { type: 'circle', cx: -32, cy: -75, r: 15, fill: '#b45309', tag: 'face_base' },
+        { type: 'circle', cx: -32, cy: -75, r: 8, fill: '#fde68a', tag: 'face_base' },
+        { type: 'circle', cx: 32, cy: -75, r: 15, fill: '#b45309', tag: 'face_base' },
+        { type: 'circle', cx: 32, cy: -75, r: 8, fill: '#fde68a', tag: 'face_base' },
+        { type: 'ellipse', cx: 0, cy: -52, rx: 38, ry: 32, fill: '#d97706', tag: 'face_base' },
+        { type: 'ellipse', cx: 0, cy: -44, rx: 20, ry: 15, fill: '#fef3c7', tag: 'face_base' },
+        { type: 'path', d: 'M -6 -50 Q 0 -54 6 -50 Q 0 -44 -6 -50 Z', fill: '#1e293b', tag: 'nose' },
+        { type: 'path', d: 'M -8 -40 Q 0 -34 8 -40', stroke: '#1e293b', strokeWidth: 2.5, strokeLinecap: 'round', fill: 'none', tag: 'mouth' },
+        { type: 'circle', cx: -14, cy: -58, r: 4.5, fill: '#0f172a', tag: 'eyes' },
+        { type: 'circle', cx: -15.5, cy: -60, r: 1.8, fill: '#ffffff', tag: 'eyes' },
+        { type: 'circle', cx: 14, cy: -58, r: 4.5, fill: '#0f172a', tag: 'eyes' },
+        { type: 'circle', cx: 12.5, cy: -60, r: 1.8, fill: '#ffffff', tag: 'eyes' },
+        { type: 'ellipse', cx: -25, cy: -46, rx: 6, ry: 4, fill: '#f87171', opacity: 0.5, tag: 'face_base' },
+        { type: 'ellipse', cx: 25, cy: -46, rx: 6, ry: 4, fill: '#f87171', opacity: 0.5, tag: 'face_base' },
       ],
     },
     leftArm: {
@@ -165,14 +166,14 @@ export const SAMMY_THE_KID: VectorRigDefinition = {
       pivot: { x: 0, y: -26 },
       zIndex: 4,
       shapes: [
-        { type: 'ellipse', cx: 0, cy: -54, rx: 30, ry: 28, fill: '#fed7aa' },
-        { type: 'path', d: 'M -34 -60 Q -36 -90 0 -92 Q 36 -90 34 -60 Q 24 -70 12 -72 Q 0 -66 -10 -72 Q -24 -70 -34 -60 Z', fill: '#78350f' },
-        { type: 'path', d: 'M -22 -68 Q -10 -58 0 -68 Q 12 -58 24 -68', stroke: '#78350f', strokeWidth: 4, strokeLinecap: 'round', fill: 'none' },
-        { type: 'circle', cx: -12, cy: -54, r: 5, fill: '#0f172a' },
-        { type: 'circle', cx: -13.5, cy: -56, r: 2, fill: '#ffffff' },
-        { type: 'circle', cx: 12, cy: -54, r: 5, fill: '#0f172a' },
-        { type: 'circle', cx: 10.5, cy: -56, r: 2, fill: '#ffffff' },
-        { type: 'path', d: 'M -8 -38 Q 0 -30 8 -38', stroke: '#b91c1c', strokeWidth: 3, strokeLinecap: 'round', fill: 'none' },
+        { type: 'ellipse', cx: 0, cy: -54, rx: 30, ry: 28, fill: '#fed7aa', tag: 'face_base' },
+        { type: 'path', d: 'M -34 -60 Q -36 -90 0 -92 Q 36 -90 34 -60 Q 24 -70 12 -72 Q 0 -66 -10 -72 Q -24 -70 -34 -60 Z', fill: '#78350f', tag: 'hair' },
+        { type: 'path', d: 'M -22 -68 Q -10 -58 0 -68 Q 12 -58 24 -68', stroke: '#78350f', strokeWidth: 4, strokeLinecap: 'round', fill: 'none', tag: 'hair' },
+        { type: 'circle', cx: -12, cy: -54, r: 5, fill: '#0f172a', tag: 'eyes' },
+        { type: 'circle', cx: -13.5, cy: -56, r: 2, fill: '#ffffff', tag: 'eyes' },
+        { type: 'circle', cx: 12, cy: -54, r: 5, fill: '#0f172a', tag: 'eyes' },
+        { type: 'circle', cx: 10.5, cy: -56, r: 2, fill: '#ffffff', tag: 'eyes' },
+        { type: 'path', d: 'M -8 -38 Q 0 -30 8 -38', stroke: '#b91c1c', strokeWidth: 3, strokeLinecap: 'round', fill: 'none', tag: 'mouth' },
       ],
     },
     leftArm: {

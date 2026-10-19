@@ -6,13 +6,11 @@ import {
   updateCharacter,
   deleteCharacter,
   duplicateCharacter,
-  generateCharacterReferenceImage,
 } from "../services/character.service";
 import CharacterLibraryHeader from "../components/characters/CharacterLibraryHeader";
 import CharacterToolbar from "../components/characters/CharacterToolbar";
 import CharacterGrid from "../components/characters/CharacterGrid";
 import CharacterEmptyState from "../components/characters/CharacterEmptyState";
-import CharacterModal from "../components/characters/CharacterModal";
 import CharacterBuilderModal from "../components/characters/CharacterBuilderModal";
 import { ConfirmModal } from "../components/common/ConfirmModal";
 import { CloseIcon } from "../components/common/Icons";
@@ -21,11 +19,7 @@ import "../components/characters/characters.css";
 export default function CharactersPage() {
   const [characters, setCharacters] = useState<Character[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showModal, setShowModal] = useState(false);
   const [showBuilderModal, setShowBuilderModal] = useState(false);
-  const [editingCharacter, setEditingCharacter] = useState<Character | null>(
-    null,
-  );
   const [builderCharacter, setBuilderCharacter] = useState<Character | null>(
     null,
   );
@@ -51,58 +45,6 @@ export default function CharactersPage() {
     }
   }
 
-  async function handleCreateCharacter(data: {
-    name: string;
-    species: string;
-    personality: string;
-    visualDescription: string;
-    distinctiveFeatures?: string;
-    canonicalAppearance?: any;
-  }) {
-    try {
-      setApiError(null);
-      await createCharacter(data);
-      setShowModal(false);
-      setEditingCharacter(null);
-      loadCharacters();
-    } catch (error) {
-      console.error("Failed to create character:", error);
-      setApiError("Failed to create character. Please try again.");
-    }
-  }
-
-  async function handleEditCharacterSubmit(data: {
-    name: string;
-    species: string;
-    personality: string;
-    visualDescription: string;
-    distinctiveFeatures?: string;
-    canonicalAppearance?: any;
-  }) {
-    if (!editingCharacter) return;
-    try {
-      setApiError(null);
-      await updateCharacter(editingCharacter.id, data);
-      setShowModal(false);
-      setEditingCharacter(null);
-      loadCharacters();
-    } catch (error) {
-      console.error("Failed to update character:", error);
-      setApiError("Failed to update character. Please try again.");
-    }
-  }
-
-  async function handleGenerateReference(characterId: string) {
-    try {
-      setApiError(null);
-      await generateCharacterReferenceImage(characterId);
-      loadCharacters();
-    } catch (error) {
-      console.error("Failed to generate reference image:", error);
-      setApiError("Failed to generate reference image. Please try again.");
-    }
-  }
-
   function handleDeleteCharacter(id: string, name: string) {
     setDeleteConfirm({ id, name });
   }
@@ -122,8 +64,7 @@ export default function CharactersPage() {
   }
 
   function handleEditCharacter(character: Character) {
-    setEditingCharacter(character);
-    setShowModal(true);
+    handleOpenBuilder(character);
   }
 
   function handleOpenBuilder(character?: Character | null) {
@@ -157,16 +98,6 @@ export default function CharactersPage() {
     }
   }
 
-  function handleOpenModal() {
-    setEditingCharacter(null);
-    setShowModal(true);
-  }
-
-  function handleCloseModal() {
-    setShowModal(false);
-    setEditingCharacter(null);
-  }
-
   function handleClearFilters() {
     setSpeciesFilter("");
     setPersonalityFilter("");
@@ -177,47 +108,102 @@ export default function CharactersPage() {
     searchQuery || speciesFilter || personalityFilter,
   );
 
+  // Dynamically extract all unique species from characters plus standard list
+  const standardSpeciesList = [
+    'Human',
+    'Bear',
+    'Animal',
+    'Fantasy Creature',
+    'Robot',
+    'Alien',
+    'Plant',
+    'Object',
+  ];
+  const dynamicSpeciesOptions = Array.from(
+    new Set([
+      ...standardSpeciesList,
+      ...characters
+        .map((c) => c.species?.trim())
+        .filter(Boolean)
+        .map((s) => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()),
+      'Other',
+    ])
+  );
+
+  // Dynamically extract all individual traits from characters' personalities
+  const standardTraitsList = [
+    'Brave',
+    'Cheerful',
+    'Helpful',
+    'Loyal',
+    'Curious',
+    'Kind',
+    'Wise',
+    'Playful',
+    'Shy',
+    'Adventurous',
+    'Smart',
+    'Funny',
+    'Strong',
+    'Gentle',
+    'Creative',
+    'Energetic',
+  ];
+  const dynamicPersonalityOptions = Array.from(
+    new Set([
+      ...standardTraitsList,
+      ...characters
+        .flatMap((c) =>
+          (c.personality || '')
+            .split(/[,;&/]+/)
+            .map((t) => t.trim())
+            .filter((t) => t.length > 1)
+        )
+        .map((t) => t.charAt(0).toUpperCase() + t.slice(1).toLowerCase()),
+      'Other',
+    ])
+  );
+
   const filteredCharacters = characters.filter((character) => {
     const matchesSearch =
       character.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       character.species.toLowerCase().includes(searchQuery.toLowerCase()) ||
       character.personality.toLowerCase().includes(searchQuery.toLowerCase());
 
-    const matchesSpecies =
-      !speciesFilter ||
-      character.species.toLowerCase().includes(speciesFilter.toLowerCase()) ||
-      (speciesFilter === "Other" &&
-        ![
-          "Human",
-          "Animal",
-          "Fantasy Creature",
-          "Robot",
-          "Alien",
-          "Plant",
-          "Object",
-        ].includes(character.species));
+    const cSpecies = (character.species || '').toLowerCase();
+    const fSpecies = (speciesFilter || '').toLowerCase();
 
-    const matchesPersonality =
-      !personalityFilter ||
-      character.personality
-        .toLowerCase()
-        .includes(personalityFilter.toLowerCase()) ||
-      (personalityFilter === "Other" &&
-        ![
-          "Brave",
-          "Curious",
-          "Kind",
-          "Wise",
-          "Playful",
-          "Shy",
-          "Adventurous",
-          "Smart",
-          "Funny",
-          "Strong",
-          "Gentle",
-        ].some((trait) =>
-          character.personality.toLowerCase().includes(trait.toLowerCase()),
-        ));
+    let matchesSpecies = true;
+    if (speciesFilter) {
+      if (fSpecies === 'other') {
+        matchesSpecies = !standardSpeciesList.some(
+          (s) => s.toLowerCase() === cSpecies
+        );
+      } else if (fSpecies === 'animal') {
+        matchesSpecies =
+          cSpecies.includes('animal') ||
+          cSpecies.includes('bear') ||
+          cSpecies.includes('dog') ||
+          cSpecies.includes('cat') ||
+          cSpecies.includes('rabbit');
+      } else {
+        matchesSpecies = cSpecies.includes(fSpecies);
+      }
+    }
+
+    const cPersonality = (character.personality || '').toLowerCase();
+    const fPersonality = (personalityFilter || '').toLowerCase();
+
+    let matchesPersonality = true;
+    if (personalityFilter) {
+      if (fPersonality === 'other') {
+        matchesPersonality = !standardTraitsList.some((trait) =>
+          cPersonality.includes(trait.toLowerCase())
+        );
+      } else {
+        matchesPersonality = cPersonality.includes(fPersonality);
+      }
+    }
 
     return matchesSearch && matchesSpecies && matchesPersonality;
   });
@@ -225,13 +211,15 @@ export default function CharactersPage() {
   return (
     <div className="character-library">
       <CharacterLibraryHeader
-        onCreateCharacter={handleOpenModal}
+        onCreateCharacter={() => handleOpenBuilder(null)}
         onOpenBuilder={() => handleOpenBuilder(null)}
       />
       <CharacterToolbar
         searchQuery={searchQuery}
         speciesFilter={speciesFilter}
         personalityFilter={personalityFilter}
+        speciesOptions={dynamicSpeciesOptions}
+        personalityOptions={dynamicPersonalityOptions}
         onSearchChange={setSearchQuery}
         onSpeciesChange={setSpeciesFilter}
         onPersonalityChange={setPersonalityFilter}
@@ -259,22 +247,8 @@ export default function CharactersPage() {
           onCustomize={(char) => handleOpenBuilder(char)}
           onDuplicate={(char) => handleDuplicateCharacter(char.id)}
           onDelete={handleDeleteCharacter}
-          onGenerateReference={handleGenerateReference}
         />
       )}
-
-      <CharacterModal
-        isOpen={showModal}
-        character={editingCharacter}
-        onSubmit={
-          editingCharacter ? handleEditCharacterSubmit : handleCreateCharacter
-        }
-        onCancel={handleCloseModal}
-        onOpenBuilder={(char) => {
-          handleCloseModal();
-          handleOpenBuilder(char);
-        }}
-      />
 
       <CharacterBuilderModal
         isOpen={showBuilderModal}

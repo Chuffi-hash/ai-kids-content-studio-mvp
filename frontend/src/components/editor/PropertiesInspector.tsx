@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { EditorScene, EditorCharacter, SceneVersionItem } from '../../types/editor';
 import {
   estimateSpeechDurationMs,
@@ -9,6 +9,17 @@ import {
 import { resolveAssetUrl } from '../../utils/urlHelper';
 import { CharacterInstance, VectorSceneData } from '../../types/animation';
 import { CharacterAnimationInspector } from './animation/CharacterAnimationInspector';
+import {
+  getTTSVoices,
+  previewVoice,
+  SupportedVoice,
+  uploadSceneBackground,
+  setSceneBackground,
+  updateBackgroundFit,
+  removeSceneBackground,
+  fetchStoryBackgrounds,
+  StoryBackgroundImage,
+} from '../../services/editor.service';
 import {
   AlertTriangleIcon,
   CheckIcon,
@@ -21,15 +32,31 @@ import {
   PlusIcon,
   ScissorsIcon,
   SparklesIcon,
+  ImageIcon,
+  UploadIcon,
 } from '../common/Icons';
 
 interface PropertiesInspectorProps {
   scene: EditorScene | null;
   characters: EditorCharacter[];
   playheadMs: number;
+  storyId?: string;
   onUpdateScene: (sceneId: string, updates: Partial<EditorScene>) => void;
+  onUploadBackground?: (sceneId: string, file: File, fit?: 'cover' | 'contain') => Promise<void>;
+  onSetBackground?: (sceneId: string, imageUrl: string, fit?: 'cover' | 'contain') => Promise<void>;
+  onUpdateBackgroundFit?: (sceneId: string, fit: 'cover' | 'contain') => Promise<void>;
+  onRemoveBackground?: (sceneId: string) => Promise<void>;
   onGenerateImage: (sceneId: string, promptOverride?: string) => Promise<void>;
-  onGenerateVoice: (sceneId: string) => Promise<void>;
+  onGenerateVoice: (
+    sceneId: string,
+    options?: {
+      provider?: string;
+      voice?: string;
+      speed?: number;
+      effect?: 'normal' | 'robot' | 'cartoon';
+      lang?: string;
+    }
+  ) => Promise<void>;
   onRemoveVoice?: (sceneId: string) => Promise<void>;
   onGenerateVideo: (sceneId: string, workflow?: 'ffmpeg' | 'ai') => Promise<void>;
   onSplitScene: (sceneId: string, splitMs: number) => void;
@@ -47,13 +74,20 @@ interface PropertiesInspectorProps {
   onUpdateAnimationData?: (sceneId: string, newData: VectorSceneData) => void;
   onAddCharacterToScene?: (sceneId: string, characterId: 'pip_the_bear' | 'sammy_the_kid') => void;
   onRemoveCharacterFromScene?: (sceneId: string, instanceId: string) => void;
+  isRippleOn?: boolean;
+  onToggleRipple?: () => void;
 }
 
 export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
   scene,
   characters,
   playheadMs,
+  storyId,
   onUpdateScene,
+  onUploadBackground,
+  onSetBackground,
+  onUpdateBackgroundFit,
+  onRemoveBackground,
   onGenerateImage,
   onGenerateVoice,
   onRemoveVoice,
@@ -72,6 +106,8 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
   onUpdateAnimationData,
   onAddCharacterToScene,
   onRemoveCharacterFromScene,
+  isRippleOn,
+  onToggleRipple,
 }) => {
   if (!scene) {
     return (
@@ -93,6 +129,18 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
   const [localCamera, setLocalCamera] = useState(scene.cameraDirection || 'Eye level wide establishing shot');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showRemoveVoiceConfirm, setShowRemoveVoiceConfirm] = useState(false);
+
+  // Scene Background State (Phase 1)
+  const bgFileInputRef = useRef<HTMLInputElement | null>(null);
+  const [isUploadingBg, setIsUploadingBg] = useState(false);
+  const [bgError, setBgError] = useState<string | null>(null);
+  const [showBgPicker, setShowBgPicker] = useState(false);
+  const [storyBackgrounds, setStoryBackgrounds] = useState<StoryBackgroundImage[]>([]);
+  const [isLoadingStoryBackgrounds, setIsLoadingStoryBackgrounds] = useState(false);
+  const [showRemoveBgConfirm, setShowRemoveBgConfirm] = useState(false);
+
+  const currentBgUrl = scene.animationData?.background?.imageUrl || scene.imageUrl;
+  const currentBgFit = scene.animationData?.background?.fit || 'cover';
 
   // Dedicated audio player state for scene inspector
   const audioPlayerRef = React.useRef<HTMLAudioElement | null>(null);
@@ -117,10 +165,99 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
     }
   }, [scene.sceneId, scene.title, scene.narration, scene.visualPrompt, scene.cameraDirection, scene.audioUrl]);
 
+  // Kokoro TTS Studio state
+  const [ttsVoices, setTtsVoices] = useState<SupportedVoice[]>([]);
+  const [isKokoroAvailable, setIsKokoroAvailable] = useState<boolean>(true);
+  const [selectedProvider, setSelectedProvider] = useState<'kokoro' | 'google'>('kokoro');
+  const [selectedLanguage, setSelectedLanguage] = useState<string>('en-us');
+  const [selectedVoice, setSelectedVoice] = useState<string>('af_heart');
+  const [voiceSpeed, setVoiceSpeed] = useState<number>(1.0);
+  const [voiceEffect, setVoiceEffect] = useState<'normal' | 'robot' | 'cartoon'>('normal');
+
+  // Preview state
+  const [isPreviewingVoice, setIsPreviewingVoice] = useState<boolean>(false);
+  const [previewAudioUrl, setPreviewAudioUrl] = useState<string | null>(null);
+  const [isPlayingPreview, setIsPlayingPreview] = useState<boolean>(false);
+  const previewAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Fetch TTS voices on mount
+  useEffect(() => {
+    getTTSVoices()
+      .then((data) => {
+        setTtsVoices(data.voices);
+        setIsKokoroAvailable(data.isKokoroAvailable);
+        setSelectedProvider(data.isKokoroAvailable ? 'kokoro' : 'google');
+        if (data.voices.length > 0) {
+          const hasAfHeart = data.voices.some((v) => v.id === 'af_heart');
+          setSelectedVoice(hasAfHeart ? 'af_heart' : data.voices[0].id);
+        }
+      })
+      .catch((err) => console.warn('Could not load TTS voices:', err));
+  }, []);
+
+  // Character-aware voice recommendation: adapt voice/effect based on scene characters
+  useEffect(() => {
+    const instances = scene?.animationData?.characterInstances || [];
+    if (instances.length > 0) {
+      const first = instances[0];
+      const matchChar = characters.find((c) => c.name.toLowerCase() === first.name.toLowerCase());
+      const charSpecies = (first.appearance?.species || matchChar?.species || '').toLowerCase();
+      if (charSpecies.includes('robot')) {
+        setVoiceEffect('robot');
+        if (selectedProvider === 'kokoro') setSelectedVoice('am_fenrir');
+      } else if (charSpecies.includes('bear') || charSpecies.includes('animal')) {
+        setVoiceEffect('cartoon');
+        if (selectedProvider === 'kokoro') setSelectedVoice('bm_george');
+      }
+    }
+  }, [scene?.sceneId]);
+
+  const handlePreviewVoice = async () => {
+    try {
+      setIsPreviewingVoice(true);
+      const res = await previewVoice({
+        voice: selectedVoice,
+        provider: selectedProvider,
+        speed: voiceSpeed,
+        effect: voiceEffect,
+        lang: selectedLanguage,
+      });
+      setPreviewAudioUrl(res.audioUrl);
+      setTimeout(() => {
+        if (previewAudioRef.current) {
+          previewAudioRef.current.currentTime = 0;
+          previewAudioRef.current.play().then(() => setIsPlayingPreview(true)).catch(() => {});
+        }
+      }, 50);
+    } catch (e: any) {
+      alert(`Voice preview failed: ${e.message || String(e)}`);
+    } finally {
+      setIsPreviewingVoice(false);
+    }
+  };
+
+  const handleGenerateVoiceClick = () => {
+    onGenerateVoice(scene.sceneId, {
+      provider: selectedProvider,
+      voice: selectedVoice,
+      speed: voiceSpeed,
+      effect: voiceEffect,
+      lang: selectedLanguage,
+    });
+  };
+
 
   const durationMs = scene.endMs > scene.startMs ? scene.endMs - scene.startMs : scene.estimatedDurationMs || 5000;
   const timingValidation = validateSceneTiming(scene);
   const estimatedSpeechMs = estimateSpeechDurationMs(localNarration);
+
+  const [durationInputVal, setDurationInputVal] = useState<string>(
+    (durationMs / 1000).toFixed(1)
+  );
+
+  useEffect(() => {
+    setDurationInputVal((durationMs / 1000).toFixed(1));
+  }, [durationMs]);
 
   const handleTitleBlur = () => {
     if (localTitle !== scene.title) {
@@ -146,8 +283,26 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
     onUpdateScene(scene.sceneId, { cameraDirection: val });
   };
 
+  const handleDurationInputBlur = () => {
+    const parsed = parseFloat(durationInputVal);
+    if (!Number.isFinite(parsed) || isNaN(parsed)) {
+      setDurationInputVal((durationMs / 1000).toFixed(1));
+      return;
+    }
+    const clampedSec = Math.max(1.5, Math.min(300, parsed));
+    const newDur = Math.round(clampedSec * 1000);
+    setDurationInputVal(clampedSec.toFixed(1));
+    if (Math.abs(newDur - durationMs) >= 50) {
+      onUpdateScene(scene.sceneId, {
+        endMs: scene.startMs + newDur,
+        estimatedDurationMs: newDur,
+      });
+    }
+  };
+
   const handleDurationStep = (deltaSec: number) => {
-    const newDur = Math.max(1500, durationMs + deltaSec * 1000);
+    const newDur = Math.max(1500, Math.min(300000, durationMs + deltaSec * 1000));
+    setDurationInputVal((newDur / 1000).toFixed(1));
     onUpdateScene(scene.sceneId, {
       endMs: scene.startMs + newDur,
       estimatedDurationMs: newDur,
@@ -157,6 +312,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
   const handleFitToVoice = () => {
     if (scene.actualAudioDurationMs) {
       const newDur = Math.max(1500, scene.actualAudioDurationMs + 500); // 500ms safety pad
+      setDurationInputVal((newDur / 1000).toFixed(1));
       onUpdateScene(scene.sceneId, {
         endMs: scene.startMs + newDur,
         estimatedDurationMs: newDur,
@@ -200,6 +356,90 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
     });
     if (updatedAnimationData && onUpdateAnimationData) {
       onUpdateAnimationData(scene.sceneId, updatedAnimationData);
+    }
+  };
+
+  // -------------------------------------------------------------------------
+  // Scene Background Handlers (Phase 1)
+  // -------------------------------------------------------------------------
+  const handleUploadBackgroundFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.type !== 'image/png' && file.type !== 'image/jpeg' && file.type !== 'image/jpg') {
+      setBgError('Please select a valid PNG or JPEG image file.');
+      return;
+    }
+
+    setBgError(null);
+    setIsUploadingBg(true);
+    try {
+      if (onUploadBackground) {
+        await onUploadBackground(scene.sceneId, file, currentBgFit);
+      } else {
+        const res = await uploadSceneBackground(scene.sceneId, file, currentBgFit);
+        if (res.scene) {
+          onUpdateScene(scene.sceneId, res.scene);
+        }
+      }
+    } catch (err: any) {
+      console.error('Background upload failed:', err);
+      setBgError(err.message || 'Failed to upload background image');
+    } finally {
+      setIsUploadingBg(false);
+      if (bgFileInputRef.current) bgFileInputRef.current.value = '';
+    }
+  };
+
+  const handleToggleFit = (newFit: 'cover' | 'contain') => {
+    setBgError(null);
+    if (onUpdateBackgroundFit) {
+      onUpdateBackgroundFit(scene.sceneId, newFit);
+    } else {
+      updateBackgroundFit(scene.sceneId, newFit)
+        .then((res) => {
+          if (res.scene) onUpdateScene(scene.sceneId, res.scene);
+        })
+        .catch((err) => setBgError(err.message || 'Failed to update fit mode'));
+    }
+  };
+
+  const handleOpenStoryBackgroundsModal = () => {
+    setShowBgPicker(true);
+    if (storyId) {
+      setIsLoadingStoryBackgrounds(true);
+      fetchStoryBackgrounds(storyId)
+        .then((bgs) => setStoryBackgrounds(bgs))
+        .catch((err) => console.warn('Failed to load story backgrounds:', err))
+        .finally(() => setIsLoadingStoryBackgrounds(false));
+    }
+  };
+
+  const handleSelectStoryBackground = (imageUrl: string) => {
+    setShowBgPicker(false);
+    setBgError(null);
+    if (onSetBackground) {
+      onSetBackground(scene.sceneId, imageUrl, currentBgFit);
+    } else {
+      setSceneBackground(scene.sceneId, imageUrl, currentBgFit)
+        .then((res) => {
+          if (res.scene) onUpdateScene(scene.sceneId, res.scene);
+        })
+        .catch((err) => setBgError(err.message || 'Failed to set background'));
+    }
+  };
+
+  const handleRemoveBackground = () => {
+    setShowRemoveBgConfirm(false);
+    setBgError(null);
+    if (onRemoveBackground) {
+      onRemoveBackground(scene.sceneId);
+    } else {
+      removeSceneBackground(scene.sceneId)
+        .then((res) => {
+          if (res.scene) onUpdateScene(scene.sceneId, res.scene);
+        })
+        .catch((err) => setBgError(err.message || 'Failed to remove background'));
     }
   };
 
@@ -295,6 +535,8 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                 instance={selectedCharacterInstance}
                 animationData={scene.animationData}
                 sceneDurationMs={durationMs}
+                sceneId={scene.sceneId}
+                characters={characters}
                 onUpdateInstance={(id, updates) => onUpdateInstance && onUpdateInstance(id, updates)}
                 onUpdateAnimationData={(newData) => onUpdateAnimationData && onUpdateAnimationData(scene.sceneId, newData)}
                 onRemoveInstance={(id) => onRemoveCharacterFromScene && onRemoveCharacterFromScene(scene.sceneId, id)}
@@ -367,7 +609,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                       gap: '8px',
                     }}
                   >
-                    <SparklesIcon size={24} color="#60a5fa" />
+                    <SparklesIcon size={24} color="#8b5cf6" />
                     <span style={{ fontWeight: 600, color: 'var(--ed-text)', fontSize: '13px' }}>
                       No 2D Characters in Scene
                     </span>
@@ -439,12 +681,32 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
             <div>End: {formatTimeMs(scene.endMs)}</div>
           </div>
 
-          {/* Duration Adjust Stepper */}
-          <div style={{ display: 'flex', gap: '6px', marginTop: '4px' }}>
-            <button className="ed-tool-btn" onClick={() => handleDurationStep(-1)}>
+          {/* Duration Adjust: Direct Numeric Input & Steppers */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
+            <span style={{ fontSize: '11px', color: 'var(--ed-text-muted)' }}>Duration:</span>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+              <input
+                type="number"
+                step="0.5"
+                min="1.5"
+                max="300"
+                className="ed-input"
+                style={{ width: '64px', padding: '4px 6px', fontSize: '12px', textAlign: 'center', fontFamily: 'monospace' }}
+                value={durationInputVal}
+                onChange={(e) => setDurationInputVal(e.target.value)}
+                onBlur={handleDurationInputBlur}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    handleDurationInputBlur();
+                  }
+                }}
+              />
+              <span style={{ fontSize: '11px', color: 'var(--ed-text-muted)', fontFamily: 'monospace' }}>s</span>
+            </div>
+            <button className="ed-tool-btn" onClick={() => handleDurationStep(-1)} title="Decrease duration by 1s">
               -1s
             </button>
-            <button className="ed-tool-btn" onClick={() => handleDurationStep(1)}>
+            <button className="ed-tool-btn" onClick={() => handleDurationStep(1)} title="Increase duration by 1s">
               +1s
             </button>
             {scene.actualAudioDurationMs && scene.actualAudioDurationMs > durationMs && (
@@ -457,6 +719,33 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
               </button>
             )}
           </div>
+
+          {/* Ripple Mode Indicator & Explanation */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '8px', fontSize: '11px', color: 'var(--ed-text-muted)' }}>
+            <span>Ripple Edit: <strong style={{ color: isRippleOn ? '#c4b5fd' : '#94a3b8' }}>{isRippleOn ? 'ON' : 'OFF'}</strong></span>
+            {onToggleRipple && (
+              <button
+                type="button"
+                onClick={onToggleRipple}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#8b5cf6',
+                  cursor: 'pointer',
+                  padding: 0,
+                  textDecoration: 'underline',
+                  fontSize: '11px',
+                }}
+              >
+                Toggle
+              </button>
+            )}
+          </div>
+          <p style={{ margin: '3px 0 0', fontSize: '10px', color: '#64748b', lineHeight: 1.3 }}>
+            {isRippleOn
+              ? 'Downstream scenes shift automatically when this scene duration changes.'
+              : 'Subsequent scenes do not shift; timing remains untouched.'}
+          </p>
 
           {/* Timing Warning Alert */}
           {!timingValidation.isValid && (
@@ -489,6 +778,242 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
             placeholder="Type spoken narration for this scene..."
           />
 
+          {/* Kokoro-82M Voice Studio Controls */}
+          <div
+            className="ed-voice-studio-panel"
+            style={{
+              background: 'var(--ed-bg)',
+              border: '1px solid var(--ed-border)',
+              borderRadius: '8px',
+              padding: '12px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '10px',
+              marginTop: '4px',
+              marginBottom: '8px',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: '11px', fontWeight: 700, color: '#c4b5fd', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                🎙️ Voice Studio
+              </span>
+              <span
+                style={{
+                  fontSize: '10px',
+                  padding: '2px 6px',
+                  borderRadius: '4px',
+                  background: selectedProvider === 'kokoro' ? 'rgba(52, 211, 153, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                  color: selectedProvider === 'kokoro' ? '#34d399' : '#fbbf24',
+                  fontWeight: 600,
+                }}
+              >
+                {selectedProvider === 'kokoro' ? '● Kokoro-82M (Local)' : '● Google TTS (Cloud)'}
+              </span>
+            </div>
+
+            {/* Provider & Language Selection */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+              <div>
+                <label style={{ fontSize: '10px', color: 'var(--ed-text-muted)', display: 'block', marginBottom: '3px' }}>
+                  TTS Provider
+                </label>
+                <select
+                  className="ed-input"
+                  style={{ fontSize: '11px', padding: '4px 6px', height: '28px' }}
+                  value={selectedProvider}
+                  onChange={(e) => setSelectedProvider(e.target.value as any)}
+                >
+                  <option value="kokoro">Kokoro-82M (Neural)</option>
+                  <option value="google">Google TTS (Fallback)</option>
+                </select>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '10px', color: 'var(--ed-text-muted)', display: 'block', marginBottom: '3px' }}>
+                  Language / Accent
+                </label>
+                <select
+                  className="ed-input"
+                  style={{ fontSize: '11px', padding: '4px 6px', height: '28px' }}
+                  value={selectedLanguage}
+                  onChange={(e) => {
+                    const l = e.target.value;
+                    setSelectedLanguage(l);
+                    if (l === 'en-gb') setSelectedVoice('bf_emma');
+                    else setSelectedVoice('af_heart');
+                  }}
+                >
+                  <option value="en-us">English (US)</option>
+                  <option value="en-gb">English (UK)</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Voice Selection & Preview */}
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3px' }}>
+                <label style={{ fontSize: '10px', color: 'var(--ed-text-muted)' }}>Speaker Voice</label>
+                <button
+                  type="button"
+                  className="ed-tool-btn"
+                  style={{ fontSize: '10px', padding: '2px 8px', color: '#c4b5fd', borderColor: '#8b5cf6' }}
+                  onClick={handlePreviewVoice}
+                  disabled={isPreviewingVoice}
+                >
+                  {isPreviewingVoice ? 'Previewing...' : '🔊 Audition Voice'}
+                </button>
+              </div>
+              <select
+                className="ed-input"
+                style={{ fontSize: '11px', padding: '4px 6px', height: '30px' }}
+                value={selectedVoice}
+                onChange={(e) => setSelectedVoice(e.target.value)}
+              >
+                {ttsVoices
+                  .filter(
+                    (v) =>
+                      !selectedLanguage ||
+                      v.lang.toLowerCase().includes(selectedLanguage.split('-')[1] || 'us') ||
+                      selectedProvider === 'google'
+                  )
+                  .map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.name} ({v.gender}, {v.accent || v.lang})
+                    </option>
+                  ))}
+              </select>
+            </div>
+
+            {/* In-line Voice Preview Player */}
+            {previewAudioUrl && (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  background: 'rgba(139, 92, 246, 0.12)',
+                  padding: '6px 10px',
+                  borderRadius: '6px',
+                  border: '1px solid rgba(139, 92, 246, 0.3)',
+                }}
+              >
+                <audio
+                  ref={previewAudioRef}
+                  src={resolveAssetUrl(previewAudioUrl)}
+                  onEnded={() => setIsPlayingPreview(false)}
+                  onError={() => setIsPlayingPreview(false)}
+                />
+                <button
+                  type="button"
+                  className="ed-tool-btn primary"
+                  style={{ width: '24px', height: '24px', padding: 0, justifyContent: 'center' }}
+                  onClick={() => {
+                    if (previewAudioRef.current) {
+                      if (isPlayingPreview) {
+                        previewAudioRef.current.pause();
+                        setIsPlayingPreview(false);
+                      } else {
+                        previewAudioRef.current.play();
+                        setIsPlayingPreview(true);
+                      }
+                    }
+                  }}
+                >
+                  {isPlayingPreview ? <PauseIcon size={12} /> : <PlayIcon size={12} />}
+                </button>
+                <span style={{ fontSize: '11px', color: '#e2e8f0', flex: 1 }}>
+                  Auditioning: <strong>{ttsVoices.find((v) => v.id === selectedVoice)?.name.split('(')[0] || selectedVoice}</strong> ({voiceEffect})
+                </span>
+                <button
+                  type="button"
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: '#94a3b8',
+                    cursor: 'pointer',
+                    fontSize: '12px',
+                  }}
+                  onClick={() => setPreviewAudioUrl(null)}
+                  title="Dismiss preview"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+
+            {/* Speech Speed Slider */}
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
+                <label style={{ fontSize: '10px', color: 'var(--ed-text-muted)' }}>Speech Speed</label>
+                <span style={{ fontSize: '10px', fontFamily: 'monospace', color: '#c4b5fd' }}>
+                  {voiceSpeed.toFixed(2)}x {voiceSpeed === 1.0 ? '(Normal)' : voiceSpeed < 1.0 ? '(Slower)' : '(Faster)'}
+                </span>
+              </div>
+              <input
+                type="range"
+                className="ed-inspector-slider"
+                min="0.5"
+                max="2.0"
+                step="0.05"
+                value={voiceSpeed}
+                onChange={(e) => setVoiceSpeed(parseFloat(e.target.value))}
+              />
+            </div>
+
+            {/* Character Voice Style / Effect Pills */}
+            <div>
+              <label style={{ fontSize: '10px', color: 'var(--ed-text-muted)', display: 'block', marginBottom: '4px' }}>
+                Character Voice Style & Audio Effect
+              </label>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
+                <button
+                  type="button"
+                  className={`ed-tool-btn ${voiceEffect === 'normal' ? 'primary' : ''}`}
+                  style={{
+                    fontSize: '10px',
+                    padding: '5px 4px',
+                    justifyContent: 'center',
+                    background: voiceEffect === 'normal' ? '#7c3aed' : undefined,
+                    color: voiceEffect === 'normal' ? '#ffffff' : undefined,
+                  }}
+                  onClick={() => setVoiceEffect('normal')}
+                >
+                  ✨ Normal
+                </button>
+                <button
+                  type="button"
+                  className={`ed-tool-btn ${voiceEffect === 'robot' ? 'primary' : ''}`}
+                  style={{
+                    fontSize: '10px',
+                    padding: '5px 4px',
+                    justifyContent: 'center',
+                    background: voiceEffect === 'robot' ? '#7c3aed' : undefined,
+                    color: voiceEffect === 'robot' ? '#ffffff' : undefined,
+                  }}
+                  onClick={() => setVoiceEffect('robot')}
+                  title="Electronic synthesized robotic voice"
+                >
+                  🤖 Robot
+                </button>
+                <button
+                  type="button"
+                  className={`ed-tool-btn ${voiceEffect === 'cartoon' ? 'primary' : ''}`}
+                  style={{
+                    fontSize: '10px',
+                    padding: '5px 4px',
+                    justifyContent: 'center',
+                    background: voiceEffect === 'cartoon' ? '#7c3aed' : undefined,
+                    color: voiceEffect === 'cartoon' ? '#ffffff' : undefined,
+                  }}
+                  onClick={() => setVoiceEffect('cartoon')}
+                  title="Playful high-pitched cartoon creature"
+                >
+                  🐿️ Creature
+                </button>
+              </div>
+            </div>
+          </div>
+
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
             <span style={{ fontSize: '11px', color: 'var(--ed-text-muted)' }}>
               {scene.actualAudioDurationMs
@@ -497,8 +1022,8 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
             </span>
             <button
               className="ed-btn-action primary"
-              style={{ fontSize: '11px', padding: '6px 10px' }}
-              onClick={() => onGenerateVoice(scene.sceneId)}
+              style={{ fontSize: '11px', padding: '6px 12px' }}
+              onClick={handleGenerateVoiceClick}
               disabled={isGeneratingVoice || !localNarration.trim()}
             >
               {isGeneratingVoice ? 'Generating...' : scene.audioUrl ? 'Regenerate Voice' : 'Generate Voice (TTS)'}
@@ -515,7 +1040,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                 <button
                   className="ed-tool-btn"
                   style={{ marginTop: '6px', background: '#eab308', color: '#1a1a1a', fontWeight: 'bold' }}
-                  onClick={() => onGenerateVoice(scene.sceneId)}
+                  onClick={handleGenerateVoiceClick}
                   disabled={isGeneratingVoice}
                 >
                   {isGeneratingVoice ? 'Regenerating...' : 'Regenerate Voice'}
@@ -685,6 +1210,174 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                   </div>
                 </>
               )}
+            </div>
+          )}
+        </div>
+
+        {/* Scene Background (2D Stage) Section */}
+        <div className="ed-field-group ed-background-card">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+            <label className="ed-field-label" style={{ margin: 0, fontWeight: 600 }}>Scene Background</label>
+            {currentBgUrl ? (
+              <span className="ed-bg-badge-fit">{currentBgFit.toUpperCase()}</span>
+            ) : (
+              <span style={{ fontSize: '11px', color: '#94a3b8' }}>Default Stage</span>
+            )}
+          </div>
+
+          <p style={{ fontSize: '11px', color: '#64748b', margin: '0 0 8px 0', lineHeight: 1.4 }}>
+            Upload or select a scenic background. Reusable characters animate independently on top.
+          </p>
+
+          <input
+            type="file"
+            ref={bgFileInputRef}
+            style={{ display: 'none' }}
+            accept="image/png,image/jpeg"
+            onChange={handleUploadBackgroundFile}
+          />
+
+          {bgError && (
+            <div style={{ fontSize: '11px', color: '#ef4444', backgroundColor: 'rgba(239, 68, 68, 0.1)', padding: '6px 8px', borderRadius: '4px', marginBottom: '8px' }}>
+              {bgError}
+            </div>
+          )}
+
+          {currentBgUrl ? (
+            <div>
+              <div className="ed-bg-preview-box">
+                <img
+                  src={currentBgUrl}
+                  alt="Scene Background"
+                  className={currentBgFit === 'contain' ? 'fit-contain' : 'fit-cover'}
+                />
+              </div>
+
+              {/* Fit Mode Toggle */}
+              <div style={{ marginTop: '8px' }}>
+                <label className="ed-field-label" style={{ fontSize: '11px', marginBottom: '4px' }}>Fit Mode</label>
+                <div className="ed-bg-fit-toggles">
+                  <button
+                    type="button"
+                    className={`ed-bg-fit-btn ${currentBgFit === 'cover' ? 'active' : ''}`}
+                    onClick={() => handleToggleFit('cover')}
+                    title="Fill 16:9 frame (crops edges if needed)"
+                  >
+                    Cover (Fill)
+                  </button>
+                  <button
+                    type="button"
+                    className={`ed-bg-fit-btn ${currentBgFit === 'contain' ? 'active' : ''}`}
+                    onClick={() => handleToggleFit('contain')}
+                    title="Preserve aspect ratio (letterbox / pillarbox with dark stage backdrop)"
+                  >
+                    Contain (Fit)
+                  </button>
+                </div>
+              </div>
+
+              {/* Actions row */}
+              <div className="ed-bg-actions-row">
+                <button
+                  type="button"
+                  className="ed-btn-action"
+                  disabled={isUploadingBg}
+                  onClick={() => bgFileInputRef.current?.click()}
+                  title="Upload a new background image from your computer (PNG/JPEG)"
+                >
+                  <UploadIcon size={12} />
+                  <span>{isUploadingBg ? 'Uploading...' : 'Replace'}</span>
+                </button>
+                <button
+                  type="button"
+                  className="ed-btn-action"
+                  onClick={handleOpenStoryBackgroundsModal}
+                  title="Choose from images already used in this story"
+                >
+                  <ImageIcon size={12} />
+                  <span>From Story</span>
+                </button>
+                <button
+                  type="button"
+                  className="ed-btn-action danger"
+                  onClick={() => setShowRemoveBgConfirm(true)}
+                  title="Remove background and restore default stage"
+                >
+                  <TrashIcon size={12} />
+                  <span>Remove</span>
+                </button>
+              </div>
+
+              {showRemoveBgConfirm && (
+                <div style={{ marginTop: '8px', padding: '8px', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '6px' }}>
+                  <p style={{ fontSize: '11px', color: '#f87171', margin: '0 0 6px 0' }}>
+                    Remove custom background and restore default stylized stage?
+                  </p>
+                  <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
+                    <button
+                      type="button"
+                      className="ed-tool-btn"
+                      style={{ fontSize: '10px', padding: '2px 8px' }}
+                      onClick={() => setShowRemoveBgConfirm(false)}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      className="ed-tool-btn"
+                      style={{ fontSize: '10px', padding: '2px 8px', background: '#ef4444', color: 'white', borderColor: '#ef4444' }}
+                      onClick={handleRemoveBackground}
+                    >
+                      Confirm
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div>
+              <div
+                style={{
+                  border: '1px dashed #cbd5e1',
+                  borderRadius: '6px',
+                  padding: '16px 10px',
+                  textAlign: 'center',
+                  background: 'rgba(248, 250, 252, 0.5)',
+                  marginBottom: '8px',
+                }}
+              >
+                <div style={{ color: '#94a3b8', marginBottom: '6px' }}>
+                  <ImageIcon size={24} />
+                </div>
+                <p style={{ fontSize: '12px', fontWeight: 500, color: '#475569', margin: '0 0 2px 0' }}>
+                  No custom background
+                </p>
+                <p style={{ fontSize: '10px', color: '#94a3b8', margin: 0 }}>
+                  Using default vector stage backdrop
+                </p>
+              </div>
+
+              <div className="ed-bg-actions-row">
+                <button
+                  type="button"
+                  className="ed-btn-action primary"
+                  disabled={isUploadingBg}
+                  onClick={() => bgFileInputRef.current?.click()}
+                  style={{ flex: 1 }}
+                >
+                  <UploadIcon size={13} />
+                  <span>{isUploadingBg ? 'Uploading...' : 'Upload Image (PNG/JPEG)'}</span>
+                </button>
+                <button
+                  type="button"
+                  className="ed-btn-action"
+                  onClick={handleOpenStoryBackgroundsModal}
+                  title="Choose from images already used in this story"
+                >
+                  <ImageIcon size={13} />
+                  <span>From Story</span>
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -963,10 +1656,10 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
         <div style={{ background: 'var(--ed-bg)', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--ed-border)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--ed-text-muted)', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-              <SparklesIcon size={12} color="#60a5fa" />
+              <SparklesIcon size={12} color="#8b5cf6" />
               <span>2D Character Animation</span>
             </span>
-            <span style={{ fontSize: '10px', color: '#93c5fd', background: 'rgba(59, 130, 246, 0.15)', padding: '1px 6px', borderRadius: '4px' }}>
+            <span style={{ fontSize: '10px', color: '#c4b5fd', background: 'rgba(139, 92, 246, 0.16)', padding: '1px 6px', borderRadius: '4px' }}>
               {characterInstances.length} {characterInstances.length === 1 ? 'character' : 'characters'}
             </span>
           </div>
@@ -1110,6 +1803,88 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
           </div>
         </div>
       </div>
+      )}
+
+      {/* Story Backgrounds Picker Modal */}
+      {showBgPicker && (
+        <div className="ed-bg-modal-overlay" onClick={() => setShowBgPicker(false)}>
+          <div className="ed-bg-modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="ed-bg-modal-header">
+              <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 600 }}>Select From Story Backgrounds</h4>
+              <button
+                type="button"
+                className="ed-tool-btn"
+                style={{ padding: '2px 8px' }}
+                onClick={() => setShowBgPicker(false)}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{ padding: '12px', maxHeight: '360px', overflowY: 'auto' }}>
+              {isLoadingStoryBackgrounds ? (
+                <div style={{ textAlign: 'center', padding: '24px 0', color: '#94a3b8', fontSize: '12px' }}>
+                  Loading backgrounds...
+                </div>
+              ) : storyBackgrounds.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '24px 0', color: '#94a3b8', fontSize: '12px' }}>
+                  No previous backgrounds found in this story.
+                  <div style={{ marginTop: '8px' }}>
+                    <button
+                      type="button"
+                      className="ed-btn-action primary"
+                      onClick={() => {
+                        setShowBgPicker(false);
+                        bgFileInputRef.current?.click();
+                      }}
+                      style={{ margin: '0 auto' }}
+                    >
+                      <UploadIcon size={12} />
+                      <span>Upload New Image</span>
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="ed-bg-picker-grid">
+                  {storyBackgrounds.map((bg, idx) => (
+                    <div
+                      key={bg.imageUrl + idx}
+                      className="ed-bg-picker-item"
+                      onClick={() => handleSelectStoryBackground(bg.imageUrl)}
+                      title={`Used in Scene ${bg.sceneNumber}`}
+                    >
+                      <img src={bg.imageUrl} alt={`Scene ${bg.sceneNumber}`} />
+                      <div className="ed-bg-picker-caption">Scene {bg.sceneNumber}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div style={{ padding: '8px 12px', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <button
+                type="button"
+                className="ed-btn-action"
+                style={{ fontSize: '11px' }}
+                onClick={() => {
+                  setShowBgPicker(false);
+                  bgFileInputRef.current?.click();
+                }}
+              >
+                <UploadIcon size={11} />
+                <span>Upload New</span>
+              </button>
+              <button
+                type="button"
+                className="ed-tool-btn"
+                style={{ fontSize: '11px' }}
+                onClick={() => setShowBgPicker(false)}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </aside>
   );
