@@ -240,8 +240,8 @@ export const TransformGizmo: React.FC<TransformGizmoProps> = ({
           y={-halfH}
           width={halfW * 2}
           height={halfH * 2}
-          fill="rgba(59, 130, 246, 0.08)"
-          stroke="#3b82f6"
+          fill="rgba(139, 92, 246, 0.1)"
+          stroke="#8b5cf6"
           strokeWidth={1.5}
           rx={6}
           style={{ cursor: activeDrag === 'move' ? 'grabbing' : 'grab' }}
@@ -249,12 +249,12 @@ export const TransformGizmo: React.FC<TransformGizmoProps> = ({
         />
 
         {/* Top rotation stem and handle */}
-        <line x1={0} y1={-halfH} x2={0} y2={-halfH - 24} stroke="#3b82f6" strokeWidth={1.5} />
+        <line x1={0} y1={-halfH} x2={0} y2={-halfH - 24} stroke="#8b5cf6" strokeWidth={1.5} />
         <circle
           cx={0}
           cy={-halfH - 24}
           r={7}
-          fill="#3b82f6"
+          fill="#8b5cf6"
           stroke="#ffffff"
           strokeWidth={2}
           style={{ cursor: 'crosshair' }}
@@ -269,7 +269,7 @@ export const TransformGizmo: React.FC<TransformGizmoProps> = ({
           width={10}
           height={10}
           fill="#ffffff"
-          stroke="#3b82f6"
+          stroke="#8b5cf6"
           strokeWidth={2}
           style={{ cursor: 'nwse-resize' }}
           onPointerDown={(e) => handlePointerDownScale(e, 'nw')}
@@ -281,7 +281,7 @@ export const TransformGizmo: React.FC<TransformGizmoProps> = ({
           width={10}
           height={10}
           fill="#ffffff"
-          stroke="#3b82f6"
+          stroke="#8b5cf6"
           strokeWidth={2}
           style={{ cursor: 'nesw-resize' }}
           onPointerDown={(e) => handlePointerDownScale(e, 'ne')}
@@ -293,7 +293,7 @@ export const TransformGizmo: React.FC<TransformGizmoProps> = ({
           width={10}
           height={10}
           fill="#ffffff"
-          stroke="#3b82f6"
+          stroke="#8b5cf6"
           strokeWidth={2}
           style={{ cursor: 'nesw-resize' }}
           onPointerDown={(e) => handlePointerDownScale(e, 'sw')}
@@ -305,7 +305,7 @@ export const TransformGizmo: React.FC<TransformGizmoProps> = ({
           width={10}
           height={10}
           fill="#ffffff"
-          stroke="#3b82f6"
+          stroke="#8b5cf6"
           strokeWidth={2}
           style={{ cursor: 'nwse-resize' }}
           onPointerDown={(e) => handlePointerDownScale(e, 'se')}

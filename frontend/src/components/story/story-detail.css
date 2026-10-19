@@ -52,8 +52,8 @@
 }
 
 .tab:hover {
-  color: var(--color-text);
-  background: var(--color-surface-muted);
+  color: var(--color-accent);
+  background: var(--color-accent-soft);
 }
 
 .tab.active {

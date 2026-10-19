@@ -11,7 +11,8 @@ import { CharacterInstance, AnimationClip, VectorSceneData } from '../types/anim
 import * as editorService from '../services/editor.service';
 import { generateScenes } from '../services/content.service';
 import { generateCharacterReferenceImage } from '../services/character.service';
-import { recalculateContiguousTimeline, validateSceneTiming } from '../utils/timingEngine';
+import { recalculateContiguousTimeline, validateSceneTiming, calculateRippleEdit } from '../utils/timingEngine';
+import { EditorAudioManager } from '../utils/editorAudioManager';
 import { TopToolbar } from '../components/editor/TopToolbar';
 import { LeftAssetPanel } from '../components/editor/LeftAssetPanel';
 import { PreviewCanvas } from '../components/editor/PreviewCanvas';
@@ -43,6 +44,12 @@ export default function StoryDetailPage() {
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [previewMode, setPreviewMode] = useState<'scene' | 'export'>('scene');
   const [exportVideoUrl, setExportVideoUrl] = useState<string | null>(null);
+
+  // Master Volume & Audio Manager state
+  const [masterVolume, setMasterVolume] = useState<number>(1.0);
+  const [isMuted, setIsMuted] = useState<boolean>(false);
+  const [isRippleOn, setIsRippleOn] = useState<boolean>(true);
+  const audioManagerRef = useRef<EditorAudioManager | null>(null);
 
   // Background music state
   const [selectedMusic, setSelectedMusic] = useState<string | null>('gentle-storybook');
@@ -230,12 +237,40 @@ export default function StoryDetailPage() {
   useEffect(() => {
     if (scenes.length === 0) return;
     const sceneAtPlayhead = scenes.find(
-      (s) => currentTimeMs >= s.startMs && currentTimeMs < s.endMs
+      (s) => currentTimeMs >= s.startMs && (currentTimeMs < s.endMs || (currentTimeMs === totalDurationMs && currentTimeMs <= s.endMs))
     );
     if (sceneAtPlayhead && sceneAtPlayhead.sceneId !== activeSceneId) {
       setActiveSceneId(sceneAtPlayhead.sceneId);
     }
-  }, [currentTimeMs, scenes, activeSceneId]);
+  }, [currentTimeMs, scenes, activeSceneId, totalDurationMs]);
+
+  // ----------------------------------------------------
+  // Audio Manager Lifecycle & Multi-Track Audio Sync
+  // ----------------------------------------------------
+  useEffect(() => {
+    audioManagerRef.current = new EditorAudioManager();
+    return () => {
+      audioManagerRef.current?.destroy();
+      audioManagerRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!audioManagerRef.current) return;
+    if (previewMode === 'export') {
+      audioManagerRef.current.stopAll();
+      return;
+    }
+    audioManagerRef.current.syncPlayback({
+      scenes,
+      currentTimeMs,
+      isPlaying,
+      masterVolume,
+      isMuted,
+      selectedMusic,
+      musicVolume,
+    });
+  }, [scenes, currentTimeMs, isPlaying, masterVolume, isMuted, selectedMusic, musicVolume, previewMode]);
 
   // ----------------------------------------------------
   // High-Precision Playback Loop
@@ -259,7 +294,7 @@ export default function StoryDetailPage() {
         const nextTime = prev + delta;
         if (nextTime >= totalDurationMs) {
           setIsPlaying(false);
-          return 0; // Loop or stop at start
+          return totalDurationMs; // Clean stop at final boundary
         }
         return nextTime;
       });
@@ -298,7 +333,7 @@ export default function StoryDetailPage() {
     const clampedMs = Math.max(0, Math.min(newMs, totalDurationMs));
     setCurrentTimeMs(clampedMs);
     const sceneAtPlayhead = scenes.find(
-      (s) => clampedMs >= s.startMs && clampedMs < s.endMs
+      (s) => clampedMs >= s.startMs && (clampedMs < s.endMs || (clampedMs === totalDurationMs && clampedMs <= s.endMs))
     );
     if (sceneAtPlayhead && sceneAtPlayhead.sceneId !== activeSceneId) {
       setActiveSceneId(sceneAtPlayhead.sceneId);
@@ -583,10 +618,25 @@ export default function StoryDetailPage() {
   // Scene metadata update from Properties Inspector
   const handleUpdateActiveScene = (sceneId: string, updates: Partial<EditorScene>) => {
     pushHistorySnapshot(scenes);
-    const updated = scenes.map((s) => {
-      if (s.sceneId !== sceneId) return s;
-      return { ...s, ...updates };
-    });
+    let updated: EditorScene[];
+    if (isRippleOn && updates.endMs !== undefined) {
+      const targetScene = scenes.find((s) => s.sceneId === sceneId);
+      if (targetScene) {
+        const newDuration = Math.max(
+          1500,
+          updates.endMs - (updates.startMs !== undefined ? updates.startMs : targetScene.startMs)
+        );
+        const rippled = calculateRippleEdit(scenes, sceneId, newDuration);
+        updated = rippled.map((s) => (s.sceneId === sceneId ? { ...s, ...updates, endMs: s.startMs + newDuration } : s));
+      } else {
+        updated = scenes.map((s) => (s.sceneId !== sceneId ? s : { ...s, ...updates }));
+      }
+    } else {
+      updated = scenes.map((s) => {
+        if (s.sceneId !== sceneId) return s;
+        return { ...s, ...updates };
+      });
+    }
     setScenes(updated);
     triggerDebouncedSave(updated);
   };
@@ -776,26 +826,78 @@ export default function StoryDetailPage() {
     [scenes, selectedInstanceId, handleUpdateAnimationData]
   );
 
+  const handleUploadBackground = useCallback(
+    async (sceneId: string, file: File, fit: 'cover' | 'contain' = 'cover') => {
+      const res = await editorService.uploadSceneBackground(sceneId, file, fit);
+      if (res.scene) {
+        setScenes((prev) => {
+          const updated = prev.map((s) => (s.sceneId === sceneId ? { ...s, ...res.scene } : s));
+          triggerDebouncedSave(updated);
+          return updated;
+        });
+        if (activeSceneId === sceneId) {
+          editorService.getSceneVersions(sceneId).then(setActiveVersions).catch(() => {});
+        }
+      }
+    },
+    [activeSceneId, triggerDebouncedSave]
+  );
+
+  const handleSetBackground = useCallback(
+    async (sceneId: string, imageUrl: string, fit: 'cover' | 'contain' = 'cover') => {
+      const res = await editorService.setSceneBackground(sceneId, imageUrl, fit);
+      if (res.scene) {
+        setScenes((prev) => {
+          const updated = prev.map((s) => (s.sceneId === sceneId ? { ...s, ...res.scene } : s));
+          triggerDebouncedSave(updated);
+          return updated;
+        });
+        if (activeSceneId === sceneId) {
+          editorService.getSceneVersions(sceneId).then(setActiveVersions).catch(() => {});
+        }
+      }
+    },
+    [activeSceneId, triggerDebouncedSave]
+  );
+
+  const handleUpdateBackgroundFit = useCallback(
+    async (sceneId: string, fit: 'cover' | 'contain') => {
+      const res = await editorService.updateBackgroundFit(sceneId, fit);
+      if (res.scene) {
+        setScenes((prev) => {
+          const updated = prev.map((s) => (s.sceneId === sceneId ? { ...s, ...res.scene } : s));
+          triggerDebouncedSave(updated);
+          return updated;
+        });
+      }
+    },
+    [triggerDebouncedSave]
+  );
+
+  const handleRemoveBackground = useCallback(
+    async (sceneId: string) => {
+      const res = await editorService.removeSceneBackground(sceneId);
+      if (res.scene) {
+        setScenes((prev) => {
+          const updated = prev.map((s) => (s.sceneId === sceneId ? { ...s, ...res.scene } : s));
+          triggerDebouncedSave(updated);
+          return updated;
+        });
+        if (activeSceneId === sceneId) {
+          editorService.getSceneVersions(sceneId).then(setActiveVersions).catch(() => {});
+        }
+      }
+    },
+    [activeSceneId, triggerDebouncedSave]
+  );
+
   const handleSetBackgroundForScene = useCallback(
     (sceneId: string, imageUrl: string) => {
-      const targetScene = scenes.find((s) => s.sceneId === sceneId);
-      if (!targetScene) return;
-
-      const currentAnimData: VectorSceneData = targetScene.animationData || {
-        version: 1,
-        viewport: { width: 1280, height: 720 },
-        characterInstances: [],
-        animationClips: [],
-      };
-
-      const updatedAnimData: VectorSceneData = {
-        ...currentAnimData,
-        background: { imageUrl, fit: 'cover' },
-      };
-
-      handleUpdateAnimationData(sceneId, updatedAnimData);
+      handleSetBackground(sceneId, imageUrl, 'cover').catch((err) => {
+        console.error('Failed to set background for scene:', err);
+      });
     },
-    [scenes, handleUpdateAnimationData]
+    [handleSetBackground]
   );
 
   // ----------------------------------------------------
@@ -855,13 +957,26 @@ export default function StoryDetailPage() {
     }
   };
 
-  const handleGenerateVoice = async (sceneId: string) => {
+  const handleGenerateVoice = async (
+    sceneId: string,
+    options?: {
+      provider?: string;
+      voice?: string;
+      speed?: number;
+      effect?: 'normal' | 'robot' | 'cartoon';
+      lang?: string;
+    }
+  ) => {
     const targetScene = scenes.find((s) => s.sceneId === sceneId);
     if (!targetScene) return;
 
     try {
       setGeneratingVoiceForScene(sceneId);
-      const result = await editorService.generateSceneVoice(sceneId, targetScene.narration);
+      const result = await editorService.generateSceneVoice(
+        sceneId,
+        targetScene.narration,
+        options
+      );
 
       // If speech duration exceeds scene duration, automatically expand the scene
       const currentDuration = targetScene.endMs - targetScene.startMs;
@@ -1063,7 +1178,7 @@ export default function StoryDetailPage() {
             style={{
               width: '40px',
               height: '40px',
-              border: '3px solid #3b82f6',
+              border: '3px solid #8b5cf6',
               borderTopColor: 'transparent',
               borderRadius: '50%',
               margin: '0 auto 16px',
@@ -1184,6 +1299,10 @@ export default function StoryDetailPage() {
             isPlaying={isPlaying}
             onTogglePlay={handleTogglePlay}
             onSeek={handleSeek}
+            masterVolume={masterVolume}
+            isMuted={isMuted}
+            onVolumeChange={setMasterVolume}
+            onToggleMute={() => setIsMuted((prev) => !prev)}
             onGenerateImage={() => activeSceneId && handleGenerateImage(activeSceneId)}
             isGeneratingImage={generatingImageForScene === activeSceneId}
             isGeneratingVideo={generatingVideoForScene === activeSceneId}
@@ -1209,7 +1328,7 @@ export default function StoryDetailPage() {
           >
             <div style={{ textAlign: 'center', maxWidth: '420px' }}>
               <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '16px' }}>
-                <FilmIcon size={48} color="#3b82f6" />
+                <FilmIcon size={48} color="#8b5cf6" />
               </div>
               <h3 style={{ color: 'var(--ed-text)', margin: '0 0 8px', fontSize: '18px' }}>
                 Your Storyboard is Empty
@@ -1241,9 +1360,14 @@ export default function StoryDetailPage() {
           scene={activeScene}
           characters={story.characters || []}
           playheadMs={currentTimeMs}
+          storyId={story.storyId}
           onUpdateScene={handleUpdateActiveScene}
+          onUploadBackground={handleUploadBackground}
+          onSetBackground={handleSetBackground}
+          onUpdateBackgroundFit={handleUpdateBackgroundFit}
+          onRemoveBackground={handleRemoveBackground}
           onGenerateImage={(scId, prompt) => handleGenerateImage(scId, prompt)}
-          onGenerateVoice={(scId) => handleGenerateVoice(scId)}
+          onGenerateVoice={(scId, opts) => handleGenerateVoice(scId, opts)}
           onRemoveVoice={handleRemoveVoice}
           onGenerateVideo={(scId) => handleGenerateVideo(scId)}
           onSplitScene={handleSplitScene}
@@ -1260,6 +1384,8 @@ export default function StoryDetailPage() {
           onUpdateAnimationData={handleUpdateAnimationData}
           onAddCharacterToScene={handleAddCharacterToScene}
           onRemoveCharacterFromScene={handleRemoveCharacterFromScene}
+          isRippleOn={isRippleOn}
+          onToggleRipple={() => setIsRippleOn((prev) => !prev)}
         />
       </div>
 
@@ -1278,6 +1404,8 @@ export default function StoryDetailPage() {
         selectedMusic={selectedMusic}
         selectedInstanceId={selectedInstanceId}
         onSelectInstance={handleSelectInstance}
+        isRippleOn={isRippleOn}
+        onToggleRipple={() => setIsRippleOn((prev) => !prev)}
       />
 
       {/* 4. Real Media Assembly & Video Export Modal */}

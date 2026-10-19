@@ -148,13 +148,21 @@ characterRouter.put("/:id", async (req, res) => {
       }
     }
 
+    let updatedCanonical = canonicalAppearance !== undefined ? canonicalAppearance : existing.canonicalAppearance;
+    if (req.body.voiceConfig) {
+      updatedCanonical = {
+        ...(typeof updatedCanonical === 'object' && updatedCanonical !== null ? updatedCanonical : {}),
+        voiceConfig: req.body.voiceConfig,
+      };
+    }
+
     const character = await updateCharacter(id, {
       name: name ? name.trim() : existing.name,
       species: species || existing.species,
       personality: personality || existing.personality,
       visualDescription: visualDescription || existing.visualDescription,
       distinctiveFeatures: distinctiveFeatures !== undefined ? distinctiveFeatures : existing.distinctiveFeatures,
-      canonicalAppearance: canonicalAppearance !== undefined ? canonicalAppearance : existing.canonicalAppearance,
+      canonicalAppearance: updatedCanonical,
     });
 
     return res.json(character);
@@ -164,6 +172,79 @@ characterRouter.put("/:id", async (req, res) => {
     }
     console.error(error);
     return res.status(500).json({ message: "Failed to update character" });
+  }
+});
+
+// GET character default voice configuration
+characterRouter.get("/:id/voice", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const character = await getCharacterById(id);
+    if (!character) {
+      return res.status(404).json({ message: "Character not found" });
+    }
+    const voiceConfig = (character.canonicalAppearance as any)?.voiceConfig || null;
+    return res.json({
+      characterId: character.id,
+      name: character.name,
+      voiceConfig: voiceConfig || {
+        voiceId: character.id === 'pip_the_bear' ? 'bm_george' : 'af_heart',
+        speed: 1.0,
+        style: 'calm',
+        effect: 'normal',
+      },
+    });
+  } catch (error: any) {
+    console.error(error);
+    return res.status(500).json({ message: "Failed to fetch character voice" });
+  }
+});
+
+// PUT update character default voice configuration
+characterRouter.put("/:id/voice", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { voiceId, speed, style, effect } = req.body;
+
+    if (!voiceId) {
+      return res.status(400).json({ message: "voiceId is required" });
+    }
+
+    const existing = await getCharacterById(id);
+    if (!existing) {
+      return res.status(404).json({ message: "Character not found" });
+    }
+
+    const existingCanonical =
+      typeof existing.canonicalAppearance === "object" && existing.canonicalAppearance !== null
+        ? existing.canonicalAppearance
+        : {};
+
+    const newVoiceConfig = {
+      voiceId,
+      speed: typeof speed === "number" ? speed : 1.0,
+      style: style || "calm",
+      effect: effect || "normal",
+    };
+
+    const updatedCanonical = {
+      ...existingCanonical,
+      voiceConfig: newVoiceConfig,
+    };
+
+    const updated = await updateCharacter(id, {
+      canonicalAppearance: updatedCanonical,
+    });
+
+    return res.json({
+      success: true,
+      characterId: updated.id,
+      voiceConfig: newVoiceConfig,
+      character: updated,
+    });
+  } catch (error: any) {
+    console.error(error);
+    return res.status(500).json({ message: "Failed to update character voice" });
   }
 });
 

@@ -36,6 +36,7 @@ interface CharacterBuilderModalProps {
 }
 
 type BuilderTab =
+  | 'identity'
   | 'head'
   | 'neck'
   | 'hair'
@@ -44,6 +45,38 @@ type BuilderTab =
   | 'arms'
   | 'legs'
   | 'accessories';
+
+export const ALL_SPECIES = [
+  'human',
+  'bear',
+  'animal',
+  'robot',
+  'fantasy creature',
+  'alien',
+  'plant',
+  'object',
+  'other',
+] as const;
+
+export const CHARACTERISTIC_PRESETS = [
+  'Brave',
+  'Cheerful',
+  'Helpful',
+  'Loyal',
+  'Curious',
+  'Kind',
+  'Wise',
+  'Playful',
+  'Shy',
+  'Adventurous',
+  'Smart',
+  'Funny',
+  'Strong',
+  'Gentle',
+  'Creative',
+  'Energetic',
+  'Calm',
+];
 
 const COLOR_SWATCHES = {
   skin: ['#fed7aa', '#fde68a', '#fdba74', '#f59e0b', '#d97706', '#b45309', '#78350f', '#451a03', '#94a3b8', '#a7f3d0'],
@@ -210,6 +243,30 @@ export const CharacterBuilderModal: React.FC<CharacterBuilderModalProps> = ({
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
     };
   }, [isOpen]);
+
+  const toggleCharacteristic = (trait: string) => {
+    const existing = personality
+      .split(/[,;&]+/)
+      .map((t) => t.trim())
+      .filter(Boolean);
+    const traitLower = trait.toLowerCase();
+    const index = existing.findIndex((t) => t.toLowerCase() === traitLower);
+    let next: string[];
+    if (index >= 0) {
+      next = existing.filter((_, i) => i !== index);
+    } else {
+      next = [...existing, trait];
+    }
+    setPersonality(next.join(', '));
+  };
+
+  const isTraitActive = (trait: string) => {
+    return personality
+      .toLowerCase()
+      .split(/[,;&]+/)
+      .map((t) => t.trim())
+      .includes(trait.toLowerCase());
+  };
 
   // Update appearance with undo/redo stack
   const updateAppearance = useCallback(
@@ -413,7 +470,9 @@ export const CharacterBuilderModal: React.FC<CharacterBuilderModalProps> = ({
         {/* Top Header Bar */}
         <div className="char-builder-header">
           <div className="char-builder-header-left">
-            <span className="char-builder-badge">Vector Rig Studio</span>
+            <span className="char-builder-badge">
+              {character ? 'Edit Character' : 'Vector Rig Studio'}
+            </span>
             <input
               type="text"
               className="char-builder-name-input"
@@ -421,6 +480,17 @@ export const CharacterBuilderModal: React.FC<CharacterBuilderModalProps> = ({
               onChange={(e) => setName(e.target.value)}
               placeholder="Character Name..."
             />
+            <span
+              className="char-builder-badge"
+              style={{
+                background: 'rgba(139, 92, 246, 0.2)',
+                border: '1px solid rgba(139, 92, 246, 0.4)',
+                color: '#c4b5fd',
+              }}
+              title="Species Archetype"
+            >
+              {species || 'Human'}
+            </span>
           </div>
 
           <div className="char-builder-header-center">
@@ -505,6 +575,13 @@ export const CharacterBuilderModal: React.FC<CharacterBuilderModalProps> = ({
             <div className="char-builder-tabs">
               <button
                 type="button"
+                className={`char-builder-tab ${activeTab === 'identity' ? 'active' : ''}`}
+                onClick={() => setActiveTab('identity')}
+              >
+                🏷️ Identity
+              </button>
+              <button
+                type="button"
                 className={`char-builder-tab ${activeTab === 'head' ? 'active' : ''}`}
                 onClick={() => setActiveTab('head')}
               >
@@ -563,13 +640,89 @@ export const CharacterBuilderModal: React.FC<CharacterBuilderModalProps> = ({
 
             {/* Tab Controls Content */}
             <div className="char-builder-tab-body">
+              {/* 0. IDENTITY TAB */}
+              {activeTab === 'identity' && (
+                <div className="char-builder-section">
+                  <div className="char-control-group">
+                    <label>Character Name</label>
+                    <input
+                      type="text"
+                      className="char-builder-input"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      placeholder="e.g. Sammy, Pip, Sparky..."
+                    />
+                  </div>
+
+                  <div className="char-control-group">
+                    <label>Species / Archetype</label>
+                    <div className="char-pill-row">
+                      {ALL_SPECIES.map((s) => (
+                        <button
+                          key={s}
+                          type="button"
+                          className={`char-pill-btn ${appearance.species === s ? 'active' : ''}`}
+                          onClick={() => {
+                            updateAppearance((a) => ({ ...a, species: s }));
+                            setSpecies(s.charAt(0).toUpperCase() + s.slice(1));
+                          }}
+                        >
+                          {s}
+                        </button>
+                      ))}
+                    </div>
+                    {appearance.species === 'other' && (
+                      <div style={{ marginTop: '8px' }}>
+                        <input
+                          type="text"
+                          className="char-builder-input"
+                          value={species}
+                          onChange={(e) => setSpecies(e.target.value)}
+                          placeholder="Custom species name (e.g. Dragon, Elf, Fox)..."
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="char-control-group">
+                    <label>Characteristics & Personality Traits</label>
+                    <div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '6px' }}>
+                      Click quick traits to toggle or type custom characteristics below:
+                    </div>
+                    <div className="char-trait-chip-row">
+                      {CHARACTERISTIC_PRESETS.map((trait) => (
+                        <button
+                          key={trait}
+                          type="button"
+                          className={`char-trait-chip ${isTraitActive(trait) ? 'active' : ''}`}
+                          onClick={() => toggleCharacteristic(trait)}
+                        >
+                          {isTraitActive(trait) ? '✓ ' : '+ '}
+                          {trait}
+                        </button>
+                      ))}
+                    </div>
+                    <div style={{ marginTop: '8px' }}>
+                      <label style={{ fontSize: '10px', color: '#64748b' }}>Custom Traits & Description</label>
+                      <input
+                        type="text"
+                        className="char-builder-input"
+                        value={personality}
+                        onChange={(e) => setPersonality(e.target.value)}
+                        placeholder="e.g. Brave, cheerful, loyal and adventurous..."
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* 1. HEAD TAB */}
               {activeTab === 'head' && (
                 <div className="char-builder-section">
                   <div className="char-control-group">
                     <label>Species / Archetype</label>
                     <div className="char-pill-row">
-                      {(['human', 'bear', 'robot', 'animal'] as const).map((s) => (
+                      {ALL_SPECIES.map((s) => (
                         <button
                           key={s}
                           type="button"

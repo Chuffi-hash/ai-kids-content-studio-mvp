@@ -70,9 +70,9 @@
 }
 
 .metadata-visual {
-  background: rgba(59, 130, 246, 0.15);
-  border-color: rgba(59, 130, 246, 0.35);
-  color: #93c5fd;
+  background: rgba(139, 92, 246, 0.16);
+  border-color: rgba(139, 92, 246, 0.35);
+  color: #c4b5fd;
 }
 
 .scene-counter {
@@ -169,8 +169,8 @@
 }
 
 .nav-button:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: var(--color-border-strong, #3b82f6);
+  background: var(--color-accent-soft, rgba(139, 92, 246, 0.14));
+  border-color: var(--color-accent, #8b5cf6);
   color: #ffffff;
   transform: translateY(-1px);
 }
@@ -200,8 +200,8 @@
 }
 
 .progress-dot.active {
-  background: #3b82f6;
-  box-shadow: 0 0 8px rgba(59, 130, 246, 0.5);
+  background: var(--color-accent, #8b5cf6);
+  box-shadow: 0 0 8px rgba(139, 92, 246, 0.5);
   transform: scale(1.2);
 }
 

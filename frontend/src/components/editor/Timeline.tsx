@@ -19,6 +19,20 @@ import {
   SparklesIcon,
 } from '../common/Icons';
 
+function getExpressionEmoji(expr?: string): string {
+  switch (expr) {
+    case 'happy': return '😊';
+    case 'sad': return '😢';
+    case 'angry': return '😠';
+    case 'surprised': return '😲';
+    case 'scared': return '😨';
+    case 'confused': return '🤨';
+    case 'curious': return '🤔';
+    case 'neutral': return '😐';
+    default: return '😐';
+  }
+}
+
 interface TimelineProps {
   scenes: EditorScene[];
   activeSceneId: string | null;
@@ -33,6 +47,8 @@ interface TimelineProps {
   selectedMusic: string | null;
   selectedInstanceId?: string | null;
   onSelectInstance?: (instanceId: string | null) => void;
+  isRippleOn?: boolean;
+  onToggleRipple?: () => void;
 }
 
 export const Timeline: React.FC<TimelineProps> = ({
@@ -49,10 +65,14 @@ export const Timeline: React.FC<TimelineProps> = ({
   selectedMusic,
   selectedInstanceId,
   onSelectInstance,
+  isRippleOn: isRippleOnProp,
+  onToggleRipple,
 }) => {
   // Zoom: pixels per second
   const [pxPerSec, setPxPerSec] = useState<number>(45);
-  const [isRippleOn, setIsRippleOn] = useState<boolean>(true);
+  const [localIsRippleOn, setLocalIsRippleOn] = useState<boolean>(true);
+  const isRippleOn = isRippleOnProp !== undefined ? isRippleOnProp : localIsRippleOn;
+  const handleToggleRipple = onToggleRipple || (() => setLocalIsRippleOn((prev) => !prev));
   const [draggedSceneId, setDraggedSceneId] = useState<string | null>(null);
 
   const rulerRef = useRef<HTMLDivElement>(null);
@@ -136,6 +156,133 @@ export const Timeline: React.FC<TimelineProps> = ({
         );
         onUpdateScenes(updated);
       }
+    };
+
+    const onMouseUp = () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  };
+
+  // Dragging dialogue clip horizontally within scene
+  const handleDialogueMouseDown = (
+    e: React.MouseEvent,
+    scene: EditorScene,
+    dlgId: string
+  ) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onSelectScene(scene.sceneId);
+
+    const dialogues = scene.animationData?.dialogueLines || [];
+    const targetDlg = dialogues.find((d) => d.id === dlgId);
+    if (!targetDlg) return;
+
+    if (targetDlg.characterInstanceId && onSelectInstance) {
+      onSelectInstance(targetDlg.characterInstanceId);
+    }
+
+    const startX = e.clientX;
+    const initialStartMs = targetDlg.startMs || 0;
+    const sceneDuration = scene.endMs - scene.startMs;
+    const maxStart = Math.max(0, sceneDuration - 300);
+
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      const deltaPx = moveEvent.clientX - startX;
+      const deltaMs = pxToMs(deltaPx);
+      let newStartMs = initialStartMs + deltaMs;
+
+      // Snap to 0ms if within 150ms of scene start
+      if (newStartMs < 150) {
+        newStartMs = 0;
+      } else {
+        // Snap to nearest 100ms grid
+        newStartMs = Math.round(newStartMs / 100) * 100;
+      }
+      newStartMs = Math.max(0, Math.min(maxStart, newStartMs));
+
+      const updatedDialogues = dialogues.map((d) =>
+        d.id === dlgId ? { ...d, startMs: newStartMs } : d
+      );
+
+      const updatedScenes: EditorScene[] = scenes.map((s) => {
+        if (s.sceneId !== scene.sceneId) return s;
+        const baseAnim = s.animationData || {
+          version: 1 as const,
+          viewport: { width: 1280 as const, height: 720 as const },
+          characterInstances: [],
+          animationClips: [],
+        };
+        return {
+          ...s,
+          animationData: {
+            ...baseAnim,
+            version: 1 as const,
+            dialogueLines: updatedDialogues,
+          },
+        };
+      });
+
+      onUpdateScenes(updatedScenes);
+    };
+
+    const onMouseUp = () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  };
+
+  // Trimming / resizing dialogue clip right handle
+  const handleDialogueResizeRightMouseDown = (
+    e: React.MouseEvent,
+    scene: EditorScene,
+    dlgId: string
+  ) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const dialogues = scene.animationData?.dialogueLines || [];
+    const targetDlg = dialogues.find((d) => d.id === dlgId);
+    if (!targetDlg) return;
+
+    const startX = e.clientX;
+    const initialDuration = targetDlg.durationMs || 3000;
+
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      const deltaPx = moveEvent.clientX - startX;
+      const deltaMs = pxToMs(deltaPx);
+      let newDuration = Math.round((initialDuration + deltaMs) / 50) * 50;
+      newDuration = Math.max(500, Math.min(30000, newDuration));
+
+      const updatedDialogues = dialogues.map((d) =>
+        d.id === dlgId ? { ...d, durationMs: newDuration } : d
+      );
+
+      const updatedScenes: EditorScene[] = scenes.map((s) => {
+        if (s.sceneId !== scene.sceneId) return s;
+        const baseAnim = s.animationData || {
+          version: 1 as const,
+          viewport: { width: 1280 as const, height: 720 as const },
+          characterInstances: [],
+          animationClips: [],
+        };
+        return {
+          ...s,
+          animationData: {
+            ...baseAnim,
+            version: 1 as const,
+            dialogueLines: updatedDialogues,
+          },
+        };
+      });
+
+      onUpdateScenes(updatedScenes);
     };
 
     const onMouseUp = () => {
@@ -238,11 +385,11 @@ export const Timeline: React.FC<TimelineProps> = ({
             type="button"
             className="ed-tool-btn"
             style={{
-              background: isRippleOn ? 'rgba(59, 130, 246, 0.2)' : 'transparent',
-              borderColor: isRippleOn ? '#3b82f6' : 'var(--ed-border)',
-              color: isRippleOn ? '#93c5fd' : 'var(--ed-text-muted)',
+              background: isRippleOn ? 'rgba(139, 92, 246, 0.2)' : 'transparent',
+              borderColor: isRippleOn ? '#8b5cf6' : 'var(--ed-border)',
+              color: isRippleOn ? '#c4b5fd' : 'var(--ed-text-muted)',
             }}
-            onClick={() => setIsRippleOn(!isRippleOn)}
+            onClick={handleToggleRipple}
             title="When ripple is ON, resizing a scene shifts all subsequent scenes"
           >
             Ripple Edit: {isRippleOn ? 'ON' : 'OFF'}
@@ -270,19 +417,23 @@ export const Timeline: React.FC<TimelineProps> = ({
         {/* Sticky Left Track Labels */}
         <div className="ed-tracks-headers">
           <div className="ed-track-header ruler-header">Time</div>
-          <div className="ed-track-header" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+          <div className="ed-track-header track-visuals">
             <FilmIcon size={13} />
             <span>Visuals</span>
           </div>
-          <div className="ed-track-header" style={{ height: '48px', display: 'flex', alignItems: 'center', gap: '5px' }}>
-            <SparklesIcon size={13} color="#60a5fa" />
+          <div className="ed-track-header track-rig">
+            <SparklesIcon size={13} color="#a78bfa" />
             <span>2D Rig</span>
           </div>
-          <div className="ed-track-header" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+          <div className="ed-track-header track-dialogue">
+            <span style={{ fontSize: '13px' }}>👄</span>
+            <span>Dialogue</span>
+          </div>
+          <div className="ed-track-header track-narration">
             <MicIcon size={13} />
             <span>Narration</span>
           </div>
-          <div className="ed-track-header" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+          <div className="ed-track-header track-soundtrack">
             <MusicIcon size={13} />
             <span>Soundtrack</span>
           </div>
@@ -316,7 +467,7 @@ export const Timeline: React.FC<TimelineProps> = ({
           </div>
 
           {/* Track 1: Visuals (Scene Clips) */}
-          <div className="ed-track-row">
+          <div className="ed-track-row track-visuals">
             {scenes.map((scene) => {
               const isSelected = scene.sceneId === activeSceneId;
               const leftPx = msToPx(scene.startMs);
@@ -374,7 +525,7 @@ export const Timeline: React.FC<TimelineProps> = ({
           </div>
 
           {/* Track 2: 2D Characters & Animation Clips */}
-          <div className="ed-track-row" style={{ height: '48px' }}>
+          <div className="ed-track-row track-rig">
             {scenes.map((scene) => {
               const instances = scene.animationData?.characterInstances || [];
               const clips = scene.animationData?.animationClips || [];
@@ -390,6 +541,12 @@ export const Timeline: React.FC<TimelineProps> = ({
                 const action = clip?.action || 'idle';
                 const isMotionPath = clip?.action === 'walk' && clip.motionMode === 'motion_path';
 
+                const cues = scene.animationData?.expressionCues || [];
+                const charCue = cues.find(
+                  (c) => c.characterInstanceId === inst.instanceId || c.characterId === inst.characterId
+                );
+                const activeExpr = charCue?.expression;
+
                 return (
                   <div
                     key={`char-clip-${inst.instanceId}`}
@@ -398,24 +555,25 @@ export const Timeline: React.FC<TimelineProps> = ({
                       left: `${leftPx}px`,
                       width: `${Math.max(28, widthPx)}px`,
                       position: 'absolute',
+                      top: '5px',
                       height: '36px',
                       borderRadius: '4px',
                       background: isSelected
-                        ? 'rgba(59, 130, 246, 0.35)'
-                        : 'rgba(59, 130, 246, 0.18)',
+                        ? 'rgba(139, 92, 246, 0.35)'
+                        : 'rgba(139, 92, 246, 0.18)',
                       border: isSelected
-                        ? '2px solid #3b82f6'
-                        : '1px solid rgba(59, 130, 246, 0.45)',
+                        ? '2px solid #8b5cf6'
+                        : '1px solid rgba(139, 92, 246, 0.45)',
                       display: 'flex',
                       alignItems: 'center',
                       padding: '0 8px',
                       gap: '6px',
                       fontSize: '11px',
-                      color: '#93c5fd',
+                      color: '#c4b5fd',
                       cursor: 'pointer',
                       overflow: 'hidden',
                       whiteSpace: 'nowrap',
-                      boxShadow: isSelected ? '0 0 10px rgba(59, 130, 246, 0.5)' : undefined,
+                      boxShadow: isSelected ? '0 0 10px rgba(139, 92, 246, 0.5)' : undefined,
                       zIndex: isSelected ? 5 : 2,
                     }}
                     onClick={() => {
@@ -439,6 +597,24 @@ export const Timeline: React.FC<TimelineProps> = ({
                     >
                       {action} {isMotionPath ? '➔' : ''}
                     </span>
+                    {activeExpr && (
+                      <span
+                        style={{
+                          fontSize: '9px',
+                          fontWeight: 600,
+                          padding: '1px 4px',
+                          borderRadius: '3px',
+                          background: 'rgba(236, 72, 153, 0.25)',
+                          color: '#fbcfe8',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '2px',
+                        }}
+                        title={`Expression: ${activeExpr}`}
+                      >
+                        {getExpressionEmoji(activeExpr)} {activeExpr}
+                      </span>
+                    )}
                     <span style={{ fontSize: '10px', opacity: 0.8, fontFamily: 'monospace' }}>
                       {formatDurationHuman(clipDurationMs)}
                     </span>
@@ -448,8 +624,113 @@ export const Timeline: React.FC<TimelineProps> = ({
             })}
           </div>
 
-          {/* Track 3: Narration Voice */}
-          <div className="ed-track-row">
+          {/* Track: Dialogue & Lip-Sync */}
+          <div className="ed-track-row track-dialogue">
+            {scenes.map((scene) => {
+              const dialogues = scene.animationData?.dialogueLines || [];
+              if (dialogues.length === 0) return null;
+              const sceneDuration = scene.endMs - scene.startMs;
+
+              return dialogues.map((dlg) => {
+                const dlgStartMs = scene.startMs + (dlg.startMs || 0);
+                const dlgDurationMs = dlg.durationMs || 3000;
+                const leftPx = msToPx(dlgStartMs);
+                const widthPx = msToPx(dlgDurationMs);
+                const isSelected = dlg.characterInstanceId === selectedInstanceId;
+                const visemeCount = dlg.visemeCues?.length || 0;
+                const isOverflow = (dlg.startMs || 0) + dlgDurationMs > sceneDuration;
+                const hasAudio = Boolean(dlg.audioUrl);
+
+                return (
+                  <div
+                    key={`dlg-clip-${dlg.id}`}
+                    className={`ed-dialogue-block ${isSelected ? 'selected' : ''} ${isOverflow ? 'overflow' : ''}`}
+                    style={{
+                      left: `${leftPx}px`,
+                      width: `${Math.max(30, widthPx)}px`,
+                      position: 'absolute',
+                      top: '6px',
+                      height: '32px',
+                      borderRadius: '4px',
+                      background: isOverflow
+                        ? 'rgba(239, 68, 68, 0.25)'
+                        : isSelected
+                        ? 'rgba(236, 72, 153, 0.35)'
+                        : 'rgba(236, 72, 153, 0.18)',
+                      border: isOverflow
+                        ? '2px solid #ef4444'
+                        : isSelected
+                        ? '2px solid #ec4899'
+                        : '1px solid rgba(236, 72, 153, 0.45)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      padding: '0 8px',
+                      paddingRight: '12px',
+                      gap: '6px',
+                      fontSize: '11px',
+                      color: isOverflow ? '#fca5a5' : '#fbcfe8',
+                      overflow: 'hidden',
+                      whiteSpace: 'nowrap',
+                      boxShadow: isSelected ? '0 0 10px rgba(236, 72, 153, 0.5)' : undefined,
+                      zIndex: isSelected ? 5 : 2,
+                    }}
+                    onMouseDown={(e) => handleDialogueMouseDown(e, scene, dlg.id)}
+                    title={`${dlg.characterName}: "${dlg.text}" (Offset: +${formatDurationHuman(dlg.startMs || 0)}, Dur: ${formatDurationHuman(dlgDurationMs)})${isOverflow ? ' - EXCEEDS SCENE DURATION!' : ''}`}
+                  >
+                    <span style={{ fontSize: '12px' }}>👄</span>
+                    <span style={{ fontWeight: 600 }}>{dlg.characterName}:</span>
+                    <span style={{ opacity: 0.9, fontStyle: 'italic' }}>"{dlg.text}"</span>
+                    <span
+                      style={{
+                        fontSize: '9px',
+                        opacity: 0.8,
+                        fontFamily: 'monospace',
+                        background: 'rgba(0, 0, 0, 0.25)',
+                        padding: '1px 4px',
+                        borderRadius: '3px',
+                      }}
+                    >
+                      +{((dlg.startMs || 0) / 1000).toFixed(1)}s | {(dlgDurationMs / 1000).toFixed(1)}s
+                    </span>
+                    {hasAudio ? (
+                      <span title="Dialogue audio generated" style={{ color: '#34d399', fontSize: '10px' }}>🔊</span>
+                    ) : (
+                      <span title="No audio generated" style={{ color: '#94a3b8', fontSize: '10px' }}>🔇</span>
+                    )}
+                    {visemeCount > 0 && (
+                      <span
+                        style={{
+                          fontSize: '9px',
+                          fontWeight: 700,
+                          padding: '1px 4px',
+                          borderRadius: '3px',
+                          background: 'rgba(255, 255, 255, 0.12)',
+                          color: '#a7f3d0',
+                        }}
+                      >
+                        {visemeCount}v
+                      </span>
+                    )}
+                    {isOverflow && (
+                      <span style={{ display: 'inline-flex', alignItems: 'center' }} title="Exceeds scene duration">
+                        <AlertTriangleIcon size={12} color="#ef4444" />
+                      </span>
+                    )}
+
+                    {/* Right trim handle */}
+                    <div
+                      className="ed-dialogue-handle right"
+                      onMouseDown={(e) => handleDialogueResizeRightMouseDown(e, scene, dlg.id)}
+                      title="Drag to trim dialogue duration"
+                    />
+                  </div>
+                );
+              });
+            })}
+          </div>
+
+          {/* Track 4: Narration Voice */}
+          <div className="ed-track-row track-narration">
             {scenes.map((scene) => {
               if (!scene.narration && !scene.audioUrl) return null;
               const isSelected = scene.sceneId === activeSceneId;
@@ -493,7 +774,7 @@ export const Timeline: React.FC<TimelineProps> = ({
           </div>
 
           {/* Track 3: Soundtrack */}
-          <div className="ed-track-row">
+          <div className="ed-track-row track-soundtrack">
             {selectedMusic && selectedMusic !== 'none' && totalDurationMs > 0 && (
               <div
                 className="ed-music-block"

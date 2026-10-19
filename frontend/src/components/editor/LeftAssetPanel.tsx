@@ -409,7 +409,7 @@ export const LeftAssetPanel: React.FC<LeftAssetPanelProps> = ({
                   type="button"
                   className="ed-tool-btn"
                   onClick={onOpenCharacterBuilder}
-                  style={{ fontSize: '10px', background: 'rgba(59, 130, 246, 0.2)', borderColor: '#3b82f6', color: '#60a5fa' }}
+                  style={{ fontSize: '10px', background: 'rgba(139, 92, 246, 0.16)', borderColor: '#8b5cf6', color: '#c4b5fd' }}
                 >
                   + Rig Studio
                 </button>
@@ -417,7 +417,7 @@ export const LeftAssetPanel: React.FC<LeftAssetPanelProps> = ({
             </div>
 
             {/* Pip the Bear */}
-            <div className="ed-character-card" style={{ border: '1px solid #3b82f6', background: 'rgba(59, 130, 246, 0.08)' }}>
+            <div className="ed-character-card" style={{ border: '1px solid #8b5cf6', background: 'rgba(139, 92, 246, 0.08)' }}>
               <div className="ed-char-avatar" style={{ background: '#78350f', color: '#fef3c7', fontSize: '20px' }}>
                 🐻
               </div>
@@ -512,8 +512,8 @@ export const LeftAssetPanel: React.FC<LeftAssetPanelProps> = ({
                           className="ed-tool-btn"
                           style={{
                             fontSize: '10px',
-                            background: isAttached ? 'rgba(59, 130, 246, 0.3)' : 'transparent',
-                            borderColor: isAttached ? '#3b82f6' : 'var(--ed-border)',
+                            background: isAttached ? 'rgba(139, 92, 246, 0.25)' : 'transparent',
+                            borderColor: isAttached ? '#8b5cf6' : 'var(--ed-border)',
                           }}
                           onClick={() => activeScene && onToggleCharacterForScene(char.id, activeScene.sceneId)}
                         >
@@ -844,12 +844,13 @@ export const LeftAssetPanel: React.FC<LeftAssetPanelProps> = ({
               </div>
               <input
                 type="range"
+                className="ed-inspector-slider"
                 min="0"
                 max="1"
                 step="0.05"
                 value={musicVolume}
                 onChange={(e) => onMusicVolumeChange(parseFloat(e.target.value))}
-                style={{ width: '100%', accentColor: 'var(--ed-accent)', marginTop: '8px' }}
+                style={{ marginTop: '8px' }}
               />
             </div>
           </>

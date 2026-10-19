@@ -176,7 +176,7 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
           )}
           {saveStatus === 'saving' && (
             <>
-              <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#3b82f6', display: 'inline-block', animation: 'pulse 1.5s infinite' }} />
+              <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#8b5cf6', display: 'inline-block', animation: 'pulse 1.5s infinite' }} />
               <span>Saving...</span>
             </>
           )}
@@ -244,7 +244,7 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
                   width: '40px',
                   background: '#1e293b',
                   color: 'white',
-                  border: '1px solid #3b82f6',
+                  border: '1px solid #8b5cf6',
                   borderRadius: '3px',
                   padding: '2px 4px',
                   fontSize: '11px',

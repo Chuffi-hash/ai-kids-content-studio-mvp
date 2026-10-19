@@ -650,6 +650,7 @@ export function buildRigFromAppearance(
   const eyeY = baseHeadY;
   const leftEyeX = -12 * headSize;
   const rightEyeX = 12 * headSize;
+  const eyeStartIdx = headShapes.length;
 
   if (app.eyes.style === 'dot') {
     headShapes.push(
@@ -735,8 +736,12 @@ export function buildRigFromAppearance(
       { type: 'circle', cx: rightEyeX - 1.5, cy: eyeY - 2, r: eyeR * 0.4, fill: '#ffffff' }
     );
   }
+  for (let i = eyeStartIdx; i < headShapes.length; i++) {
+    headShapes[i].tag = 'eyes';
+  }
 
   // Eyebrows (Issue 1: distinct eyebrow styles)
+  const browStartIdx = headShapes.length;
   const browY = baseHeadY - 10 * headSize;
   const browColor = app.eyebrows.color || hairColor;
 
@@ -762,8 +767,12 @@ export function buildRigFromAppearance(
       { type: 'path', d: `M ${rightEyeX - 6} ${browY} Q ${rightEyeX} ${browY - 3} ${rightEyeX + 6} ${browY}`, stroke: browColor, strokeWidth: 2.2, strokeLinecap: 'round', fill: 'none' }
     );
   }
+  for (let i = browStartIdx; i < headShapes.length; i++) {
+    headShapes[i].tag = 'eyebrows';
+  }
 
   // Nose (Issue 1: distinct nose styles including oval and button)
+  const noseStartIdx = headShapes.length;
   const noseY = baseHeadY + 6;
   const noseColor = app.nose.color || '#d97706';
 
@@ -816,8 +825,12 @@ export function buildRigFromAppearance(
       }
     );
   }
+  for (let i = noseStartIdx; i < headShapes.length; i++) {
+    headShapes[i].tag = 'nose';
+  }
 
   // Mouth (Issue 1: distinct mouth expressions)
+  const mouthStartIdx = headShapes.length;
   const mouthY = baseHeadY + 16;
   const mouthColor = app.mouth.color || '#b91c1c';
 
@@ -876,6 +889,9 @@ export function buildRigFromAppearance(
       strokeLinecap: 'round',
       fill: 'none',
     });
+  }
+  for (let i = mouthStartIdx; i < headShapes.length; i++) {
+    headShapes[i].tag = 'mouth';
   }
 
   // Accessories: Blush & Freckles

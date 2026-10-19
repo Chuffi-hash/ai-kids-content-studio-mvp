@@ -24,16 +24,7 @@ export default function CharacterLibraryHeader({
           style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
         >
           <PlusIcon size={15} />
-          <span>Build Character (Rig Studio)</span>
-        </button>
-        <button
-          type="button"
-          className="btn btn-secondary"
-          onClick={onCreateCharacter}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-          title="Create character with text metadata"
-        >
-          <span>Text Metadata</span>
+          <span>Build Character</span>
         </button>
       </div>
     </div>

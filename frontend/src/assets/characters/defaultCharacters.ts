@@ -65,6 +65,7 @@ export const PIP_THE_BEAR: VectorRigDefinition = {
           cy: -75,
           r: 15,
           fill: '#b45309',
+          tag: 'face_base',
         },
         {
           type: 'circle',
@@ -72,6 +73,7 @@ export const PIP_THE_BEAR: VectorRigDefinition = {
           cy: -75,
           r: 8,
           fill: '#fde68a', // Inner ear
+          tag: 'face_base',
         },
         // Right Ear
         {
@@ -80,6 +82,7 @@ export const PIP_THE_BEAR: VectorRigDefinition = {
           cy: -75,
           r: 15,
           fill: '#b45309',
+          tag: 'face_base',
         },
         {
           type: 'circle',
@@ -87,6 +90,7 @@ export const PIP_THE_BEAR: VectorRigDefinition = {
           cy: -75,
           r: 8,
           fill: '#fde68a', // Inner ear
+          tag: 'face_base',
         },
         // Head Base
         {
@@ -96,6 +100,7 @@ export const PIP_THE_BEAR: VectorRigDefinition = {
           rx: 38,
           ry: 32,
           fill: '#d97706', // Slightly lighter brown face
+          tag: 'face_base',
         },
         // Muzzle / Snout
         {
@@ -105,12 +110,14 @@ export const PIP_THE_BEAR: VectorRigDefinition = {
           rx: 20,
           ry: 15,
           fill: '#fef3c7', // Cream snout
+          tag: 'face_base',
         },
         // Nose
         {
           type: 'path',
           d: 'M -6 -50 Q 0 -54 6 -50 Q 0 -44 -6 -50 Z',
           fill: '#1e293b',
+          tag: 'nose',
         },
         // Mouth Smile
         {
@@ -120,6 +127,7 @@ export const PIP_THE_BEAR: VectorRigDefinition = {
           strokeWidth: 2.5,
           strokeLinecap: 'round',
           fill: 'none',
+          tag: 'mouth',
         },
         // Left Eye
         {
@@ -128,6 +136,7 @@ export const PIP_THE_BEAR: VectorRigDefinition = {
           cy: -58,
           r: 4.5,
           fill: '#0f172a',
+          tag: 'eyes',
         },
         {
           type: 'circle',
@@ -135,6 +144,7 @@ export const PIP_THE_BEAR: VectorRigDefinition = {
           cy: -60,
           r: 1.8,
           fill: '#ffffff', // Eye glint
+          tag: 'eyes',
         },
         // Right Eye
         {
@@ -143,6 +153,7 @@ export const PIP_THE_BEAR: VectorRigDefinition = {
           cy: -58,
           r: 4.5,
           fill: '#0f172a',
+          tag: 'eyes',
         },
         {
           type: 'circle',
@@ -150,6 +161,7 @@ export const PIP_THE_BEAR: VectorRigDefinition = {
           cy: -60,
           r: 1.8,
           fill: '#ffffff', // Eye glint
+          tag: 'eyes',
         },
         // Blush cheeks
         {
@@ -160,6 +172,7 @@ export const PIP_THE_BEAR: VectorRigDefinition = {
           ry: 4,
           fill: '#f87171',
           opacity: 0.5,
+          tag: 'face_base',
         },
         {
           type: 'ellipse',
@@ -169,6 +182,7 @@ export const PIP_THE_BEAR: VectorRigDefinition = {
           ry: 4,
           fill: '#f87171',
           opacity: 0.5,
+          tag: 'face_base',
         },
       ],
     },
@@ -325,12 +339,14 @@ export const SAMMY_THE_KID: VectorRigDefinition = {
           rx: 30,
           ry: 28,
           fill: '#fed7aa', // Light peach skin
+          tag: 'face_base',
         },
         // Messy cartoon hair
         {
           type: 'path',
           d: 'M -34 -60 Q -36 -90 0 -92 Q 36 -90 34 -60 Q 24 -70 12 -72 Q 0 -66 -10 -72 Q -24 -70 -34 -60 Z',
           fill: '#78350f', // Brown hair
+          tag: 'hair',
         },
         // Hair bangs
         {
@@ -340,6 +356,7 @@ export const SAMMY_THE_KID: VectorRigDefinition = {
           strokeWidth: 4,
           strokeLinecap: 'round',
           fill: 'none',
+          tag: 'hair',
         },
         // Big cartoon eyes
         {
@@ -348,6 +365,7 @@ export const SAMMY_THE_KID: VectorRigDefinition = {
           cy: -54,
           r: 5,
           fill: '#0f172a',
+          tag: 'eyes',
         },
         {
           type: 'circle',
@@ -355,6 +373,7 @@ export const SAMMY_THE_KID: VectorRigDefinition = {
           cy: -56,
           r: 2,
           fill: '#ffffff',
+          tag: 'eyes',
         },
         {
           type: 'circle',
@@ -362,6 +381,7 @@ export const SAMMY_THE_KID: VectorRigDefinition = {
           cy: -54,
           r: 5,
           fill: '#0f172a',
+          tag: 'eyes',
         },
         {
           type: 'circle',
@@ -369,6 +389,7 @@ export const SAMMY_THE_KID: VectorRigDefinition = {
           cy: -56,
           r: 2,
           fill: '#ffffff',
+          tag: 'eyes',
         },
         // Cheerful mouth
         {
@@ -378,6 +399,7 @@ export const SAMMY_THE_KID: VectorRigDefinition = {
           strokeWidth: 3,
           strokeLinecap: 'round',
           fill: 'none',
+          tag: 'mouth',
         },
       ],
     },

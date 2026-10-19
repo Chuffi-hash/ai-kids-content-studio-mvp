@@ -10,7 +10,41 @@ interface CharacterToolbarProps {
   onPersonalityChange: (value: string) => void;
   onClearFilters: () => void;
   hasActiveFilters: boolean;
+  speciesOptions?: string[];
+  personalityOptions?: string[];
 }
+
+const DEFAULT_SPECIES = [
+  'Human',
+  'Bear',
+  'Animal',
+  'Fantasy Creature',
+  'Robot',
+  'Alien',
+  'Plant',
+  'Object',
+  'Other',
+];
+
+const DEFAULT_CHARACTERISTICS = [
+  'Brave',
+  'Cheerful',
+  'Helpful',
+  'Loyal',
+  'Curious',
+  'Kind',
+  'Wise',
+  'Playful',
+  'Shy',
+  'Adventurous',
+  'Smart',
+  'Funny',
+  'Strong',
+  'Gentle',
+  'Creative',
+  'Energetic',
+  'Other',
+];
 
 export default function CharacterToolbar({
   searchQuery,
@@ -21,7 +55,13 @@ export default function CharacterToolbar({
   onPersonalityChange,
   onClearFilters,
   hasActiveFilters,
+  speciesOptions = DEFAULT_SPECIES,
+  personalityOptions = DEFAULT_CHARACTERISTICS,
 }: CharacterToolbarProps) {
+  // Combine defaults with passed options, keeping unique capitalized entries
+  const allSpecies = Array.from(new Set([...DEFAULT_SPECIES, ...speciesOptions]));
+  const allCharacteristics = Array.from(new Set([...DEFAULT_CHARACTERISTICS, ...personalityOptions]));
+
   return (
     <div className="character-toolbar">
       <div className="toolbar-search">
@@ -41,14 +81,11 @@ export default function CharacterToolbar({
         aria-label="Filter by species"
       >
         <option value="">All species</option>
-        <option>Human</option>
-        <option>Animal</option>
-        <option>Fantasy Creature</option>
-        <option>Robot</option>
-        <option>Alien</option>
-        <option>Plant</option>
-        <option>Object</option>
-        <option>Other</option>
+        {allSpecies.map((s) => (
+          <option key={s} value={s}>
+            {s}
+          </option>
+        ))}
       </select>
 
       <select
@@ -58,18 +95,11 @@ export default function CharacterToolbar({
         aria-label="Filter by characteristic"
       >
         <option value="">All characteristics</option>
-        <option>Brave</option>
-        <option>Curious</option>
-        <option>Kind</option>
-        <option>Wise</option>
-        <option>Playful</option>
-        <option>Shy</option>
-        <option>Adventurous</option>
-        <option>Smart</option>
-        <option>Funny</option>
-        <option>Strong</option>
-        <option>Gentle</option>
-        <option>Other</option>
+        {allCharacteristics.map((trait) => (
+          <option key={trait} value={trait}>
+            {trait}
+          </option>
+        ))}
       </select>
 
       {hasActiveFilters && (
