@@ -1,4 +1,4 @@
-export type AudioEffectType = 'normal' | 'robot' | 'cartoon';
+export type AudioEffectType = 'normal' | 'robot' | 'cartoon' | 'whisper' | 'shout';
 
 export interface SupportedVoice {
   id: string;
@@ -15,6 +15,9 @@ export interface TTSGenerationOptions {
   lang?: string;
   speed?: number; // 0.5 - 2.0
   effect?: AudioEffectType;
+  sentencePause?: number;
+  clausePause?: number;
+  emotion?: string;
   outputFormat?: 'wav' | 'mp3';
 }
 

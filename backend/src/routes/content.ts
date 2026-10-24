@@ -36,6 +36,7 @@ import { getImageGenerationProvider } from "../services/image-generation/provide
 import { LocalStorageService } from "../services/storage/local-storage.service.js";
 import { buildSceneImagePrompt } from "../services/image-generation/prompt-builder.js";
 import { AudioGenerationService } from "../services/audio-generation/audio-generation.service.js";
+import { suggestEmotionForText } from "../services/audio-generation/emotion-suggester.service.js";
 import { estimateSpeechDurationMs, formatTimeMs } from "../services/timing/timing.service.js";
 import { randomUUID } from "crypto";
 
@@ -97,7 +98,7 @@ contentRouter.post("/story/generate", async (req, res) => {
       topic: topic.trim(),
       ageGroup: ageGroup || audience || "4-7 years",
       desiredDurationSeconds: duration,
-      language: language || "English",
+      language: language || "Hindi",
       title,
       genre: genre || "Adventure",
       lesson,
@@ -352,7 +353,7 @@ contentRouter.put("/story/:storyId", async (req, res) => {
       topic: topic.trim(),
       ageGroup: ageGroup || audience || existingStory.ageGroup || "4-7 years",
       desiredDurationSeconds: duration,
-      language: language || "English",
+      language: language || "Hindi",
       title: title || existingStory.title,
       genre: genre || existingStory.genre || "Adventure",
       lesson: lesson || existingStory.lesson,
@@ -853,7 +854,7 @@ contentRouter.get("/tts/voices", async (_req, res) => {
 // Preview voice with sample speech and effect
 contentRouter.post("/tts/preview", async (req, res) => {
   try {
-    const { voice, provider, speed, effect, sampleText, lang } = req.body;
+    const { voice, provider, speed, effect, sampleText, lang, emotion } = req.body;
     const result = await audioGenerationService.previewVoice({
       voice,
       provider,
@@ -861,6 +862,7 @@ contentRouter.post("/tts/preview", async (req, res) => {
       effect,
       sampleText,
       lang,
+      emotion,
     });
     return res.json({ success: true, ...result });
   } catch (error: any) {
@@ -869,11 +871,22 @@ contentRouter.post("/tts/preview", async (req, res) => {
   }
 });
 
+// Suggest speaking emotion and facial expression from text
+contentRouter.post("/suggest-emotion", async (req, res) => {
+  try {
+    const { text } = req.body || {};
+    const suggestion = suggestEmotionForText(text || "");
+    return res.json({ success: true, suggestion });
+  } catch (err: any) {
+    return res.status(500).json({ message: err.message || "Failed to suggest emotion" });
+  }
+});
+
 // Real voice / narration generation endpoint
 contentRouter.post("/scenes/:sceneId/voice", async (req, res) => {
   try {
     const { sceneId } = req.params;
-    const { narration, lang, provider, voice, speed, effect } = req.body;
+    const { narration, lang, provider, voice, speed, effect, emotion } = req.body;
 
     const scene = await getSceneBySceneId(sceneId);
     if (!scene) {
@@ -888,11 +901,12 @@ contentRouter.post("/scenes/:sceneId/voice", async (req, res) => {
     const result = await audioGenerationService.generateNarrationAudio({
       sceneId,
       narration: textToSpeak,
-      lang: lang || "en",
+      lang: lang || "hi",
       provider,
       voice,
       speed: speed ? parseFloat(speed) : undefined,
       effect,
+      emotion,
     });
 
     return res.json({
@@ -933,10 +947,13 @@ contentRouter.post("/scenes/:sceneId/dialogue/generate", async (req, res) => {
       text,
       voice,
       speakingDirection,
+      emotion,
+      facialExpression,
       speed,
       startMs,
       effect,
       provider,
+      lang,
     } = req.body;
 
     if (!text || !text.trim()) {
@@ -956,10 +973,13 @@ contentRouter.post("/scenes/:sceneId/dialogue/generate", async (req, res) => {
       text,
       voice,
       speakingDirection,
+      emotion,
+      facialExpression,
       speed: speed ? parseFloat(speed) : undefined,
       startMs: typeof startMs === "number" ? startMs : 0,
       effect,
       provider,
+      lang,
     });
 
     // Update scene animationData.dialogueLines if animationData exists

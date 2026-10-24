@@ -658,14 +658,23 @@ export function normalizeAppearance(rawApp?: any): CustomCharacterAppearance {
     rightLeg,
     voiceConfig: rawApp.voiceConfig
       ? {
-          voiceId: String(rawApp.voiceConfig.voiceId || ''),
+          lang: rawApp.voiceConfig.lang || 'hi',
+          voiceId: String(rawApp.voiceConfig.voiceId || 'hf_alpha'),
           speed: typeof rawApp.voiceConfig.speed === 'number' && isFinite(rawApp.voiceConfig.speed)
             ? Math.max(0.5, Math.min(2.0, rawApp.voiceConfig.speed))
             : 1.0,
-          style: rawApp.voiceConfig.style || 'cheerful',
+          emotion: rawApp.voiceConfig.emotion || rawApp.voiceConfig.style || 'neutral',
+          style: rawApp.voiceConfig.style || rawApp.voiceConfig.emotion || 'cheerful',
           effect: rawApp.voiceConfig.effect || 'normal',
         }
-      : undefined,
+      : {
+          lang: 'hi',
+          voiceId: 'hf_alpha',
+          speed: 1.0,
+          emotion: 'neutral',
+          style: 'cheerful',
+          effect: 'normal',
+        },
     planet: rawApp.planet
       ? {
           oceanColor: rawApp.planet.oceanColor || '#1d4ed8',

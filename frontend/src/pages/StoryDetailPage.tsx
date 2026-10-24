@@ -999,8 +999,9 @@ export default function StoryDetailPage() {
       provider?: string;
       voice?: string;
       speed?: number;
-      effect?: 'normal' | 'robot' | 'cartoon';
+      effect?: 'normal' | 'robot' | 'cartoon' | 'whisper' | 'shout';
       lang?: string;
+      emotion?: string;
     }
   ) => {
     const targetScene = scenes.find((s) => s.sceneId === sceneId);

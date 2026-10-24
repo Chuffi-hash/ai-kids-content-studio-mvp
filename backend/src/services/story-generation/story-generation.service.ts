@@ -268,7 +268,7 @@ Return ONLY valid JSON.
     const duration = input.desiredDurationSeconds || 60;
     const sceneCount = input.sceneCount || (duration <= 30 ? 3 : duration <= 60 ? 4 : 5);
     const genre = input.genre || 'Adventure';
-    const language = input.language || 'English';
+    const language = input.language || 'Hindi';
     const tone = input.tone || 'cheerful and encouraging';
 
     return `

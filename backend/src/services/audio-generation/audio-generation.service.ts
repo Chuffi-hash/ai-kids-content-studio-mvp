@@ -5,11 +5,12 @@ import { execFile } from 'child_process';
 import { randomUUID } from 'crypto';
 // @ts-ignore
 import ffprobeStatic from '@ffprobe-installer/ffprobe';
-import { updateScene, createSceneVersion, getSceneBySceneId, getCharacterById, getCharacterByName, getScenesByStoryId } from '../database/database.service.js';
+import { updateScene, createSceneVersion, getSceneBySceneId, getCharacterById, getCharacterByName, getScenesByStoryId, getStoryByStoryId } from '../database/database.service.js';
 import { TTSProviderFactory } from './tts-provider.factory.js';
 import { AudioEffectType, SupportedVoice } from './tts-provider.interface.js';
 import { generateVisemeCues } from './viseme-generator.js';
-import { SceneDialogue, SpeakingDirection } from '../animation/vector-animation.engine.js';
+import { SceneDialogue, SpeakingDirection, FacialExpression } from '../animation/vector-animation.engine.js';
+import { EMOTION_DELIVERY_MAP, SpeakingEmotion } from './emotion-suggester.service.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -47,6 +48,7 @@ export class AudioGenerationService {
     effect?: AudioEffectType;
     sampleText?: string;
     lang?: string;
+    emotion?: SpeakingEmotion;
   }): Promise<{
     audioUrl: string;
     durationMs: number;
@@ -55,18 +57,27 @@ export class AudioGenerationService {
     effect: AudioEffectType;
   }> {
     const providerInstance = await TTSProviderFactory.getProvider(options.provider);
-    const voice = options.voice || (providerInstance.name === 'kokoro' ? 'af_heart' : 'en-US-Standard');
+    const lang = options.lang || (options.voice?.startsWith('h') ? 'hi' : (options.voice?.startsWith('b') ? 'en-gb' : (options.voice ? 'en-us' : 'hi')));
+    const voice = options.voice || (lang === 'hi' ? 'hf_alpha' : 'af_heart');
     const effect = options.effect || 'normal';
     const speed = options.speed || 1.0;
-    const lang = options.lang;
+    const emotion = (options.emotion || 'neutral') as SpeakingEmotion;
 
-    const previewText = options.sampleText || "Hi there! I am ready to tell a wonderful story for you.";
+    const emotionConfig = EMOTION_DELIVERY_MAP[emotion] || EMOTION_DELIVERY_MAP.neutral;
+    const calibratedSpeed = Math.max(0.5, Math.min(2.0, speed * (emotionConfig.speedMultiplier || 1.0)));
+    const effectiveEffect = (effect === 'normal' && emotionConfig.audioEffect) ? emotionConfig.audioEffect : effect;
+
+    const defaultHindiSample = "नमस्ते! मैं आपके साथ एक शानदार कहानी सुनाने के लिए तैयार हूँ।";
+    const defaultEnglishSample = "Hello! I am ready to tell a wonderful story for you.";
+    const previewText = options.sampleText || (lang === 'hi' ? defaultHindiSample : defaultEnglishSample);
 
     const result = await providerInstance.generateSpeech(previewText, {
       voice,
-      speed,
-      effect,
+      speed: calibratedSpeed,
+      effect: effectiveEffect,
       lang,
+      sentencePause: emotionConfig.sentencePause,
+      clausePause: emotionConfig.clausePause,
     });
 
     const previewFilename = `preview-${Date.now()}-${Math.random().toString(36).substring(7)}.${result.format}`;
@@ -88,7 +99,7 @@ export class AudioGenerationService {
       durationMs,
       voice,
       provider: providerInstance.name,
-      effect,
+      effect: effectiveEffect,
     };
   }
 
@@ -105,6 +116,7 @@ export class AudioGenerationService {
     speed?: number;
     effect?: AudioEffectType;
     lang?: string;
+    emotion?: SpeakingEmotion;
   }): Promise<{
     audioUrl: string;
     durationMs: number;
@@ -113,13 +125,18 @@ export class AudioGenerationService {
     voice: string;
     effect: AudioEffectType;
   }> {
-    const { sceneId, narration, provider, voice, speed = 1.0, effect = 'normal', lang } = options;
+    const { sceneId, narration, provider, voice, speed = 1.0, effect = 'normal', lang, emotion = 'neutral' } = options;
 
     if (!narration || narration.trim().length === 0) {
       throw new Error('Narration text is required for audio generation');
     }
 
-    console.log(`[AudioGeneration] Generating narration for scene ${sceneId}: "${narration.substring(0, 60)}..." (provider: ${provider || 'default'}, voice: ${voice || 'default'}, effect: ${effect})`);
+    const scene = await getSceneBySceneId(sceneId);
+    const story = scene?.storyId ? await getStoryByStoryId(scene.storyId) : null;
+    const projectLang = (story?.language && story.language.toLowerCase().includes('english')) ? 'en-us' : 'hi';
+    const effectiveLang = lang || (voice?.startsWith('h') ? 'hi' : (voice?.startsWith('b') ? 'en-gb' : (voice ? 'en-us' : projectLang)));
+
+    console.log(`[AudioGeneration] Generating narration for scene ${sceneId}: "${narration.substring(0, 60)}..." (provider: ${provider || 'default'}, voice: ${voice || 'default'}, lang: ${effectiveLang}, emotion: ${emotion})`);
 
     // Clean narration text: remove markdown formatting, stage directions, or extra symbols
     const cleanText = narration
@@ -132,15 +149,21 @@ export class AudioGenerationService {
 
     // Select TTS provider (Kokoro-82M by default or fallback)
     const providerInstance = await TTSProviderFactory.getProvider(provider);
-    const selectedVoice = voice || (providerInstance.name === 'kokoro' ? 'af_heart' : 'en-US-Standard');
+    const selectedVoice = voice || (effectiveLang === 'hi' ? 'hf_alpha' : (providerInstance.name === 'kokoro' ? 'af_heart' : 'en-US-Standard'));
+
+    const emotionConfig = EMOTION_DELIVERY_MAP[emotion] || EMOTION_DELIVERY_MAP.neutral;
+    const calibratedSpeed = Math.max(0.5, Math.min(2.0, speed * (emotionConfig.speedMultiplier || 1.0)));
+    const effectiveEffect = (effect === 'normal' && emotionConfig.audioEffect) ? emotionConfig.audioEffect : effect;
 
     let ttsResult;
     try {
       ttsResult = await providerInstance.generateSpeech(textToSpeak, {
         voice: selectedVoice,
-        speed,
-        effect,
-        lang,
+        speed: calibratedSpeed,
+        effect: effectiveEffect,
+        lang: effectiveLang,
+        sentencePause: emotionConfig.sentencePause,
+        clausePause: emotionConfig.clausePause,
       });
     } catch (err: any) {
       console.warn(`[AudioGeneration] TTS generation with provider "${providerInstance.name}" failed:`, err);
@@ -216,6 +239,11 @@ export class AudioGenerationService {
    * Generates character dialogue audio using Kokoro-82M, calculates exact duration,
    * derives lip-sync viseme cues, and saves the dialogue audio file.
    */
+  /**
+   * Generates spoken audio for a single dialogue line spoken by a character in a scene,
+   * derives lip-sync viseme cues, and saves the dialogue audio file.
+   * Follows strict precedence: Project defaults -> Character defaults -> Scene overrides -> Dialogue-line overrides.
+   */
   async generateCharacterDialogueAudio(options: {
     sceneId: string;
     characterId?: string;
@@ -224,10 +252,13 @@ export class AudioGenerationService {
     text: string;
     voice?: string;
     speakingDirection?: SpeakingDirection;
+    emotion?: SpeakingEmotion;
+    facialExpression?: FacialExpression;
     speed?: number;
     effect?: AudioEffectType;
     startMs?: number;
     provider?: string;
+    lang?: string;
   }): Promise<SceneDialogue> {
     const {
       sceneId,
@@ -235,7 +266,9 @@ export class AudioGenerationService {
       characterInstanceId,
       characterName,
       text,
-      speakingDirection = 'calm',
+      speakingDirection,
+      emotion,
+      facialExpression,
       startMs = 0,
       effect = 'normal',
       provider,
@@ -253,34 +286,40 @@ export class AudioGenerationService {
 
     const textToSpeak = cleanText.length > 0 ? cleanText : text.trim();
 
-    // 1. Resolve character's default voice if characterId or characterName provided
-    let voiceToUse = options.voice;
-    let baseSpeed = options.speed ?? 1.0;
-    let effectToUse = options.effect || 'normal';
+    // 1. Fetch Scene and Story for Hierarchical Precedence
+    const scene = await getSceneBySceneId(sceneId);
+    const story = scene?.storyId ? await getStoryByStoryId(scene.storyId) : null;
 
-    if (!voiceToUse || voiceToUse === 'default') {
-      try {
-        let char = characterId ? await getCharacterById(characterId) : null;
-        if (!char && characterName) {
-          char = await getCharacterByName(characterName);
-        }
-        const voiceConfig = (char?.canonicalAppearance as any)?.voiceConfig || (char as any)?.voiceConfig;
-        if (voiceConfig?.voiceId) {
-          voiceToUse = voiceConfig.voiceId;
-          if (voiceConfig.speed && options.speed === undefined) {
-            baseSpeed = voiceConfig.speed;
-          }
-          if (voiceConfig.effect && (!options.effect || options.effect === 'normal')) {
-            effectToUse = voiceConfig.effect;
-          }
-        }
-      } catch (err) {
-        console.warn(`[AudioGeneration] Could not fetch character ${characterId || characterName} for voiceConfig:`, err);
+    // A. Project defaults (Hindi default)
+    const projectLang = (story?.language && story.language.toLowerCase().includes('english')) ? 'en' : 'hi';
+    const projectVoice = projectLang === 'hi' ? 'hf_alpha' : 'af_heart';
+
+    // B. Character defaults
+    let charLang: string | undefined;
+    let charVoiceId: string | undefined;
+    let charSpeed: number | undefined;
+    let charEmotion: string | undefined;
+    let charEffect: AudioEffectType | undefined;
+
+    try {
+      let char = characterId ? await getCharacterById(characterId) : null;
+      if (!char && characterName) {
+        char = await getCharacterByName(characterName);
       }
+      const voiceConfig = (char?.canonicalAppearance as any)?.voiceConfig || (char as any)?.voiceConfig;
+      if (voiceConfig) {
+        charLang = voiceConfig.lang;
+        charVoiceId = voiceConfig.voiceId;
+        charSpeed = voiceConfig.speed;
+        charEmotion = voiceConfig.emotion || voiceConfig.style;
+        charEffect = voiceConfig.effect;
+      }
+    } catch (err) {
+      console.warn(`[AudioGeneration] Could not fetch character ${characterId || characterName} for voiceConfig:`, err);
     }
 
-    // Default voice heuristics based on species/name if still not set
-    if (!voiceToUse || voiceToUse === 'default') {
+    // Character default voice heuristics based on species/name if no explicit voiceConfig
+    if (!charVoiceId || charVoiceId === 'default') {
       const lowerName = (characterName || '').toLowerCase();
       const lowerId = (characterId || '').toLowerCase();
       if (
@@ -289,35 +328,80 @@ export class AudioGenerationService {
         lowerName.includes('terra') ||
         lowerName.includes('planet')
       ) {
-        voiceToUse = 'bm_daniel';
+        charVoiceId = 'bm_daniel';
+        charLang = charLang || 'en';
       } else if (lowerId.includes('pip') || lowerName.includes('bear')) {
-        voiceToUse = 'bm_george';
+        charVoiceId = 'bm_george';
+        charLang = charLang || 'en';
       } else if (lowerId.includes('sammy') || lowerName.includes('kid') || lowerName.includes('boy')) {
-        voiceToUse = 'am_adam';
+        charVoiceId = 'am_adam';
+        charLang = charLang || 'en';
       } else if (lowerName.includes('robot')) {
-        voiceToUse = 'bm_lewis';
+        charVoiceId = 'bm_lewis';
+        charLang = charLang || 'en';
       } else if (lowerName.includes('girl')) {
-        voiceToUse = 'af_bella';
-      } else {
-        voiceToUse = 'af_heart';
+        charVoiceId = 'af_bella';
+        charLang = charLang || 'en';
       }
     }
 
-    // Direction speed modifier
-    const dirSpeedMultipliers: Record<string, number> = {
-      cheerful: 1.05,
-      excited: 1.15,
-      calm: 0.95,
-      sad: 0.88,
-      worried: 1.08,
-      curious: 1.0,
-      serious: 0.92,
-    };
-    const directionMultiplier = dirSpeedMultipliers[speakingDirection] || 1.0;
-    const effectiveSpeed = Math.max(0.5, Math.min(2.0, baseSpeed * directionMultiplier));
+    // C. Scene overrides (characterPerformances)
+    const animData = (scene as any)?.animationData;
+    const scenePerf =
+      (characterInstanceId && animData?.characterPerformances?.[characterInstanceId]) ||
+      (characterId && animData?.characterPerformances?.[characterId]) ||
+      (characterName && animData?.characterPerformances?.[characterName]);
+
+    const sceneLang = scenePerf?.lang;
+    const sceneVoiceId = scenePerf?.voiceId;
+    const sceneSpeed = scenePerf?.speed;
+    const sceneEmotion = scenePerf?.emotion;
+
+    // D. Dialogue-line overrides
+    const lineLang = options.lang;
+    const lineVoiceId = (options.voice && options.voice !== 'default') ? options.voice : undefined;
+    const lineSpeed = options.speed;
+    const lineEmotion = emotion || speakingDirection;
+    const lineEffect = (effect && effect !== 'normal') ? effect : undefined;
+
+    // Effective values according to strict precedence:
+    // Project defaults -> Character defaults -> Scene overrides -> Dialogue-line overrides
+    let effectiveVoice = lineVoiceId || sceneVoiceId || charVoiceId || projectVoice;
+    let effectiveLang = lineLang || sceneLang || charLang;
+    if (!effectiveLang) {
+      if (effectiveVoice.startsWith('h')) {
+        effectiveLang = 'hi';
+      } else if (effectiveVoice && effectiveVoice !== 'default') {
+        effectiveLang = 'en';
+      } else {
+        effectiveLang = projectLang;
+      }
+    }
+
+    // If language is explicitly set to Hindi but the selected voice is non-Hindi, adapt to Hindi default
+    if ((lineLang === 'hi' || sceneLang === 'hi') && !effectiveVoice.startsWith('h')) {
+      effectiveVoice = 'hf_alpha';
+    }
+    // If language is explicitly set to English but the selected voice is Hindi, adapt to English default
+    if ((lineLang === 'en' || sceneLang === 'en') && effectiveVoice.startsWith('h')) {
+      effectiveVoice = 'af_heart';
+    }
+
+    if (!effectiveVoice || effectiveVoice === 'default') {
+      effectiveVoice = effectiveLang === 'hi' ? 'hf_alpha' : 'af_heart';
+    }
+
+    const effectiveEmotion = ((lineEmotion || sceneEmotion || charEmotion || 'neutral') as string).toLowerCase() as SpeakingEmotion;
+    const baseSpeed = lineSpeed ?? sceneSpeed ?? charSpeed ?? 1.0;
+    const baseEffect = lineEffect || charEffect || 'normal';
+
+    // Apply emotion-calibrated speed, pauses, and acoustic delivery
+    const emotionConfig = EMOTION_DELIVERY_MAP[effectiveEmotion] || EMOTION_DELIVERY_MAP.neutral;
+    const calibratedSpeed = Math.max(0.5, Math.min(2.0, baseSpeed * (emotionConfig.speedMultiplier || 1.0)));
+    const effectiveEffect = (baseEffect === 'normal' && emotionConfig.audioEffect) ? emotionConfig.audioEffect : baseEffect;
 
     console.log(
-      `[AudioGeneration] Generating dialogue for character "${characterName}": "${textToSpeak.slice(0, 40)}..." (voice: ${voiceToUse}, speed: ${effectiveSpeed}, effect: ${effectToUse}, direction: ${speakingDirection})`
+      `[AudioGeneration] Generating dialogue for character "${characterName}": "${textToSpeak.slice(0, 40)}..." (lang: ${effectiveLang}, voice: ${effectiveVoice}, speed: ${calibratedSpeed}, effect: ${effectiveEffect}, emotion: ${effectiveEmotion})`
     );
 
     // 2. Synthesize speech using TTS provider (Kokoro-82M by default)
@@ -325,9 +409,12 @@ export class AudioGenerationService {
     let ttsResult;
     try {
       ttsResult = await providerInstance.generateSpeech(textToSpeak, {
-        voice: voiceToUse,
-        speed: effectiveSpeed,
-        effect: effectToUse,
+        voice: effectiveVoice,
+        speed: calibratedSpeed,
+        effect: effectiveEffect,
+        lang: effectiveLang,
+        sentencePause: emotionConfig.sentencePause,
+        clausePause: emotionConfig.clausePause,
       });
     } catch (err: any) {
       console.warn(`[AudioGeneration] Dialogue TTS with provider "${providerInstance.name}" failed:`, err);
@@ -336,8 +423,9 @@ export class AudioGenerationService {
         const fallback = await TTSProviderFactory.getProvider('google');
         ttsResult = await fallback.generateSpeech(textToSpeak, {
           voice: 'en-US-Standard',
-          speed: effectiveSpeed,
-          effect: effectToUse,
+          speed: calibratedSpeed,
+          effect: effectiveEffect,
+          lang: effectiveLang || 'en',
         });
       } else {
         throw new Error(`Dialogue speech generation failed: ${err.message || String(err)}`);
@@ -357,7 +445,7 @@ export class AudioGenerationService {
       durationMs = await this.probeAudioDuration(filePath);
     } catch {
       const words = textToSpeak.split(/\s+/).length;
-      durationMs = Math.round((words * 400 + 400) / effectiveSpeed);
+      durationMs = Math.round((words * 400 + 400) / calibratedSpeed);
     }
 
     // 4. Derive deterministic lip-sync viseme cues
@@ -369,9 +457,12 @@ export class AudioGenerationService {
       characterInstanceId,
       characterName,
       text: textToSpeak,
-      voice: ttsResult.voice || voiceToUse,
-      speakingDirection,
-      speed: effectiveSpeed,
+      lang: effectiveLang,
+      voice: ttsResult.voice || effectiveVoice,
+      speakingDirection: effectiveEmotion,
+      emotion: effectiveEmotion,
+      facialExpression,
+      speed: baseSpeed,
       audioUrl: `/storage/audio/${filename}`,
       startMs,
       durationMs,
@@ -441,11 +532,14 @@ export class AudioGenerationService {
           characterInstanceId: line.characterInstanceId,
           characterName: line.characterName,
           text: line.text,
+          lang: line.lang,
           voice: lineVoice,
           speakingDirection: line.speakingDirection,
+          emotion: line.emotion,
+          facialExpression: line.facialExpression,
           speed: line.speed,
           startMs: line.startMs,
-          effect: options.effect || 'normal',
+          effect: line.effect || options.effect || 'normal',
           provider: options.provider,
         });
 
@@ -512,8 +606,11 @@ export class AudioGenerationService {
           characterInstanceId: line.characterInstanceId,
           characterName: line.characterName || charObj?.name || 'Character',
           text: line.text,
+          lang: line.lang,
           voice: resolvedVoice || line.voice,
           speakingDirection: line.speakingDirection,
+          emotion: line.emotion,
+          facialExpression: line.facialExpression,
           speed: line.speed,
           startMs: line.startMs,
           effect: line.effect || 'normal',

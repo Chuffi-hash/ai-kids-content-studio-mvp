@@ -85,14 +85,25 @@ export type FacialExpression =
 
 export type MouthShape = 'rest' | 'open' | 'wide' | 'round' | 'closed';
 
-export type SpeakingDirection =
-  | 'cheerful'
+export type SpeakingEmotion =
+  | 'neutral'
+  | 'happy'
   | 'excited'
-  | 'calm'
   | 'sad'
+  | 'sleepy'
+  | 'confused'
   | 'worried'
   | 'curious'
-  | 'serious';
+  | 'calm'
+  | 'serious'
+  | 'angry'
+  | 'surprised'
+  | 'whispering'
+  | 'shouting';
+
+export type SpeakingDirection =
+  | SpeakingEmotion
+  | 'cheerful';
 
 export interface ExpressionCue {
   id?: string;
@@ -110,14 +121,27 @@ export interface VisemeCue {
   durationMs: number;
 }
 
+export interface CharacterPerformanceOverride {
+  lang?: 'hi' | 'en' | string;
+  voiceId?: string;
+  emotion?: SpeakingEmotion;
+  speed?: number;
+  effect?: 'normal' | 'cartoon' | 'robot' | 'whisper' | 'shout';
+  defaultExpression?: FacialExpression;
+  facialExpression?: FacialExpression;
+}
+
 export interface SceneDialogue {
   id: string;
   characterId?: string;
   characterInstanceId?: string;
   characterName: string;
   text: string;
+  lang?: string;
   voice?: string;
   speakingDirection?: SpeakingDirection;
+  emotion?: SpeakingEmotion;
+  facialExpression?: FacialExpression;
   speed?: number;
   audioUrl?: string;
   startMs: number;
@@ -126,10 +150,12 @@ export interface SceneDialogue {
 }
 
 export interface CharacterVoiceConfig {
+  lang?: 'hi' | 'en' | string;
   voiceId: string;
   speed?: number;
+  emotion?: SpeakingEmotion;
   style?: SpeakingDirection;
-  effect?: 'normal' | 'cartoon' | 'robot';
+  effect?: 'normal' | 'cartoon' | 'robot' | 'whisper' | 'shout';
 }
 
 export interface VectorRigDefinition {
@@ -205,6 +231,7 @@ export interface VectorSceneData {
   expressionCues?: ExpressionCue[];
   dialogueLines?: SceneDialogue[];
   overlays?: EducationalOverlay[];
+  characterPerformances?: Record<string, CharacterPerformanceOverride>;
 }
 
 export interface EvaluatedCharacterPose {

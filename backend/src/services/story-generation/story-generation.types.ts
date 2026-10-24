@@ -6,7 +6,7 @@ export interface StoryGenerationInput {
   topic: string;
   ageGroup?: string; // '2-4 years' | '4-7 years' | '8-10 years' | '10-12 years'
   desiredDurationSeconds?: number; // e.g. 30, 60, 120, 180 (default: 60)
-  language?: string; // default: 'English'
+  language?: string; // default: 'Hindi'
 
   // Optional inputs
   title?: string;

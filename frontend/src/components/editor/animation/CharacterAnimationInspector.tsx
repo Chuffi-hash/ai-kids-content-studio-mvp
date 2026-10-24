@@ -7,9 +7,11 @@ import {
   MotionPath,
   FacialExpression,
   SpeakingDirection,
+  SpeakingEmotion,
   ExpressionCue,
   SceneDialogue,
   CharacterVoiceConfig,
+  CharacterPerformanceOverride,
 } from '../../../types/animation';
 import { EditorCharacter } from '../../../types/editor';
 import { getVectorRig } from '../../../assets/characters/defaultCharacters';
@@ -25,6 +27,11 @@ import {
   updateCharacterVoice,
   getCharacterVoice,
 } from '../../../services/character.service';
+import {
+  EMOTION_OPTIONS,
+  EMOTION_TO_FACIAL_EXPRESSION,
+  suggestEmotionForText,
+} from '../../../utils/emotionSuggester';
 
 export interface CharacterAnimationInspectorProps {
   instance: CharacterInstance;
@@ -48,14 +55,26 @@ const FACIAL_EXPRESSIONS: Array<{ id: FacialExpression; label: string; emoji: st
   { id: 'curious', label: 'Curious', emoji: '🤔', desc: 'Puzzled tilt' },
 ];
 
-const KOKORO_VOICES = [
+export const KOKORO_VOICES = [
+  {
+    group: 'Hindi (हिन्दी)',
+    lang: 'hi',
+    voices: [
+      { id: 'hf_alpha', name: 'Alpha (Female • Clear & Storyteller)' },
+      { id: 'hf_beta', name: 'Beta (Female • Warm & Expressive)' },
+      { id: 'hm_omega', name: 'Omega (Male • Resonant & Warm)' },
+      { id: 'hm_psi', name: 'Psi (Male • Deep & Storyteller)' },
+    ],
+  },
   {
     group: 'American Female',
+    lang: 'en',
     voices: [
       { id: 'af_heart', name: 'Heart (Warm & Engaging)' },
       { id: 'af_bella', name: 'Bella (Friendly & Playful)' },
       { id: 'af_nicole', name: 'Nicole (Soft & Gentle)' },
       { id: 'af_sarah', name: 'Sarah (Clear Storyteller)' },
+      { id: 'af_nova', name: 'Nova (Bright & Cheerful)' },
       { id: 'af_sky', name: 'Sky (Bright & Cheerful)' },
       { id: 'af_alloy', name: 'Alloy (Energetic & Dynamic)' },
       { id: 'af_aoede', name: 'Aoede (Melodic & Friendly)' },
@@ -66,6 +85,7 @@ const KOKORO_VOICES = [
   },
   {
     group: 'American Male',
+    lang: 'en',
     voices: [
       { id: 'am_adam', name: 'Adam (Warm & Friendly)' },
       { id: 'am_echo', name: 'Echo (Lively & Animated)' },
@@ -80,6 +100,7 @@ const KOKORO_VOICES = [
   },
   {
     group: 'British Female',
+    lang: 'en',
     voices: [
       { id: 'bf_alice', name: 'Alice (Refined & Pleasant)' },
       { id: 'bf_emma', name: 'Emma (Warm English Accent)' },
@@ -89,6 +110,7 @@ const KOKORO_VOICES = [
   },
   {
     group: 'British Male',
+    lang: 'en',
     voices: [
       { id: 'bm_george', name: 'George (Wise & Warm Bear)' },
       { id: 'bm_daniel', name: 'Daniel (Distinguished Storyteller)' },
@@ -205,24 +227,63 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
   };
 
   // -------------------------------------------------------------
-  // Character Voice Settings (Kokoro-82M)
+  // Timed Expression Cues Management
+  // -------------------------------------------------------------
+  const [newCueTimeSec, setNewCueTimeSec] = useState<number>(1.0);
+  const [newCueDurationSec, setNewCueDurationSec] = useState<number>(2.0);
+  const [newCueExpression, setNewCueExpression] = useState<FacialExpression>('happy');
+
+  const handleAddTimedExpressionCue = () => {
+    const cue: ExpressionCue = {
+      id: `cue-exp-${Date.now()}`,
+      instanceId: instance.instanceId,
+      characterInstanceId: instance.instanceId,
+      characterId: instance.characterId,
+      expression: newCueExpression,
+      startMs: Math.round(newCueTimeSec * 1000),
+      durationMs: Math.round(newCueDurationSec * 1000),
+    };
+    onUpdateAnimationData({
+      ...animationData,
+      expressionCues: [...expressionCues, cue],
+    });
+  };
+
+  const handleRemoveExpressionCue = (cueId?: string) => {
+    if (!cueId) return;
+    const filtered = expressionCues.filter((c) => c.id !== cueId);
+    onUpdateAnimationData({
+      ...animationData,
+      expressionCues: filtered,
+    });
+  };
+
+  // -------------------------------------------------------------
+  // Character Voice Settings (Kokoro-82M) & Scene Performance
   // -------------------------------------------------------------
   // Find matching character in story/catalogue
   const matchedChar = characters.find((c) => c.id === instance.characterId);
+  const scenePerformance = animationData.characterPerformances?.[instance.instanceId];
   const initialVoiceConfig: CharacterVoiceConfig =
     matchedChar?.canonicalAppearance?.voiceConfig ||
     instance.appearance?.voiceConfig || {
-      voiceId: instance.characterId === 'pip_the_bear' ? 'bm_george' : 'af_heart',
+      lang: 'hi',
+      voiceId: 'hf_alpha',
+      emotion: 'neutral',
       speed: 1.0,
       style: 'calm',
       effect: 'normal',
     };
 
-  const [voiceId, setVoiceId] = useState<string>(initialVoiceConfig.voiceId || 'af_heart');
-  const [voiceSpeed, setVoiceSpeed] = useState<number>(initialVoiceConfig.speed || 1.0);
-  const [voiceStyle, setVoiceStyle] = useState<SpeakingDirection>(initialVoiceConfig.style || 'calm');
-  const [voiceEffect, setVoiceEffect] = useState<'normal' | 'cartoon' | 'robot'>(
-    initialVoiceConfig.effect || 'normal'
+  const initialLang: 'hi' | 'en' =
+    (scenePerformance?.lang === 'en' || initialVoiceConfig.lang === 'en') ? 'en' : 'hi';
+
+  const [voiceLang, setVoiceLang] = useState<'hi' | 'en'>(initialLang);
+  const [voiceId, setVoiceId] = useState<string>(scenePerformance?.voiceId || initialVoiceConfig.voiceId || 'hf_alpha');
+  const [voiceEmotion, setVoiceEmotion] = useState<SpeakingEmotion>(scenePerformance?.emotion || initialVoiceConfig.emotion || 'neutral');
+  const [voiceSpeed, setVoiceSpeed] = useState<number>(scenePerformance?.speed ?? initialVoiceConfig.speed ?? 1.0);
+  const [voiceEffect, setVoiceEffect] = useState<'normal' | 'cartoon' | 'robot' | 'whisper' | 'shout'>(
+    scenePerformance?.effect || initialVoiceConfig.effect || 'normal'
   );
 
   const [isSavingVoice, setIsSavingVoice] = useState<boolean>(false);
@@ -230,18 +291,59 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
   const [isAuditioning, setIsAuditioning] = useState<boolean>(false);
   const auditionAudioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Sync state when instance or matchedChar changes
+  // Sync state when instance or matchedChar or scenePerformance changes
   useEffect(() => {
+    const override = animationData.characterPerformances?.[instance.instanceId];
     const config =
       matchedChar?.canonicalAppearance?.voiceConfig ||
       instance.appearance?.voiceConfig;
-    if (config) {
-      if (config.voiceId) setVoiceId(config.voiceId);
-      if (config.speed) setVoiceSpeed(config.speed);
-      if (config.style) setVoiceStyle(config.style);
-      if (config.effect) setVoiceEffect(config.effect);
-    }
-  }, [instance.characterId, matchedChar]);
+    
+    const effLang: 'hi' | 'en' = (override?.lang === 'en' || config?.lang === 'en') ? 'en' : 'hi';
+    const effVoice = override?.voiceId || config?.voiceId || (effLang === 'hi' ? 'hf_alpha' : 'af_heart');
+    const effEmotion = override?.emotion || config?.emotion || 'neutral';
+    const effSpeed = override?.speed ?? config?.speed ?? 1.0;
+    const effEffect = override?.effect || config?.effect || 'normal';
+
+    setVoiceLang(effLang);
+    setVoiceId(effVoice);
+    setVoiceEmotion(effEmotion);
+    setVoiceSpeed(effSpeed);
+    setVoiceEffect(effEffect);
+  }, [instance.characterId, instance.instanceId, matchedChar, animationData.characterPerformances]);
+
+  const handleUpdateSceneVoice = (updates: Partial<CharacterPerformanceOverride>) => {
+    const nextLang: 'hi' | 'en' = updates.lang ? (updates.lang === 'en' ? 'en' : 'hi') : voiceLang;
+    const nextVoice = updates.voiceId ?? voiceId;
+    const nextEmotion = updates.emotion ?? voiceEmotion;
+    const nextSpeed = updates.speed ?? voiceSpeed;
+    const nextEffect = updates.effect ?? voiceEffect;
+
+    if (updates.lang !== undefined) setVoiceLang(updates.lang === 'en' ? 'en' : 'hi');
+    if (updates.voiceId !== undefined) setVoiceId(updates.voiceId);
+    if (updates.emotion !== undefined) setVoiceEmotion(updates.emotion);
+    if (updates.speed !== undefined) setVoiceSpeed(updates.speed);
+    if (updates.effect !== undefined) setVoiceEffect(updates.effect);
+
+    const existingPerformances = animationData.characterPerformances || {};
+    const updatedPerformance: CharacterPerformanceOverride = {
+      ...existingPerformances[instance.instanceId],
+      lang: nextLang,
+      voiceId: nextVoice,
+      emotion: nextEmotion,
+      speed: nextSpeed,
+      effect: nextEffect,
+    };
+
+    onUpdateAnimationData({
+      ...animationData,
+      characterPerformances: {
+        ...existingPerformances,
+        [instance.instanceId]: updatedPerformance,
+      },
+    });
+  };
+
+  const handleUpdateScenePerformance = handleUpdateSceneVoice;
 
   const handleAuditionVoice = async () => {
     if (isAuditioning) {
@@ -255,9 +357,14 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
 
     setIsAuditioning(true);
     try {
-      const sampleText = `Hello! I am ${instance.name || 'your friend'}, ready for an amazing story adventure!`;
+      const sampleText = voiceLang === 'hi'
+        ? `नमस्ते! मैं ${instance.name || 'आपका दोस्त'} हूँ, और मैं एक रोमांचक कहानी के लिए पूरी तरह तैयार हूँ!`
+        : `Hello! I am ${instance.name || 'your friend'}, ready for an amazing story adventure!`;
+
       const res = await previewVoice({
         voice: voiceId,
+        lang: voiceLang,
+        emotion: voiceEmotion,
         speed: voiceSpeed,
         effect: voiceEffect,
         sampleText,
@@ -282,9 +389,11 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
     setVoiceSavedMsg(null);
 
     const newConfig: CharacterVoiceConfig = {
+      lang: voiceLang,
       voiceId,
+      emotion: voiceEmotion,
       speed: voiceSpeed,
-      style: voiceStyle,
+      style: voiceEmotion as any,
       effect: voiceEffect,
     };
 
@@ -301,7 +410,7 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
         });
       }
 
-      setVoiceSavedMsg('Default voice saved!');
+      setVoiceSavedMsg(`Default saved (${voiceLang.toUpperCase()} • ${voiceId})!`);
       setTimeout(() => setVoiceSavedMsg(null), 3000);
     } catch (err: any) {
       console.error('Failed to save default voice:', err);
@@ -323,12 +432,43 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
   );
 
   const [newDialogueText, setNewDialogueText] = useState<string>('');
-  const [newDialogueDirection, setNewDialogueDirection] = useState<SpeakingDirection>(voiceStyle || 'cheerful');
+  const [newDialogueLang, setNewDialogueLang] = useState<'hi' | 'en'>(voiceLang);
+  const [newDialogueVoice, setNewDialogueVoice] = useState<string>(voiceId);
+  const [newDialogueEmotion, setNewDialogueEmotion] = useState<SpeakingEmotion>(voiceEmotion);
+  const [newDialogueFacialExpression, setNewDialogueFacialExpression] = useState<FacialExpression>(
+    EMOTION_TO_FACIAL_EXPRESSION[voiceEmotion] || 'neutral'
+  );
   const [newDialogueStartSec, setNewDialogueStartSec] = useState<number>(0);
   const [isGeneratingDialogue, setIsGeneratingDialogue] = useState<boolean>(false);
+  const [isSuggestingEmotion, setIsSuggestingEmotion] = useState<boolean>(false);
+  const [suggestionBadge, setSuggestionBadge] = useState<string | null>(null);
   const [dialogueError, setDialogueError] = useState<string | null>(null);
   const [activeDialogueAudioId, setActiveDialogueAudioId] = useState<string | null>(null);
   const dialogueAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Sync new dialogue lang & voice with scene performance when it changes
+  useEffect(() => {
+    setNewDialogueLang(voiceLang);
+    setNewDialogueVoice(voiceId);
+    setNewDialogueEmotion(voiceEmotion);
+    setNewDialogueFacialExpression(EMOTION_TO_FACIAL_EXPRESSION[voiceEmotion] || 'neutral');
+  }, [voiceLang, voiceId, voiceEmotion]);
+
+  const handleAutoSuggestEmotion = () => {
+    if (!newDialogueText.trim()) return;
+    setIsSuggestingEmotion(true);
+    try {
+      const suggestion = suggestEmotionForText(newDialogueText.trim());
+      setNewDialogueEmotion(suggestion.emotion);
+      setNewDialogueFacialExpression(suggestion.facialExpression);
+      setSuggestionBadge(`${suggestion.emotion.toUpperCase()} (${Math.round(suggestion.confidence * 100)}%): ${suggestion.rationale}`);
+      setTimeout(() => setSuggestionBadge(null), 5000);
+    } catch (e) {
+      console.warn('Suggest emotion error:', e);
+    } finally {
+      setIsSuggestingEmotion(false);
+    }
+  };
 
   const handlePlayDialogue = (dialogue: SceneDialogue) => {
     if (!dialogue.audioUrl) return;
@@ -369,8 +509,11 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
         characterInstanceId: instance.instanceId,
         characterName: instance.name,
         text: newDialogueText.trim(),
-        voice: voiceId,
-        speakingDirection: newDialogueDirection,
+        lang: newDialogueLang,
+        voice: newDialogueVoice || voiceId,
+        emotion: newDialogueEmotion,
+        facialExpression: newDialogueFacialExpression,
+        speakingDirection: newDialogueEmotion as any,
         speed: voiceSpeed,
         startMs: Math.round(newDialogueStartSec * 1000),
       });
@@ -503,12 +646,133 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
             );
           })}
         </div>
+
+        {/* Timed Expression Cues (Within-Scene Keyframing) */}
+        <div style={{ marginTop: '10px', paddingTop: '8px', borderTop: '1px dashed var(--ed-border)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+            <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--ed-text)' }}>
+              Timed Expression Changes ({instanceCues.filter(c => c.startMs > 0 || c.durationMs < 50000).length})
+            </span>
+          </div>
+
+          {/* List of active timed expression cues */}
+          {instanceCues.filter(c => c.startMs > 0 || c.durationMs < 50000).map((cue) => (
+            <div
+              key={cue.id}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '4px 8px',
+                borderRadius: '4px',
+                background: 'var(--ed-surface-elevated)',
+                border: '1px solid var(--ed-border)',
+                marginBottom: '4px',
+                fontSize: '11px',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span>{FACIAL_EXPRESSIONS.find(e => e.id === cue.expression)?.emoji}</span>
+                <span style={{ fontWeight: 600, textTransform: 'capitalize' }}>{cue.expression}</span>
+                <span style={{ color: 'var(--ed-text-muted)' }}>
+                  @ {(cue.startMs / 1000).toFixed(1)}s (for {(cue.durationMs / 1000).toFixed(1)}s)
+                </span>
+              </div>
+              <button
+                type="button"
+                className="ed-tool-btn danger"
+                style={{ padding: '2px 5px', fontSize: '10px' }}
+                onClick={() => handleRemoveExpressionCue(cue.id)}
+                title="Remove timed expression cue"
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+
+          {/* Add timed cue mini-form */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr auto', gap: '4px', alignItems: 'center', marginTop: '6px' }}>
+            <select
+              className="ed-select"
+              value={newCueExpression}
+              onChange={(e) => setNewCueExpression(e.target.value as FacialExpression)}
+              style={{ fontSize: '11px', padding: '3px 4px' }}
+            >
+              {FACIAL_EXPRESSIONS.map((expr) => (
+                <option key={expr.id} value={expr.id}>
+                  {expr.emoji} {expr.label}
+                </option>
+              ))}
+            </select>
+            <input
+              type="number"
+              min="0"
+              step="0.5"
+              placeholder="Start(s)"
+              value={newCueTimeSec}
+              onChange={(e) => setNewCueTimeSec(parseFloat(e.target.value) || 0)}
+              className="ed-input"
+              style={{ fontSize: '11px', padding: '3px 4px' }}
+              title="Start time in seconds"
+            />
+            <input
+              type="number"
+              min="0.5"
+              step="0.5"
+              placeholder="Dur(s)"
+              value={newCueDurationSec}
+              onChange={(e) => setNewCueDurationSec(parseFloat(e.target.value) || 1)}
+              className="ed-input"
+              style={{ fontSize: '11px', padding: '3px 4px' }}
+              title="Duration in seconds"
+            />
+            <button
+              type="button"
+              className="ed-tool-btn primary"
+              onClick={handleAddTimedExpressionCue}
+              style={{ fontSize: '10px', padding: '3px 6px', whiteSpace: 'nowrap' }}
+              title="Add expression keyframe at this time"
+            >
+              + Cue
+            </button>
+          </div>
+        </div>
       </div>
 
-      {/* 3. Character Default Voice Settings (Kokoro-82M) */}
+      {/* 3. Character Voice Settings & Scene Performance (Kokoro-82M) */}
       <div className="ed-inspector-section">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-          <label className="ed-field-label" style={{ margin: 0 }}>Default Character Voice</label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <label className="ed-field-label" style={{ margin: 0 }}>Voice & Performance</label>
+            {scenePerformance ? (
+              <span
+                style={{
+                  fontSize: '9px',
+                  fontWeight: 700,
+                  padding: '1px 5px',
+                  borderRadius: '3px',
+                  background: 'rgba(139, 92, 246, 0.2)',
+                  color: '#c4b5fd',
+                  border: '1px solid rgba(139, 92, 246, 0.4)',
+                }}
+              >
+                SCENE OVERRIDE
+              </span>
+            ) : (
+              <span
+                style={{
+                  fontSize: '9px',
+                  fontWeight: 600,
+                  padding: '1px 5px',
+                  borderRadius: '3px',
+                  background: 'rgba(148, 163, 184, 0.15)',
+                  color: '#94a3b8',
+                }}
+              >
+                CHAR DEFAULT
+              </span>
+            )}
+          </div>
           <span
             style={{
               fontSize: '10px',
@@ -525,38 +789,91 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '10px' }}>
+          {/* Language Selector */}
           <div>
-            <span style={{ fontSize: '11px', color: 'var(--ed-text-muted)' }}>Assigned Voice (27 Styles)</span>
+            <span style={{ fontSize: '11px', color: 'var(--ed-text-muted)' }}>Language</span>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', marginTop: '3px' }}>
+              <button
+                type="button"
+                className={`ed-tool-btn ${voiceLang === 'hi' ? 'primary' : ''}`}
+                style={{
+                  fontSize: '11px',
+                  fontWeight: voiceLang === 'hi' ? 700 : 400,
+                  background: voiceLang === 'hi' ? '#047857' : undefined,
+                  borderColor: voiceLang === 'hi' ? '#059669' : undefined,
+                }}
+                onClick={() => {
+                  const defaultHindiVoice = 'hf_alpha';
+                  handleUpdateSceneVoice({ lang: 'hi', voiceId: defaultHindiVoice });
+                }}
+              >
+                🇮🇳 Hindi (हिन्दी) [Default]
+              </button>
+              <button
+                type="button"
+                className={`ed-tool-btn ${voiceLang === 'en' ? 'primary' : ''}`}
+                style={{
+                  fontSize: '11px',
+                  fontWeight: voiceLang === 'en' ? 700 : 400,
+                }}
+                onClick={() => {
+                  const defaultEngVoice = instance.characterId === 'pip_the_bear' ? 'bm_george' : 'af_heart';
+                  handleUpdateSceneVoice({ lang: 'en', voiceId: defaultEngVoice });
+                }}
+              >
+                🇬🇧/🇺🇸 English
+              </button>
+            </div>
+          </div>
+
+          {/* Assigned Voice Dropdown */}
+          <div>
+            <span style={{ fontSize: '11px', color: 'var(--ed-text-muted)' }}>
+              Assigned Voice ({voiceLang === 'hi' ? '4 Hindi' : '28 English'} Styles)
+            </span>
             <select
               className="ed-select"
               value={voiceId}
-              onChange={(e) => setVoiceId(e.target.value)}
+              onChange={(e) => {
+                const vid = e.target.value;
+                const isHindi = vid.startsWith('hf_') || vid.startsWith('hm_');
+                handleUpdateSceneVoice({
+                  voiceId: vid,
+                  lang: isHindi ? 'hi' : 'en',
+                });
+              }}
               style={{ width: '100%', fontSize: '11px', marginTop: '2px' }}
             >
-              {KOKORO_VOICES.map((grp) => (
-                <optgroup key={grp.group} label={grp.group}>
-                  {grp.voices.map((v) => (
-                    <option key={v.id} value={v.id}>
-                      {v.name}
-                    </option>
-                  ))}
-                </optgroup>
-              ))}
+              {KOKORO_VOICES
+                .filter((grp) => (voiceLang === 'hi' ? grp.lang === 'hi' : grp.lang === 'en'))
+                .map((grp) => (
+                  <optgroup key={grp.group} label={grp.group}>
+                    {grp.voices.map((v) => (
+                      <option key={v.id} value={v.id}>
+                        {v.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
             </select>
           </div>
 
+          {/* Speaking Emotion (All 14 calibrated delivery styles) */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
             <div>
-              <span style={{ fontSize: '11px', color: 'var(--ed-text-muted)' }}>Speaking Direction</span>
+              <span style={{ fontSize: '11px', color: 'var(--ed-text-muted)' }}>Speaking Emotion</span>
               <select
                 className="ed-select"
-                value={voiceStyle}
-                onChange={(e) => setVoiceStyle(e.target.value as SpeakingDirection)}
+                value={voiceEmotion}
+                onChange={(e) => {
+                  const em = e.target.value as SpeakingEmotion;
+                  handleUpdateSceneVoice({ emotion: em });
+                }}
                 style={{ width: '100%', fontSize: '11px', marginTop: '2px' }}
               >
-                {SPEAKING_DIRECTIONS.map((dir) => (
-                  <option key={dir.id} value={dir.id}>
-                    {dir.emoji} {dir.label}
+                {EMOTION_OPTIONS.map((emo) => (
+                  <option key={emo.id} value={emo.id}>
+                    {emo.emoji} {emo.label}
                   </option>
                 ))}
               </select>
@@ -567,16 +884,19 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
               <select
                 className="ed-select"
                 value={voiceEffect}
-                onChange={(e) => setVoiceEffect(e.target.value as any)}
+                onChange={(e) => handleUpdateSceneVoice({ effect: e.target.value as any })}
                 style={{ width: '100%', fontSize: '11px', marginTop: '2px' }}
               >
                 <option value="normal">Normal (Natural)</option>
                 <option value="cartoon">Cartoon (Playful)</option>
                 <option value="robot">Robot (Toy)</option>
+                <option value="whisper">Whisper (Soft)</option>
+                <option value="shout">Shout (Elevated)</option>
               </select>
             </div>
           </div>
 
+          {/* Speed slider */}
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px' }}>
               <span style={{ color: 'var(--ed-text-muted)' }}>Speed</span>
@@ -589,10 +909,11 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
               max="2.0"
               step="0.05"
               value={voiceSpeed}
-              onChange={(e) => setVoiceSpeed(parseFloat(e.target.value))}
+              onChange={(e) => handleUpdateSceneVoice({ speed: parseFloat(e.target.value) })}
             />
           </div>
 
+          {/* Action buttons */}
           <div style={{ display: 'flex', gap: '6px', marginTop: '4px' }}>
             <button
               type="button"
@@ -601,7 +922,7 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
               style={{ flex: 1, fontSize: '11px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
             >
               {isAuditioning ? <PauseIcon size={12} /> : <PlayIcon size={12} />}
-              <span>{isAuditioning ? 'Stop Audition' : 'Audition Voice'}</span>
+              <span>{isAuditioning ? 'Stop' : `Audition (${voiceLang.toUpperCase()})`}</span>
             </button>
             <button
               type="button"
@@ -609,9 +930,10 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
               onClick={handleSaveDefaultVoice}
               disabled={isSavingVoice}
               style={{ flex: 1, fontSize: '11px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
+              title="Save this language and voice as the permanent default for this character"
             >
               <CheckIcon size={12} />
-              <span>{isSavingVoice ? 'Saving...' : 'Save As Default'}</span>
+              <span>{isSavingVoice ? 'Saving...' : 'Save As Global'}</span>
             </button>
           </div>
 
@@ -654,6 +976,9 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
               const visemeCount = dlg.visemeCues?.length || 0;
               const startSec = (dlg.startMs / 1000).toFixed(1);
               const durSec = (dlg.durationMs / 1000).toFixed(1);
+              const lineLang = dlg.lang || voiceLang;
+              const lineEmotion = dlg.emotion || dlg.speakingDirection || 'neutral';
+              const lineFacialExp = dlg.facialExpression || EMOTION_TO_FACIAL_EXPRESSION[lineEmotion as SpeakingEmotion] || 'neutral';
 
               return (
                 <div
@@ -684,16 +1009,48 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
                   </div>
 
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '10px', color: 'var(--ed-text-muted)', marginTop: '2px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <span style={{ textTransform: 'capitalize', color: '#c4b5fd', fontWeight: 600 }}>
-                        {dlg.speakingDirection || 'calm'}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
+                      <span
+                        style={{
+                          padding: '1px 4px',
+                          borderRadius: '3px',
+                          background: lineLang === 'hi' ? '#065f46' : '#1e3a8a',
+                          color: '#ffffff',
+                          fontWeight: 600,
+                          fontSize: '9px',
+                        }}
+                      >
+                        {lineLang === 'hi' ? '🇮🇳 हिन्दी' : '🇬🇧 EN'}
+                      </span>
+                      <span
+                        style={{
+                          textTransform: 'capitalize',
+                          color: '#c4b5fd',
+                          fontWeight: 600,
+                          padding: '1px 4px',
+                          borderRadius: '3px',
+                          background: 'rgba(139, 92, 246, 0.15)',
+                        }}
+                      >
+                        {EMOTION_OPTIONS.find(e => e.id === lineEmotion)?.emoji || '💬'} {lineEmotion}
+                      </span>
+                      <span
+                        style={{
+                          textTransform: 'capitalize',
+                          color: '#67e8f9',
+                          fontWeight: 500,
+                          padding: '1px 4px',
+                          borderRadius: '3px',
+                          background: 'rgba(6, 182, 212, 0.15)',
+                        }}
+                      >
+                        Face: {lineFacialExp}
                       </span>
                       <span>•</span>
                       <span>{startSec}s - {(Number(startSec) + Number(durSec)).toFixed(1)}s</span>
-                      <span>({durSec}s)</span>
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                       {dlg.audioUrl ? (
                         <span
                           style={{
@@ -731,11 +1088,12 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
                             color: '#10b981',
                             fontWeight: 600,
                           }}
+                          title={`${visemeCount} synchronized visemes`}
                         >
                           👄 {visemeCount}v
                         </span>
                       ) : (
-                        <span style={{ color: '#f59e0b' }}>No visemes</span>
+                        <span style={{ color: '#f59e0b', fontSize: '9px' }}>No visemes</span>
                       )}
 
                       {dlg.audioUrl && (
@@ -769,31 +1127,110 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
             gap: '8px',
           }}
         >
-          <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--ed-text)' }}>
-            + Add Character Dialogue
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--ed-text)' }}>
+              + Add Character Dialogue
+            </span>
+            <button
+              type="button"
+              className="ed-tool-btn"
+              onClick={handleAutoSuggestEmotion}
+              disabled={isSuggestingEmotion || !newDialogueText.trim()}
+              style={{
+                fontSize: '10px',
+                padding: '2px 6px',
+                color: '#c4b5fd',
+                borderColor: '#8b5cf6',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '3px',
+              }}
+              title="Automatically detect speaking emotion and facial expression from dialogue text"
+            >
+              <SparklesIcon size={10} />
+              <span>{isSuggestingEmotion ? 'Analyzing...' : 'Suggest Emotion'}</span>
+            </button>
+          </div>
+
+          {suggestionBadge && (
+            <div
+              style={{
+                fontSize: '10px',
+                padding: '3px 6px',
+                borderRadius: '4px',
+                background: 'rgba(139, 92, 246, 0.2)',
+                color: '#ddd6fe',
+                border: '1px solid rgba(139, 92, 246, 0.3)',
+              }}
+            >
+              ✨ {suggestionBadge}
+            </div>
+          )}
 
           <textarea
             className="ed-input"
             rows={2}
-            placeholder={`What does ${instance.name || 'this character'} say?`}
+            placeholder={voiceLang === 'hi' ? `यह पात्र क्या बोलता है? (उदा. नमस्ते दोस्तों!)` : `What does ${instance.name || 'this character'} say?`}
             value={newDialogueText}
             onChange={(e) => setNewDialogueText(e.target.value)}
             style={{ fontSize: '11px', resize: 'vertical' }}
           />
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
             <div>
-              <span style={{ fontSize: '10px', color: 'var(--ed-text-muted)' }}>Emotion / Direction</span>
+              <span style={{ fontSize: '10px', color: 'var(--ed-text-muted)' }}>Language</span>
               <select
                 className="ed-select"
-                value={newDialogueDirection}
-                onChange={(e) => setNewDialogueDirection(e.target.value as SpeakingDirection)}
+                value={newDialogueLang}
+                onChange={(e) => {
+                  const l = e.target.value as 'hi' | 'en';
+                  setNewDialogueLang(l);
+                  if (l === 'hi' && !newDialogueVoice.startsWith('h')) {
+                    setNewDialogueVoice('hf_alpha');
+                  } else if (l === 'en' && newDialogueVoice.startsWith('h')) {
+                    setNewDialogueVoice('af_heart');
+                  }
+                }}
                 style={{ width: '100%', fontSize: '11px', marginTop: '2px' }}
               >
-                {SPEAKING_DIRECTIONS.map((dir) => (
-                  <option key={dir.id} value={dir.id}>
-                    {dir.emoji} {dir.label}
+                <option value="hi">🇮🇳 Hindi (हिन्दी)</option>
+                <option value="en">🇬🇧 English</option>
+              </select>
+            </div>
+
+            <div>
+              <span style={{ fontSize: '10px', color: 'var(--ed-text-muted)' }}>Speaking Emotion</span>
+              <select
+                className="ed-select"
+                value={newDialogueEmotion}
+                onChange={(e) => {
+                  const em = e.target.value as SpeakingEmotion;
+                  setNewDialogueEmotion(em);
+                  setNewDialogueFacialExpression(EMOTION_TO_FACIAL_EXPRESSION[em] || 'neutral');
+                }}
+                style={{ width: '100%', fontSize: '11px', marginTop: '2px' }}
+              >
+                {EMOTION_OPTIONS.map((emo) => (
+                  <option key={emo.id} value={emo.id}>
+                    {emo.emoji} {emo.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+            <div>
+              <span style={{ fontSize: '10px', color: 'var(--ed-text-muted)' }}>Facial Expression Override</span>
+              <select
+                className="ed-select"
+                value={newDialogueFacialExpression}
+                onChange={(e) => setNewDialogueFacialExpression(e.target.value as FacialExpression)}
+                style={{ width: '100%', fontSize: '11px', marginTop: '2px' }}
+              >
+                {FACIAL_EXPRESSIONS.map((expr) => (
+                  <option key={expr.id} value={expr.id}>
+                    {expr.emoji} {expr.label}
                   </option>
                 ))}
               </select>

@@ -30,7 +30,7 @@ const defaultState: StoryFormState = {
   topic: "",
   ageGroup: "4-7 years",
   desiredDurationSeconds: 60,
-  language: "English",
+  language: "Hindi",
   title: "",
   genre: "Adventure",
   visualStyle: "Storybook",
@@ -509,12 +509,12 @@ export default function StoryBuilder({
                     value={form.language}
                     onChange={(e) => setForm((prev) => ({ ...prev, language: e.target.value }))}
                   >
+                    <option value="Hindi">Hindi (हिन्दी) [Default]</option>
                     <option value="English">English</option>
                     <option value="Spanish">Spanish</option>
                     <option value="French">French</option>
                     <option value="German">German</option>
                     <option value="Japanese">Japanese</option>
-                    <option value="Hindi">Hindi</option>
                   </select>
                 </div>
                 <div className="studio-field">
