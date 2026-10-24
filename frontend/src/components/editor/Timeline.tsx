@@ -47,10 +47,58 @@ interface TimelineProps {
   selectedMusic: string | null;
   selectedInstanceId?: string | null;
   onSelectInstance?: (instanceId: string | null) => void;
+  selectedDialogueId?: string | null;
+  onSelectDialogue?: (dialogueId: string | null) => void;
   selectedOverlayId?: string | null;
   onSelectOverlay?: (overlayId: string | null) => void;
   isRippleOn?: boolean;
   onToggleRipple?: () => void;
+}
+
+interface TimelineLayoutItem<T> {
+  item: T;
+  scene: EditorScene;
+  startMs: number;
+  durationMs: number;
+  endMs: number;
+  lane: number;
+}
+
+function packClipsIntoSubLanes<T>(
+  clips: Array<{ item: T; scene: EditorScene; startMs: number; durationMs: number; endMs: number }>
+): { items: TimelineLayoutItem<T>[]; totalLanes: number } {
+  if (clips.length === 0) {
+    return { items: [], totalLanes: 1 };
+  }
+
+  // Sort by startMs, then by endMs
+  const sorted = [...clips].sort((a, b) => a.startMs - b.startMs || a.endMs - b.endMs);
+  const laneEndTimes: number[] = [];
+  const packed: TimelineLayoutItem<T>[] = [];
+
+  for (const clip of sorted) {
+    let assignedLane = -1;
+    for (let l = 0; l < laneEndTimes.length; l++) {
+      if (laneEndTimes[l] <= clip.startMs + 30) {
+        assignedLane = l;
+        laneEndTimes[l] = clip.endMs;
+        break;
+      }
+    }
+    if (assignedLane === -1) {
+      assignedLane = laneEndTimes.length;
+      laneEndTimes.push(clip.endMs);
+    }
+    packed.push({
+      ...clip,
+      lane: assignedLane,
+    });
+  }
+
+  return {
+    items: packed,
+    totalLanes: Math.max(1, laneEndTimes.length),
+  };
 }
 
 export const Timeline: React.FC<TimelineProps> = ({
@@ -67,6 +115,8 @@ export const Timeline: React.FC<TimelineProps> = ({
   selectedMusic,
   selectedInstanceId,
   onSelectInstance,
+  selectedDialogueId,
+  onSelectDialogue,
   selectedOverlayId,
   onSelectOverlay,
   isRippleOn: isRippleOnProp,
@@ -83,6 +133,63 @@ export const Timeline: React.FC<TimelineProps> = ({
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   const activeScene = scenes.find((s) => s.sceneId === activeSceneId) || null;
+
+  // Sub-lane packing for dialogues
+  const packedDialogues = React.useMemo(() => {
+    const raw: Array<{
+      item: any;
+      scene: EditorScene;
+      startMs: number;
+      durationMs: number;
+      endMs: number;
+    }> = [];
+    for (const scene of scenes) {
+      const dlgs = scene.animationData?.dialogueLines || [];
+      for (const dlg of dlgs) {
+        const startMs = scene.startMs + (dlg.startMs || 0);
+        const durationMs = dlg.durationMs || 3000;
+        raw.push({
+          item: dlg,
+          scene,
+          startMs,
+          durationMs,
+          endMs: startMs + durationMs,
+        });
+      }
+    }
+    return packClipsIntoSubLanes(raw);
+  }, [scenes]);
+
+  const dialogueTrackHeight = Math.max(46, packedDialogues.totalLanes * 36 + 8);
+
+  // Sub-lane packing for educational overlays
+  const packedOverlays = React.useMemo(() => {
+    const raw: Array<{
+      item: any;
+      scene: EditorScene;
+      startMs: number;
+      durationMs: number;
+      endMs: number;
+    }> = [];
+    for (const scene of scenes) {
+      const ovs = scene.animationData?.overlays || [];
+      const sceneDuration = scene.endMs - scene.startMs;
+      for (const ov of ovs) {
+        const startMs = scene.startMs + (ov.startMs || 0);
+        const durationMs = ov.durationMs !== undefined ? ov.durationMs : sceneDuration;
+        raw.push({
+          item: ov,
+          scene,
+          startMs,
+          durationMs,
+          endMs: startMs + durationMs,
+        });
+      }
+    }
+    return packClipsIntoSubLanes(raw);
+  }, [scenes]);
+
+  const overlayTrackHeight = Math.max(46, packedOverlays.totalLanes * 36 + 8);
 
   // Zoom controls
   const handleZoomIn = () => setPxPerSec((prev) => Math.min(160, Math.round(prev * 1.3)));
@@ -187,6 +294,9 @@ export const Timeline: React.FC<TimelineProps> = ({
 
     if (targetDlg.characterInstanceId && onSelectInstance) {
       onSelectInstance(targetDlg.characterInstanceId);
+    }
+    if (onSelectDialogue) {
+      onSelectDialogue(dlgId);
     }
 
     const startX = e.clientX;
@@ -429,13 +539,19 @@ export const Timeline: React.FC<TimelineProps> = ({
             <SparklesIcon size={13} color="#a78bfa" />
             <span>2D Rig</span>
           </div>
-          <div className="ed-track-header track-dialogue">
+          <div
+            className="ed-track-header track-dialogue"
+            style={{ height: `${dialogueTrackHeight}px`, minHeight: `${dialogueTrackHeight}px` }}
+          >
             <span style={{ fontSize: '13px' }}>👄</span>
-            <span>Dialogue</span>
+            <span>Dialogue {packedDialogues.totalLanes > 1 ? `(${packedDialogues.totalLanes})` : ''}</span>
           </div>
-          <div className="ed-track-header track-overlays">
+          <div
+            className="ed-track-header track-overlays"
+            style={{ height: `${overlayTrackHeight}px`, minHeight: `${overlayTrackHeight}px` }}
+          >
             <span style={{ fontSize: '13px' }}>📍</span>
-            <span>Overlays</span>
+            <span>Overlays {packedOverlays.totalLanes > 1 ? `(${packedOverlays.totalLanes})` : ''}</span>
           </div>
           <div className="ed-track-header track-narration">
             <MicIcon size={13} />
@@ -633,61 +749,92 @@ export const Timeline: React.FC<TimelineProps> = ({
           </div>
 
           {/* Track: Dialogue & Lip-Sync */}
-          <div className="ed-track-row track-dialogue">
-            {scenes.map((scene) => {
-              const dialogues = scene.animationData?.dialogueLines || [];
-              if (dialogues.length === 0) return null;
+          <div
+            className="ed-track-row track-dialogue"
+            style={{ height: `${dialogueTrackHeight}px`, minHeight: `${dialogueTrackHeight}px`, position: 'relative' }}
+          >
+            {packedDialogues.items.map(({ item: dlg, scene, startMs, durationMs, lane }) => {
+              const leftPx = msToPx(startMs);
+              const widthPx = msToPx(durationMs);
+              const isSelected = dlg.id === selectedDialogueId;
               const sceneDuration = scene.endMs - scene.startMs;
+              const isOverflow = (dlg.startMs || 0) + durationMs > sceneDuration;
+              const hasAudio = Boolean(dlg.audioUrl);
+              const visemeCount = dlg.visemeCues?.length || 0;
+              const topPx = 4 + lane * 36;
 
-              return dialogues.map((dlg) => {
-                const dlgStartMs = scene.startMs + (dlg.startMs || 0);
-                const dlgDurationMs = dlg.durationMs || 3000;
-                const leftPx = msToPx(dlgStartMs);
-                const widthPx = msToPx(dlgDurationMs);
-                const isSelected = dlg.characterInstanceId === selectedInstanceId;
-                const visemeCount = dlg.visemeCues?.length || 0;
-                const isOverflow = (dlg.startMs || 0) + dlgDurationMs > sceneDuration;
-                const hasAudio = Boolean(dlg.audioUrl);
-
-                return (
-                  <div
-                    key={`dlg-clip-${dlg.id}`}
-                    className={`ed-dialogue-block ${isSelected ? 'selected' : ''} ${isOverflow ? 'overflow' : ''}`}
-                    style={{
-                      left: `${leftPx}px`,
-                      width: `${Math.max(30, widthPx)}px`,
-                      position: 'absolute',
-                      top: '6px',
-                      height: '32px',
-                      borderRadius: '4px',
-                      background: isOverflow
-                        ? 'rgba(239, 68, 68, 0.25)'
-                        : isSelected
-                        ? 'rgba(236, 72, 153, 0.35)'
-                        : 'rgba(236, 72, 153, 0.18)',
-                      border: isOverflow
-                        ? '2px solid #ef4444'
-                        : isSelected
-                        ? '2px solid #ec4899'
-                        : '1px solid rgba(236, 72, 153, 0.45)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      padding: '0 8px',
-                      paddingRight: '12px',
-                      gap: '6px',
-                      fontSize: '11px',
-                      color: isOverflow ? '#fca5a5' : '#fbcfe8',
-                      overflow: 'hidden',
-                      whiteSpace: 'nowrap',
-                      boxShadow: isSelected ? '0 0 10px rgba(236, 72, 153, 0.5)' : undefined,
-                      zIndex: isSelected ? 5 : 2,
-                    }}
-                    onMouseDown={(e) => handleDialogueMouseDown(e, scene, dlg.id)}
-                    title={`${dlg.characterName}: "${dlg.text}" (Offset: +${formatDurationHuman(dlg.startMs || 0)}, Dur: ${formatDurationHuman(dlgDurationMs)})${isOverflow ? ' - EXCEEDS SCENE DURATION!' : ''}`}
-                  >
-                    <span style={{ fontSize: '12px' }}>👄</span>
-                    <span style={{ fontWeight: 600 }}>{dlg.characterName}:</span>
-                    <span style={{ opacity: 0.9, fontStyle: 'italic' }}>"{dlg.text}"</span>
+              return (
+                <div
+                  key={`dlg-clip-${dlg.id}`}
+                  className={`ed-dialogue-block ${isSelected ? 'selected' : ''} ${isOverflow ? 'overflow' : ''}`}
+                  style={{
+                    left: `${leftPx}px`,
+                    width: `${Math.max(28, widthPx)}px`,
+                    position: 'absolute',
+                    top: `${topPx}px`,
+                    height: '32px',
+                    borderRadius: '4px',
+                    background: isOverflow
+                      ? 'rgba(239, 68, 68, 0.25)'
+                      : isSelected
+                      ? 'rgba(236, 72, 153, 0.35)'
+                      : 'rgba(236, 72, 153, 0.18)',
+                    border: isOverflow
+                      ? '2px solid #ef4444'
+                      : isSelected
+                      ? '2px solid #ec4899'
+                      : '1px solid rgba(236, 72, 153, 0.45)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    padding: '0 6px',
+                    gap: '5px',
+                    fontSize: '11px',
+                    color: isOverflow ? '#fca5a5' : '#fbcfe8',
+                    overflow: 'hidden',
+                    whiteSpace: 'nowrap',
+                    boxShadow: isSelected ? '0 0 10px rgba(236, 72, 153, 0.5)' : undefined,
+                    zIndex: isSelected ? 5 : 2,
+                    cursor: 'pointer',
+                    boxSizing: 'border-box',
+                  }}
+                  onMouseDown={(e) => handleDialogueMouseDown(e, scene, dlg.id)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSelectScene(scene.sceneId);
+                    if (onSelectDialogue) onSelectDialogue(dlg.id);
+                  }}
+                  title={`${dlg.characterName}: "${dlg.text}" (Offset: +${formatDurationHuman(dlg.startMs || 0)}, Dur: ${formatDurationHuman(durationMs)})${isOverflow ? ' - EXCEEDS SCENE DURATION!' : ''}`}
+                >
+                  <span style={{ fontSize: '12px', flexShrink: 0 }}>👄</span>
+                  {widthPx >= 60 && (
+                    <span
+                      style={{
+                        fontWeight: 600,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        flexShrink: widthPx < 140 ? 1 : 0,
+                      }}
+                    >
+                      {dlg.characterName}:
+                    </span>
+                  )}
+                  {widthPx >= 130 && (
+                    <span
+                      style={{
+                        opacity: 0.9,
+                        fontStyle: 'italic',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        flex: 1,
+                        minWidth: 0,
+                      }}
+                    >
+                      "{dlg.text}"
+                    </span>
+                  )}
+                  {widthPx >= 170 && (
                     <span
                       style={{
                         fontSize: '9px',
@@ -696,129 +843,144 @@ export const Timeline: React.FC<TimelineProps> = ({
                         background: 'rgba(0, 0, 0, 0.25)',
                         padding: '1px 4px',
                         borderRadius: '3px',
+                        flexShrink: 0,
                       }}
                     >
-                      +{((dlg.startMs || 0) / 1000).toFixed(1)}s | {(dlgDurationMs / 1000).toFixed(1)}s
+                      +{((dlg.startMs || 0) / 1000).toFixed(1)}s | {(durationMs / 1000).toFixed(1)}s
                     </span>
-                    {hasAudio ? (
-                      <span title="Dialogue audio generated" style={{ color: '#34d399', fontSize: '10px' }}>🔊</span>
-                    ) : (
-                      <span title="No audio generated" style={{ color: '#94a3b8', fontSize: '10px' }}>🔇</span>
-                    )}
-                    {visemeCount > 0 && (
-                      <span
-                        style={{
-                          fontSize: '9px',
-                          fontWeight: 700,
-                          padding: '1px 4px',
-                          borderRadius: '3px',
-                          background: 'rgba(255, 255, 255, 0.12)',
-                          color: '#a7f3d0',
-                        }}
-                      >
-                        {visemeCount}v
-                      </span>
-                    )}
-                    {isOverflow && (
-                      <span style={{ display: 'inline-flex', alignItems: 'center' }} title="Exceeds scene duration">
-                        <AlertTriangleIcon size={12} color="#ef4444" />
-                      </span>
-                    )}
-
-                    {/* Right trim handle */}
-                    <div
-                      className="ed-dialogue-handle right"
-                      onMouseDown={(e) => handleDialogueResizeRightMouseDown(e, scene, dlg.id)}
-                      title="Drag to trim dialogue duration"
-                    />
-                  </div>
-                );
-              });
-            })}
-          </div>
-
-          {/* Track: Educational & Geographic Overlays */}
-          <div className="ed-track-row track-overlays">
-            {scenes.map((scene) => {
-              const overlays = scene.animationData?.overlays || [];
-              if (overlays.length === 0) return null;
-              const sceneDuration = scene.endMs - scene.startMs;
-
-              return overlays.map((ov) => {
-                const ovStartMs = scene.startMs + (ov.startMs || 0);
-                const ovDurationMs = ov.durationMs !== undefined ? ov.durationMs : sceneDuration;
-                const leftPx = msToPx(ovStartMs);
-                const widthPx = msToPx(ovDurationMs);
-                const isSelected = ov.id === selectedOverlayId;
-
-                const getOverlayIcon = (t: string) => {
-                  switch (t) {
-                    case 'location_pin': return '📍';
-                    case 'route_line': return '〰️';
-                    case 'highlight_ring': return '⭕';
-                    case 'arrow_pointer': return '↗️';
-                    case 'callout_label': return '🏷️';
-                    default: return '📍';
-                  }
-                };
-
-                return (
-                  <div
-                    key={`overlay-clip-${ov.id}`}
-                    className={`ed-overlay-block ${isSelected ? 'selected' : ''}`}
-                    style={{
-                      left: `${leftPx}px`,
-                      width: `${Math.max(28, widthPx)}px`,
-                      position: 'absolute',
-                      top: '5px',
-                      height: '34px',
-                      borderRadius: '4px',
-                      background: isSelected
-                        ? 'rgba(6, 182, 212, 0.35)'
-                        : 'rgba(6, 182, 212, 0.18)',
-                      border: isSelected
-                        ? '2px solid #06b6d4'
-                        : '1px solid rgba(6, 182, 212, 0.45)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      padding: '0 8px',
-                      gap: '6px',
-                      fontSize: '11px',
-                      color: isSelected ? '#a5f3fc' : '#67e8f9',
-                      cursor: 'pointer',
-                      overflow: 'hidden',
-                      whiteSpace: 'nowrap',
-                      boxShadow: isSelected ? '0 0 10px rgba(6, 182, 212, 0.5)' : undefined,
-                      zIndex: isSelected ? 5 : 2,
-                    }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onSelectScene(scene.sceneId);
-                      if (onSelectOverlay) onSelectOverlay(ov.id);
-                    }}
-                    title={`${ov.title || ov.type} (${ov.layerPosition === 'below_characters' ? 'Below Characters' : 'Above Characters'}) - ${formatDurationHuman(ovDurationMs)}`}
-                  >
-                    <span>{getOverlayIcon(ov.type)}</span>
-                    <span style={{ fontWeight: 600 }}>{ov.title || ov.type}</span>
+                  )}
+                  {hasAudio ? (
+                    <span title="Dialogue audio generated" style={{ color: '#34d399', fontSize: '10px', flexShrink: 0 }}>🔊</span>
+                  ) : (
+                    <span title="No audio generated" style={{ color: '#94a3b8', fontSize: '10px', flexShrink: 0 }}>🔇</span>
+                  )}
+                  {visemeCount > 0 && widthPx >= 100 && (
                     <span
                       style={{
                         fontSize: '9px',
                         fontWeight: 700,
-                        textTransform: 'uppercase',
                         padding: '1px 4px',
                         borderRadius: '3px',
-                        background: 'rgba(0, 0, 0, 0.3)',
-                        color: ov.layerPosition === 'below_characters' ? '#93c5fd' : '#fbcfe8',
+                        background: 'rgba(255, 255, 255, 0.12)',
+                        color: '#a7f3d0',
+                        flexShrink: 0,
                       }}
                     >
-                      {ov.layerPosition === 'below_characters' ? 'Under' : 'Over'}
+                      {visemeCount}v
                     </span>
-                    <span style={{ fontSize: '10px', opacity: 0.8, fontFamily: 'monospace' }}>
-                      {formatDurationHuman(ovDurationMs)}
+                  )}
+                  {isOverflow && (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', flexShrink: 0 }} title="Exceeds scene duration">
+                      <AlertTriangleIcon size={12} color="#ef4444" />
                     </span>
-                  </div>
-                );
-              });
+                  )}
+
+                  {/* Right trim handle */}
+                  <div
+                    className="ed-dialogue-handle right"
+                    onMouseDown={(e) => handleDialogueResizeRightMouseDown(e, scene, dlg.id)}
+                    title="Drag to trim dialogue duration"
+                  />
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Track: Educational & Geographic Overlays */}
+          <div
+            className="ed-track-row track-overlays"
+            style={{ height: `${overlayTrackHeight}px`, minHeight: `${overlayTrackHeight}px`, position: 'relative' }}
+          >
+            {packedOverlays.items.map(({ item: ov, scene, startMs, durationMs, lane }) => {
+              const leftPx = msToPx(startMs);
+              const widthPx = msToPx(durationMs);
+              const isSelected = ov.id === selectedOverlayId;
+              const topPx = 4 + lane * 36;
+
+              const getOverlayIcon = (t: string) => {
+                switch (t) {
+                  case 'location_pin': return '📍';
+                  case 'route_line': return '〰️';
+                  case 'highlight_ring': return '⭕';
+                  case 'arrow_pointer': return '↗️';
+                  case 'callout_label': return '🏷️';
+                  default: return '📍';
+                }
+              };
+
+              return (
+                <div
+                  key={`overlay-clip-${ov.id}`}
+                  className={`ed-overlay-block ${isSelected ? 'selected' : ''}`}
+                  style={{
+                    left: `${leftPx}px`,
+                    width: `${Math.max(26, widthPx)}px`,
+                    position: 'absolute',
+                    top: `${topPx}px`,
+                    height: '32px',
+                    borderRadius: '4px',
+                    background: isSelected
+                      ? 'rgba(6, 182, 212, 0.35)'
+                      : 'rgba(6, 182, 212, 0.18)',
+                    border: isSelected
+                      ? '2px solid #06b6d4'
+                      : '1px solid rgba(6, 182, 212, 0.45)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    padding: '0 6px',
+                    gap: '5px',
+                    fontSize: '11px',
+                    color: isSelected ? '#a5f3fc' : '#67e8f9',
+                    cursor: 'pointer',
+                    overflow: 'hidden',
+                    whiteSpace: 'nowrap',
+                    boxShadow: isSelected ? '0 0 10px rgba(6, 182, 212, 0.5)' : undefined,
+                    zIndex: isSelected ? 5 : 2,
+                    boxSizing: 'border-box',
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSelectScene(scene.sceneId);
+                    if (onSelectOverlay) onSelectOverlay(ov.id);
+                  }}
+                  title={`${ov.title || ov.type} (${ov.layerPosition === 'below_characters' ? 'Below Characters' : 'Above Characters'}) - ${formatDurationHuman(durationMs)}`}
+                >
+                  <span style={{ fontSize: '12px', flexShrink: 0 }}>{getOverlayIcon(ov.type)}</span>
+                  {widthPx >= 50 && (
+                    <span
+                      style={{
+                        fontWeight: 600,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        flex: 1,
+                        minWidth: 0,
+                      }}
+                    >
+                      {ov.title || ov.type}
+                    </span>
+                  )}
+                  {widthPx >= 120 && (
+                    <span
+                      style={{
+                        fontSize: '9px',
+                        padding: '1px 4px',
+                        borderRadius: '3px',
+                        background: 'rgba(255, 255, 255, 0.1)',
+                        color: ov.layerPosition === 'below_characters' ? '#93c5fd' : '#a5f3fc',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {ov.layerPosition === 'below_characters' ? 'under' : 'over'}
+                    </span>
+                  )}
+                  {widthPx >= 160 && (
+                    <span style={{ fontSize: '10px', opacity: 0.8, fontFamily: 'monospace', flexShrink: 0 }}>
+                      {formatDurationHuman(durationMs)}
+                    </span>
+                  )}
+                </div>
+              );
             })}
           </div>
 

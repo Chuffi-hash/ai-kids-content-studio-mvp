@@ -998,6 +998,7 @@ contentRouter.post("/scenes/:sceneId/dialogue/generate", async (req, res) => {
       speed,
       startMs,
       effect,
+      volume,
       provider,
       lang,
     } = req.body;
@@ -1025,6 +1026,7 @@ contentRouter.post("/scenes/:sceneId/dialogue/generate", async (req, res) => {
       speed: speed ? parseFloat(speed) : undefined,
       startMs: typeof startMs === "number" ? startMs : 0,
       effect,
+      volume: volume !== undefined ? parseFloat(volume) : undefined,
       provider,
       lang,
     });

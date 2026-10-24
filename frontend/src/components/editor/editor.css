@@ -1189,15 +1189,11 @@ body.theme-light .ed-center-canvas {
 }
 
 .track-dialogue {
-  height: 46px !important;
-  min-height: 46px !important;
-  max-height: 46px !important;
+  min-height: 46px;
 }
 
 .track-overlays {
-  height: 46px !important;
-  min-height: 46px !important;
-  max-height: 46px !important;
+  min-height: 46px;
 }
 
 .track-narration {

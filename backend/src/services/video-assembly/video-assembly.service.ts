@@ -269,7 +269,7 @@ export class VideoAssemblyService {
         }
 
         // Collect valid dialogue audio files for the scene
-        const dialogueAudios: Array<{ path: string; startMs: number }> = [];
+        const dialogueAudios: Array<{ path: string; startMs: number; volume?: number }> = [];
         if (Array.isArray((scene as any).animationData?.dialogueLines)) {
           for (const line of (scene as any).animationData.dialogueLines) {
             if (line.audioUrl) {
@@ -278,6 +278,7 @@ export class VideoAssemblyService {
                 dialogueAudios.push({
                   path: resolved,
                   startMs: Math.max(0, line.startMs || 0),
+                  volume: typeof line.volume === 'number' && Number.isFinite(line.volume) ? line.volume : 1.0,
                 });
               }
             }
@@ -411,14 +412,21 @@ export class VideoAssemblyService {
       }
 
       if (musicPath && fs.existsSync(musicPath)) {
-        job.stage = 'Mixing soundtrack and mastering output audio...';
+        job.stage = 'Mixing soundtrack with audio ducking and mastering output audio...';
+        const effectiveMusicVol = Math.max(0.01, Math.min(1.0, musicVolume));
+        const duckingFilter = [
+          `[0:a]volume=1.0,aresample=44100,asplit=2[speech_main][speech_sc]`,
+          `[1:a]volume=${effectiveMusicVol.toFixed(2)},aresample=44100[bgm_in]`,
+          `[bgm_in][speech_sc]sidechaincompress=threshold=0.03:ratio=4:attack=50:release=400[bgm_ducked]`,
+          `[speech_main][bgm_ducked]amix=inputs=2:duration=first:dropout_transition=2:normalize=0,loudnorm=I=-16:TP=-1.5:LRA=11[aout]`,
+        ].join(';');
+
         await execFileAsync(ffmpegPath, [
           '-y',
           '-i', assembledPath,
           '-stream_loop', '-1',
           '-i', musicPath,
-          '-filter_complex',
-          `[0:a]volume=1.0[a0];[1:a]volume=${musicVolume}[a1];[a0][a1]amix=inputs=2:duration=first:dropout_transition=2[aout]`,
+          '-filter_complex', duckingFilter,
           '-map', '0:v',
           '-map', '[aout]',
           '-c:v', 'copy',
@@ -428,8 +436,19 @@ export class VideoAssemblyService {
           finalOutputPath,
         ]);
       } else {
-        // Move assembled file to final storage
-        await fs.promises.copyFile(assembledPath, finalOutputPath);
+        job.stage = 'Mastering audio to broadcast standard (-16 LUFS)...';
+        await execFileAsync(ffmpegPath, [
+          '-y',
+          '-i', assembledPath,
+          '-filter_complex', '[0:a]aresample=44100,loudnorm=I=-16:TP=-1.5:LRA=11[aout]',
+          '-map', '0:v',
+          '-map', '[aout]',
+          '-c:v', 'copy',
+          '-c:a', 'aac',
+          '-b:a', '192k',
+          '-ar', '44100',
+          finalOutputPath,
+        ]);
       }
 
       // Do not report success unless a non-empty output file exists and ffprobe can read it.
@@ -489,16 +508,18 @@ export class VideoAssemblyService {
   private buildAudioMixFfmpegArgs(options: {
     videoInputCount: number;
     audioPath: string | null;
-    dialogueAudios: Array<{ path: string; startMs: number }>;
+    dialogueAudios: Array<{ path: string; startMs: number; volume?: number }>;
+    durationSec: number;
     videoFilter?: string;
   }): {
     audioInputArgs: string[];
     filterComplexArgs: string[];
     mapArgs: string[];
   } {
-    const { videoInputCount, audioPath, dialogueAudios, videoFilter } = options;
+    const { videoInputCount, audioPath, dialogueAudios, durationSec, videoFilter } = options;
     const hasNarration = Boolean(audioPath && fs.existsSync(audioPath));
     const hasDialogue = dialogueAudios.length > 0;
+    const safeDurationStr = Math.max(0.1, durationSec).toFixed(3);
 
     const filterParts: string[] = [];
     if (videoFilter) {
@@ -507,19 +528,20 @@ export class VideoAssemblyService {
 
     if (hasNarration && hasDialogue) {
       const audioInputArgs = ['-i', audioPath!, ...dialogueAudios.flatMap((d) => ['-i', d.path])];
-      filterParts.push(`[${videoInputCount}:a]aresample=44100[a_narr]`);
+      filterParts.push(`[${videoInputCount}:a]volume=1.0,aresample=44100[a_narr]`);
       const mixInputs: string[] = ['[a_narr]'];
 
       dialogueAudios.forEach((d, idx) => {
         const inputIdx = videoInputCount + 1 + idx;
         const safeDelay = Math.max(1, d.startMs || 0);
+        const vol = typeof d.volume === 'number' && Number.isFinite(d.volume) ? Math.max(0, Math.min(2.0, d.volume)) : 1.0;
         const label = `[a_dlg${idx}]`;
-        filterParts.push(`[${inputIdx}:a]adelay=${safeDelay}|${safeDelay},aresample=44100${label}`);
+        filterParts.push(`[${inputIdx}:a]adelay=${safeDelay}|${safeDelay},volume=${vol.toFixed(2)},aresample=44100${label}`);
         mixInputs.push(label);
       });
 
       filterParts.push(
-        `${mixInputs.join('')}amix=inputs=${mixInputs.length}:dropout_transition=0:duration=longest,aresample=44100[aout]`
+        `${mixInputs.join('')}amix=inputs=${mixInputs.length}:dropout_transition=0:duration=longest:normalize=0,alimiter=limit=0.95,apad,atrim=0:${safeDurationStr},aresample=44100[aout]`
       );
 
       return {
@@ -529,7 +551,7 @@ export class VideoAssemblyService {
       };
     } else if (hasNarration && !hasDialogue) {
       const audioInputArgs = ['-i', audioPath!];
-      filterParts.push(`[${videoInputCount}:a]aresample=44100[aout]`);
+      filterParts.push(`[${videoInputCount}:a]volume=1.0,apad,atrim=0:${safeDurationStr},aresample=44100[aout]`);
       return {
         audioInputArgs,
         filterComplexArgs: ['-filter_complex', filterParts.join(';')],
@@ -542,16 +564,17 @@ export class VideoAssemblyService {
       dialogueAudios.forEach((d, idx) => {
         const inputIdx = videoInputCount + idx;
         const safeDelay = Math.max(1, d.startMs || 0);
+        const vol = typeof d.volume === 'number' && Number.isFinite(d.volume) ? Math.max(0, Math.min(2.0, d.volume)) : 1.0;
         const label = `[a_dlg${idx}]`;
-        filterParts.push(`[${inputIdx}:a]adelay=${safeDelay}|${safeDelay},aresample=44100${label}`);
+        filterParts.push(`[${inputIdx}:a]adelay=${safeDelay}|${safeDelay},volume=${vol.toFixed(2)},aresample=44100${label}`);
         mixInputs.push(label);
       });
 
       if (dialogueAudios.length === 1) {
-        filterParts.push(`[a_dlg0]aresample=44100[aout]`);
+        filterParts.push(`[a_dlg0]apad,atrim=0:${safeDurationStr},aresample=44100[aout]`);
       } else {
         filterParts.push(
-          `${mixInputs.join('')}amix=inputs=${mixInputs.length}:dropout_transition=0:duration=longest,aresample=44100[aout]`
+          `${mixInputs.join('')}amix=inputs=${mixInputs.length}:dropout_transition=0:duration=longest:normalize=0,alimiter=limit=0.95,apad,atrim=0:${safeDurationStr},aresample=44100[aout]`
         );
       }
 
@@ -565,7 +588,7 @@ export class VideoAssemblyService {
         '-f', 'lavfi',
         '-i', 'anullsrc=channel_layout=stereo:sample_rate=44100',
       ];
-      filterParts.push(`[${videoInputCount}:a]aresample=44100[aout]`);
+      filterParts.push(`[${videoInputCount}:a]atrim=0:${safeDurationStr},aresample=44100[aout]`);
       return {
         audioInputArgs,
         filterComplexArgs: ['-filter_complex', filterParts.join(';')],
@@ -581,7 +604,7 @@ export class VideoAssemblyService {
     ffmpegPath: string;
     animationData: any;
     audioPath: string | null;
-    dialogueAudios?: Array<{ path: string; startMs: number }>;
+    dialogueAudios?: Array<{ path: string; startMs: number; volume?: number }>;
     durationSec: number;
     width: number;
     height: number;
@@ -639,6 +662,7 @@ export class VideoAssemblyService {
             dialogueAudios.push({
               path: resolved,
               startMs: Math.max(0, line.startMs || 0),
+              volume: typeof line.volume === 'number' && Number.isFinite(line.volume) ? line.volume : 1.0,
             });
           }
         }
@@ -650,6 +674,7 @@ export class VideoAssemblyService {
       videoInputCount: 1,
       audioPath,
       dialogueAudios,
+      durationSec,
     });
 
     const args: string[] = [
@@ -680,7 +705,7 @@ export class VideoAssemblyService {
     ffmpegPath: string;
     videoPath: string;
     audioPath: string | null;
-    dialogueAudios?: Array<{ path: string; startMs: number }>;
+    dialogueAudios?: Array<{ path: string; startMs: number; volume?: number }>;
     durationSec: number;
     width: number;
     height: number;
@@ -704,6 +729,7 @@ export class VideoAssemblyService {
       videoInputCount: 1,
       audioPath,
       dialogueAudios,
+      durationSec,
       videoFilter: vf,
     });
 
@@ -736,7 +762,7 @@ export class VideoAssemblyService {
     ffmpegPath: string;
     imagePath: string;
     audioPath: string | null;
-    dialogueAudios?: Array<{ path: string; startMs: number }>;
+    dialogueAudios?: Array<{ path: string; startMs: number; volume?: number }>;
     durationSec: number;
     width: number;
     height: number;
@@ -760,6 +786,7 @@ export class VideoAssemblyService {
       videoInputCount: 1,
       audioPath,
       dialogueAudios,
+      durationSec,
       videoFilter: vf,
     });
 
@@ -793,7 +820,7 @@ export class VideoAssemblyService {
     title: string;
     narration: string;
     audioPath: string | null;
-    dialogueAudios?: Array<{ path: string; startMs: number }>;
+    dialogueAudios?: Array<{ path: string; startMs: number; volume?: number }>;
     durationSec: number;
     width: number;
     height: number;
@@ -815,6 +842,7 @@ export class VideoAssemblyService {
       videoInputCount: 1,
       audioPath,
       dialogueAudios,
+      durationSec,
     });
 
     const args: string[] = [

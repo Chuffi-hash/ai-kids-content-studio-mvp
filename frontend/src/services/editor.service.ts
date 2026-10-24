@@ -638,6 +638,7 @@ export async function generateSceneDialogueAudio(
     startMs?: number;
     effect?: string;
     lang?: string;
+    volume?: number;
   }
 ): Promise<{ success: boolean; sceneId: string; dialogue: SceneDialogue }> {
   const res = await fetch(`${API_URL}/api/content/scenes/${sceneId}/dialogue/generate`, {
