@@ -270,6 +270,7 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
       lang: 'hi',
       voiceId: 'hf_alpha',
       emotion: 'neutral',
+      emotionIntensity: 0,
       speed: 1.0,
       style: 'calm',
       effect: 'normal',
@@ -281,6 +282,9 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
   const [voiceLang, setVoiceLang] = useState<'hi' | 'en'>(initialLang);
   const [voiceId, setVoiceId] = useState<string>(scenePerformance?.voiceId || initialVoiceConfig.voiceId || 'hf_alpha');
   const [voiceEmotion, setVoiceEmotion] = useState<SpeakingEmotion>(scenePerformance?.emotion || initialVoiceConfig.emotion || 'neutral');
+  const [voiceEmotionIntensity, setVoiceEmotionIntensity] = useState<number>(
+    scenePerformance?.emotionIntensity ?? initialVoiceConfig.emotionIntensity ?? (initialVoiceConfig.emotion === 'happy' ? 60 : (initialVoiceConfig.emotion === 'neutral' ? 0 : 50))
+  );
   const [voiceSpeed, setVoiceSpeed] = useState<number>(scenePerformance?.speed ?? initialVoiceConfig.speed ?? 1.0);
   const [voiceEffect, setVoiceEffect] = useState<'normal' | 'cartoon' | 'robot' | 'whisper' | 'shout'>(
     scenePerformance?.effect || initialVoiceConfig.effect || 'normal'
@@ -301,12 +305,14 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
     const effLang: 'hi' | 'en' = (override?.lang === 'en' || config?.lang === 'en') ? 'en' : 'hi';
     const effVoice = override?.voiceId || config?.voiceId || (effLang === 'hi' ? 'hf_alpha' : 'af_heart');
     const effEmotion = override?.emotion || config?.emotion || 'neutral';
+    const effIntensity = override?.emotionIntensity ?? config?.emotionIntensity ?? (effEmotion === 'happy' ? 60 : (effEmotion === 'neutral' ? 0 : 50));
     const effSpeed = override?.speed ?? config?.speed ?? 1.0;
     const effEffect = override?.effect || config?.effect || 'normal';
 
     setVoiceLang(effLang);
     setVoiceId(effVoice);
     setVoiceEmotion(effEmotion);
+    setVoiceEmotionIntensity(effIntensity);
     setVoiceSpeed(effSpeed);
     setVoiceEffect(effEffect);
   }, [instance.characterId, instance.instanceId, matchedChar, animationData.characterPerformances]);
@@ -315,12 +321,14 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
     const nextLang: 'hi' | 'en' = updates.lang ? (updates.lang === 'en' ? 'en' : 'hi') : voiceLang;
     const nextVoice = updates.voiceId ?? voiceId;
     const nextEmotion = updates.emotion ?? voiceEmotion;
+    const nextIntensity = updates.emotionIntensity ?? voiceEmotionIntensity;
     const nextSpeed = updates.speed ?? voiceSpeed;
     const nextEffect = updates.effect ?? voiceEffect;
 
     if (updates.lang !== undefined) setVoiceLang(updates.lang === 'en' ? 'en' : 'hi');
     if (updates.voiceId !== undefined) setVoiceId(updates.voiceId);
     if (updates.emotion !== undefined) setVoiceEmotion(updates.emotion);
+    if (updates.emotionIntensity !== undefined) setVoiceEmotionIntensity(updates.emotionIntensity);
     if (updates.speed !== undefined) setVoiceSpeed(updates.speed);
     if (updates.effect !== undefined) setVoiceEffect(updates.effect);
 
@@ -330,6 +338,7 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
       lang: nextLang,
       voiceId: nextVoice,
       emotion: nextEmotion,
+      emotionIntensity: nextIntensity,
       speed: nextSpeed,
       effect: nextEffect,
     };
@@ -365,6 +374,7 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
         voice: voiceId,
         lang: voiceLang,
         emotion: voiceEmotion,
+        emotionIntensity: voiceEmotionIntensity,
         speed: voiceSpeed,
         effect: voiceEffect,
         sampleText,
@@ -392,6 +402,7 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
       lang: voiceLang,
       voiceId,
       emotion: voiceEmotion,
+      emotionIntensity: voiceEmotionIntensity,
       speed: voiceSpeed,
       style: voiceEmotion as any,
       effect: voiceEffect,
@@ -410,7 +421,7 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
         });
       }
 
-      setVoiceSavedMsg(`Default saved (${voiceLang.toUpperCase()} • ${voiceId})!`);
+      setVoiceSavedMsg(`Default saved (${voiceLang.toUpperCase()} • ${voiceId} • ${voiceEmotionIntensity}%)!`);
       setTimeout(() => setVoiceSavedMsg(null), 3000);
     } catch (err: any) {
       console.error('Failed to save default voice:', err);
@@ -442,6 +453,9 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
   const [newDialogueLang, setNewDialogueLang] = useState<'hi' | 'en'>(voiceLang);
   const [newDialogueVoice, setNewDialogueVoice] = useState<string>(voiceId);
   const [newDialogueEmotion, setNewDialogueEmotion] = useState<SpeakingEmotion>(voiceEmotion);
+  const [newDialogueEmotionIntensity, setNewDialogueEmotionIntensity] = useState<number>(
+    voiceEmotionIntensity ?? (voiceEmotion === 'happy' ? 60 : (voiceEmotion === 'neutral' ? 0 : 50))
+  );
   const [newDialogueFacialExpression, setNewDialogueFacialExpression] = useState<FacialExpression>(
     EMOTION_TO_FACIAL_EXPRESSION[voiceEmotion] || 'neutral'
   );
@@ -458,8 +472,9 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
     setNewDialogueLang(voiceLang);
     setNewDialogueVoice(voiceId);
     setNewDialogueEmotion(voiceEmotion);
+    setNewDialogueEmotionIntensity(voiceEmotionIntensity);
     setNewDialogueFacialExpression(EMOTION_TO_FACIAL_EXPRESSION[voiceEmotion] || 'neutral');
-  }, [voiceLang, voiceId, voiceEmotion]);
+  }, [voiceLang, voiceId, voiceEmotion, voiceEmotionIntensity]);
 
   const handleAutoSuggestEmotion = () => {
     if (!newDialogueText.trim()) return;
@@ -519,6 +534,7 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
         lang: newDialogueLang,
         voice: newDialogueVoice || voiceId,
         emotion: newDialogueEmotion,
+        emotionIntensity: newDialogueEmotionIntensity,
         facialExpression: newDialogueFacialExpression,
         speakingDirection: newDialogueEmotion as any,
         speed: voiceSpeed,
@@ -903,6 +919,74 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
             </div>
           </div>
 
+          {/* Emotion Intensity Slider (0% - 100%) */}
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px', marginBottom: '4px' }}>
+              <span style={{ color: 'var(--ed-text-muted)' }}>Emotion Intensity</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span
+                  style={{
+                    fontSize: '10px',
+                    color: voiceEmotionIntensity === 0 ? '#94a3b8' : voiceEmotionIntensity <= 25 ? '#38bdf8' : voiceEmotionIntensity <= 60 ? '#a78bfa' : '#f43f5e',
+                    fontWeight: 500,
+                  }}
+                >
+                  {voiceEmotionIntensity === 0
+                    ? '0% Minimal'
+                    : voiceEmotionIntensity <= 25
+                    ? '25% Subtle'
+                    : voiceEmotionIntensity <= 50
+                    ? '50% Moderate'
+                    : voiceEmotionIntensity === 60
+                    ? '60% Happy'
+                    : voiceEmotionIntensity <= 75
+                    ? '75% Strong'
+                    : '100% Max'}
+                </span>
+                <span style={{ fontWeight: 700, color: 'var(--ed-text)', minWidth: '38px', textAlign: 'right' }}>
+                  {voiceEmotionIntensity}%
+                </span>
+              </div>
+            </div>
+            <input
+              type="range"
+              className="ed-inspector-slider"
+              min="0"
+              max="100"
+              step="1"
+              value={voiceEmotionIntensity}
+              onChange={(e) => handleUpdateSceneVoice({ emotionIntensity: parseInt(e.target.value, 10) || 0 })}
+            />
+            {/* Quick preset level buttons */}
+            <div style={{ display: 'flex', gap: '4px', marginTop: '4px', flexWrap: 'wrap' }}>
+              {[
+                { val: 0, label: '0% Min' },
+                { val: 25, label: '25% Subtle' },
+                { val: 50, label: '50% Mod' },
+                { val: 60, label: '60% Happy' },
+                { val: 75, label: '75% Strong' },
+                { val: 100, label: '100% Max' },
+              ].map((p) => (
+                <button
+                  key={p.val}
+                  type="button"
+                  onClick={() => handleUpdateSceneVoice({ emotionIntensity: p.val })}
+                  style={{
+                    fontSize: '9px',
+                    padding: '2px 5px',
+                    borderRadius: '4px',
+                    border: voiceEmotionIntensity === p.val ? '1px solid #8b5cf6' : '1px solid var(--ed-border)',
+                    background: voiceEmotionIntensity === p.val ? 'rgba(139, 92, 246, 0.25)' : 'var(--ed-surface-elevated)',
+                    color: voiceEmotionIntensity === p.val ? '#c4b5fd' : 'var(--ed-text-muted)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* Speed slider */}
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px' }}>
@@ -1040,6 +1124,18 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
                         }}
                       >
                         {EMOTION_OPTIONS.find(e => e.id === lineEmotion)?.emoji || '💬'} {lineEmotion}
+                      </span>
+                      <span
+                        style={{
+                          color: '#fb7185',
+                          fontWeight: 600,
+                          padding: '1px 4px',
+                          borderRadius: '3px',
+                          background: 'rgba(244, 63, 94, 0.15)',
+                        }}
+                        title={`Emotion Intensity: ${dlg.emotionIntensity ?? (lineEmotion === 'happy' ? 60 : (lineEmotion === 'neutral' ? 0 : 50))}%`}
+                      >
+                        ⚡ {dlg.emotionIntensity ?? (lineEmotion === 'happy' ? 60 : (lineEmotion === 'neutral' ? 0 : 50))}%
                       </span>
                       <span
                         style={{
@@ -1214,6 +1310,7 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
                   const em = e.target.value as SpeakingEmotion;
                   setNewDialogueEmotion(em);
                   setNewDialogueFacialExpression(EMOTION_TO_FACIAL_EXPRESSION[em] || 'neutral');
+                  setNewDialogueEmotionIntensity(em === 'happy' ? 60 : (em === 'neutral' ? 0 : 50));
                 }}
                 style={{ width: '100%', fontSize: '11px', marginTop: '2px' }}
               >
@@ -1223,6 +1320,68 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
                   </option>
                 ))}
               </select>
+            </div>
+          </div>
+
+          {/* Emotion Intensity Slider for Dialogue */}
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px' }}>
+              <span style={{ color: 'var(--ed-text-muted)' }}>Emotion Intensity</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ fontSize: '10px', color: '#c4b5fd' }}>
+                  {newDialogueEmotionIntensity <= 0
+                    ? '0% Neutral'
+                    : newDialogueEmotionIntensity <= 25
+                    ? '25% Subtle'
+                    : newDialogueEmotionIntensity <= 50
+                    ? '50% Moderate'
+                    : newDialogueEmotionIntensity === 60
+                    ? '60% Happy'
+                    : newDialogueEmotionIntensity <= 75
+                    ? '75% Strong'
+                    : '100% Max'}
+                </span>
+                <span style={{ fontWeight: 700, color: 'var(--ed-text)', minWidth: '38px', textAlign: 'right' }}>
+                  {newDialogueEmotionIntensity}%
+                </span>
+              </div>
+            </div>
+            <input
+              type="range"
+              className="ed-inspector-slider"
+              min="0"
+              max="100"
+              step="1"
+              value={newDialogueEmotionIntensity}
+              onChange={(e) => setNewDialogueEmotionIntensity(parseInt(e.target.value, 10) || 0)}
+            />
+            {/* Quick preset level buttons */}
+            <div style={{ display: 'flex', gap: '4px', marginTop: '4px', flexWrap: 'wrap' }}>
+              {[
+                { val: 0, label: '0% Min' },
+                { val: 25, label: '25% Subtle' },
+                { val: 50, label: '50% Mod' },
+                { val: 60, label: '60% Happy' },
+                { val: 75, label: '75% Strong' },
+                { val: 100, label: '100% Max' },
+              ].map((p) => (
+                <button
+                  key={p.val}
+                  type="button"
+                  onClick={() => setNewDialogueEmotionIntensity(p.val)}
+                  style={{
+                    fontSize: '9px',
+                    padding: '2px 5px',
+                    borderRadius: '4px',
+                    border: newDialogueEmotionIntensity === p.val ? '1px solid #8b5cf6' : '1px solid var(--ed-border)',
+                    background: newDialogueEmotionIntensity === p.val ? 'rgba(139, 92, 246, 0.25)' : 'var(--ed-surface-elevated)',
+                    color: newDialogueEmotionIntensity === p.val ? '#c4b5fd' : 'var(--ed-text-muted)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {p.label}
+                </button>
+              ))}
             </div>
           </div>
 

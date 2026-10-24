@@ -18,6 +18,9 @@ export interface TTSGenerationOptions {
   sentencePause?: number;
   clausePause?: number;
   emotion?: string;
+  emotionIntensity?: number; // 0 - 100
+  pitchShiftSemitones?: number;
+  presenceGainDb?: number;
   outputFormat?: 'wav' | 'mp3';
 }
 

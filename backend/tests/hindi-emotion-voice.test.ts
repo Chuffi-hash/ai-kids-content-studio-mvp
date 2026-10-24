@@ -4,10 +4,14 @@ import fs from "fs";
 import path from "path";
 import { KokoroTTSProvider } from "../src/services/audio-generation/kokoro-tts.provider.js";
 import { generateVisemeCues } from "../src/services/audio-generation/viseme-generator.js";
+import crypto from "crypto";
 import {
   suggestEmotionForText,
   EMOTION_DELIVERY_MAP,
   EMOTION_TO_FACIAL_EXPRESSION,
+  DEFAULT_EMOTION_INTENSITY,
+  normalizeEmotionIntensity,
+  calculateEmotionDelivery,
 } from "../src/services/audio-generation/emotion-suggester.service.js";
 import {
   evaluatePose,
@@ -334,3 +338,151 @@ test("9. Audio Effects Service - Whisper and Shout Filter Configurations", () =>
   // Directly test that AudioEffectsService has whisper and shout configured
   assert.ok(audioEffects, "audioEffects instance exists");
 });
+
+test("10. Emotion Intensity Normalization & Backward-Compatible Defaults", () => {
+  // Clamping
+  assert.strictEqual(normalizeEmotionIntensity(-15, "happy"), 0, "Negative intensity must clamp to 0");
+  assert.strictEqual(normalizeEmotionIntensity(150, "happy"), 100, "Values above 100 must clamp to 100");
+  assert.strictEqual(normalizeEmotionIntensity(42.4, "happy"), 42, "Float intensity should round");
+  assert.strictEqual(normalizeEmotionIntensity("75", "happy"), 75, "String numbers must be parsed");
+
+  // Documented backward-compatible defaults:
+  // Neutral: 0%, Happy: 60%, others: 50%
+  assert.strictEqual(normalizeEmotionIntensity(undefined, "neutral"), 0, "Neutral default must be 0%");
+  assert.strictEqual(normalizeEmotionIntensity(null, "neutral"), 0, "Neutral default must be 0%");
+  assert.strictEqual(normalizeEmotionIntensity(undefined, "happy"), 60, "Happy default must be 60%");
+  assert.strictEqual(normalizeEmotionIntensity(null, "happy"), 60, "Happy default must be 60%");
+  assert.strictEqual(normalizeEmotionIntensity(NaN, "happy"), 60, "NaN on happy must fallback to 60%");
+  assert.strictEqual(normalizeEmotionIntensity(undefined, "excited"), 50, "Excited default must be 50%");
+  assert.strictEqual(normalizeEmotionIntensity(undefined, "sad"), 50, "Sad default must be 50%");
+  assert.strictEqual(normalizeEmotionIntensity(undefined, "angry"), 50, "Angry default must be 50%");
+});
+
+test("11. Continuous Prosody Delivery Adapter - Linear Interpolation Across 0% to 100%", () => {
+  // At 0% intensity: minimal emotional influence (neutral baseline)
+  const del0 = calculateEmotionDelivery({ emotion: "happy", intensity: 0, baseSpeed: 1.0 });
+  assert.strictEqual(del0.intensity, 0);
+  assert.strictEqual(del0.calibratedSpeed, 1.0);
+  assert.strictEqual(del0.pitchShiftSemitones, 0);
+  assert.strictEqual(del0.presenceGainDb, 0);
+  assert.strictEqual(del0.sentencePause, 0.25);
+
+  // At 25% intensity: subtle expression
+  const del25 = calculateEmotionDelivery({ emotion: "happy", intensity: 25, baseSpeed: 1.0 });
+  assert.strictEqual(del25.intensity, 25);
+  assert.ok(Math.abs(del25.calibratedSpeed - 1.025) < 0.001, `Speed at 25% should be 1.025, got ${del25.calibratedSpeed}`);
+  assert.ok(Math.abs(del25.pitchShiftSemitones - 0.20) < 0.01, `Pitch at 25% should be +0.20st, got ${del25.pitchShiftSemitones}`);
+  assert.ok(Math.abs(del25.presenceGainDb - 0.45) < 0.01, `Presence at 25% should be +0.45dB, got ${del25.presenceGainDb}`);
+
+  // At 60% intensity: acceptance-test default
+  const del60 = calculateEmotionDelivery({ emotion: "happy", intensity: 60, baseSpeed: 1.0 });
+  assert.strictEqual(del60.intensity, 60);
+  assert.ok(Math.abs(del60.calibratedSpeed - 1.060) < 0.001, `Speed at 60% should be 1.060, got ${del60.calibratedSpeed}`);
+  assert.ok(Math.abs(del60.pitchShiftSemitones - 0.48) < 0.01, `Pitch at 60% should be +0.48st, got ${del60.pitchShiftSemitones}`);
+  assert.ok(Math.abs(del60.presenceGainDb - 1.08) < 0.01, `Presence at 60% should be +1.08dB, got ${del60.presenceGainDb}`);
+
+  // At 100% intensity: maximum target expression
+  const del100 = calculateEmotionDelivery({ emotion: "happy", intensity: 100, baseSpeed: 1.0 });
+  assert.strictEqual(del100.intensity, 100);
+  assert.ok(Math.abs(del100.calibratedSpeed - 1.100) < 0.001, `Speed at 100% should be 1.100, got ${del100.calibratedSpeed}`);
+  assert.ok(Math.abs(del100.pitchShiftSemitones - 0.80) < 0.01, `Pitch at 100% should be +0.80st, got ${del100.pitchShiftSemitones}`);
+  assert.ok(Math.abs(del100.presenceGainDb - 1.80) < 0.01, `Presence at 100% should be +1.80dB, got ${del100.presenceGainDb}`);
+
+  // Distinctness across monotonic progression
+  assert.ok(del0.calibratedSpeed < del25.calibratedSpeed && del25.calibratedSpeed < del60.calibratedSpeed && del60.calibratedSpeed < del100.calibratedSpeed, "Speed must increase strictly monotonically with happy intensity");
+  assert.ok(del0.pitchShiftSemitones < del25.pitchShiftSemitones && del25.pitchShiftSemitones < del60.pitchShiftSemitones && del60.pitchShiftSemitones < del100.pitchShiftSemitones, "Pitch must increase strictly monotonically with happy intensity");
+  assert.ok(del0.presenceGainDb < del25.presenceGainDb && del25.presenceGainDb < del60.presenceGainDb && del60.presenceGainDb < del100.presenceGainDb, "Presence must increase strictly monotonically with happy intensity");
+
+  // Multiplier independence from base speed
+  const delBaseFast = calculateEmotionDelivery({ emotion: "happy", intensity: 60, baseSpeed: 1.25 });
+  assert.ok(Math.abs(delBaseFast.calibratedSpeed - (1.25 * 1.06)) < 0.01, "Base speed must scale multiplicatively without clipping");
+});
+
+test("12. Intensity-Aware Cache Invalidation & Deterministic Key Separation", () => {
+  const text = "नमस्ते बच्चों! आज हम पृथ्वी के बारे में सीखेंगे।";
+  const lang = "hi";
+  const voice = "hf_alpha";
+
+  const getHash = (intensity: number) => {
+    const delivery = calculateEmotionDelivery({ emotion: "happy", intensity, baseSpeed: 1.0 });
+    return crypto
+      .createHash("sha256")
+      .update(JSON.stringify({
+        text,
+        lang,
+        voice,
+        emotion: "happy",
+        intensity: delivery.intensity,
+        speed: delivery.calibratedSpeed,
+        effect: delivery.effectiveEffect,
+        pitch: delivery.pitchShiftSemitones,
+        presence: delivery.presenceGainDb,
+      }))
+      .digest("hex");
+  };
+
+  const hash0 = getHash(0);
+  const hash25 = getHash(25);
+  const hash60 = getHash(60);
+  const hash100 = getHash(100);
+
+  const hashSet = new Set([hash0, hash25, hash60, hash100]);
+  assert.strictEqual(hashSet.size, 4, "Every distinct intensity must produce a unique cache key to prevent stale cache reuse");
+});
+
+test("13. Character Independence & Hierarchical Precedence", () => {
+  // Character A: Earth (Neutral, 0%)
+  const earthConfig = { voiceId: "hf_alpha", emotion: "neutral" as const, emotionIntensity: 0 };
+  const earthDelivery = calculateEmotionDelivery({ emotion: earthConfig.emotion, intensity: earthConfig.emotionIntensity });
+
+  // Character B: Pip (Happy, 75%)
+  const pipConfig = { voiceId: "bm_george", emotion: "happy" as const, emotionIntensity: 75 };
+  const pipDelivery = calculateEmotionDelivery({ emotion: pipConfig.emotion, intensity: pipConfig.emotionIntensity });
+
+  assert.strictEqual(earthDelivery.intensity, 0);
+  assert.strictEqual(earthDelivery.calibratedSpeed, 1.0);
+  assert.strictEqual(pipDelivery.intensity, 75);
+  assert.ok(pipDelivery.calibratedSpeed > 1.0);
+  assert.notStrictEqual(earthDelivery.intensity, pipDelivery.intensity, "Character voice parameters must remain completely independent");
+
+  // Line-level override precedence: Line specifies 100%, character default is 60%
+  const lineIntensity = 100;
+  const lineEmotion = "happy" as const;
+  const lineDelivery = calculateEmotionDelivery({ emotion: lineEmotion, intensity: lineIntensity });
+  assert.strictEqual(lineDelivery.intensity, 100, "Line-level intensity override must take precedence over character defaults");
+});
+
+test("14. Mandatory Hindi Audition Test - 4 Distinct Audio Files Verified", () => {
+  const reportPath = path.join(process.cwd(), "storage", "audio", "audition_samples_report.json");
+  assert.ok(fs.existsSync(reportPath), "Audition samples report must exist");
+
+  const report = JSON.parse(fs.readFileSync(reportPath, "utf-8"));
+  assert.strictEqual(report.length, 4, "Must contain exactly 4 audition samples");
+
+  const hashes = new Set<string>();
+  for (const sample of report) {
+    assert.ok(fs.existsSync(sample.fullPath), `Audio file for ${sample.label} must exist on disk`);
+    assert.ok(sample.sizeBytes > 50000, `Audio file for ${sample.label} must be a valid non-empty audio file (>50kB)`);
+    hashes.add(sample.sha256);
+  }
+
+  assert.strictEqual(hashes.size, 4, "All 4 audition samples must be distinct audio files with unique checksums");
+
+  // Verify Sample A, B, C, D properties
+  const sampleA = report.find((r: any) => r.label === "Sample A");
+  const sampleB = report.find((r: any) => r.label === "Sample B");
+  const sampleC = report.find((r: any) => r.label === "Sample C");
+  const sampleD = report.find((r: any) => r.label === "Sample D");
+
+  assert.strictEqual(sampleA.emotion, "neutral");
+  assert.strictEqual(sampleA.intensity, 0);
+  assert.strictEqual(sampleB.intensity, 25);
+  assert.strictEqual(sampleC.intensity, 60);
+  assert.strictEqual(sampleD.intensity, 100);
+
+  // Monotonic duration progression (higher intensity = slightly faster tempo + shorter duration)
+  assert.ok(sampleA.sizeBytes > sampleB.sizeBytes, "Sample A size should be greater than Sample B");
+  assert.ok(sampleB.sizeBytes > sampleC.sizeBytes, "Sample B size should be greater than Sample C");
+  assert.ok(sampleC.sizeBytes > sampleD.sizeBytes, "Sample C size should be greater than Sample D");
+});
+

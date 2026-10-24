@@ -1002,6 +1002,7 @@ export default function StoryDetailPage() {
       effect?: 'normal' | 'robot' | 'cartoon' | 'whisper' | 'shout';
       lang?: string;
       emotion?: string;
+      emotionIntensity?: number;
     }
   ) => {
     const targetScene = scenes.find((s) => s.sceneId === sceneId);

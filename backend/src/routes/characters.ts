@@ -12,6 +12,7 @@ import { ImageGenerationService } from "../services/image-generation/image-gener
 import { getImageGenerationProvider } from "../services/image-generation/provider.factory.js";
 import { LocalStorageService } from "../services/storage/local-storage.service.js";
 import { randomUUID } from "crypto";
+import { normalizeEmotionIntensity } from "../services/audio-generation/emotion-suggester.service.js";
 
 export const characterRouter = Router();
 
@@ -225,7 +226,7 @@ characterRouter.get("/:id/voice", async (req, res) => {
 characterRouter.put("/:id/voice", async (req, res) => {
   try {
     const { id } = req.params;
-    const { voiceId, speed, style, effect } = req.body;
+    const { voiceId, speed, style, effect, emotion, emotionIntensity, lang } = req.body;
 
     if (!voiceId) {
       return res.status(400).json({ message: "voiceId is required" });
@@ -241,10 +242,20 @@ characterRouter.put("/:id/voice", async (req, res) => {
         ? existing.canonicalAppearance
         : {};
 
+    const effectiveEmotion = emotion || style || "neutral";
+    const effectiveIntensity = emotionIntensity !== undefined
+      ? normalizeEmotionIntensity(emotionIntensity, effectiveEmotion)
+      : ((existingCanonical as any)?.voiceConfig?.emotionIntensity !== undefined
+        ? (existingCanonical as any).voiceConfig.emotionIntensity
+        : normalizeEmotionIntensity(undefined, effectiveEmotion));
+
     const newVoiceConfig = {
+      lang: lang || (existingCanonical as any)?.voiceConfig?.lang || (voiceId.startsWith('h') ? 'hi' : 'en'),
       voiceId,
       speed: typeof speed === "number" ? speed : 1.0,
-      style: style || "calm",
+      emotion: effectiveEmotion,
+      emotionIntensity: effectiveIntensity,
+      style: style || effectiveEmotion,
       effect: effect || "normal",
     };
 
