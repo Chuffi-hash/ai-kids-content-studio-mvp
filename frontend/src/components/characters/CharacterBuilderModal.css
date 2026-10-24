@@ -716,4 +716,70 @@
   box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.2);
 }
 
+/* Light Mode Overrides for Character Builder & Story Details Modals */
+[data-theme="light"] .char-builder-modal,
+body.theme-light .char-builder-modal {
+  background: var(--color-surface, #ffffff);
+  border-color: var(--color-border, #e2e8f0);
+  color: var(--color-text, #0f172a);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.15);
+}
+
+[data-theme="light"] .char-builder-header,
+body.theme-light .char-builder-header {
+  background: var(--color-surface-muted, #f1f5f9);
+  border-color: var(--color-border, #e2e8f0);
+}
+
+[data-theme="light"] .char-builder-tabs,
+body.theme-light .char-builder-tabs {
+  background: var(--color-surface-muted, #f1f5f9);
+  border-color: var(--color-border, #e2e8f0);
+}
+
+[data-theme="light"] .char-builder-tab,
+body.theme-light .char-builder-tab {
+  color: var(--color-text-muted, #64748b);
+}
+
+[data-theme="light"] .char-builder-tab:hover,
+body.theme-light .char-builder-tab:hover {
+  color: var(--color-text, #0f172a);
+}
+
+[data-theme="light"] .char-builder-tab.active,
+body.theme-light .char-builder-tab.active {
+  color: var(--color-accent, #7c3aed);
+  border-bottom-color: var(--color-accent, #7c3aed);
+}
+
+[data-theme="light"] .char-builder-tab-body,
+body.theme-light .char-builder-tab-body {
+  background: var(--color-bg, #f8fafc) !important;
+}
+
+[data-theme="light"] .char-builder-name-input,
+[data-theme="light"] .char-builder-input,
+body.theme-light .char-builder-name-input,
+body.theme-light .char-builder-input {
+  background: #ffffff;
+  border-color: #cbd5e1;
+  color: #0f172a;
+}
+
+[data-theme="light"] .char-builder-preset-btn,
+body.theme-light .char-builder-preset-btn {
+  background: #ffffff;
+  border-color: #cbd5e1;
+  color: #334155;
+}
+
+[data-theme="light"] .char-trait-chip,
+body.theme-light .char-trait-chip {
+  background: #ffffff;
+  border-color: #cbd5e1;
+  color: #475569;
+}
+
+
 

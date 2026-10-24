@@ -279,7 +279,7 @@ export const StoryDetailsModal: React.FC<StoryDetailsModalProps> = ({
         {errorMsg && <div className="char-builder-alert">{errorMsg}</div>}
 
         {/* Tab Navigation */}
-        <div className="char-builder-tabs" style={{ background: '#0e1726' }}>
+        <div className="char-builder-tabs" style={{ background: 'var(--ed-surface-elevated)' }}>
           <button
             type="button"
             className={`char-builder-tab ${activeTab === 'details' ? 'active' : ''}`}
@@ -297,7 +297,8 @@ export const StoryDetailsModal: React.FC<StoryDetailsModalProps> = ({
         </div>
 
         {/* Tab Content */}
-        <div className="char-builder-tab-body" style={{ padding: '20px', background: '#090d16', flex: 1, overflowY: 'auto' }}>
+        <div className="char-builder-tab-body" style={{ padding: '20px', background: 'var(--ed-bg)', flex: 1, overflowY: 'auto' }}>
+
           {/* TAB 1: DETAILS */}
           {activeTab === 'details' && (
             <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -449,8 +450,8 @@ export const StoryDetailsModal: React.FC<StoryDetailsModalProps> = ({
                         key={char.id}
                         onClick={() => handleToggleCharacter(char.id)}
                         style={{
-                          background: isLinked ? 'rgba(139, 92, 246, 0.15)' : '#0e1726',
-                          border: `1px solid ${isLinked ? '#8b5cf6' : '#1e293b'}`,
+                          background: isLinked ? 'var(--ed-accent-soft)' : 'var(--ed-surface-elevated)',
+                          border: `1px solid ${isLinked ? 'var(--ed-accent)' : 'var(--ed-border)'}`,
                           borderRadius: '8px',
                           padding: '12px',
                           cursor: 'pointer',
@@ -465,15 +466,16 @@ export const StoryDetailsModal: React.FC<StoryDetailsModalProps> = ({
                             width: '40px',
                             height: '40px',
                             borderRadius: '50%',
-                            background: '#1e293b',
+                            background: 'var(--ed-surface-hover)',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
                             fontSize: '16px',
-                            color: '#e2e8f0',
+                            color: 'var(--ed-text)',
                             flexShrink: 0,
                           }}
                         >
+
                           {char.name ? char.name[0] : 'C'}
                         </div>
 
