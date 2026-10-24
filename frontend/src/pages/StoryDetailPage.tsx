@@ -14,7 +14,8 @@ import { generateCharacterReferenceImage } from '../services/character.service';
 import { recalculateContiguousTimeline, validateSceneTiming, calculateRippleEdit } from '../utils/timingEngine';
 import { EditorAudioManager } from '../utils/editorAudioManager';
 import { TopToolbar } from '../components/editor/TopToolbar';
-import { LeftAssetPanel } from '../components/editor/LeftAssetPanel';
+import { SidebarNavigation, SidebarSection } from '../components/editor/SidebarNavigation';
+import { LeftAssetPanel, AssetTab } from '../components/editor/LeftAssetPanel';
 import { PreviewCanvas } from '../components/editor/PreviewCanvas';
 import { PropertiesInspector } from '../components/editor/PropertiesInspector';
 import { Timeline } from '../components/editor/Timeline';
@@ -23,6 +24,7 @@ import { StoryDetailsModal } from '../components/editor/StoryDetailsModal';
 import { CharacterBuilderModal } from '../components/characters/CharacterBuilderModal';
 import { buildRigFromAppearance } from '../utils/customCharacterRig';
 import { createCharacter, updateCharacter } from '../services/character.service';
+import { SceneDialogue, EducationalOverlayType } from '../types/animation';
 import { AlertTriangleIcon, ArrowLeftIcon, FilmIcon, SparklesIcon, PlusIcon } from '../components/common/Icons';
 import '../components/editor/editor.css';
 
@@ -40,6 +42,13 @@ export default function StoryDetailPage() {
   const [selectedDialogueId, setSelectedDialogueId] = useState<string | null>(null);
   const [isStoryDetailsOpen, setIsStoryDetailsOpen] = useState<boolean>(false);
   const [isCharacterBuilderOpen, setIsCharacterBuilderOpen] = useState<boolean>(false);
+
+  // Layout & Sidebar states
+  const [activeSidebarSection, setActiveSidebarSection] = useState<SidebarSection>('scenes');
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
+  const [isLeftDrawerOpen, setIsLeftDrawerOpen] = useState<boolean>(true);
+  const [isInspectorOpen, setIsInspectorOpen] = useState<boolean>(true);
+  const [activeInspectorTab, setActiveInspectorTab] = useState<'scene' | 'animation' | 'dialogue' | 'overlays'>('scene');
 
   // Playback & timeline state
   const [currentTimeMs, setCurrentTimeMs] = useState<number>(0);
@@ -667,8 +676,178 @@ export default function StoryDetailPage() {
     if (dialogueId) {
       setSelectedInstanceId(null);
       setSelectedOverlayId(null);
+      setActiveSidebarSection('dialogue');
+      setActiveInspectorTab('dialogue');
+      setIsInspectorOpen(true);
     }
   }, []);
+
+  const handleSelectSidebarSection = useCallback((section: SidebarSection) => {
+    setActiveSidebarSection(section);
+    if (['scenes', 'characters', 'images', 'videos', 'audio'].includes(section)) {
+      setIsLeftDrawerOpen(true);
+    } else {
+      setIsInspectorOpen(true);
+      if (section === 'scene_settings') setActiveInspectorTab('scene');
+      else if (section === 'rig') setActiveInspectorTab('animation');
+      else if (section === 'dialogue') setActiveInspectorTab('dialogue');
+      else if (section === 'overlays') setActiveInspectorTab('overlays');
+    }
+  }, []);
+
+  const handleDeleteDialogue = useCallback(
+    async (dialogueId: string) => {
+      if (!activeSceneId) return;
+      const targetScene = scenes.find((s) => s.sceneId === activeSceneId);
+      if (!targetScene?.animationData) return;
+
+      const updatedLines = (targetScene.animationData.dialogueLines || []).filter((d) => d.id !== dialogueId);
+      handleUpdateAnimationData(activeSceneId, {
+        ...targetScene.animationData,
+        dialogueLines: updatedLines,
+      });
+      if (selectedDialogueId === dialogueId) {
+        setSelectedDialogueId(null);
+      }
+    },
+    [activeSceneId, scenes, selectedDialogueId]
+  );
+
+  const handleDeleteOverlay = useCallback(
+    (sceneId: string, overlayId: string) => {
+      const targetScene = scenes.find((s) => s.sceneId === sceneId);
+      if (!targetScene?.animationData) return;
+
+      const updatedOverlays = (targetScene.animationData.overlays || []).filter((o) => o.id !== overlayId);
+      handleUpdateAnimationData(sceneId, {
+        ...targetScene.animationData,
+        overlays: updatedOverlays,
+      });
+      if (selectedOverlayId === overlayId) {
+        setSelectedOverlayId(null);
+      }
+    },
+    [scenes, selectedOverlayId]
+  );
+
+  const handleAddDialogue = useCallback(
+    (sceneId: string, startOffsetMs?: number) => {
+      const targetScene = scenes.find((s) => s.sceneId === sceneId);
+      if (!targetScene) return;
+
+      const currentAnimData: VectorSceneData = targetScene.animationData || {
+        version: 1,
+        viewport: { width: 1280, height: 720 },
+        characterInstances: [],
+        animationClips: [],
+      };
+
+      const defaultChar = currentAnimData.characterInstances[0] || (story?.characters || [])[0] || { name: 'Pip the Bear' };
+      const newDlg: SceneDialogue = {
+        id: `dlg-${Date.now().toString(36)}`,
+        characterName: defaultChar.name,
+        text: 'Hello, welcome to our story!',
+        startMs: startOffsetMs !== undefined ? Math.max(0, startOffsetMs - targetScene.startMs) : 0,
+        durationMs: 3000,
+        emotion: 'neutral',
+        emotionIntensity: 50,
+        speed: 1.0,
+        volume: 1.0,
+      };
+
+      handleUpdateAnimationData(sceneId, {
+        ...currentAnimData,
+        dialogueLines: [...(currentAnimData.dialogueLines || []), newDlg],
+      });
+      setSelectedDialogueId(newDlg.id);
+      setActiveSidebarSection('dialogue');
+      setActiveInspectorTab('dialogue');
+      setIsInspectorOpen(true);
+    },
+    [scenes, story]
+  );
+
+  const handleAddOverlay = useCallback(
+    (sceneId: string, type: EducationalOverlayType, startOffsetMs?: number) => {
+      const targetScene = scenes.find((s) => s.sceneId === sceneId);
+      if (!targetScene) return;
+
+      const sceneDuration = targetScene.endMs - targetScene.startMs;
+      const currentAnimData: VectorSceneData = targetScene.animationData || {
+        version: 1,
+        viewport: { width: 1280, height: 720 },
+        characterInstances: [],
+        animationClips: [],
+      };
+
+      const newOverlay: EducationalOverlay = {
+        id: `overlay-${type}-${Date.now().toString(36)}`,
+        type,
+        x: 640,
+        y: 360,
+        startMs: startOffsetMs !== undefined ? Math.max(0, startOffsetMs - targetScene.startMs) : 0,
+        durationMs: Math.min(3000, sceneDuration),
+        layerPosition: type === 'route_line' || type === 'spotlight' ? 'below_characters' : 'above_characters',
+        color: type === 'location_pin' ? '#ef4444' : type === 'route_line' ? '#38bdf8' : '#f59e0b',
+        title: type === 'location_pin' ? 'Location Pin' : type === 'route_line' ? 'Route Line' : 'Educational Overlay',
+      };
+
+      handleUpdateAnimationData(sceneId, {
+        ...currentAnimData,
+        overlays: [...(currentAnimData.overlays || []), newOverlay],
+      });
+      setSelectedOverlayId(newOverlay.id);
+      setActiveSidebarSection('overlays');
+      setActiveInspectorTab('overlays');
+      setIsInspectorOpen(true);
+    },
+    [scenes]
+  );
+
+  const handlePreviewDialogue = useCallback(
+    (dlg: SceneDialogue) => {
+      if (dlg.audioUrl) {
+        const audio = new Audio(dlg.audioUrl);
+        audio.play().catch((err) => console.warn('Dialogue audio preview failed:', err));
+      }
+    },
+    []
+  );
+
+  const handleRegenerateDialogue = useCallback(
+    async (sceneId: string, dialogueId: string) => {
+      const targetScene = scenes.find((s) => s.sceneId === sceneId);
+      const dlg = targetScene?.animationData?.dialogueLines?.find((d) => d.id === dialogueId);
+      if (!dlg) return;
+
+      try {
+        const res = await editorService.generateSceneDialogueAudio(sceneId, {
+          dialogueId,
+          characterName: dlg.characterName || 'Character',
+          text: dlg.text,
+          voice: dlg.voice || 'hf_alpha',
+          lang: dlg.lang || 'hi',
+          speed: dlg.speed || 1.0,
+          emotion: dlg.emotion || 'neutral',
+          emotionIntensity: dlg.emotionIntensity || 50,
+          volume: dlg.volume !== undefined ? dlg.volume : 1.0,
+        });
+
+        if (res.dialogue && targetScene?.animationData) {
+          const updatedLines = (targetScene.animationData.dialogueLines || []).map((d) =>
+            d.id === dialogueId ? { ...d, ...res.dialogue } : d
+          );
+          handleUpdateAnimationData(sceneId, {
+            ...targetScene.animationData,
+            dialogueLines: updatedLines,
+          });
+        }
+      } catch (err) {
+        console.error('Failed to regenerate dialogue audio:', err);
+      }
+    },
+    [scenes]
+  );
 
   const handleUpdateAnimationData = useCallback(
     (sceneId: string, newData: VectorSceneData) => {
@@ -1307,9 +1486,27 @@ export default function StoryDetailPage() {
         validationMessage={validationMessage}
       />
 
-      {/* 2. Main Middle Workspace Area (Left Panel + Center Preview Canvas + Right Inspector) */}
+      {/* 2. Main Middle Workspace Area (Left Persistent Sidebar + Left Drawer + Center Preview Canvas + Right Inspector) */}
       <div className="ed-body">
-        {/* Left Asset Panel (Scenes, Characters, Images, Videos, Audio, Music) */}
+        {/* Left Persistent Vertical Sidebar */}
+        <SidebarNavigation
+          activeSection={activeSidebarSection}
+          onSelectSection={handleSelectSidebarSection}
+          isCollapsed={isSidebarCollapsed}
+          onToggleCollapse={() => setIsSidebarCollapsed((prev) => !prev)}
+          counts={{
+            scenes: scenes.length,
+            characters: (story.characters || []).length,
+            images: scenes.filter((s) => s.imageUrl || s.image?.imageUrl).length,
+            videos: scenes.filter((s) => s.videoUrl).length,
+            audio: scenes.filter((s) => s.audioUrl).length,
+            rig: (activeScene?.animationData?.characterInstances || []).length,
+            dialogue: (activeScene?.animationData?.dialogueLines || []).length,
+            overlays: (activeScene?.animationData?.overlays || []).length,
+          }}
+        />
+
+        {/* Collapsible Left Asset Panel Drawer (Scenes, Characters, Images, Videos, Audio) */}
         <LeftAssetPanel
           story={story}
           scenes={scenes}
@@ -1337,6 +1534,22 @@ export default function StoryDetailPage() {
           onGenerateCharacterReference={handleGenerateCharacterReference}
           onAddCharacterToScene={handleAddCharacterToScene}
           onSetBackgroundForScene={handleSetBackgroundForScene}
+          isOpen={isLeftDrawerOpen && ['scenes', 'characters', 'images', 'videos', 'audio'].includes(activeSidebarSection)}
+          onClose={() => setIsLeftDrawerOpen(false)}
+          activeTab={
+            activeSidebarSection === 'videos'
+              ? 'videos'
+              : activeSidebarSection === 'characters'
+              ? 'characters'
+              : activeSidebarSection === 'images'
+              ? 'images'
+              : activeSidebarSection === 'audio'
+              ? 'audio'
+              : 'scenes'
+          }
+          onTabChange={(t) => {
+            setActiveSidebarSection(t === 'music' ? 'audio' : t);
+          }}
         />
 
         {/* Center 16:9 Canvas & Playback Synchronizer */}
@@ -1443,6 +1656,16 @@ export default function StoryDetailPage() {
           onRemoveCharacterFromScene={handleRemoveCharacterFromScene}
           isRippleOn={isRippleOn}
           onToggleRipple={() => setIsRippleOn((prev) => !prev)}
+          isOpen={isInspectorOpen}
+          onClose={() => setIsInspectorOpen(false)}
+          activeInspectorTab={activeInspectorTab}
+          onTabChange={(tab) => {
+            setActiveInspectorTab(tab);
+            if (tab === 'scene') setActiveSidebarSection('scene_settings');
+            else if (tab === 'animation') setActiveSidebarSection('rig');
+            else if (tab === 'dialogue') setActiveSidebarSection('dialogue');
+            else if (tab === 'overlays') setActiveSidebarSection('overlays');
+          }}
         />
       </div>
 
@@ -1467,6 +1690,16 @@ export default function StoryDetailPage() {
         onSelectOverlay={handleSelectOverlay}
         isRippleOn={isRippleOn}
         onToggleRipple={() => setIsRippleOn((prev) => !prev)}
+        onDuplicateScene={handleDuplicateScene}
+        onDeleteScene={handleDeleteScene}
+        onDeleteDialogue={handleDeleteDialogue}
+        onDeleteOverlay={handleDeleteOverlay}
+        onDeleteInstance={(scId, instId) => handleRemoveCharacterFromScene(scId, instId)}
+        onAddDialogue={handleAddDialogue}
+        onAddOverlay={handleAddOverlay}
+        onAddCharacter={handleAddCharacterToScene}
+        onPreviewDialogue={handlePreviewDialogue}
+        onRegenerateDialogue={handleRegenerateDialogue}
       />
 
       {/* 4. Real Media Assembly & Video Export Modal */}

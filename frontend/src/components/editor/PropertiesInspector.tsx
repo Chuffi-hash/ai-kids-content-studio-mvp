@@ -96,6 +96,10 @@ interface PropertiesInspectorProps {
   onDeleteDialogue?: (dialogueId: string) => Promise<void>;
   onAddDialogue?: (dialogue: SceneDialogue) => void;
   onSaveCharacterDefault?: (characterId: string, settings: { voice?: string; lang?: string; emotion?: SpeakingEmotion; emotionIntensity?: number }) => Promise<void>;
+  activeInspectorTab?: 'scene' | 'animation' | 'dialogue' | 'overlays';
+  onTabChange?: (tab: 'scene' | 'animation' | 'dialogue' | 'overlays') => void;
+  isOpen?: boolean;
+  onClose?: () => void;
 }
 
 export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
@@ -140,12 +144,31 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
   onDeleteDialogue,
   onAddDialogue,
   onSaveCharacterDefault,
+  activeInspectorTab: activeInspectorTabProp,
+  onTabChange,
+  isOpen = true,
+  onClose,
 }) => {
+  if (!isOpen) {
+    return null;
+  }
+
   if (!scene) {
     return (
       <aside className="ed-inspector">
-        <div className="ed-inspector-header">
+        <div className="ed-inspector-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <h3>Properties</h3>
+          {onClose && (
+            <button
+              type="button"
+              className="ed-icon-btn"
+              onClick={onClose}
+              title="Close inspector"
+              style={{ width: '26px', height: '26px', fontSize: '11px', display: 'grid', placeItems: 'center' }}
+            >
+              ✕
+            </button>
+          )}
         </div>
         <div style={{ padding: '24px', color: 'var(--ed-text-muted)', fontSize: '13px' }}>
           Select a scene from the timeline or asset panel to edit its properties.
@@ -534,7 +557,21 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
   const canSplitAtPlayhead =
     playheadMs > scene.startMs + 500 && playheadMs < scene.endMs - 500;
 
-  const [activeInspectorTab, setActiveInspectorTab] = useState<'scene' | 'animation' | 'dialogue' | 'overlays'>('scene');
+  const [internalInspectorTab, setInternalInspectorTab] = useState<'scene' | 'animation' | 'dialogue' | 'overlays'>(
+    activeInspectorTabProp || 'scene'
+  );
+  const activeInspectorTab = activeInspectorTabProp || internalInspectorTab;
+
+  const setActiveInspectorTab = (tab: 'scene' | 'animation' | 'dialogue' | 'overlays') => {
+    setInternalInspectorTab(tab);
+    if (onTabChange) onTabChange(tab);
+  };
+
+  useEffect(() => {
+    if (activeInspectorTabProp) {
+      setInternalInspectorTab(activeInspectorTabProp);
+    }
+  }, [activeInspectorTabProp]);
 
   useEffect(() => {
     if (selectedInstanceId) {
@@ -868,17 +905,28 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
     <aside className="ed-inspector">
       <div className="ed-inspector-header" style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'stretch' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <h3>Inspector — Scene {scene.number}</h3>
-          <span
-            style={{
-              fontSize: '11px',
-              textTransform: 'uppercase',
-              fontWeight: 700,
-              color: scene.generationStatus === 'completed' ? '#34d399' : '#94a3b8',
-            }}
-          >
-            {scene.generationStatus || 'draft'}
-          </span>
+          <div>
+            <h3 style={{ fontSize: '13px', fontWeight: 700, margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              {activeInspectorTab === 'scene' && `Scene ${scene.number} Settings`}
+              {activeInspectorTab === 'animation' && `2D Character Rig`}
+              {activeInspectorTab === 'dialogue' && `Dialogue Voice & Lip-Sync`}
+              {activeInspectorTab === 'overlays' && `Educational Overlays`}
+            </h3>
+            <span style={{ fontSize: '10px', color: 'var(--ed-text-muted)' }}>
+              Scene {scene.number} &bull; <span style={{ color: scene.generationStatus === 'completed' ? '#34d399' : 'inherit' }}>{scene.generationStatus || 'draft'}</span>
+            </span>
+          </div>
+          {onClose && (
+            <button
+              type="button"
+              className="ed-icon-btn"
+              onClick={onClose}
+              title="Collapse inspector"
+              style={{ width: '26px', height: '26px', fontSize: '11px', display: 'grid', placeItems: 'center' }}
+            >
+              ✕
+            </button>
+          )}
         </div>
 
         {/* Tab Switcher */}

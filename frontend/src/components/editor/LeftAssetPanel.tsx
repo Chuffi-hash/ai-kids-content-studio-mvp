@@ -56,6 +56,10 @@ interface LeftAssetPanelProps {
     customData?: { name: string; appearance?: any; rig?: any }
   ) => void;
   onSetBackgroundForScene?: (sceneId: string, imageUrl: string) => void;
+  activeTab?: AssetTab;
+  onTabChange?: (tab: AssetTab) => void;
+  isOpen?: boolean;
+  onClose?: () => void;
 }
 
 export const LeftAssetPanel: React.FC<LeftAssetPanelProps> = ({
@@ -85,8 +89,20 @@ export const LeftAssetPanel: React.FC<LeftAssetPanelProps> = ({
   onGenerateCharacterReference,
   onAddCharacterToScene,
   onSetBackgroundForScene,
+  activeTab: activeTabProp,
+  onTabChange,
+  isOpen = true,
+  onClose,
 }) => {
-  const [activeTab, setActiveTab] = useState<AssetTab>('scenes');
+  const [internalTab, setInternalTab] = useState<AssetTab>(activeTabProp || 'scenes');
+  const activeTab = activeTabProp || internalTab;
+
+  useEffect(() => {
+    if (activeTabProp) {
+      setInternalTab(activeTabProp);
+    }
+  }, [activeTabProp]);
+
   const [previewingAudio, setPreviewingAudio] = useState<string | null>(null);
   const [musicTracks, setMusicTracks] = useState<MusicTrackInfo[]>([]);
   const [libraryCharacters, setLibraryCharacters] = useState<Character[]>([]);
@@ -204,58 +220,39 @@ export const LeftAssetPanel: React.FC<LeftAssetPanelProps> = ({
   };
 
 
+  if (!isOpen) return null;
+
   return (
     <aside className="ed-asset-panel">
-      {/* Tab Navigation */}
-      <div className="ed-asset-tabs-header">
-        <button
-          type="button"
-          className={`ed-asset-tab-btn ${activeTab === 'scenes' ? 'active' : ''}`}
-          onClick={() => setActiveTab('scenes')}
-        >
-          <span className="tab-icon"><ClapperboardIcon size={14} /></span>
-          <span>Scenes</span>
-        </button>
-        <button
-          type="button"
-          className={`ed-asset-tab-btn ${activeTab === 'characters' ? 'active' : ''}`}
-          onClick={() => setActiveTab('characters')}
-        >
-          <span className="tab-icon"><UsersIcon size={14} /></span>
-          <span>Characters</span>
-        </button>
-        <button
-          type="button"
-          className={`ed-asset-tab-btn ${activeTab === 'images' ? 'active' : ''}`}
-          onClick={() => setActiveTab('images')}
-        >
-          <span className="tab-icon"><ImageIcon size={14} /></span>
-          <span>Images</span>
-        </button>
-        <button
-          type="button"
-          className={`ed-asset-tab-btn ${activeTab === 'videos' ? 'active' : ''}`}
-          onClick={() => setActiveTab('videos')}
-        >
-          <span className="tab-icon"><VideoIcon size={14} /></span>
-          <span>Clips</span>
-        </button>
-        <button
-          type="button"
-          className={`ed-asset-tab-btn ${activeTab === 'audio' ? 'active' : ''}`}
-          onClick={() => setActiveTab('audio')}
-        >
-          <span className="tab-icon"><MicIcon size={14} /></span>
-          <span>Audio</span>
-        </button>
-        <button
-          type="button"
-          className={`ed-asset-tab-btn ${activeTab === 'music' ? 'active' : ''}`}
-          onClick={() => setActiveTab('music')}
-        >
-          <span className="tab-icon"><MusicIcon size={14} /></span>
-          <span>Music</span>
-        </button>
+      {/* Clean Drawer Header */}
+      <div className="ed-inspector-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{ color: '#8b5cf6', display: 'flex' }}>
+            {activeTab === 'scenes' && <ClapperboardIcon size={15} />}
+            {activeTab === 'characters' && <UsersIcon size={15} />}
+            {activeTab === 'images' && <ImageIcon size={15} />}
+            {activeTab === 'videos' && <VideoIcon size={15} />}
+            {(activeTab === 'audio' || activeTab === 'music') && <MusicIcon size={15} />}
+          </span>
+          <h3 style={{ fontSize: '13px', fontWeight: 700, margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            {activeTab === 'scenes' && `Scenes (${scenes.length})`}
+            {activeTab === 'characters' && `Characters (${(story.characters || []).length})`}
+            {activeTab === 'images' && `Images (${allImages.length})`}
+            {activeTab === 'videos' && `Clips (${allVideos.length})`}
+            {(activeTab === 'audio' || activeTab === 'music') && `Audio & Music`}
+          </h3>
+        </div>
+        {onClose && (
+          <button
+            type="button"
+            className="ed-icon-btn"
+            onClick={onClose}
+            title="Collapse drawer"
+            style={{ width: '26px', height: '26px', fontSize: '11px', display: 'grid', placeItems: 'center' }}
+          >
+            ✕
+          </button>
+        )}
       </div>
 
       {/* Tab Content */}

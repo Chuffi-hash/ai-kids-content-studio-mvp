@@ -625,6 +625,7 @@ export async function fetchStoryBackgrounds(storyId: string): Promise<StoryBackg
 export async function generateSceneDialogueAudio(
   sceneId: string,
   payload: {
+    dialogueId?: string;
     characterId?: string;
     characterInstanceId?: string;
     characterName: string;
