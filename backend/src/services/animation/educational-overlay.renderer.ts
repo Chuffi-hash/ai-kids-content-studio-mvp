@@ -22,7 +22,17 @@ export type EducationalOverlayType =
   | 'sparkles'
   | 'flying_birds'
   | 'moving_clouds'
-  | 'title_card';
+  | 'title_card'
+  | 'rain'
+  | 'snowfall'
+  | 'wind'
+  | 'falling_leaves'
+  | 'sunshine_rays'
+  | 'heat_shimmer'
+  | 'fog_mist'
+  | 'lightning'
+  | 'water_splashes'
+  | 'butterflies';
 
 export interface EducationalOverlay {
   id: string;
@@ -565,6 +575,206 @@ export function renderEducationalOverlayXml(overlay: EducationalOverlay, sceneRe
               ${escapedLabel}
             </text>
           ` : ''}
+        </g>
+      `.trim();
+    }
+
+    case 'rain': {
+      const color = overlay.color || '#38bdf8';
+      const intensity = overlay.strokeWidth || 1.8;
+      const count = 24;
+      const drops = Array.from({ length: count }, (_, i) => {
+        const seedX = (i * 53 + 37) % 1280;
+        const seedY = (i * 47 + 19) % 720;
+        const speed = 1.1 + (i % 5) * 0.2;
+        const yOffset = (elapsed * speed * 0.9) % 720;
+        const curY = (seedY + yOffset) % 720;
+        const curX = (seedX - (curY - seedY) * 0.15 + 1280) % 1280;
+        const len = 16 * speed;
+        return `<line x1="${curX.toFixed(1)}" y1="${curY.toFixed(1)}" x2="${(curX - 4).toFixed(1)}" y2="${(curY + len).toFixed(1)}" stroke="${color}" stroke-width="${intensity}" stroke-linecap="round" opacity="${(0.4 + (i % 3) * 0.2) * fadeOutOpacity}"/>`;
+      }).join('\n');
+
+      return `
+        <g id="overlay-${overlay.id}" class="edu-overlay rain">
+          ${drops}
+        </g>
+      `.trim();
+    }
+
+    case 'snowfall': {
+      const color = overlay.color || '#ffffff';
+      const count = 20;
+      const flakes = Array.from({ length: count }, (_, i) => {
+        const seedX = (i * 67 + 23) % 1280;
+        const seedY = (i * 51 + 31) % 720;
+        const speed = 0.18 + (i % 4) * 0.08;
+        const curY = (seedY + elapsed * speed) % 720;
+        const sway = Math.sin((elapsed / (800 + i * 100)) * 2 * Math.PI) * (12 + (i % 8) * 3);
+        const curX = (seedX + sway + 1280) % 1280;
+        const r = 2.5 + (i % 4) * 1.2;
+        const op = (0.5 + (i % 4) * 0.15) * fadeOutOpacity;
+        return `<circle cx="${curX.toFixed(1)}" cy="${curY.toFixed(1)}" r="${r.toFixed(1)}" fill="${color}" opacity="${op.toFixed(2)}"/>`;
+      }).join('\n');
+
+      return `
+        <g id="overlay-${overlay.id}" class="edu-overlay snowfall">
+          ${flakes}
+        </g>
+      `.trim();
+    }
+
+    case 'wind': {
+      const color = overlay.color || '#e2e8f0';
+      const strokeW = overlay.strokeWidth || 2;
+      const streaks = [
+        { y: 180, len: 260, speed: 0.6, shift: 0 },
+        { y: 320, len: 320, speed: 0.85, shift: 400 },
+        { y: 460, len: 240, speed: 0.7, shift: 800 },
+        { y: 240, len: 280, speed: 0.9, shift: 1200 },
+      ].map((st, i) => {
+        const xOffset = ((elapsed + st.shift) * st.speed) % 1600 - 300;
+        return `<path d="M ${xOffset} ${st.y} Q ${xOffset + st.len * 0.6} ${st.y - 15} ${xOffset + st.len} ${st.y + 10}" fill="none" stroke="${color}" stroke-width="${strokeW}" stroke-linecap="round" opacity="${0.35 * fadeOutOpacity}"/>`;
+      }).join('\n');
+
+      return `
+        <g id="overlay-${overlay.id}" class="edu-overlay wind">
+          ${streaks}
+        </g>
+      `.trim();
+    }
+
+    case 'falling_leaves': {
+      const colors = ['#f59e0b', '#ef4444', '#d97706', '#ea580c', '#ca8a04'];
+      const count = 12;
+      const leaves = Array.from({ length: count }, (_, i) => {
+        const seedX = (i * 103 + 47) % 1280;
+        const seedY = (i * 79 + 17) % 720;
+        const speed = 0.22 + (i % 3) * 0.08;
+        const curY = (seedY + elapsed * speed) % 720;
+        const sway = Math.sin((elapsed / (900 + i * 150)) * 2 * Math.PI) * 35;
+        const curX = (seedX + sway + 1280) % 1280;
+        const rot = (elapsed * 0.15 + i * 45) % 360;
+        const color = colors[i % colors.length];
+        const sz = 10 + (i % 4) * 3;
+        return `
+          <g transform="translate(${curX.toFixed(1)}, ${curY.toFixed(1)}) rotate(${rot.toFixed(1)})" opacity="${0.85 * fadeOutOpacity}">
+            <path d="M 0 ${-sz} Q ${sz * 0.6} 0 0 ${sz} Q ${-sz * 0.6} 0 0 ${-sz} Z" fill="${color}"/>
+            <line x1="0" y1="${-sz}" x2="0" y2="${sz}" stroke="rgba(0,0,0,0.2)" stroke-width="1"/>
+          </g>
+        `;
+      }).join('\n');
+
+      return `
+        <g id="overlay-${overlay.id}" class="edu-overlay falling-leaves">
+          ${leaves}
+        </g>
+      `.trim();
+    }
+
+    case 'sunshine_rays': {
+      const color = overlay.color || '#fef08a';
+      const pulse = 1.0 + 0.06 * Math.sin((elapsed / 1400) * 2 * Math.PI);
+      const op = 0.25 * pulse * easeOut * fadeOutOpacity;
+      const rays = [
+        `M 0 0 L 380 720 L 520 720 Z`,
+        `M 0 0 L 640 720 L 780 720 Z`,
+        `M 0 0 L 920 720 L 1060 720 Z`,
+        `M 0 0 L 1180 720 L 1280 640 Z`,
+      ].map((d, i) => `<path key="${i}" d="${d}" fill="url(#sun-beam-grad-${overlay.id})" />`).join('\n');
+
+      return `
+        <g id="overlay-${overlay.id}" class="edu-overlay sunshine-rays" opacity="${op}">
+          <defs>
+            <linearGradient id="sun-beam-grad-${overlay.id}" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="${color}" stop-opacity="0.7"/>
+              <stop offset="60%" stop-color="${color}" stop-opacity="0.3"/>
+              <stop offset="100%" stop-color="${color}" stop-opacity="0.0"/>
+            </linearGradient>
+          </defs>
+          ${rays}
+        </g>
+      `.trim();
+    }
+
+    case 'heat_shimmer': {
+      const color = overlay.color || '#fde047';
+      const baseY = overlay.y || 480;
+      const lines = [0, 40, 80, 120].map((dy, i) => {
+        const y = baseY + dy;
+        const wave = Math.sin((elapsed / 600 + i) * 2 * Math.PI) * 8;
+        return `<path d="M 0 ${y + wave} Q 320 ${y - wave} 640 ${y + wave} T 1280 ${y + wave}" fill="none" stroke="${color}" stroke-width="1.8" opacity="${0.22 * fadeOutOpacity}"/>`;
+      }).join('\n');
+
+      return `
+        <g id="overlay-${overlay.id}" class="edu-overlay heat-shimmer">
+          ${lines}
+        </g>
+      `.trim();
+    }
+
+    case 'fog_mist': {
+      const color = overlay.color || '#f8fafc';
+      const baseY = overlay.y || 520;
+      const t = (elapsed * 0.04) % 1280;
+      return `
+        <g id="overlay-${overlay.id}" class="edu-overlay fog-mist" opacity="${0.45 * easeOut * fadeOutOpacity}">
+          <ellipse cx="${(200 + t) % 1400 - 100}" cy="${baseY}" rx="240" ry="60" fill="${color}" opacity="0.35"/>
+          <ellipse cx="${(600 + t) % 1400 - 100}" cy="${baseY + 30}" rx="320" ry="70" fill="${color}" opacity="0.4"/>
+          <ellipse cx="${(1000 + t) % 1400 - 100}" cy="${baseY - 10}" rx="280" ry="65" fill="${color}" opacity="0.3"/>
+        </g>
+      `.trim();
+    }
+
+    case 'lightning': {
+      const cycle = elapsed % 3200;
+      if (cycle > 220) return '';
+      const flashOp = (1 - cycle / 220) * 0.85 * fadeOutOpacity;
+      const color = overlay.color || '#ffffff';
+      return `
+        <g id="overlay-${overlay.id}" class="edu-overlay lightning" opacity="${flashOp}">
+          <rect width="1280" height="720" fill="#ffffff" opacity="${flashOp * 0.3}"/>
+          <path d="M 640 0 L 610 220 L 660 240 L 590 480 L 630 490 L 580 720" fill="none" stroke="${color}" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M 640 0 L 610 220 L 660 240 L 590 480 L 630 490 L 580 720" fill="none" stroke="#38bdf8" stroke-width="9" stroke-linecap="round" stroke-linejoin="round" opacity="0.4"/>
+        </g>
+      `.trim();
+    }
+
+    case 'water_splashes': {
+      const x = overlay.x || 640;
+      const y = overlay.y || 540;
+      const color = overlay.color || '#38bdf8';
+      const period = 1200;
+      const phase = (elapsed % period) / period;
+      const r = (overlay.radius || 40) * phase;
+      const op = (1 - phase) * 0.7 * fadeOutOpacity;
+      return `
+        <g id="overlay-${overlay.id}" class="edu-overlay water-splashes" opacity="${fadeOutOpacity}">
+          <ellipse cx="${x}" cy="${y}" rx="${r}" ry="${r * 0.35}" fill="none" stroke="${color}" stroke-width="2.5" opacity="${op}"/>
+          <ellipse cx="${x}" cy="${y}" rx="${r * 1.5}" ry="${r * 0.5}" fill="none" stroke="${color}" stroke-width="1.8" opacity="${op * 0.6}"/>
+        </g>
+      `.trim();
+    }
+
+    case 'butterflies': {
+      const startX = overlay.x || 300;
+      const startY = overlay.y || 400;
+      const color1 = overlay.color || '#f43f5e';
+      const color2 = '#38bdf8';
+      const period = 2400;
+      const phase = (elapsed % period) / period;
+      const t = phase * 2 * Math.PI;
+      const bx = startX + Math.sin(t) * 120;
+      const by = startY + Math.sin(t * 2) * 50;
+      const wingFlap = Math.abs(Math.sin((elapsed / 120) * Math.PI));
+      const wingW = 14 * wingFlap;
+
+      return `
+        <g id="overlay-${overlay.id}" class="edu-overlay butterflies" transform="translate(${bx.toFixed(1)}, ${by.toFixed(1)})" opacity="${easeOut * fadeOutOpacity}">
+          <ellipse cx="${-wingW * 0.6}" cy="-4" rx="${wingW}" ry="10" fill="${color1}" opacity="0.85"/>
+          <ellipse cx="${wingW * 0.6}" cy="-4" rx="${wingW}" ry="10" fill="${color1}" opacity="0.85"/>
+          <ellipse cx="${-wingW * 0.5}" cy="6" rx="${wingW * 0.7}" ry="7" fill="${color2}" opacity="0.85"/>
+          <ellipse cx="${wingW * 0.5}" cy="6" rx="${wingW * 0.7}" ry="7" fill="${color2}" opacity="0.85"/>
+          <ellipse cx="0" cy="0" rx="2.5" ry="8" fill="#1e293b"/>
         </g>
       `.trim();
     }

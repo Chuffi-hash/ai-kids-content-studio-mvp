@@ -57,8 +57,20 @@ export class VideoAssemblyService {
     fps?: number;
     backgroundMusic?: string | null;
     musicVolume?: number;
+    format?: '16:9' | '9:16' | '1:1' | '4:5' | 'custom';
+    selectedSceneIds?: string[];
+    targetDurationSec?: number;
   }): ExportJob {
-    const { storyId, resolution = '720p', fps = 30, backgroundMusic, musicVolume = 0.2 } = options;
+    const {
+      storyId,
+      resolution = '720p',
+      fps = 30,
+      backgroundMusic,
+      musicVolume = 0.2,
+      format = '16:9',
+      selectedSceneIds,
+      targetDurationSec,
+    } = options;
     const jobId = randomUUID();
 
     const job: ExportJob = {
@@ -73,7 +85,17 @@ export class VideoAssemblyService {
     jobs.set(jobId, job);
 
     // Run assembly asynchronously
-    this.processExport(jobId, storyId, resolution, fps, backgroundMusic, musicVolume).catch((err) => {
+    this.processExport({
+      jobId,
+      storyId,
+      resolution,
+      fps,
+      backgroundMusic,
+      musicVolume,
+      format,
+      selectedSceneIds,
+      targetDurationSec,
+    }).catch((err) => {
       console.error(`[VideoAssembly] Unhandled error in job ${jobId}:`, err);
       job.status = 'failed';
       job.error = err.message || String(err);
@@ -93,14 +115,28 @@ export class VideoAssemblyService {
   /**
    * Executes the full video assembly pipeline using FFmpeg.
    */
-  private async processExport(
-    jobId: string,
-    storyId: string,
-    resolution: '1080p' | '720p',
-    fps: number,
-    backgroundMusic?: string | null,
-    musicVolume = 0.2
-  ): Promise<void> {
+  private async processExport(options: {
+    jobId: string;
+    storyId: string;
+    resolution: '1080p' | '720p';
+    fps: number;
+    backgroundMusic?: string | null;
+    musicVolume?: number;
+    format?: '16:9' | '9:16' | '1:1' | '4:5' | 'custom';
+    selectedSceneIds?: string[];
+    targetDurationSec?: number;
+  }): Promise<void> {
+    const {
+      jobId,
+      storyId,
+      resolution,
+      fps,
+      backgroundMusic,
+      musicVolume = 0.2,
+      format = '16:9',
+      selectedSceneIds,
+    } = options;
+
     const job = jobs.get(jobId);
     if (!job) return;
 
@@ -113,16 +149,40 @@ export class VideoAssemblyService {
       throw new Error(`Story not found: ${storyId}`);
     }
 
-    const scenes = await getScenesByStoryId(storyId, false);
-    if (!scenes || scenes.length === 0) {
+    const allScenes = await getScenesByStoryId(storyId, false);
+    if (!allScenes || allScenes.length === 0) {
       throw new Error('This story has no scenes to export. Generate scenes first.');
+    }
+
+    let scenes = allScenes;
+    if (Array.isArray(selectedSceneIds) && selectedSceneIds.length > 0) {
+      const filtered = allScenes.filter(
+        (s) => selectedSceneIds.includes(s.sceneId) || selectedSceneIds.includes(s.id)
+      );
+      if (filtered.length > 0) {
+        scenes = filtered;
+      }
     }
 
     const jobTempDir = path.join(this.tempDir, `export-${jobId}`);
     await fs.promises.mkdir(jobTempDir, { recursive: true });
 
-    const width = resolution === '1080p' ? 1920 : 1280;
-    const height = resolution === '1080p' ? 1080 : 720;
+    let width = 1280;
+    let height = 720;
+    if (format === '9:16') {
+      width = resolution === '1080p' ? 1080 : 720;
+      height = resolution === '1080p' ? 1920 : 1280;
+    } else if (format === '1:1') {
+      width = resolution === '1080p' ? 1080 : 720;
+      height = resolution === '1080p' ? 1080 : 720;
+    } else if (format === '4:5') {
+      width = resolution === '1080p' ? 1080 : 720;
+      height = resolution === '1080p' ? 1350 : 900;
+    } else {
+      width = resolution === '1080p' ? 1920 : 1280;
+      height = resolution === '1080p' ? 1080 : 720;
+    }
+
     const ffmpegPath = ffmpegStatic?.path || 'ffmpeg';
 
     try {
@@ -249,6 +309,7 @@ export class VideoAssemblyService {
             width,
             height,
             fps,
+            activeFormat: format,
             outputPath: segmentPath,
             jobTempDir,
             sceneIndex: i,
@@ -330,7 +391,8 @@ export class VideoAssemblyService {
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, '-')
         .slice(0, 30);
-      const finalFilename = `${cleanTitle}-${timestamp}.mp4`;
+      const formatTag = format === '9:16' ? 'reel-9x16' : (format === '1:1' ? 'square-1x1' : (format === '4:5' ? 'portrait-4x5' : 'landscape-16x9'));
+      const finalFilename = `${cleanTitle}-${formatTag}-${timestamp}.mp4`;
       const finalOutputPath = path.join(this.exportsDir, finalFilename);
 
       // Check if background soundtrack should be mixed in
@@ -457,7 +519,7 @@ export class VideoAssemblyService {
       });
 
       filterParts.push(
-        `${mixInputs.join('')}amix=inputs=${mixInputs.length}:dropout_transition=0:duration=longest,apad[aout]`
+        `${mixInputs.join('')}amix=inputs=${mixInputs.length}:dropout_transition=0:duration=longest,aresample=44100[aout]`
       );
 
       return {
@@ -467,20 +529,12 @@ export class VideoAssemblyService {
       };
     } else if (hasNarration && !hasDialogue) {
       const audioInputArgs = ['-i', audioPath!];
-      if (videoFilter) {
-        filterParts.push(`[${videoInputCount}:a]apad,aresample=44100[aout]`);
-        return {
-          audioInputArgs,
-          filterComplexArgs: ['-filter_complex', filterParts.join(';')],
-          mapArgs: ['-map', '[vout]', '-map', '[aout]'],
-        };
-      } else {
-        return {
-          audioInputArgs,
-          filterComplexArgs: ['-af', 'apad,aresample=44100'],
-          mapArgs: ['-map', '0:v', '-map', `${videoInputCount}:a`],
-        };
-      }
+      filterParts.push(`[${videoInputCount}:a]aresample=44100[aout]`);
+      return {
+        audioInputArgs,
+        filterComplexArgs: ['-filter_complex', filterParts.join(';')],
+        mapArgs: ['-map', videoFilter ? '[vout]' : '0:v', '-map', '[aout]'],
+      };
     } else if (!hasNarration && hasDialogue) {
       const audioInputArgs = dialogueAudios.flatMap((d) => ['-i', d.path]);
       const mixInputs: string[] = [];
@@ -494,10 +548,10 @@ export class VideoAssemblyService {
       });
 
       if (dialogueAudios.length === 1) {
-        filterParts.push(`[a_dlg0]apad[aout]`);
+        filterParts.push(`[a_dlg0]aresample=44100[aout]`);
       } else {
         filterParts.push(
-          `${mixInputs.join('')}amix=inputs=${mixInputs.length}:dropout_transition=0:duration=longest,apad[aout]`
+          `${mixInputs.join('')}amix=inputs=${mixInputs.length}:dropout_transition=0:duration=longest,aresample=44100[aout]`
         );
       }
 
@@ -511,20 +565,12 @@ export class VideoAssemblyService {
         '-f', 'lavfi',
         '-i', 'anullsrc=channel_layout=stereo:sample_rate=44100',
       ];
-      if (videoFilter) {
-        filterParts.push(`[${videoInputCount}:a]aresample=44100[aout]`);
-        return {
-          audioInputArgs,
-          filterComplexArgs: ['-filter_complex', filterParts.join(';')],
-          mapArgs: ['-map', '[vout]', '-map', '[aout]'],
-        };
-      } else {
-        return {
-          audioInputArgs,
-          filterComplexArgs: [],
-          mapArgs: ['-map', '0:v', '-map', `${videoInputCount}:a`],
-        };
-      }
+      filterParts.push(`[${videoInputCount}:a]aresample=44100[aout]`);
+      return {
+        audioInputArgs,
+        filterComplexArgs: ['-filter_complex', filterParts.join(';')],
+        mapArgs: ['-map', videoFilter ? '[vout]' : '0:v', '-map', '[aout]'],
+      };
     }
   }
 
@@ -540,6 +586,7 @@ export class VideoAssemblyService {
     width: number;
     height: number;
     fps: number;
+    activeFormat?: string;
     outputPath: string;
     jobTempDir: string;
     sceneIndex: number;
@@ -553,6 +600,7 @@ export class VideoAssemblyService {
       width,
       height,
       fps,
+      activeFormat,
       outputPath,
       jobTempDir,
       sceneIndex,
@@ -572,6 +620,7 @@ export class VideoAssemblyService {
         timestampSec,
         width,
         height,
+        activeFormat: activeFormat as any,
         resolveLocalPath: (url: string) => this.resolveLocalPath(url),
       });
 

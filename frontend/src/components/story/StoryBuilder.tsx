@@ -24,6 +24,13 @@ interface StoryBuilderProps {
   characters: Character[];
   loading?: boolean;
   onGenerate: (data: StoryFormState) => void;
+  onImport?: (data: {
+    rawText: string;
+    title?: string;
+    language?: string;
+    format?: string;
+    genre?: string;
+  }) => void;
 }
 
 const defaultState: StoryFormState = {
@@ -109,6 +116,7 @@ export default function StoryBuilder({
   characters = [],
   loading = false,
   onGenerate,
+  onImport,
 }: StoryBuilderProps) {
   const [form, setForm] = useState<StoryFormState>({ ...defaultState, ...initialState });
   const [errors, setErrors] = useState<{ topic?: string }>({});
@@ -159,39 +167,271 @@ export default function StoryBuilder({
     onGenerate(form);
   }
 
+  const [studioMode, setStudioMode] = useState<'generate' | 'import'>('generate');
+  const [importText, setImportText] = useState<string>('');
+  const [importTitle, setImportTitle] = useState<string>('');
+  const [importLanguage, setImportLanguage] = useState<string>('Hindi');
+  const [importFormat, setImportFormat] = useState<'16:9' | '9:16'>('16:9');
+  const [importGenre, setImportGenre] = useState<string>('Educational');
+  const [importError, setImportError] = useState<string | null>(null);
+
+  const SAMPLE_FOUR_SEASONS = `# Title: Earth's Promise: The Four Seasons
+Logline: Earth teaches children how the four seasons bring balance, beauty, and life to our planet.
+Lesson: Every season has a special purpose in nature.
+
+## Characters
+- Earth (Protagonist): Our smiling, wise living planet with blue oceans and green continents.
+
+## Scene 1: Golden Summer
+Visual: Sun-drenched golden meadows with distant mountains, vibrant sunshine rays and heat shimmer.
+Narration: ग्रीष्म ऋतु में सूरज अपनी सुनहरी किरणें बिखेरता है और प्रकृति खिल उठती है।
+Earth: नमस्ते नन्हे दोस्तों! मैं तुम्हारी पृथ्वी हूँ। देखो, सूरज की धूप फसलों को पका रही है! (Emotion: happy)
+
+## Scene 2: The Monsoon Rain
+Visual: Lush green hills and valleys covered in fresh gentle monsoon rain, rolling clouds and water splashes.
+Narration: वर्षा ऋतु में काले बादल गरजते हैं और ठंडी बारिश सूखी धरती को नया जीवन देती है।
+Earth: आहा! बारिश की हर बूंद नदियों और झरनों में नई जान फूंक देती है। (Emotion: excited)
+
+## Scene 3: Peaceful Winter
+Visual: Serene snowy forest with pine trees covered in soft snowfall, gentle fog and mist.
+Narration: शीत ऋतु में बर्फ की सफेद चादर बिछ जाती है और पेड़-पौधे विश्राम करते हैं।
+Earth: सर्दी हमें सिखाती है कि नए जीवन की तैयारी के लिए विश्राम भी जरूरी है। (Emotion: calm)
+
+## Scene 4: Colorful Autumn
+Visual: Forest hills with golden falling leaves swirling in the breeze and flying birds in the sky.
+Narration: शरद ऋतु में पत्ते सुनहरे होकर गिरते हैं और पक्षी सुहाने मौसम में उड़ते हैं।
+Earth: पतझड़ के बाद नया बसंत आता है! प्रकृति का यह चक्र हमेशा मुस्कुराता रहता है। (Emotion: cheerful)
+`;
+
+  function handleLoadSample() {
+    setImportTitle("Earth's Promise: The Four Seasons");
+    setImportText(SAMPLE_FOUR_SEASONS);
+    setImportLanguage('Hindi');
+    setImportError(null);
+  }
+
+  function handleImportSubmit() {
+    if (!importText.trim()) {
+      setImportError('Please enter or paste your story script.');
+      return;
+    }
+    setImportError(null);
+    if (onImport) {
+      onImport({
+        rawText: importText,
+        title: importTitle || undefined,
+        language: importLanguage,
+        format: importFormat,
+        genre: importGenre,
+      });
+    }
+  }
+
   const estimatedScenes =
     form.desiredDurationSeconds <= 30 ? "3" : form.desiredDurationSeconds <= 60 ? "4" : "5–6";
 
   return (
     <div className="story-studio-workbench">
-      {/* 1. Creative Story Sparks Row */}
-      <div className="story-spark-bar">
-        <div className="spark-bar-title">
-          <SparklesIcon size={14} color="var(--studio-violet, #8b5cf6)" />
-          <span>Story Sparks:</span>
-        </div>
-        <div className="spark-chips-container" role="region" aria-label="Story Spark Inspirations">
-          {INSPIRATION_CHIPS.map((chip) => {
-            const isActive = selectedSparkId === chip.id;
-            return (
-              <button
-                key={chip.id}
-                type="button"
-                className={`spark-card spark-${chip.theme} ${isActive ? "active" : ""}`}
-                onClick={() => handleSelectInspiration(chip)}
-                title={`${chip.label} — ${chip.prompt}`}
-                aria-pressed={isActive}
-              >
-                <span className="spark-emoji">{chip.emoji}</span>
-                <div className="spark-body">
-                  <span className="spark-label">{chip.label}</span>
-                  <span className="spark-category">{chip.category}</span>
-                </div>
-              </button>
-            );
-          })}
-        </div>
+      {/* Studio Mode Selector (AI Generator vs Import/Write Script) */}
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', background: 'rgba(255,255,255,0.04)', padding: '6px', borderRadius: '10px' }}>
+        <button
+          type="button"
+          style={{
+            flex: 1,
+            padding: '10px 16px',
+            borderRadius: '8px',
+            border: studioMode === 'generate' ? '1px solid var(--ed-accent, #8b5cf6)' : '1px solid transparent',
+            background: studioMode === 'generate' ? 'rgba(139, 92, 246, 0.22)' : 'transparent',
+            color: studioMode === 'generate' ? '#ffffff' : '#94a3b8',
+            fontWeight: 600,
+            fontSize: '13px',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '8px',
+          }}
+          onClick={() => setStudioMode('generate')}
+        >
+          <SparklesIcon size={15} />
+          <span>AI Idea Sparks & Story Builder</span>
+        </button>
+        <button
+          type="button"
+          style={{
+            flex: 1,
+            padding: '10px 16px',
+            borderRadius: '8px',
+            border: studioMode === 'import' ? '1px solid #38bdf8' : '1px solid transparent',
+            background: studioMode === 'import' ? 'rgba(56, 189, 248, 0.22)' : 'transparent',
+            color: studioMode === 'import' ? '#ffffff' : '#94a3b8',
+            fontWeight: 600,
+            fontSize: '13px',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '8px',
+          }}
+          onClick={() => setStudioMode('import')}
+        >
+          <span>📝</span>
+          <span>Import or Write Story (Fast • Local • Zero AI Cost)</span>
+        </button>
       </div>
+
+      {studioMode === 'import' ? (
+        <div className="studio-card" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+            <div>
+              <h3 style={{ margin: 0, fontSize: '18px', color: '#f8fafc' }}>Import or Write Story Script</h3>
+              <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#94a3b8' }}>
+                Paste from Claude, ChatGPT, Gemini, or type your own scenes. Automatically detects character dialogue, emotions, narration, and seasonal weather overlays.
+              </p>
+            </div>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                type="button"
+                className="ed-btn-action"
+                style={{ background: 'rgba(139, 92, 246, 0.2)', border: '1px solid #8b5cf6', color: '#c4b5fd' }}
+                onClick={handleLoadSample}
+              >
+                🌍 Load "Earth's Four Seasons" Sample
+              </button>
+              <button
+                type="button"
+                className="ed-btn-action"
+                style={{ background: 'rgba(255, 255, 255, 0.05)', color: '#94a3b8' }}
+                onClick={() => { setImportText(''); setImportTitle(''); setImportError(null); }}
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+            <div className="studio-field">
+              <label className="studio-label">Story Title (Optional)</label>
+              <input
+                type="text"
+                className="studio-input"
+                placeholder="e.g., Earth's Promise: The Four Seasons"
+                value={importTitle}
+                onChange={(e) => setImportTitle(e.target.value)}
+              />
+            </div>
+
+            <div className="studio-field">
+              <label className="studio-label">Primary Language (Speech & Subtitles)</label>
+              <select
+                className="studio-input"
+                value={importLanguage}
+                onChange={(e) => setImportLanguage(e.target.value)}
+              >
+                <option value="Hindi">Hindi (Default • Kokoro hf_alpha)</option>
+                <option value="English">English (Kokoro 28 Voices)</option>
+              </select>
+            </div>
+
+            <div className="studio-field">
+              <label className="studio-label">Target Format</label>
+              <select
+                className="studio-input"
+                value={importFormat}
+                onChange={(e) => setImportFormat(e.target.value as any)}
+              >
+                <option value="16:9">16:9 Landscape (YouTube / Desktop)</option>
+                <option value="9:16">9:16 Vertical Reel / Short (Instagram / Shorts / TikTok)</option>
+              </select>
+            </div>
+
+            <div className="studio-field">
+              <label className="studio-label">Genre</label>
+              <select
+                className="studio-input"
+                value={importGenre}
+                onChange={(e) => setImportGenre(e.target.value)}
+              >
+                <option value="Educational">Educational & Science</option>
+                <option value="Adventure">Adventure</option>
+                <option value="Bedtime">Bedtime & Calm</option>
+                <option value="Comedy">Fun & Playful</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="studio-field">
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+              <label className="studio-label" style={{ margin: 0 }}>Story Script (Markdown, Screenplay, or JSON) *</label>
+              <span style={{ fontSize: '11px', color: '#94a3b8' }}>{importText.length} characters</span>
+            </div>
+            <textarea
+              className="studio-textarea"
+              style={{ fontFamily: 'monospace', fontSize: '13px', minHeight: '260px', lineHeight: '1.5' }}
+              placeholder={`# Title: Earth's Promise: The Four Seasons\n\n## Scene 1: Summer\nVisual: Golden meadow with sunshine rays...\nNarration: ग्रीष्म ऋतु में...\nEarth: नमस्ते दोस्तों! (Emotion: happy)\n\n## Scene 2: Monsoon\nVisual: Rain drops and rolling clouds...\nEarth: देखो बारिश! (Emotion: excited)`}
+              value={importText}
+              onChange={(e) => { setImportText(e.target.value); setImportError(null); }}
+              rows={12}
+            />
+            {importError && (
+              <span className="field-error" style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+                {importError}
+              </span>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <button
+              type="button"
+              className="studio-generate-btn"
+              onClick={handleImportSubmit}
+              disabled={loading}
+              style={{ minWidth: '240px', background: 'linear-gradient(135deg, #0284c7, #38bdf8)' }}
+            >
+              {loading ? (
+                <>
+                  <span className="studio-spinner" aria-hidden="true" />
+                  <span>Parsing & Creating Video Project...</span>
+                </>
+              ) : (
+                <>
+                  <span>🚀</span>
+                  <span>Import & Create Video Project</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <>
+          {/* 1. Creative Story Sparks Row */}
+          <div className="story-spark-bar">
+            <div className="spark-bar-title">
+              <SparklesIcon size={14} color="var(--studio-violet, #8b5cf6)" />
+              <span>Story Sparks:</span>
+            </div>
+            <div className="spark-chips-container" role="region" aria-label="Story Spark Inspirations">
+              {INSPIRATION_CHIPS.map((chip) => {
+                const isActive = selectedSparkId === chip.id;
+                return (
+                  <button
+                    key={chip.id}
+                    type="button"
+                    className={`spark-card spark-${chip.theme} ${isActive ? "active" : ""}`}
+                    onClick={() => handleSelectInspiration(chip)}
+                    title={`${chip.label} — ${chip.prompt}`}
+                    aria-pressed={isActive}
+                  >
+                    <span className="spark-emoji">{chip.emoji}</span>
+                    <div className="spark-body">
+                      <span className="spark-label">{chip.label}</span>
+                      <span className="spark-category">{chip.category}</span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
 
       {/* 2. Main Studio Two-Column Grid */}
       <div className="story-studio-grid">
@@ -565,6 +805,8 @@ export default function StoryBuilder({
           </div>
         </div>
       </div>
+      </>
+      )}
 
       {/* Modal for browsing character library */}
       <CharacterPickerModal

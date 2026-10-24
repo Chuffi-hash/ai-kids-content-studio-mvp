@@ -144,9 +144,34 @@ export interface CharacterVoiceConfig {
   effect?: 'normal' | 'cartoon' | 'robot' | 'whisper' | 'shout';
 }
 
+export type AspectRatioType = '16:9' | '9:16' | '1:1' | '4:5' | 'custom';
+
+export interface FormatVariantPresentation {
+  aspectRatio: AspectRatioType;
+  width: number;
+  height: number;
+  characterOverrides?: Record<string, {
+    x?: number;
+    y?: number;
+    scale?: number;
+  }>;
+  background?: {
+    fit?: 'cover' | 'contain';
+    focalPoint?: { x: number; y: number };
+  };
+  overlayOverrides?: Record<string, {
+    x?: number;
+    y?: number;
+    scale?: number;
+  }>;
+  captionPosition?: 'top' | 'middle' | 'bottom';
+}
+
 export interface VectorSceneData {
   version: number;
   viewport: { width: number; height: number };
+  activeFormat?: AspectRatioType;
+  formatVariants?: Record<string, FormatVariantPresentation>;
   background?: {
     imageUrl: string;
     fit?: 'cover' | 'contain';
@@ -552,10 +577,13 @@ export class VectorAnimationEngine {
     timestampSec: number;
     width?: number;
     height?: number;
+    activeFormat?: AspectRatioType;
     resolveLocalPath?: (url: string) => string;
   }): string {
     const { animationData, timestampSec, width = 1280, height = 720, resolveLocalPath } = options;
+    const activeFormat: AspectRatioType = options.activeFormat || animationData?.activeFormat || (width < height ? '9:16' : '16:9');
     const sceneRelativeMs = timestampSec * 1000;
+    const formatVariant = animationData?.formatVariants?.[activeFormat];
 
     let backgroundXml = '';
     if (animationData?.background?.imageUrl) {
@@ -579,24 +607,55 @@ export class VectorAnimationEngine {
         }
       }
 
-      const fitMode = animationData.background?.fit === 'contain' ? 'xMidYMid meet' : 'xMidYMid slice';
+      const fitMode = (formatVariant?.background?.fit || animationData.background?.fit) === 'contain' ? 'xMidYMid meet' : 'xMidYMid slice';
       const backdropXml = `<rect id="scene-background-backdrop" width="${width}" height="${height}" fill="#090d16"/>`;
       backgroundXml = `<g id="scene-background-group">${backdropXml}<image id="scene-background-image" href="${imageHref}" x="0" y="0" width="${width}" height="${height}" preserveAspectRatio="${fitMode}"/></g>`;
     }
 
     if (!backgroundXml) {
+      const groundY = Math.round(height * 0.75);
+      const groundH = height - groundY;
       backgroundXml = `
         <g id="default-stylized-background">
           <rect id="scene-background-rect" width="${width}" height="${height}" fill="#101726"/>
-          <line x1="0" y1="540" x2="${width}" y2="540" stroke="#1e293b" stroke-width="2"/>
-          <rect x="0" y="540" width="${width}" height="180" fill="#0d131f" opacity="0.6"/>
+          <line x1="0" y1="${groundY}" x2="${width}" y2="${groundY}" stroke="#1e293b" stroke-width="2"/>
+          <rect x="0" y="${groundY}" width="${width}" height="${groundH}" fill="#0d131f" opacity="0.6"/>
         </g>
       `;
     }
 
     const instances = animationData.characterInstances || [];
     const clips = animationData.animationClips || [];
-    const sortedInstances = [...instances].sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
+    const characterOverrides = formatVariant?.characterOverrides;
+
+    const adjustedInstances = instances.map((inst) => {
+      const override = characterOverrides?.[inst.instanceId];
+      if (override) {
+        return {
+          ...inst,
+          x: override.x !== undefined ? override.x : inst.x,
+          y: override.y !== undefined ? override.y : inst.y,
+          scale: override.scale !== undefined ? override.scale : inst.scale,
+        };
+      }
+      if (activeFormat === '9:16' && width < height) {
+        // Adapt 16:9 (1280x720) coordinates to 9:16 vertical (e.g. 720x1280)
+        const xOffset = inst.x - 640;
+        const newX = (width / 2) + (xOffset * (width / 1280));
+        const yRatio = inst.y / 720;
+        const newY = yRatio * height;
+        const newScale = (inst.scale || 1.0) <= 1.0 ? (inst.scale || 1.0) * 1.15 : (inst.scale || 1.0);
+        return {
+          ...inst,
+          x: Math.round(newX),
+          y: Math.round(newY),
+          scale: Number(newScale.toFixed(2)),
+        };
+      }
+      return inst;
+    });
+
+    const sortedInstances = [...adjustedInstances].sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
 
     const charactersXml = sortedInstances
       .map((instance) => {
@@ -672,7 +731,28 @@ export class VectorAnimationEngine {
       })
       .join('\n');
 
-    const overlays = animationData.overlays || [];
+    const overlays = (animationData.overlays || []).map((o) => {
+      const override = formatVariant?.overlayOverrides?.[o.id];
+      if (override) {
+        return {
+          ...o,
+          x: override.x !== undefined ? override.x : o.x,
+          y: override.y !== undefined ? override.y : o.y,
+        };
+      }
+      if (activeFormat === '9:16' && width < height) {
+        if (o.type === 'title_card') {
+          return { ...o, x: width / 2, y: o.y > 450 ? Math.round(height * 0.78) : o.y };
+        }
+        if (o.type === 'spotlight' || o.type === 'glow' || o.type === 'sparkles') {
+          const xOffset = o.x - 640;
+          const newX = (width / 2) + (xOffset * (width / 1280));
+          const yRatio = o.y / 720;
+          return { ...o, x: Math.round(newX), y: Math.round(yRatio * height) };
+        }
+      }
+      return o;
+    });
     const belowCharacterOverlays = overlays.filter(
       (o) => o.layerPosition === 'below_characters' || (o.zIndex !== undefined && o.zIndex < 0)
     );

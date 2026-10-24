@@ -314,7 +314,15 @@ productionRouter.post('/scenes/:sceneId/voice', async (req, res) => {
 productionRouter.post('/story/:storyId/export', async (req, res) => {
   try {
     const { storyId } = req.params;
-    const { resolution = '720p', fps = 30, backgroundMusic, musicVolume } = req.body;
+    const {
+      resolution = '720p',
+      fps = 30,
+      backgroundMusic,
+      musicVolume,
+      format = '16:9',
+      selectedSceneIds,
+      targetDurationSec,
+    } = req.body;
 
     const job = videoAssemblyService.startExportJob({
       storyId,
@@ -322,6 +330,9 @@ productionRouter.post('/story/:storyId/export', async (req, res) => {
       fps,
       backgroundMusic,
       musicVolume,
+      format,
+      selectedSceneIds,
+      targetDurationSec,
     });
 
     return res.json({

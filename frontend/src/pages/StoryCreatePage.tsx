@@ -10,6 +10,7 @@ import { ProductionState, ProductionScene } from "../types/production";
 import { generateScenes } from "../services/content.service";
 import { getApiUrl } from "../utils/urlHelper";
 import { fetchStory } from "../services/storybook.service";
+import { importStory } from "../services/editor.service";
 
 export default function StoryCreatePage() {
   const navigate = useNavigate();
@@ -72,6 +73,21 @@ export default function StoryCreatePage() {
     } catch (error: any) {
       console.error(error);
       setApiError(error?.message || "Failed to generate story. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleImportStory(data: any) {
+    setLoading(true);
+    setApiError(null);
+
+    try {
+      const result = await importStory(data);
+      navigate(`/stories/${result.storyId}`);
+    } catch (error: any) {
+      console.error(error);
+      setApiError(error?.message || "Failed to import story. Please check your text format.");
     } finally {
       setLoading(false);
     }
@@ -179,6 +195,7 @@ export default function StoryCreatePage() {
         characters={characters}
         loading={loading}
         onGenerate={generateStory}
+        onImport={handleImportStory}
       />
     </div>
   );

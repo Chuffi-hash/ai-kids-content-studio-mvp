@@ -188,7 +188,17 @@ export type EducationalOverlayType =
   | 'sparkles'
   | 'flying_birds'
   | 'moving_clouds'
-  | 'title_card';
+  | 'title_card'
+  | 'rain'
+  | 'snowfall'
+  | 'wind'
+  | 'falling_leaves'
+  | 'sunshine_rays'
+  | 'heat_shimmer'
+  | 'fog_mist'
+  | 'lightning'
+  | 'water_splashes'
+  | 'butterflies';
 
 export interface EducationalOverlay {
   id: string;
@@ -223,9 +233,34 @@ export interface EducationalOverlay {
   pulseSpeedMs?: number;
 }
 
+export type AspectRatioType = '16:9' | '9:16' | '1:1' | '4:5' | 'custom';
+
+export interface FormatVariantPresentation {
+  aspectRatio: AspectRatioType;
+  width: number;
+  height: number;
+  characterOverrides?: Record<string, {
+    x?: number;
+    y?: number;
+    scale?: number;
+  }>;
+  background?: {
+    fit?: 'cover' | 'contain';
+    focalPoint?: { x: number; y: number };
+  };
+  overlayOverrides?: Record<string, {
+    x?: number;
+    y?: number;
+    scale?: number;
+  }>;
+  captionPosition?: 'top' | 'middle' | 'bottom';
+}
+
 export interface VectorSceneData {
   version: 1;
-  viewport: { width: 1280; height: 720 };
+  viewport: { width: number; height: number };
+  activeFormat?: AspectRatioType;
+  formatVariants?: Record<string, FormatVariantPresentation>;
   background?: {
     imageUrl?: string;
     fit?: 'cover' | 'contain';
