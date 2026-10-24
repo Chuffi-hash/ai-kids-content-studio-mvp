@@ -7,9 +7,10 @@ import {
   formatTimeMs,
 } from '../../utils/timingEngine';
 import { resolveAssetUrl } from '../../utils/urlHelper';
-import { CharacterInstance, VectorSceneData, EducationalOverlay, EducationalOverlayType, SpeakingEmotion } from '../../types/animation';
+import { CharacterInstance, VectorSceneData, EducationalOverlay, EducationalOverlayType, SpeakingEmotion, SceneDialogue } from '../../types/animation';
 import { CharacterAnimationInspector } from './animation/CharacterAnimationInspector';
 import { OverlayInspector } from './animation/OverlayInspector';
+import { DialogueInspector } from './animation/DialogueInspector';
 import {
   getTTSVoices,
   previewVoice,
@@ -88,6 +89,13 @@ interface PropertiesInspectorProps {
   onAddOverlay?: (sceneId: string, overlay: EducationalOverlay) => void;
   onDeleteOverlay?: (sceneId: string, overlayId: string) => void;
   onReorderOverlays?: (sceneId: string, overlays: EducationalOverlay[]) => void;
+
+  selectedDialogueId?: string | null;
+  onSelectDialogue?: (dialogueId: string | null) => void;
+  onUpdateDialogue?: (dialogueId: string, updates: Partial<SceneDialogue>) => void;
+  onDeleteDialogue?: (dialogueId: string) => Promise<void>;
+  onAddDialogue?: (dialogue: SceneDialogue) => void;
+  onSaveCharacterDefault?: (characterId: string, settings: { voice?: string; lang?: string; emotion?: SpeakingEmotion; emotionIntensity?: number }) => Promise<void>;
 }
 
 export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
@@ -126,6 +134,12 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
   onAddOverlay,
   onDeleteOverlay,
   onReorderOverlays,
+  selectedDialogueId,
+  onSelectDialogue,
+  onUpdateDialogue,
+  onDeleteDialogue,
+  onAddDialogue,
+  onSaveCharacterDefault,
 }) => {
   if (!scene) {
     return (
@@ -520,7 +534,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
   const canSplitAtPlayhead =
     playheadMs > scene.startMs + 500 && playheadMs < scene.endMs - 500;
 
-  const [activeInspectorTab, setActiveInspectorTab] = useState<'scene' | 'animation' | 'overlays'>('scene');
+  const [activeInspectorTab, setActiveInspectorTab] = useState<'scene' | 'animation' | 'dialogue' | 'overlays'>('scene');
 
   useEffect(() => {
     if (selectedInstanceId) {
@@ -529,10 +543,82 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
   }, [selectedInstanceId]);
 
   useEffect(() => {
+    if (selectedDialogueId) {
+      setActiveInspectorTab('dialogue');
+    }
+  }, [selectedDialogueId]);
+
+  useEffect(() => {
     if (selectedOverlayId) {
       setActiveInspectorTab('overlays');
     }
   }, [selectedOverlayId]);
+
+  const handleUpdateDialogueLine = (dlgId: string, updates: Partial<SceneDialogue>) => {
+    if (onUpdateDialogue) {
+      onUpdateDialogue(dlgId, updates);
+      return;
+    }
+    const currentLines = scene.animationData?.dialogueLines || [];
+    const updatedLines = currentLines.map((d) => (d.id === dlgId ? { ...d, ...updates } : d));
+    const nextAnim: VectorSceneData = {
+      ...(scene.animationData || {
+        version: 1,
+        viewport: { width: 1280, height: 720 },
+        characterInstances: [],
+        animationClips: [],
+      }),
+      dialogueLines: updatedLines,
+    };
+    if (onUpdateAnimationData) {
+      onUpdateAnimationData(scene.sceneId, nextAnim);
+    }
+    onUpdateScene(scene.sceneId, { animationData: nextAnim });
+  };
+
+  const handleDeleteDialogueLine = async (dlgId: string) => {
+    if (onDeleteDialogue) {
+      await onDeleteDialogue(dlgId);
+      return;
+    }
+    const currentLines = scene.animationData?.dialogueLines || [];
+    const updatedLines = currentLines.filter((d) => d.id !== dlgId);
+    const nextAnim: VectorSceneData = {
+      ...(scene.animationData || {
+        version: 1,
+        viewport: { width: 1280, height: 720 },
+        characterInstances: [],
+        animationClips: [],
+      }),
+      dialogueLines: updatedLines,
+    };
+    if (onUpdateAnimationData) {
+      onUpdateAnimationData(scene.sceneId, nextAnim);
+    }
+    onUpdateScene(scene.sceneId, { animationData: nextAnim });
+  };
+
+  const handleAddDialogueLine = (newDlg: SceneDialogue) => {
+    if (onAddDialogue) {
+      onAddDialogue(newDlg);
+      return;
+    }
+    const currentLines = scene.animationData?.dialogueLines || [];
+    const updatedLines = [...currentLines, newDlg];
+    const nextAnim: VectorSceneData = {
+      ...(scene.animationData || {
+        version: 1,
+        viewport: { width: 1280, height: 720 },
+        characterInstances: [],
+        animationClips: [],
+      }),
+      dialogueLines: updatedLines,
+    };
+    if (onUpdateAnimationData) {
+      onUpdateAnimationData(scene.sceneId, nextAnim);
+    }
+    onUpdateScene(scene.sceneId, { animationData: nextAnim });
+  };
 
   const characterInstances = scene.animationData?.characterInstances || [];
   const selectedCharacterInstance = characterInstances.find((i) => i.instanceId === selectedInstanceId) || null;
@@ -838,6 +924,25 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
               flex: 1,
               justifyContent: 'center',
               fontSize: '11px',
+              background: activeInspectorTab === 'dialogue' ? 'var(--ed-surface-elevated)' : 'transparent',
+              color: activeInspectorTab === 'dialogue' ? '#f472b6' : 'var(--ed-text-muted)',
+              fontWeight: activeInspectorTab === 'dialogue' ? 600 : 400,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+            }}
+            onClick={() => setActiveInspectorTab('dialogue')}
+          >
+            <span style={{ fontSize: '12px' }}>👄</span>
+            <span>Dialogue ({scene.animationData?.dialogueLines?.length || 0})</span>
+          </button>
+          <button
+            type="button"
+            className="ed-tool-btn"
+            style={{
+              flex: 1,
+              justifyContent: 'center',
+              fontSize: '11px',
               background: activeInspectorTab === 'overlays' ? 'var(--ed-surface-elevated)' : 'transparent',
               color: activeInspectorTab === 'overlays' ? '#67e8f9' : 'var(--ed-text-muted)',
               fontWeight: activeInspectorTab === 'overlays' ? 600 : 400,
@@ -984,6 +1089,19 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
               </div>
             </div>
           )}
+        </div>
+      ) : activeInspectorTab === 'dialogue' ? (
+        <div className="ed-inspector-content">
+          <DialogueInspector
+            scene={scene}
+            characters={characters}
+            selectedDialogueId={selectedDialogueId || null}
+            onSelectDialogue={(id) => (onSelectDialogue ? onSelectDialogue(id) : undefined)}
+            onUpdateDialogue={handleUpdateDialogueLine}
+            onDeleteDialogue={handleDeleteDialogueLine}
+            onAddDialogue={handleAddDialogueLine}
+            onSaveCharacterDefault={onSaveCharacterDefault}
+          />
         </div>
       ) : activeInspectorTab === 'overlays' ? (
         <div className="ed-inspector-content">

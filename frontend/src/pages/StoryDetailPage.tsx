@@ -37,6 +37,7 @@ export default function StoryDetailPage() {
   const [activeVersions, setActiveVersions] = useState<SceneVersionItem[]>([]);
   const [selectedInstanceId, setSelectedInstanceId] = useState<string | null>(null);
   const [selectedOverlayId, setSelectedOverlayId] = useState<string | null>(null);
+  const [selectedDialogueId, setSelectedDialogueId] = useState<string | null>(null);
   const [isStoryDetailsOpen, setIsStoryDetailsOpen] = useState<boolean>(false);
   const [isCharacterBuilderOpen, setIsCharacterBuilderOpen] = useState<boolean>(false);
 
@@ -649,6 +650,7 @@ export default function StoryDetailPage() {
     setSelectedInstanceId(instanceId);
     if (instanceId) {
       setSelectedOverlayId(null);
+      setSelectedDialogueId(null);
     }
   }, []);
 
@@ -656,6 +658,15 @@ export default function StoryDetailPage() {
     setSelectedOverlayId(overlayId);
     if (overlayId) {
       setSelectedInstanceId(null);
+      setSelectedDialogueId(null);
+    }
+  }, []);
+
+  const handleSelectDialogue = useCallback((dialogueId: string | null) => {
+    setSelectedDialogueId(dialogueId);
+    if (dialogueId) {
+      setSelectedInstanceId(null);
+      setSelectedOverlayId(null);
     }
   }, []);
 
@@ -1425,6 +1436,8 @@ export default function StoryDetailPage() {
           selectedOverlayId={selectedOverlayId}
           onSelectOverlay={handleSelectOverlay}
           onUpdateOverlay={handleUpdateOverlay}
+          selectedDialogueId={selectedDialogueId}
+          onSelectDialogue={handleSelectDialogue}
           onUpdateAnimationData={handleUpdateAnimationData}
           onAddCharacterToScene={handleAddCharacterToScene}
           onRemoveCharacterFromScene={handleRemoveCharacterFromScene}
@@ -1448,6 +1461,8 @@ export default function StoryDetailPage() {
         selectedMusic={selectedMusic}
         selectedInstanceId={selectedInstanceId}
         onSelectInstance={handleSelectInstance}
+        selectedDialogueId={selectedDialogueId}
+        onSelectDialogue={handleSelectDialogue}
         selectedOverlayId={selectedOverlayId}
         onSelectOverlay={handleSelectOverlay}
         isRippleOn={isRippleOn}

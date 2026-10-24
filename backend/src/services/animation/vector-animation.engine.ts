@@ -135,6 +135,7 @@ export interface SceneDialogue {
   facialExpression?: FacialExpression;
   speed?: number;
   effect?: AudioEffectType;
+  volume?: number; // 0.0 - 2.0 (default 1.0)
   audioUrl?: string;
   audioMeta?: {
     text: string;
@@ -144,6 +145,7 @@ export interface SceneDialogue {
     emotionIntensity: number;
     speed: number;
     effect?: string;
+    volume?: number;
   };
   startMs: number;
   durationMs: number;

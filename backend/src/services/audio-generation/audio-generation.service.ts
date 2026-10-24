@@ -314,6 +314,7 @@ export class AudioGenerationService {
     facialExpression?: FacialExpression;
     speed?: number;
     effect?: AudioEffectType;
+    volume?: number;
     startMs?: number;
     provider?: string;
     lang?: string;
@@ -330,6 +331,7 @@ export class AudioGenerationService {
       facialExpression,
       startMs = 0,
       effect = 'normal',
+      volume = 1.0,
       provider,
     } = options;
 
@@ -540,6 +542,7 @@ export class AudioGenerationService {
       facialExpression,
       speed: baseSpeed,
       effect: delivery.effectiveEffect,
+      volume: typeof volume === 'number' && Number.isFinite(volume) ? Math.max(0, Math.min(2.0, volume)) : 1.0,
       audioUrl: `/storage/audio/${filename}`,
       audioMeta: {
         text: textToSpeak,
@@ -549,6 +552,7 @@ export class AudioGenerationService {
         emotionIntensity: delivery.intensity,
         speed: baseSpeed,
         effect: delivery.effectiveEffect,
+        volume: typeof volume === 'number' && Number.isFinite(volume) ? Math.max(0, Math.min(2.0, volume)) : 1.0,
       },
       startMs,
       durationMs,
