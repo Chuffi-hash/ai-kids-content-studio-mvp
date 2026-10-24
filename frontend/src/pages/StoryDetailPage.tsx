@@ -7,7 +7,7 @@ import {
   SaveStatus,
   HistorySnapshot,
 } from '../types/editor';
-import { CharacterInstance, AnimationClip, VectorSceneData } from '../types/animation';
+import { CharacterInstance, AnimationClip, VectorSceneData, EducationalOverlay } from '../types/animation';
 import * as editorService from '../services/editor.service';
 import { generateScenes } from '../services/content.service';
 import { generateCharacterReferenceImage } from '../services/character.service';
@@ -36,6 +36,7 @@ export default function StoryDetailPage() {
   const [activeSceneId, setActiveSceneId] = useState<string | null>(null);
   const [activeVersions, setActiveVersions] = useState<SceneVersionItem[]>([]);
   const [selectedInstanceId, setSelectedInstanceId] = useState<string | null>(null);
+  const [selectedOverlayId, setSelectedOverlayId] = useState<string | null>(null);
   const [isStoryDetailsOpen, setIsStoryDetailsOpen] = useState<boolean>(false);
   const [isCharacterBuilderOpen, setIsCharacterBuilderOpen] = useState<boolean>(false);
 
@@ -642,10 +643,20 @@ export default function StoryDetailPage() {
   };
 
   // ----------------------------------------------------
-  // 2D Character Animation Operations
+  // 2D Character Animation & Overlay Operations
   // ----------------------------------------------------
   const handleSelectInstance = useCallback((instanceId: string | null) => {
     setSelectedInstanceId(instanceId);
+    if (instanceId) {
+      setSelectedOverlayId(null);
+    }
+  }, []);
+
+  const handleSelectOverlay = useCallback((overlayId: string | null) => {
+    setSelectedOverlayId(overlayId);
+    if (overlayId) {
+      setSelectedInstanceId(null);
+    }
   }, []);
 
   const handleUpdateAnimationData = useCallback(
@@ -677,6 +688,31 @@ export default function StoryDetailPage() {
       handleUpdateAnimationData(activeSceneId, {
         ...targetScene.animationData,
         characterInstances: updatedInstances,
+      });
+    },
+    [activeSceneId, scenes, handleUpdateAnimationData]
+  );
+
+  const handleUpdateOverlay = useCallback(
+    (overlayId: string, updates: Partial<EducationalOverlay>) => {
+      if (!activeSceneId) return;
+      const targetScene = scenes.find((s) => s.sceneId === activeSceneId);
+      if (!targetScene) return;
+
+      const currentAnimData: VectorSceneData = targetScene.animationData || {
+        version: 1,
+        viewport: { width: 1280, height: 720 },
+        characterInstances: [],
+        animationClips: [],
+      };
+
+      const updatedOverlays = (currentAnimData.overlays || []).map((ov) =>
+        ov.id === overlayId ? { ...ov, ...updates } : ov
+      );
+
+      handleUpdateAnimationData(activeSceneId, {
+        ...currentAnimData,
+        overlays: updatedOverlays,
       });
     },
     [activeSceneId, scenes, handleUpdateAnimationData]
@@ -1314,6 +1350,9 @@ export default function StoryDetailPage() {
             selectedInstanceId={selectedInstanceId}
             onSelectInstance={handleSelectInstance}
             onUpdateInstance={handleUpdateInstance}
+            selectedOverlayId={selectedOverlayId}
+            onSelectOverlay={handleSelectOverlay}
+            onUpdateOverlay={handleUpdateOverlay}
             onUpdateAnimationData={(newData) => activeSceneId && handleUpdateAnimationData(activeSceneId, newData)}
           />
         ) : (
@@ -1381,6 +1420,9 @@ export default function StoryDetailPage() {
           selectedInstanceId={selectedInstanceId}
           onSelectInstance={handleSelectInstance}
           onUpdateInstance={handleUpdateInstance}
+          selectedOverlayId={selectedOverlayId}
+          onSelectOverlay={handleSelectOverlay}
+          onUpdateOverlay={handleUpdateOverlay}
           onUpdateAnimationData={handleUpdateAnimationData}
           onAddCharacterToScene={handleAddCharacterToScene}
           onRemoveCharacterFromScene={handleRemoveCharacterFromScene}
@@ -1404,6 +1446,8 @@ export default function StoryDetailPage() {
         selectedMusic={selectedMusic}
         selectedInstanceId={selectedInstanceId}
         onSelectInstance={handleSelectInstance}
+        selectedOverlayId={selectedOverlayId}
+        onSelectOverlay={handleSelectOverlay}
         isRippleOn={isRippleOn}
         onToggleRipple={() => setIsRippleOn((prev) => !prev)}
       />

@@ -151,6 +151,46 @@ export interface VectorRigDefinition {
   };
 }
 
+export type EducationalOverlayType =
+  | 'location_pin'
+  | 'route_line'
+  | 'highlight_ring'
+  | 'arrow_pointer'
+  | 'callout_label';
+
+export interface EducationalOverlay {
+  id: string;
+  type: EducationalOverlayType;
+  title?: string;
+  label?: string;
+  startMs: number;
+  durationMs: number;
+  x: number;
+  y: number;
+  zIndex?: number;
+  layerPosition?: 'below_characters' | 'above_characters';
+  targetX?: number;
+  targetY?: number;
+  points?: Array<{ x: number; y: number }>;
+  pathD?: string;
+  radius?: number;
+  radiusX?: number;
+  radiusY?: number;
+  width?: number;
+  height?: number;
+  color?: string;
+  fillColor?: string;
+  textColor?: string;
+  strokeWidth?: number;
+  fontSize?: number;
+  icon?: 'pin' | 'flag' | 'star' | 'mountain' | 'city';
+  style?: 'solid' | 'dashed' | 'glow' | 'pulse' | 'radar';
+  animationStyle?: 'fade' | 'pop' | 'drop' | 'draw' | 'pulse';
+  progressDurationMs?: number;
+  hasConnectorLine?: boolean;
+  pulseSpeedMs?: number;
+}
+
 export interface VectorSceneData {
   version: 1;
   viewport: { width: 1280; height: 720 };
@@ -164,6 +204,7 @@ export interface VectorSceneData {
   characterActions?: Array<{ characterName: string; action: string; pose?: string }>;
   expressionCues?: ExpressionCue[];
   dialogueLines?: SceneDialogue[];
+  overlays?: EducationalOverlay[];
 }
 
 export interface EvaluatedCharacterPose {

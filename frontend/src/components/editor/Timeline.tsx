@@ -47,6 +47,8 @@ interface TimelineProps {
   selectedMusic: string | null;
   selectedInstanceId?: string | null;
   onSelectInstance?: (instanceId: string | null) => void;
+  selectedOverlayId?: string | null;
+  onSelectOverlay?: (overlayId: string | null) => void;
   isRippleOn?: boolean;
   onToggleRipple?: () => void;
 }
@@ -65,6 +67,8 @@ export const Timeline: React.FC<TimelineProps> = ({
   selectedMusic,
   selectedInstanceId,
   onSelectInstance,
+  selectedOverlayId,
+  onSelectOverlay,
   isRippleOn: isRippleOnProp,
   onToggleRipple,
 }) => {
@@ -429,6 +433,10 @@ export const Timeline: React.FC<TimelineProps> = ({
             <span style={{ fontSize: '13px' }}>👄</span>
             <span>Dialogue</span>
           </div>
+          <div className="ed-track-header track-overlays">
+            <span style={{ fontSize: '13px' }}>📍</span>
+            <span>Overlays</span>
+          </div>
           <div className="ed-track-header track-narration">
             <MicIcon size={13} />
             <span>Narration</span>
@@ -723,6 +731,91 @@ export const Timeline: React.FC<TimelineProps> = ({
                       onMouseDown={(e) => handleDialogueResizeRightMouseDown(e, scene, dlg.id)}
                       title="Drag to trim dialogue duration"
                     />
+                  </div>
+                );
+              });
+            })}
+          </div>
+
+          {/* Track: Educational & Geographic Overlays */}
+          <div className="ed-track-row track-overlays">
+            {scenes.map((scene) => {
+              const overlays = scene.animationData?.overlays || [];
+              if (overlays.length === 0) return null;
+              const sceneDuration = scene.endMs - scene.startMs;
+
+              return overlays.map((ov) => {
+                const ovStartMs = scene.startMs + (ov.startMs || 0);
+                const ovDurationMs = ov.durationMs !== undefined ? ov.durationMs : sceneDuration;
+                const leftPx = msToPx(ovStartMs);
+                const widthPx = msToPx(ovDurationMs);
+                const isSelected = ov.id === selectedOverlayId;
+
+                const getOverlayIcon = (t: string) => {
+                  switch (t) {
+                    case 'location_pin': return '📍';
+                    case 'route_line': return '〰️';
+                    case 'highlight_ring': return '⭕';
+                    case 'arrow_pointer': return '↗️';
+                    case 'callout_label': return '🏷️';
+                    default: return '📍';
+                  }
+                };
+
+                return (
+                  <div
+                    key={`overlay-clip-${ov.id}`}
+                    className={`ed-overlay-block ${isSelected ? 'selected' : ''}`}
+                    style={{
+                      left: `${leftPx}px`,
+                      width: `${Math.max(28, widthPx)}px`,
+                      position: 'absolute',
+                      top: '5px',
+                      height: '34px',
+                      borderRadius: '4px',
+                      background: isSelected
+                        ? 'rgba(6, 182, 212, 0.35)'
+                        : 'rgba(6, 182, 212, 0.18)',
+                      border: isSelected
+                        ? '2px solid #06b6d4'
+                        : '1px solid rgba(6, 182, 212, 0.45)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      padding: '0 8px',
+                      gap: '6px',
+                      fontSize: '11px',
+                      color: isSelected ? '#a5f3fc' : '#67e8f9',
+                      cursor: 'pointer',
+                      overflow: 'hidden',
+                      whiteSpace: 'nowrap',
+                      boxShadow: isSelected ? '0 0 10px rgba(6, 182, 212, 0.5)' : undefined,
+                      zIndex: isSelected ? 5 : 2,
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSelectScene(scene.sceneId);
+                      if (onSelectOverlay) onSelectOverlay(ov.id);
+                    }}
+                    title={`${ov.title || ov.type} (${ov.layerPosition === 'below_characters' ? 'Below Characters' : 'Above Characters'}) - ${formatDurationHuman(ovDurationMs)}`}
+                  >
+                    <span>{getOverlayIcon(ov.type)}</span>
+                    <span style={{ fontWeight: 600 }}>{ov.title || ov.type}</span>
+                    <span
+                      style={{
+                        fontSize: '9px',
+                        fontWeight: 700,
+                        textTransform: 'uppercase',
+                        padding: '1px 4px',
+                        borderRadius: '3px',
+                        background: 'rgba(0, 0, 0, 0.3)',
+                        color: ov.layerPosition === 'below_characters' ? '#93c5fd' : '#fbcfe8',
+                      }}
+                    >
+                      {ov.layerPosition === 'below_characters' ? 'Under' : 'Over'}
+                    </span>
+                    <span style={{ fontSize: '10px', opacity: 0.8, fontFamily: 'monospace' }}>
+                      {formatDurationHuman(ovDurationMs)}
+                    </span>
                   </div>
                 );
               });

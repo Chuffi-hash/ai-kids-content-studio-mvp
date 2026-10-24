@@ -1108,6 +1108,12 @@ body.theme-light .ed-center-canvas {
   max-height: 46px !important;
 }
 
+.track-overlays {
+  height: 46px !important;
+  min-height: 46px !important;
+  max-height: 46px !important;
+}
+
 .track-narration {
   height: 48px !important;
   min-height: 48px !important;
@@ -1118,6 +1124,15 @@ body.theme-light .ed-center-canvas {
   height: 42px !important;
   min-height: 42px !important;
   max-height: 42px !important;
+}
+
+.ed-overlay-block {
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.ed-overlay-block:hover {
+  background: rgba(6, 182, 212, 0.28) !important;
+  border-color: #06b6d4 !important;
 }
 
 /* Scene Clip on Visual Track */
