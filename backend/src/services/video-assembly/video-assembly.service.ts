@@ -9,6 +9,7 @@ import ffmpegStatic from '@ffmpeg-installer/ffmpeg';
 import ffprobeStatic from '@ffprobe-installer/ffprobe';
 import { getStoryByStoryId, getScenesByStoryId, getImagesBySceneId } from '../database/database.service.js';
 import { VectorAnimationEngine } from '../animation/vector-animation.engine.js';
+import { AudioGenerationService } from '../audio-generation/audio-generation.service.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -32,6 +33,7 @@ export class VideoAssemblyService {
   private storageDir: string;
   private exportsDir: string;
   private tempDir: string;
+  private audioGenerationService = new AudioGenerationService();
 
   constructor() {
     this.storageDir = process.env.STORAGE_DIR || './storage';
@@ -186,6 +188,25 @@ export class VideoAssemblyService {
         }
 
         const segmentPath = path.join(jobTempDir, `scene-${i}.mp4`);
+
+        // Auto-generate missing dialogue audio files on the fly if needed
+        if (scene.id && Array.isArray((scene as any).animationData?.dialogueLines)) {
+          const hasUnbuiltDialogue = (scene as any).animationData.dialogueLines.some((d: any) => {
+            if (!d.text || !d.text.trim()) return false;
+            if (!d.audioUrl) return true;
+            return !fs.existsSync(this.resolveLocalPath(d.audioUrl));
+          });
+          if (hasUnbuiltDialogue) {
+            try {
+              const genLines = await this.audioGenerationService.generateAllSceneDialogues(scene.id);
+              if (genLines && genLines.length > 0) {
+                (scene as any).animationData.dialogueLines = genLines;
+              }
+            } catch (err) {
+              console.warn(`[VideoAssembly] Auto-generation of dialogue audio for scene ${scene.number || i + 1} notice:`, err);
+            }
+          }
+        }
 
         // Collect valid dialogue audio files for the scene
         const dialogueAudios: Array<{ path: string; startMs: number }> = [];

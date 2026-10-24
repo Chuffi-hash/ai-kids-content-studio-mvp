@@ -16,7 +16,13 @@ export type EducationalOverlayType =
   | 'route_line'
   | 'highlight_ring'
   | 'arrow_pointer'
-  | 'callout_label';
+  | 'callout_label'
+  | 'spotlight'
+  | 'glow'
+  | 'sparkles'
+  | 'flying_birds'
+  | 'moving_clouds'
+  | 'title_card';
 
 export interface EducationalOverlay {
   id: string;
@@ -358,6 +364,207 @@ export function renderEducationalOverlayXml(overlay: EducationalOverlay, sceneRe
           ` : `
             <text x="${x}" y="${y + fontSize * 0.35}" fill="${textColor}" font-family="system-ui, -apple-system, sans-serif" font-size="${fontSize}" font-weight="600" text-anchor="middle">${escapedText}</text>
           `}
+        </g>
+      `.trim();
+    }
+
+    case 'spotlight': {
+      const targetX = overlay.x;
+      const targetY = overlay.y;
+      const sourceX = overlay.targetX ?? targetX;
+      const sourceY = overlay.targetY ?? 0;
+      const radius = overlay.radius || 130;
+      const color = overlay.color || '#fef08a';
+      const pulseSpeed = overlay.pulseSpeedMs || 2200;
+      const pulse = 1.0 + 0.04 * Math.sin(((elapsed % pulseSpeed) / pulseSpeed) * 2 * Math.PI);
+      const currentRadius = radius * pulse * easeOut;
+
+      const beamOpacity = 0.22 * easeOut * fadeOutOpacity;
+      const groundOpacity = 0.35 * easeOut * fadeOutOpacity;
+
+      const coneLeftX = targetX - currentRadius;
+      const coneRightX = targetX + currentRadius;
+
+      return `
+        <g id="overlay-${overlay.id}" class="edu-overlay spotlight" opacity="${fadeOutOpacity}">
+          <defs>
+            <linearGradient id="spotlight-grad-${overlay.id}" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="${color}" stop-opacity="0.05"/>
+              <stop offset="70%" stop-color="${color}" stop-opacity="${beamOpacity}"/>
+              <stop offset="100%" stop-color="${color}" stop-opacity="${beamOpacity * 1.5}"/>
+            </linearGradient>
+            <radialGradient id="spotlight-pool-${overlay.id}" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stop-color="${color}" stop-opacity="${groundOpacity}"/>
+              <stop offset="60%" stop-color="${color}" stop-opacity="${groundOpacity * 0.5}"/>
+              <stop offset="100%" stop-color="${color}" stop-opacity="0"/>
+            </radialGradient>
+          </defs>
+          <polygon points="${sourceX},${sourceY} ${coneRightX},${targetY} ${coneLeftX},${targetY}" fill="url(#spotlight-grad-${overlay.id})" />
+          <ellipse cx="${targetX}" cy="${targetY}" rx="${currentRadius}" ry="${currentRadius * 0.38}" fill="url(#spotlight-pool-${overlay.id})" />
+        </g>
+      `.trim();
+    }
+
+    case 'glow': {
+      const x = overlay.x;
+      const y = overlay.y;
+      const radius = overlay.radius || 90;
+      const color = overlay.color || '#38bdf8';
+      const pulseSpeed = overlay.pulseSpeedMs || 1800;
+      const phase = ((elapsed % pulseSpeed) / pulseSpeed) * 2 * Math.PI;
+      const pulse = 1.0 + 0.12 * Math.sin(phase);
+      const r = radius * pulse * easeOut;
+      const glowOpacity = 0.45 * easeOut * fadeOutOpacity;
+
+      return `
+        <g id="overlay-${overlay.id}" class="edu-overlay glow" opacity="${fadeOutOpacity}">
+          <defs>
+            <radialGradient id="glow-grad-${overlay.id}" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stop-color="${color}" stop-opacity="${glowOpacity}"/>
+              <stop offset="45%" stop-color="${color}" stop-opacity="${glowOpacity * 0.6}"/>
+              <stop offset="80%" stop-color="${color}" stop-opacity="${glowOpacity * 0.2}"/>
+              <stop offset="100%" stop-color="${color}" stop-opacity="0"/>
+            </radialGradient>
+          </defs>
+          <circle cx="${x}" cy="${y}" r="${r * 1.4}" fill="url(#glow-grad-${overlay.id})" />
+          <circle cx="${x}" cy="${y}" r="${r * 0.7}" fill="${color}" fill-opacity="${glowOpacity * 0.25}" />
+        </g>
+      `.trim();
+    }
+
+    case 'sparkles': {
+      const centerX = overlay.x;
+      const centerY = overlay.y;
+      const areaR = overlay.radius || 80;
+      const color = overlay.color || '#fde047';
+
+      const sparkleConfigs = [
+        { dx: -0.45, dy: -0.35, size: 10, freq: 1100, shift: 0 },
+        { dx: 0.5, dy: -0.4, size: 12, freq: 950, shift: 1.8 },
+        { dx: -0.2, dy: 0.45, size: 8, freq: 1300, shift: 3.2 },
+        { dx: 0.4, dy: 0.35, size: 11, freq: 1050, shift: 4.5 },
+        { dx: 0.0, dy: -0.6, size: 9, freq: 850, shift: 2.1 },
+        { dx: -0.55, dy: 0.1, size: 7, freq: 1200, shift: 5.0 },
+      ];
+
+      const starsXml = sparkleConfigs.map((sp) => {
+        const sx = centerX + sp.dx * areaR;
+        const sy = centerY + sp.dy * areaR;
+        const phase = ((elapsed + sp.shift * 1000) % sp.freq) / sp.freq;
+        const scale = (0.2 + 0.8 * Math.sin(phase * Math.PI)) * easeOut;
+        const opacity = (0.3 + 0.7 * Math.sin(phase * Math.PI)) * fadeOutOpacity;
+        const s = sp.size * scale;
+        const d = `M ${sx} ${sy - s} Q ${sx} ${sy} ${sx + s} ${sy} Q ${sx} ${sy} ${sx} ${sy + s} Q ${sx} ${sy} ${sx - s} ${sy} Q ${sx} ${sy} ${sx} ${sy - s} Z`;
+        return `<path d="${d}" fill="${color}" opacity="${Math.max(0, opacity).toFixed(3)}"/>`;
+      }).join('\n');
+
+      return `
+        <g id="overlay-${overlay.id}" class="edu-overlay sparkles">
+          ${starsXml}
+        </g>
+      `.trim();
+    }
+
+    case 'flying_birds': {
+      const startX = overlay.x;
+      const startY = overlay.y;
+      const endX = overlay.targetX ?? (startX + 450);
+      const endY = overlay.targetY ?? (startY - 30);
+      const color = overlay.color || '#334155';
+      const strokeWidth = overlay.strokeWidth || 2.2;
+
+      const t = Math.min(1.0, Math.max(0.0, elapsed / duration));
+      const curX = startX + (endX - startX) * t;
+      const curY = startY + (endY - startY) * t;
+
+      const birds = [
+        { offsetX: 0, offsetY: 0, scale: 1.0, phaseOffset: 0 },
+        { offsetX: -28, offsetY: 14, scale: 0.82, phaseOffset: 0.25 },
+        { offsetX: -52, offsetY: 26, scale: 0.72, phaseOffset: 0.5 },
+        { offsetX: -22, offsetY: -16, scale: 0.85, phaseOffset: 0.15 },
+      ];
+
+      const birdsXml = birds.map((b) => {
+        const bx = curX + b.offsetX;
+        const by = curY + b.offsetY;
+        const flapCycle = ((elapsed + b.phaseOffset * 1000) % 320) / 320;
+        const wingAngle = Math.sin(flapCycle * 2 * Math.PI);
+        const wingUp = -8 * wingAngle * b.scale;
+        const wingSpan = 14 * b.scale;
+        const d = `M ${bx - wingSpan} ${by + wingUp} Q ${bx - wingSpan * 0.4} ${by - 2} ${bx} ${by} Q ${bx + wingSpan * 0.4} ${by - 2} ${bx + wingSpan} ${by + wingUp}`;
+        return `<path d="${d}" fill="none" stroke="${color}" stroke-width="${strokeWidth * b.scale}" stroke-linecap="round" stroke-linejoin="round"/>`;
+      }).join('\n');
+
+      return `
+        <g id="overlay-${overlay.id}" class="edu-overlay flying-birds" opacity="${fadeOutOpacity}">
+          ${birdsXml}
+        </g>
+      `.trim();
+    }
+
+    case 'moving_clouds': {
+      const startX = overlay.x;
+      const y = overlay.y;
+      const endX = overlay.targetX ?? (startX + 350);
+      const width = overlay.width || 140;
+      const height = overlay.height || 50;
+      const fillColor = overlay.fillColor || '#ffffff';
+      const opacity = (overlay.strokeWidth ? 0.9 : 0.82) * fadeOutOpacity;
+
+      const t = Math.min(1.0, Math.max(0.0, elapsed / duration));
+      const curX = startX + (endX - startX) * t;
+
+      const r1 = height * 0.5;
+      const r2 = height * 0.7;
+      const r3 = height * 0.55;
+
+      return `
+        <g id="overlay-${overlay.id}" class="edu-overlay moving-clouds" opacity="${opacity}">
+          <rect x="${curX}" y="${y}" width="${width}" height="${height * 0.7}" rx="${height * 0.35}" fill="${fillColor}"/>
+          <circle cx="${curX + width * 0.28}" cy="${y + height * 0.2}" r="${r1}" fill="${fillColor}"/>
+          <circle cx="${curX + width * 0.55}" cy="${y + height * 0.1}" r="${r2}" fill="${fillColor}"/>
+          <circle cx="${curX + width * 0.8}" cy="${y + height * 0.25}" r="${r3}" fill="${fillColor}"/>
+        </g>
+      `.trim();
+    }
+
+    case 'title_card': {
+      const x = overlay.x;
+      const y = overlay.y;
+      const title = overlay.title || overlay.label || 'LESSON TITLE';
+      const label = overlay.label && overlay.title && overlay.label !== overlay.title ? overlay.label : null;
+      const color = overlay.color || '#38bdf8';
+      const fillColor = overlay.fillColor || '#0f172a';
+      const textColor = overlay.textColor || '#ffffff';
+      const fontSize = overlay.fontSize || 22;
+
+      const escapedTitle = escapeXml(title);
+      const escapedLabel = label ? escapeXml(label) : null;
+
+      const textLen = Math.max(escapedTitle.length, escapedLabel ? escapedLabel.length : 0);
+      const cardWidth = Math.max(260, textLen * (fontSize * 0.6) + 64);
+      const cardHeight = escapedLabel ? fontSize * 3.6 : fontSize * 2.6;
+      const bx = x - cardWidth / 2;
+      const by = y - cardHeight / 2;
+
+      const slideY = (1 - easeOut) * 20;
+      const wipeProgress = calculateDrawProgress(elapsed, 600);
+      const wipeWidth = cardWidth * wipeProgress;
+
+      return `
+        <g id="overlay-${overlay.id}" class="edu-overlay title-card" transform="translate(0, ${slideY})" opacity="${easeOut * fadeOutOpacity}">
+          <rect x="${bx + 4}" y="${by + 4}" width="${cardWidth}" height="${cardHeight}" rx="8" fill="rgba(0,0,0,0.4)"/>
+          <rect x="${bx}" y="${by}" width="${cardWidth}" height="${cardHeight}" rx="8" fill="${fillColor}" fill-opacity="0.94" stroke="${color}" stroke-width="2"/>
+          <line x1="${bx}" y1="${by}" x2="${bx + wipeWidth}" y2="${by}" stroke="${color}" stroke-width="4" stroke-linecap="round"/>
+          <rect x="${bx}" y="${by}" width="6" height="${cardHeight}" rx="3" fill="${color}"/>
+          <text x="${x}" y="${by + (escapedLabel ? fontSize * 1.4 : fontSize * 1.6)}" fill="${textColor}" font-family="system-ui, -apple-system, sans-serif" font-size="${fontSize}" font-weight="800" text-anchor="middle" letter-spacing="1">
+            ${escapedTitle}
+          </text>
+          ${escapedLabel ? `
+            <text x="${x}" y="${by + fontSize * 2.7}" fill="${color}" font-family="system-ui, -apple-system, sans-serif" font-size="${fontSize * 0.65}" font-weight="600" text-anchor="middle" letter-spacing="0.5">
+              ${escapedLabel}
+            </text>
+          ` : ''}
         </g>
       `.trim();
     }

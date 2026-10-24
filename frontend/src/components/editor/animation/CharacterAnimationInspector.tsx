@@ -428,7 +428,14 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
     (d) =>
       d.characterInstanceId === instance.instanceId ||
       d.characterId === instance.characterId ||
-      d.characterName === instance.name
+      d.characterName === instance.name ||
+      (d.characterName && instance.name && d.characterName.toLowerCase() === instance.name.toLowerCase()) ||
+      (d.characterName && instance.name && (
+        (d.characterName.toLowerCase().includes('earth') && (instance.name.toLowerCase().includes('earth') || instance.name.toLowerCase().includes('terra'))) ||
+        (d.characterName.toLowerCase().includes('terra') && (instance.name.toLowerCase().includes('earth') || instance.name.toLowerCase().includes('terra'))) ||
+        (d.characterName.toLowerCase().includes('pip') && instance.name.toLowerCase().includes('pip')) ||
+        (d.characterName.toLowerCase().includes('sammy') && instance.name.toLowerCase().includes('sammy'))
+      ))
   );
 
   const [newDialogueText, setNewDialogueText] = useState<string>('');

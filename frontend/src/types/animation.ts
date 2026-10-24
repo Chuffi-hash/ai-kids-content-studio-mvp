@@ -182,7 +182,13 @@ export type EducationalOverlayType =
   | 'route_line'
   | 'highlight_ring'
   | 'arrow_pointer'
-  | 'callout_label';
+  | 'callout_label'
+  | 'spotlight'
+  | 'glow'
+  | 'sparkles'
+  | 'flying_birds'
+  | 'moving_clouds'
+  | 'title_card';
 
 export interface EducationalOverlay {
   id: string;

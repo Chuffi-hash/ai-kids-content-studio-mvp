@@ -118,10 +118,12 @@ export interface CustomCharacterAppearance {
   leftLeg?: LegLimbConfig;
   rightLeg?: LegLimbConfig;
   voiceConfig?: {
+    lang?: string;
     voiceId: string;
     speed?: number;
+    emotion?: string;
     style?: string;
-    effect?: 'normal' | 'cartoon' | 'robot';
+    effect?: 'normal' | 'cartoon' | 'robot' | 'whisper' | 'shout' | string;
   };
   planet?: PlanetCustomConfig;
 }

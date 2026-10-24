@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
 import { StructuredScene } from './story-generation.types.js';
-import { ResolvedCharacterInfo } from './character-resolution.service.js';
+import { ResolvedCharacterInfo, CharacterResolutionService } from './character-resolution.service.js';
 import {
   VectorSceneData,
   CharacterInstance,
@@ -68,8 +68,11 @@ export class ScenePreparationService {
 
       const sceneCharacters: ResolvedCharacterInfo[] = [];
       for (const name of sceneCharNames) {
-        const found = characterMapByName.get(name);
-        if (found) {
+        let found = characterMapByName.get(name);
+        if (!found) {
+          found = CharacterResolutionService.findMatchingCharacter(name, allResolvedCharacters);
+        }
+        if (found && !sceneCharacters.some((c) => c.id === found!.id)) {
           sceneCharacters.push(found);
         }
       }
@@ -144,9 +147,16 @@ export class ScenePreparationService {
         if (!d.text || !d.text.trim()) continue;
 
         const charNameLower = (d.characterName || '').trim().toLowerCase();
-        const matchedChar = sceneCharacters.find((c) => c.name.toLowerCase() === charNameLower);
+        let matchedChar = sceneCharacters.find((c) => c.name.toLowerCase() === charNameLower);
+        if (!matchedChar) {
+          matchedChar =
+            CharacterResolutionService.findMatchingCharacter(charNameLower, sceneCharacters) ||
+            CharacterResolutionService.findMatchingCharacter(charNameLower, allResolvedCharacters);
+        }
         const matchedInst = characterInstances.find(
-          (ci) => (ci.name || '').toLowerCase() === charNameLower
+          (ci) =>
+            (ci.name || '').toLowerCase() === charNameLower ||
+            (matchedChar && ci.characterId === matchedChar.id)
         );
 
         // Resolve voice configuration
