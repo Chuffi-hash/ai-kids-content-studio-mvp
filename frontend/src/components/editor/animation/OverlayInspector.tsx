@@ -46,6 +46,12 @@ export const OverlayInspector: React.FC<OverlayInspectorProps> = ({
       case 'highlight_ring': return '⭕';
       case 'arrow_pointer': return '↗️';
       case 'callout_label': return '🏷️';
+      case 'spotlight': return '🔦';
+      case 'glow': return '💫';
+      case 'sparkles': return '✨';
+      case 'flying_birds': return '🦅';
+      case 'moving_clouds': return '☁️';
+      case 'title_card': return '🎬';
       default: return '✨';
     }
   };
@@ -57,6 +63,12 @@ export const OverlayInspector: React.FC<OverlayInspectorProps> = ({
       case 'highlight_ring': return 'Highlight Ring';
       case 'arrow_pointer': return 'Directional Arrow';
       case 'callout_label': return 'Callout Label';
+      case 'spotlight': return 'Stage Spotlight';
+      case 'glow': return 'Atmospheric Glow';
+      case 'sparkles': return 'Magic Sparkles';
+      case 'flying_birds': return 'Flying Birds';
+      case 'moving_clouds': return 'Moving Clouds';
+      case 'title_card': return 'Title Card';
       default: return 'Overlay';
     }
   };
@@ -67,7 +79,7 @@ export const OverlayInspector: React.FC<OverlayInspectorProps> = ({
       <div style={{ background: 'var(--ed-surface-elevated, #161f33)', padding: '12px', borderRadius: '8px', border: '1px solid var(--ed-border, #1e293b)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
           <span style={{ fontWeight: 600, color: 'var(--ed-text, #f8fafc)', fontSize: '13px' }}>
-            Educational Overlays ({overlays.length})
+            Educational Overlays & VFX ({overlays.length})
           </span>
         </div>
 
@@ -112,11 +124,65 @@ export const OverlayInspector: React.FC<OverlayInspectorProps> = ({
           <button
             type="button"
             className="ed-tool-btn"
-            style={{ padding: '6px 4px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'center', gridColumn: 'span 2' }}
+            style={{ padding: '6px 4px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'center' }}
             onClick={() => onAddOverlay('callout_label')}
             title="Add an educational title or callout badge"
           >
-            <span>🏷️</span> Callout Label
+            <span>🏷️</span> Callout
+          </button>
+          <button
+            type="button"
+            className="ed-tool-btn"
+            style={{ padding: '6px 4px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'center' }}
+            onClick={() => onAddOverlay('spotlight')}
+            title="Add a dramatic stage spotlight beam"
+          >
+            <span>🔦</span> Spotlight
+          </button>
+          <button
+            type="button"
+            className="ed-tool-btn"
+            style={{ padding: '6px 4px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'center' }}
+            onClick={() => onAddOverlay('glow')}
+            title="Add a soft pulsing atmospheric aura"
+          >
+            <span>💫</span> Glow
+          </button>
+          <button
+            type="button"
+            className="ed-tool-btn"
+            style={{ padding: '6px 4px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'center' }}
+            onClick={() => onAddOverlay('sparkles')}
+            title="Add twinkling star particles"
+          >
+            <span>✨</span> Sparkles
+          </button>
+          <button
+            type="button"
+            className="ed-tool-btn"
+            style={{ padding: '6px 4px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'center' }}
+            onClick={() => onAddOverlay('flying_birds')}
+            title="Add animated flying birds in the sky"
+          >
+            <span>🦅</span> Birds
+          </button>
+          <button
+            type="button"
+            className="ed-tool-btn"
+            style={{ padding: '6px 4px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'center' }}
+            onClick={() => onAddOverlay('moving_clouds')}
+            title="Add drifting clouds across scene"
+          >
+            <span>☁️</span> Clouds
+          </button>
+          <button
+            type="button"
+            className="ed-tool-btn"
+            style={{ padding: '6px 4px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'center', gridColumn: 'span 2' }}
+            onClick={() => onAddOverlay('title_card')}
+            title="Add a cinematic topic title or banner"
+          >
+            <span>🎬</span> Title Card
           </button>
         </div>
       </div>

@@ -133,7 +133,7 @@ export class AudioGenerationService {
 
     const scene = await getSceneBySceneId(sceneId);
     const story = scene?.storyId ? await getStoryByStoryId(scene.storyId) : null;
-    const projectLang = (story?.language && story.language.toLowerCase().includes('english')) ? 'en-us' : 'hi';
+    const projectLang = ((story as any)?.language && (story as any).language.toLowerCase().includes('english')) ? 'en-us' : 'hi';
     const effectiveLang = lang || (voice?.startsWith('h') ? 'hi' : (voice?.startsWith('b') ? 'en-gb' : (voice ? 'en-us' : projectLang)));
 
     console.log(`[AudioGeneration] Generating narration for scene ${sceneId}: "${narration.substring(0, 60)}..." (provider: ${provider || 'default'}, voice: ${voice || 'default'}, lang: ${effectiveLang}, emotion: ${emotion})`);
@@ -291,7 +291,7 @@ export class AudioGenerationService {
     const story = scene?.storyId ? await getStoryByStoryId(scene.storyId) : null;
 
     // A. Project defaults (Hindi default)
-    const projectLang = (story?.language && story.language.toLowerCase().includes('english')) ? 'en' : 'hi';
+    const projectLang = ((story as any)?.language && (story as any).language.toLowerCase().includes('english')) ? 'en' : 'hi';
     const projectVoice = projectLang === 'hi' ? 'hf_alpha' : 'af_heart';
 
     // B. Character defaults

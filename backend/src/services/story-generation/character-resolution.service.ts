@@ -145,7 +145,72 @@ export class CharacterResolutionService {
   }
 
   /**
-   * Reconciles scene character actions and dialogue against resolved characters.
+   * Finds the best matching character using direct name, substring, or semantic archetype aliases.
+   */
+  public static findMatchingCharacter(
+    rawName: string,
+    characterSource: Map<string, ResolvedCharacterInfo> | ResolvedCharacterInfo[]
+  ): ResolvedCharacterInfo | undefined {
+    if (!rawName || !rawName.trim()) return undefined;
+    const nameLower = rawName.trim().toLowerCase();
+
+    const charEntries: Array<[string, ResolvedCharacterInfo]> =
+      characterSource instanceof Map
+        ? Array.from(characterSource.entries())
+        : characterSource.map((c) => [c.name.toLowerCase().trim(), c]);
+
+    // 1. Direct exact match
+    for (const [key, char] of charEntries) {
+      if (key === nameLower) return char;
+    }
+
+    // 2. Substring or semantic alias match
+    for (const [key, char] of charEntries) {
+      if (key === nameLower) return char;
+      if (key.includes(nameLower) || nameLower.includes(key)) return char;
+      const charNameLower = char.name.toLowerCase();
+      if (charNameLower.includes(nameLower) || nameLower.includes(charNameLower)) return char;
+
+      // Semantic archetype aliases (e.g. Terra <-> Earth, Pip <-> Bear, Sammy <-> Kid)
+      const speciesLower = (char.species || '').toLowerCase();
+      if (
+        (nameLower.includes('earth') || nameLower.includes('terra') || nameLower.includes('planet')) &&
+        (key.includes('earth') || key.includes('terra') || key.includes('planet') || speciesLower.includes('planet'))
+      ) {
+        return char;
+      }
+      if (
+        (nameLower.includes('pip') || nameLower.includes('bear')) &&
+        (key.includes('pip') || key.includes('bear') || speciesLower.includes('bear'))
+      ) {
+        return char;
+      }
+      if (
+        (nameLower.includes('sammy') || nameLower.includes('kid') || nameLower.includes('boy')) &&
+        (key.includes('sammy') || key.includes('kid') || key.includes('boy') || speciesLower.includes('boy'))
+      ) {
+        return char;
+      }
+      if (
+        (nameLower.includes('maya') || nameLower.includes('girl')) &&
+        (key.includes('maya') || key.includes('girl') || speciesLower.includes('girl'))
+      ) {
+        return char;
+      }
+      if (
+        nameLower.includes('robot') &&
+        (key.includes('robot') || speciesLower.includes('robot'))
+      ) {
+        return char;
+      }
+    }
+
+    return undefined;
+  }
+
+  /**
+   * Reconciles scene character actions and dialogue against resolved characters
+   * without discarding speakers or forcefully reassigning distinct speakers.
    */
   public static reconcileSceneCharacters(
     scenes: StructuredScene[],
@@ -153,24 +218,27 @@ export class CharacterResolutionService {
     defaultCharacter?: ResolvedCharacterInfo
   ): void {
     const fallbackChar = defaultCharacter || characterMapByName.values().next().value;
-    if (!fallbackChar) return;
 
     for (const scene of scenes) {
       for (const d of scene.dialogue) {
-        const found = characterMapByName.get(d.characterName.trim().toLowerCase());
+        if (!d.characterName || !d.characterName.trim()) {
+          if (fallbackChar) d.characterName = fallbackChar.name;
+          continue;
+        }
+        const found = this.findMatchingCharacter(d.characterName, characterMapByName);
         if (found) {
           d.characterName = found.name;
-        } else {
-          d.characterName = fallbackChar.name;
         }
       }
 
       for (const a of scene.characterActions) {
-        const found = characterMapByName.get(a.characterName.trim().toLowerCase());
+        if (!a.characterName || !a.characterName.trim()) {
+          if (fallbackChar) a.characterName = fallbackChar.name;
+          continue;
+        }
+        const found = this.findMatchingCharacter(a.characterName, characterMapByName);
         if (found) {
           a.characterName = found.name;
-        } else {
-          a.characterName = fallbackChar.name;
         }
       }
     }

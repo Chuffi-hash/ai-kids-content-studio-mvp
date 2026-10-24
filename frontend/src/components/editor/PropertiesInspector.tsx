@@ -366,13 +366,46 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
   };
 
   const dialogueList: Array<{ speaker: string; text: string }> =
-    scene.dialogue || (scene.animationData?.dialogue as any) || [];
+    (scene.dialogue && scene.dialogue.length > 0)
+      ? scene.dialogue
+      : ((scene.animationData?.dialogueLines && scene.animationData.dialogueLines.length > 0)
+          ? scene.animationData.dialogueLines.map((d) => ({ speaker: d.characterName, text: d.text }))
+          : ((scene.animationData?.dialogue as any) || []));
   const actionList: Array<{ characterName: string; action: string; pose?: string }> =
     scene.characterActions || (scene.animationData?.characterActions as any) || [];
 
   const handleUpdateDialogue = (newDialogue: Array<{ speaker: string; text: string }>) => {
+    let updatedDialogueLines = scene.animationData?.dialogueLines;
+    if (updatedDialogueLines && updatedDialogueLines.length > 0) {
+      updatedDialogueLines = newDialogue.map((nd, i) => {
+        const existing = updatedDialogueLines?.[i];
+        if (existing) {
+          return {
+            ...existing,
+            characterName: nd.speaker,
+            text: nd.text,
+          };
+        }
+        return {
+          id: `dlg-${Date.now()}-${i}`,
+          characterName: nd.speaker,
+          text: nd.text,
+          startMs: 1000 + i * 2500,
+          durationMs: 2500,
+        };
+      });
+    } else {
+      updatedDialogueLines = newDialogue.map((nd, i) => ({
+        id: `dlg-${Date.now()}-${i}`,
+        characterName: nd.speaker,
+        text: nd.text,
+        startMs: 1000 + i * 2500,
+        durationMs: 2500,
+      }));
+    }
+
     const updatedAnimationData = scene.animationData
-      ? { ...scene.animationData, dialogue: newDialogue }
+      ? { ...scene.animationData, dialogue: newDialogue, dialogueLines: updatedDialogueLines }
       : undefined;
     onUpdateScene(scene.sceneId, {
       dialogue: newDialogue,
@@ -544,6 +577,51 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
     } else if (type === 'location_pin') {
       baseOverlay.icon = 'pin';
       baseOverlay.label = 'Mount Everest';
+    } else if (type === 'spotlight') {
+      baseOverlay.x = 640;
+      baseOverlay.y = 500;
+      baseOverlay.radius = 140;
+      baseOverlay.color = '#fef08a';
+      baseOverlay.title = 'Stage Spotlight';
+      baseOverlay.layerPosition = 'below_characters';
+    } else if (type === 'glow') {
+      baseOverlay.x = 640;
+      baseOverlay.y = 420;
+      baseOverlay.radius = 90;
+      baseOverlay.color = '#38bdf8';
+      baseOverlay.title = 'Atmospheric Glow';
+      baseOverlay.layerPosition = 'below_characters';
+    } else if (type === 'sparkles') {
+      baseOverlay.x = 640;
+      baseOverlay.y = 360;
+      baseOverlay.radius = 80;
+      baseOverlay.color = '#fde047';
+      baseOverlay.title = 'Magic Sparkles';
+    } else if (type === 'flying_birds') {
+      baseOverlay.x = 80;
+      baseOverlay.y = 120;
+      baseOverlay.targetX = 1200;
+      baseOverlay.targetY = 90;
+      baseOverlay.color = '#334155';
+      baseOverlay.title = 'Flying Birds';
+    } else if (type === 'moving_clouds') {
+      baseOverlay.x = 100;
+      baseOverlay.y = 90;
+      baseOverlay.targetX = 1000;
+      baseOverlay.targetY = 90;
+      baseOverlay.width = 160;
+      baseOverlay.height = 55;
+      baseOverlay.fillColor = '#ffffff';
+      baseOverlay.title = 'Drifting Clouds';
+      baseOverlay.layerPosition = 'below_characters';
+    } else if (type === 'title_card') {
+      baseOverlay.x = 640;
+      baseOverlay.y = 180;
+      baseOverlay.color = '#38bdf8';
+      baseOverlay.fillColor = '#0f172a';
+      baseOverlay.textColor = '#ffffff';
+      baseOverlay.title = 'LESSON: OUR BLUE PLANET';
+      baseOverlay.label = 'Educational Adventure';
     }
 
     if (onAddOverlay) {
