@@ -185,6 +185,25 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showRemoveVoiceConfirm, setShowRemoveVoiceConfirm] = useState(false);
 
+  // Collapsible Accordion Sections State for Scene Inspector
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({
+    overview: true,
+    timing: true,
+    background: true,
+    narration: true,
+    characters: true,
+    dialogue: false,
+    operations: false,
+  });
+
+  const toggleSection = (sectionId: string) => {
+    setOpenSections((prev) => ({
+      ...prev,
+      [sectionId]: !prev[sectionId],
+    }));
+  };
+
+
   // Scene Background State (Phase 1)
   const bgFileInputRef = useRef<HTMLInputElement | null>(null);
   const [isUploadingBg, setIsUploadingBg] = useState(false);
@@ -1169,118 +1188,284 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
         </div>
       ) : (
         <div className="ed-inspector-content">
-        {/* Title */}
-        <div className="ed-field-group">
-          <label className="ed-field-label">Scene Title</label>
-          <input
-            className="ed-input"
-            value={localTitle}
-            onChange={(e) => setLocalTitle(e.target.value)}
-            onBlur={handleTitleBlur}
-          />
-        </div>
-
-        {/* Timing Section */}
-        <div className="ed-field-group">
-          <div className="ed-field-label">
-            <span>Timing & Duration</span>
-            <span style={{ fontFamily: 'monospace' }}>{formatDurationHuman(durationMs)}</span>
-          </div>
-
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr 1fr',
-              gap: '8px',
-              fontSize: '12px',
-              fontFamily: 'monospace',
-              background: 'var(--ed-bg)',
-              padding: '8px',
-              borderRadius: '6px',
-            }}
+        {/* ============================================================ */}
+        {/* Accordion 1: Overview & Visual Media */}
+        {/* ============================================================ */}
+        <div className={`ed-accordion-section ${openSections.overview ? 'is-open' : ''}`}>
+          <button
+            type="button"
+            className="ed-accordion-header"
+            onClick={() => toggleSection('overview')}
+            aria-expanded={openSections.overview}
           >
-            <div>Start: {formatTimeMs(scene.startMs)}</div>
-            <div>End: {formatTimeMs(scene.endMs)}</div>
-          </div>
-
-          {/* Duration Adjust: Direct Numeric Input & Steppers */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
-            <span style={{ fontSize: '11px', color: 'var(--ed-text-muted)' }}>Duration:</span>
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-              <input
-                type="number"
-                step="0.5"
-                min="1.5"
-                max="300"
-                className="ed-input"
-                style={{ width: '64px', padding: '4px 6px', fontSize: '12px', textAlign: 'center', fontFamily: 'monospace' }}
-                value={durationInputVal}
-                onChange={(e) => setDurationInputVal(e.target.value)}
-                onBlur={handleDurationInputBlur}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    handleDurationInputBlur();
-                  }
-                }}
-              />
-              <span style={{ fontSize: '11px', color: 'var(--ed-text-muted)', fontFamily: 'monospace' }}>s</span>
+            <div className="ed-accordion-header-left">
+              <span className="ed-accordion-icon">🎬</span>
+              <span className="ed-accordion-title">Overview & Visual Media</span>
             </div>
-            <button className="ed-tool-btn" onClick={() => handleDurationStep(-1)} title="Decrease duration by 1s">
-              -1s
-            </button>
-            <button className="ed-tool-btn" onClick={() => handleDurationStep(1)} title="Increase duration by 1s">
-              +1s
-            </button>
-            {scene.actualAudioDurationMs && scene.actualAudioDurationMs > durationMs && (
-              <button
-                className="ed-tool-btn"
-                style={{ background: 'rgba(239, 68, 68, 0.2)', borderColor: '#ef4444', color: '#fca5a5' }}
-                onClick={handleFitToVoice}
-              >
-                Fit to Voice
-              </button>
-            )}
-          </div>
+            <div className="ed-accordion-header-right">
+              <span className="ed-accordion-badge">Scene {scene.number}</span>
+              <span className="ed-accordion-chevron">{openSections.overview ? '▾' : '▸'}</span>
+            </div>
+          </button>
+          {openSections.overview && (
+            <div className="ed-accordion-body">
+              <div className="ed-field-group">
+                <label className="ed-field-label">Scene Title</label>
+                <input
+                  className="ed-input"
+                  value={localTitle}
+                  onChange={(e) => setLocalTitle(e.target.value)}
+                  onBlur={handleTitleBlur}
+                />
+              </div>
 
-          {/* Ripple Mode Indicator & Explanation */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '8px', fontSize: '11px', color: 'var(--ed-text-muted)' }}>
-            <span>Ripple Edit: <strong style={{ color: isRippleOn ? '#c4b5fd' : '#94a3b8' }}>{isRippleOn ? 'ON' : 'OFF'}</strong></span>
-            {onToggleRipple && (
-              <button
-                type="button"
-                onClick={onToggleRipple}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: '#8b5cf6',
-                  cursor: 'pointer',
-                  padding: 0,
-                  textDecoration: 'underline',
-                  fontSize: '11px',
-                }}
-              >
-                Toggle
-              </button>
-            )}
-          </div>
-          <p style={{ margin: '3px 0 0', fontSize: '10px', color: '#64748b', lineHeight: 1.3 }}>
-            {isRippleOn
-              ? 'Downstream scenes shift automatically when this scene duration changes.'
-              : 'Subsequent scenes do not shift; timing remains untouched.'}
-          </p>
+              <div className="ed-field-group">
+                <label className="ed-field-label">Visual Scene Prompt</label>
+                <textarea
+                  className="ed-textarea"
+                  value={localPrompt}
+                  onChange={(e) => setLocalPrompt(e.target.value)}
+                  onBlur={handlePromptBlur}
+                  placeholder="Describe the visual composition, characters, action..."
+                />
+              </div>
 
-          {/* Timing Warning Alert */}
-          {!timingValidation.isValid && (
-            <div className="ed-warning-box">
-              <AlertTriangleIcon size={14} color="#f59e0b" />
-              <span>{timingValidation.warning}</span>
+              <div className="ed-field-group">
+                <label className="ed-field-label">Camera Direction</label>
+                <select className="ed-select" value={localCamera} onChange={handleCameraChange}>
+                  <option value="Eye level wide establishing shot">Eye level wide establishing shot</option>
+                  <option value="Medium close-up">Medium close-up</option>
+                  <option value="Dramatic low angle looking up">Dramatic low angle looking up</option>
+                  <option value="High angle bird's eye view">High angle bird's eye view</option>
+                  <option value="Over-the-shoulder shot">Over-the-shoulder shot</option>
+                  <option value="Dynamic tracking pan left-to-right">Dynamic tracking pan left-to-right</option>
+                  <option value="Soft bokeh macro focus">Soft bokeh macro focus</option>
+                </select>
+              </div>
+
+              {/* Media Generation Workflows */}
+              {(() => {
+                const hasVisual = Boolean(scene.imageUrl || scene.image?.imageUrl);
+                const hasVideo = Boolean(scene.videoUrl);
+
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '2px' }}>
+                    <div>
+                      <button
+                        className="ed-btn-action primary"
+                        style={{ width: '100%' }}
+                        onClick={() => onGenerateImage(scene.sceneId, localPrompt)}
+                        disabled={isGeneratingImage}
+                      >
+                        {isGeneratingImage ? 'Generating Image...' : hasVisual ? 'Regenerate Scene Image' : 'Generate Scene Image'}
+                      </button>
+                    </div>
+
+                    <div style={{ background: 'var(--ed-surface-elevated)', padding: '10px', borderRadius: '6px', border: '1px solid var(--ed-border)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--ed-text-muted)', textTransform: 'uppercase' }}>
+                          Scene Video Generation
+                        </span>
+                        {hasVideo && (
+                          <span style={{ fontSize: '10px', color: '#34d399', fontWeight: 600, background: 'rgba(52, 211, 153, 0.1)', padding: '1px 6px', borderRadius: '4px', border: '1px solid rgba(52, 211, 153, 0.3)', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                            <FilmIcon size={11} /> Video Ready
+                          </span>
+                        )}
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                        <button
+                          type="button"
+                          className="ed-btn-action"
+                          style={{ fontSize: '11px', padding: '6px 8px', textAlign: 'center' }}
+                          onClick={() => onGenerateVideo(scene.sceneId, 'ffmpeg')}
+                          disabled={isGeneratingVideo || !hasVisual}
+                          title={!hasVisual ? 'Generate an image first to enable Ken Burns motion rendering' : 'Render smooth Ken Burns motion video from current image'}
+                        >
+                          {isGeneratingVideo ? 'Rendering...' : hasVideo ? 'Re-render Motion' : 'Render Motion (FFmpeg)'}
+                        </button>
+
+                        <button
+                          type="button"
+                          className="ed-btn-action"
+                          style={{ fontSize: '11px', padding: '6px 8px', textAlign: 'center' }}
+                          onClick={() => onGenerateVideo(scene.sceneId, 'ai')}
+                          disabled={isGeneratingVideo}
+                          title="Generate video using AI video model (e.g. Replicate/Runway)"
+                        >
+                          {isGeneratingVideo ? 'Generating...' : 'Generate AI Video'}
+                        </button>
+                      </div>
+
+                      {!hasVisual && (
+                        <div style={{ fontSize: '11px', color: 'var(--ed-text-faint)', lineHeight: 1.3 }}>
+                          Generate an image above first to enable FFmpeg Ken Burns motion rendering, or generate AI video directly.
+                        </div>
+                      )}
+
+                      {hasVideo && (
+                        <div style={{ fontSize: '11px', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <CheckIcon size={11} color="#34d399" />
+                          <span>Playable in center preview & timeline. Original still image is preserved.</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           )}
         </div>
 
-        {/* Narration Section */}
-        <div className="ed-field-group">
-          <div className="ed-field-label">
+        {/* ============================================================ */}
+        {/* Accordion 2: Timing & Trimming */}
+        {/* ============================================================ */}
+        <div className={`ed-accordion-section ${openSections.timing ? 'is-open' : ''}`}>
+          <button
+            type="button"
+            className="ed-accordion-header"
+            onClick={() => toggleSection('timing')}
+            aria-expanded={openSections.timing}
+          >
+            <div className="ed-accordion-header-left">
+              <span className="ed-accordion-icon">⏱️</span>
+              <span className="ed-accordion-title">Timing & Trimming</span>
+            </div>
+            <div className="ed-accordion-header-right">
+              <span className="ed-accordion-badge">{formatDurationHuman(durationMs)}</span>
+              <span className="ed-accordion-chevron">{openSections.timing ? '▾' : '▸'}</span>
+            </div>
+          </button>
+          {openSections.timing && (
+            <div className="ed-accordion-body">
+              <div className="ed-field-group">
+                <div className="ed-field-label">
+                  <span>Start / End Timecode</span>
+                  <span style={{ fontFamily: 'monospace' }}>{formatDurationHuman(durationMs)}</span>
+                </div>
+
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: '1fr 1fr',
+                    gap: '8px',
+                    fontSize: '12px',
+                    fontFamily: 'monospace',
+                    background: 'var(--ed-surface-elevated)',
+                    padding: '8px',
+                    borderRadius: '6px',
+                  }}
+                >
+                  <div>Start: {formatTimeMs(scene.startMs)}</div>
+                  <div>End: {formatTimeMs(scene.endMs)}</div>
+                </div>
+
+                {/* Duration Adjust: Direct Numeric Input & Steppers */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
+                  <span style={{ fontSize: '11px', color: 'var(--ed-text-muted)' }}>Duration:</span>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                    <input
+                      type="number"
+                      step="0.5"
+                      min="1.5"
+                      max="300"
+                      className="ed-input"
+                      style={{ width: '64px', padding: '4px 6px', fontSize: '12px', textAlign: 'center', fontFamily: 'monospace' }}
+                      value={durationInputVal}
+                      onChange={(e) => setDurationInputVal(e.target.value)}
+                      onBlur={handleDurationInputBlur}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          handleDurationInputBlur();
+                        }
+                      }}
+                    />
+                    <span style={{ fontSize: '11px', color: 'var(--ed-text-muted)', fontFamily: 'monospace' }}>s</span>
+                  </div>
+                  <button className="ed-tool-btn" onClick={() => handleDurationStep(-1)} title="Decrease duration by 1s">
+                    -1s
+                  </button>
+                  <button className="ed-tool-btn" onClick={() => handleDurationStep(1)} title="Increase duration by 1s">
+                    +1s
+                  </button>
+                  {scene.actualAudioDurationMs && scene.actualAudioDurationMs > durationMs && (
+                    <button
+                      className="ed-tool-btn"
+                      style={{ background: 'rgba(239, 68, 68, 0.2)', borderColor: '#ef4444', color: '#fca5a5' }}
+                      onClick={handleFitToVoice}
+                    >
+                      Fit to Voice
+                    </button>
+                  )}
+                </div>
+
+                {/* Ripple Mode Indicator & Explanation */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '8px', fontSize: '11px', color: 'var(--ed-text-muted)' }}>
+                  <span>Ripple Edit: <strong style={{ color: isRippleOn ? '#c4b5fd' : '#94a3b8' }}>{isRippleOn ? 'ON' : 'OFF'}</strong></span>
+                  {onToggleRipple && (
+                    <button
+                      type="button"
+                      onClick={onToggleRipple}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: '#8b5cf6',
+                        cursor: 'pointer',
+                        padding: 0,
+                        textDecoration: 'underline',
+                        fontSize: '11px',
+                      }}
+                    >
+                      Toggle
+                    </button>
+                  )}
+                </div>
+                <p style={{ margin: '3px 0 0', fontSize: '10px', color: '#64748b', lineHeight: 1.3 }}>
+                  {isRippleOn
+                    ? 'Downstream scenes shift automatically when this scene duration changes.'
+                    : 'Subsequent scenes do not shift; timing remains untouched.'}
+                </p>
+
+                {/* Timing Warning Alert */}
+                {!timingValidation.isValid && (
+                  <div className="ed-warning-box">
+                    <AlertTriangleIcon size={14} color="#f59e0b" />
+                    <span>{timingValidation.warning}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+
+        {/* ============================================================ */}
+        {/* Accordion 4: Narration Voice Studio */}
+        {/* ============================================================ */}
+        <div className={`ed-accordion-section ${openSections.narration ? 'is-open' : ''}`}>
+          <button
+            type="button"
+            className="ed-accordion-header"
+            onClick={() => toggleSection('narration')}
+            aria-expanded={openSections.narration}
+          >
+            <div className="ed-accordion-header-left">
+              <span className="ed-accordion-icon">🎙️</span>
+              <span className="ed-accordion-title">Narration Voice Studio</span>
+            </div>
+            <div className="ed-accordion-header-right">
+              <span className="ed-accordion-badge">
+                {scene.actualAudioDurationMs ? `${(scene.actualAudioDurationMs / 1000).toFixed(1)}s Verified` : 'Kokoro TTS'}
+              </span>
+              <span className="ed-accordion-chevron">{openSections.narration ? '▾' : '▸'}</span>
+            </div>
+          </button>
+          {openSections.narration && (
+            <div className="ed-accordion-body">
+              {/* Narration Section */}
+              <div className="ed-field-group">
+                <div className="ed-field-label">
+
             <span>Narration Text</span>
             {scene.actualAudioDurationMs ? (
               <span className="ed-audio-badge-verified" style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
@@ -1856,18 +2041,44 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
               )}
             </div>
           )}
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Scene Background (2D Stage) Section */}
-        <div className="ed-field-group ed-background-card">
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-            <label className="ed-field-label" style={{ margin: 0, fontWeight: 600 }}>Scene Background</label>
-            {currentBgUrl ? (
-              <span className="ed-bg-badge-fit">{currentBgFit.toUpperCase()}</span>
-            ) : (
-              <span style={{ fontSize: '11px', color: '#94a3b8' }}>Default Stage</span>
-            )}
-          </div>
+        {/* ============================================================ */}
+        {/* Accordion 3: Stage Background */}
+        {/* ============================================================ */}
+        <div className={`ed-accordion-section ${openSections.background ? 'is-open' : ''}`}>
+          <button
+            type="button"
+            className="ed-accordion-header"
+            onClick={() => toggleSection('background')}
+            aria-expanded={openSections.background}
+          >
+            <div className="ed-accordion-header-left">
+              <span className="ed-accordion-icon">🖼️</span>
+              <span className="ed-accordion-title">Stage Background</span>
+            </div>
+            <div className="ed-accordion-header-right">
+              <span className="ed-accordion-badge">
+                {currentBgUrl ? currentBgFit.toUpperCase() : 'Default'}
+              </span>
+              <span className="ed-accordion-chevron">{openSections.background ? '▾' : '▸'}</span>
+            </div>
+          </button>
+          {openSections.background && (
+            <div className="ed-accordion-body">
+              <div className="ed-field-group ed-background-card">
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                  <label className="ed-field-label" style={{ margin: 0, fontWeight: 600 }}>Scene Background</label>
+                  {currentBgUrl ? (
+                    <span className="ed-bg-badge-fit">{currentBgFit.toUpperCase()}</span>
+                  ) : (
+                    <span style={{ fontSize: '11px', color: '#94a3b8' }}>Default Stage</span>
+                  )}
+                </div>
+
 
           <p style={{ fontSize: '11px', color: '#64748b', margin: '0 0 8px 0', lineHeight: 1.4 }}>
             Upload or select a scenic background. Reusable characters animate independently on top.
@@ -2025,113 +2236,39 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
             </div>
           )}
         </div>
-
-        {/* Visual & Video Media Section */}
-        <div className="ed-field-group">
-          <label className="ed-field-label">Visual Scene Prompt</label>
-          <textarea
-            className="ed-textarea"
-            value={localPrompt}
-            onChange={(e) => setLocalPrompt(e.target.value)}
-            onBlur={handlePromptBlur}
-            placeholder="Describe the visual composition, characters, action..."
-          />
-
-          <label className="ed-field-label" style={{ marginTop: '4px' }}>Camera Direction</label>
-          <select className="ed-select" value={localCamera} onChange={handleCameraChange}>
-            <option value="Eye level wide establishing shot">Eye level wide establishing shot</option>
-            <option value="Medium close-up">Medium close-up</option>
-            <option value="Dramatic low angle looking up">Dramatic low angle looking up</option>
-            <option value="High angle bird's eye view">High angle bird's eye view</option>
-            <option value="Over-the-shoulder shot">Over-the-shoulder shot</option>
-            <option value="Dynamic tracking pan left-to-right">Dynamic tracking pan left-to-right</option>
-            <option value="Soft bokeh macro focus">Soft bokeh macro focus</option>
-          </select>
-
-          {/* Media Generation Workflows */}
-          {(() => {
-            const hasVisual = Boolean(scene.imageUrl || scene.image?.imageUrl);
-            const hasVideo = Boolean(scene.videoUrl);
-
-            return (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '6px' }}>
-                {/* 1. Still Image Generation */}
-                <div>
-                  <button
-                    className="ed-btn-action primary"
-                    style={{ width: '100%' }}
-                    onClick={() => onGenerateImage(scene.sceneId, localPrompt)}
-                    disabled={isGeneratingImage}
-                  >
-                    {isGeneratingImage ? 'Generating Image...' : hasVisual ? 'Regenerate Scene Image' : 'Generate Scene Image'}
-                  </button>
-                </div>
-
-                {/* 2. Video Clip Generation Workflows */}
-                <div style={{ background: 'var(--ed-bg)', padding: '10px', borderRadius: '6px', border: '1px solid var(--ed-border)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--ed-text-muted)', textTransform: 'uppercase' }}>
-                      Scene Video Generation
-                    </span>
-                    {hasVideo && (
-                      <span style={{ fontSize: '10px', color: '#34d399', fontWeight: 600, background: 'rgba(52, 211, 153, 0.1)', padding: '1px 6px', borderRadius: '4px', border: '1px solid rgba(52, 211, 153, 0.3)', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-                        <FilmIcon size={11} /> Video Ready
-                      </span>
-                    )}
-                  </div>
-
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                    {/* Workflow 2: Ken Burns Motion from Image */}
-                    <button
-                      type="button"
-                      className="ed-btn-action"
-                      style={{ fontSize: '11px', padding: '6px 8px', textAlign: 'center' }}
-                      onClick={() => onGenerateVideo(scene.sceneId, 'ffmpeg')}
-                      disabled={isGeneratingVideo || !hasVisual}
-                      title={!hasVisual ? 'Generate an image first to enable Ken Burns motion rendering' : 'Render smooth Ken Burns motion video from current image'}
-                    >
-                      {isGeneratingVideo ? 'Rendering...' : hasVideo ? 'Re-render Motion' : 'Render Motion (FFmpeg)'}
-                    </button>
-
-                    {/* Workflow 1: AI Video Provider */}
-                    <button
-                      type="button"
-                      className="ed-btn-action"
-                      style={{ fontSize: '11px', padding: '6px 8px', textAlign: 'center' }}
-                      onClick={() => onGenerateVideo(scene.sceneId, 'ai')}
-                      disabled={isGeneratingVideo}
-                      title="Generate video using AI video model (e.g. Replicate/Runway)"
-                    >
-                      {isGeneratingVideo ? 'Generating...' : 'Generate AI Video'}
-                    </button>
-                  </div>
-
-                  {/* Clarifying prerequisite hint if no image exists yet */}
-                  {!hasVisual && (
-                    <div style={{ fontSize: '11px', color: 'var(--ed-text-faint)', lineHeight: 1.3 }}>
-                      Generate an image above first to enable FFmpeg Ken Burns motion rendering, or generate AI video directly.
-                    </div>
-                  )}
-
-                  {hasVideo && (
-                    <div style={{ fontSize: '11px', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <CheckIcon size={11} color="#34d399" />
-                      <span>Playable in center preview & timeline. Original still image is preserved.</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })()}
+            </div>
+          )}
         </div>
 
-        {/* Structured Dialogue Section */}
-        <div className="ed-field-group">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <label className="ed-field-label">Structured Dialogue</label>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              {(dialogueList.length > 0 || (scene.animationData?.dialogueLines?.length || 0) > 0) && (
-                <button
+        {/* ============================================================ */}
+        {/* Accordion 6: Structured Dialogue & Character Actions */}
+        {/* ============================================================ */}
+        <div className={`ed-accordion-section ${openSections.dialogue ? 'is-open' : ''}`}>
+          <button
+            type="button"
+            className="ed-accordion-header"
+            onClick={() => toggleSection('dialogue')}
+            aria-expanded={openSections.dialogue}
+          >
+            <div className="ed-accordion-header-left">
+              <span className="ed-accordion-icon">💬</span>
+              <span className="ed-accordion-title">Structured Dialogue & Actions</span>
+            </div>
+            <div className="ed-accordion-header-right">
+              <span className="ed-accordion-badge">{dialogueList.length} Lines</span>
+              <span className="ed-accordion-chevron">{openSections.dialogue ? '▾' : '▸'}</span>
+            </div>
+          </button>
+          {openSections.dialogue && (
+            <div className="ed-accordion-body">
+              {/* Structured Dialogue Section */}
+              <div className="ed-field-group">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <label className="ed-field-label">Structured Dialogue</label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    {(dialogueList.length > 0 || (scene.animationData?.dialogueLines?.length || 0) > 0) && (
+                      <button
+
                   type="button"
                   className="ed-tool-btn primary"
                   style={{ fontSize: '10px', padding: '2px 8px' }}
@@ -2357,157 +2494,208 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
             </div>
           )}
         </div>
-
-        {/* 2D Character Animation Summary & Access */}
-        <div style={{ background: 'var(--ed-bg)', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--ed-border)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--ed-text-muted)', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-              <SparklesIcon size={12} color="#8b5cf6" />
-              <span>2D Character Animation</span>
-            </span>
-            <span style={{ fontSize: '10px', color: '#c4b5fd', background: 'rgba(139, 92, 246, 0.16)', padding: '1px 6px', borderRadius: '4px' }}>
-              {characterInstances.length} {characterInstances.length === 1 ? 'character' : 'characters'}
-            </span>
-          </div>
-
-          <div style={{ display: 'flex', gap: '6px' }}>
-            <button
-              type="button"
-              className="ed-btn-action primary"
-              style={{ flex: 1, fontSize: '11px', padding: '6px 8px' }}
-              onClick={() => setActiveInspectorTab('animation')}
-            >
-              {characterInstances.length > 0 ? 'Edit Animation Rigs' : '+ Add 2D Character Rig'}
-            </button>
-          </div>
+            </div>
+          )}
         </div>
 
-        {/* Character References */}
-        {characters.length > 0 && (
-          <div className="ed-field-group">
-            <label className="ed-field-label">Characters in this Scene</label>
-            <div className="ed-char-chips">
-              {characters.map((char) => {
-                const isSelected = scene.characterIds?.includes(char.id);
-                return (
-                  <button
-                    key={char.id}
-                    type="button"
-                    className={`ed-char-chip ${isSelected ? 'selected' : ''}`}
-                    onClick={() => handleToggleCharacter(char.id)}
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                  >
-                    <span>{isSelected ? <CheckIcon size={11} /> : <PlusIcon size={11} />}</span>
-                    <span>{char.name}</span>
-                  </button>
-                );
-              })}
+        {/* ============================================================ */}
+        {/* Accordion 5: Characters on Stage & 2D Rigging */}
+        {/* ============================================================ */}
+        <div className={`ed-accordion-section ${openSections.characters ? 'is-open' : ''}`}>
+          <button
+            type="button"
+            className="ed-accordion-header"
+            onClick={() => toggleSection('characters')}
+            aria-expanded={openSections.characters}
+          >
+            <div className="ed-accordion-header-left">
+              <span className="ed-accordion-icon">🎭</span>
+              <span className="ed-accordion-title">Characters & 2D Rigging</span>
             </div>
-          </div>
-        )}
-
-        {/* Version History */}
-        {versions && versions.length > 0 && (
-          <div className="ed-field-group">
-            <label className="ed-field-label">Version History ({versions.length})</label>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '120px', overflowY: 'auto' }}>
-              {versions.map((ver) => (
-                <div
-                  key={ver.id}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    padding: '6px 8px',
-                    background: 'var(--ed-bg)',
-                    borderRadius: '4px',
-                    fontSize: '11px',
-                  }}
-                >
-                  <div>
-                    <strong>v{ver.versionNumber}</strong> • {new Date(ver.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </div>
-                  <button
-                    type="button"
-                    className="ed-tool-btn"
-                    style={{ fontSize: '10px' }}
-                    onClick={() => onRestoreVersion(scene.sceneId, ver.id)}
-                  >
-                    Restore
-                  </button>
+            <div className="ed-accordion-header-right">
+              <span className="ed-accordion-badge">{characterInstances.length} on Stage</span>
+              <span className="ed-accordion-chevron">{openSections.characters ? '▾' : '▸'}</span>
+            </div>
+          </button>
+          {openSections.characters && (
+            <div className="ed-accordion-body">
+              {/* 2D Character Animation Summary & Access */}
+              <div style={{ background: 'var(--ed-surface-elevated)', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--ed-border)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--ed-text-muted)', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                    <SparklesIcon size={12} color="#8b5cf6" />
+                    <span>2D Character Animation</span>
+                  </span>
+                  <span style={{ fontSize: '10px', color: '#c4b5fd', background: 'rgba(139, 92, 246, 0.16)', padding: '1px 6px', borderRadius: '4px' }}>
+                    {characterInstances.length} {characterInstances.length === 1 ? 'character' : 'characters'}
+                  </span>
                 </div>
-              ))}
-            </div>
-          </div>
-        )}
 
-        {/* Scene Operations */}
-        <div className="ed-field-group" style={{ borderTop: '1px solid var(--ed-border)', paddingTop: '14px' }}>
-          <label className="ed-field-label">Scene Operations</label>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <button
-              type="button"
-              className="ed-btn-action"
-              onClick={() => onSplitScene(scene.sceneId, playheadMs)}
-              disabled={!canSplitAtPlayhead}
-              title={
-                canSplitAtPlayhead
-                  ? `Split scene at playhead position (${formatTimeMs(playheadMs)})`
-                  : 'Place playhead inside this scene to split'
-              }
-              style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
-            >
-              <ScissorsIcon size={13} />
-              <span>Split Scene at Playhead</span>
-            </button>
-
-            <button
-              type="button"
-              className="ed-btn-action"
-              onClick={() => onDuplicateScene(scene.sceneId)}
-            >
-              Duplicate Scene
-            </button>
-
-            {showDeleteConfirm ? (
-              <div style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid #ef4444', borderRadius: '6px', padding: '8px' }}>
-                <p style={{ margin: '0 0 8px 0', fontSize: '12px', color: '#fca5a5' }}>
-                  Delete Scene {scene.number}? This will ripple subsequent scenes.
-                </p>
-                <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                <div style={{ display: 'flex', gap: '6px' }}>
                   <button
                     type="button"
-                    className="ed-tool-btn"
-                    onClick={() => setShowDeleteConfirm(false)}
+                    className="ed-btn-action primary"
+                    style={{ flex: 1, fontSize: '11px', padding: '6px 8px' }}
+                    onClick={() => setActiveInspectorTab('animation')}
                   >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    className="ed-tool-btn"
-                    style={{ background: '#ef4444', color: 'white', borderColor: '#ef4444' }}
-                    onClick={() => {
-                      setShowDeleteConfirm(false);
-                      onDeleteScene(scene.sceneId);
-                    }}
-                  >
-                    Confirm Delete
+                    {characterInstances.length > 0 ? 'Edit Animation Rigs' : '+ Add 2D Character Rig'}
                   </button>
                 </div>
               </div>
-            ) : (
-              <button
-                type="button"
-                className="ed-btn-action"
-                style={{ color: '#f87171', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
-                onClick={() => setShowDeleteConfirm(true)}
-              >
-                <TrashIcon size={13} />
-                <span>Delete Scene</span>
-              </button>
-            )}
-          </div>
+
+              {/* Character References */}
+              {characters.length > 0 && (
+                <div className="ed-field-group">
+                  <label className="ed-field-label">Characters in this Scene</label>
+                  <div className="ed-char-chips">
+                    {characters.map((char) => {
+                      const isSelected = scene.characterIds?.includes(char.id);
+                      return (
+                        <button
+                          key={char.id}
+                          type="button"
+                          className={`ed-char-chip ${isSelected ? 'selected' : ''}`}
+                          onClick={() => handleToggleCharacter(char.id)}
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                        >
+                          <span>{isSelected ? <CheckIcon size={11} /> : <PlusIcon size={11} />}</span>
+                          <span>{char.name}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
+
+        {/* ============================================================ */}
+        {/* Accordion 7: Scene Operations & Version History */}
+        {/* ============================================================ */}
+        <div className={`ed-accordion-section ${openSections.operations ? 'is-open' : ''}`}>
+          <button
+            type="button"
+            className="ed-accordion-header"
+            onClick={() => toggleSection('operations')}
+            aria-expanded={openSections.operations}
+          >
+            <div className="ed-accordion-header-left">
+              <span className="ed-accordion-icon">⚙️</span>
+              <span className="ed-accordion-title">Operations & History</span>
+            </div>
+            <div className="ed-accordion-header-right">
+              <span className="ed-accordion-chevron">{openSections.operations ? '▾' : '▸'}</span>
+            </div>
+          </button>
+          {openSections.operations && (
+            <div className="ed-accordion-body">
+              {/* Version History */}
+              {versions && versions.length > 0 && (
+                <div className="ed-field-group">
+                  <label className="ed-field-label">Version History ({versions.length})</label>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '120px', overflowY: 'auto' }}>
+                    {versions.map((ver) => (
+                      <div
+                        key={ver.id}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '6px 8px',
+                          background: 'var(--ed-surface-elevated)',
+                          borderRadius: '4px',
+                          fontSize: '11px',
+                        }}
+                      >
+                        <div>
+                          <strong>v{ver.versionNumber}</strong> • {new Date(ver.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </div>
+                        <button
+                          type="button"
+                          className="ed-tool-btn"
+                          style={{ fontSize: '10px' }}
+                          onClick={() => onRestoreVersion(scene.sceneId, ver.id)}
+                        >
+                          Restore
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Scene Operations */}
+              <div className="ed-field-group">
+                <label className="ed-field-label">Timeline & Scene Actions</label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <button
+                    type="button"
+                    className="ed-btn-action"
+                    onClick={() => onSplitScene(scene.sceneId, playheadMs)}
+                    disabled={!canSplitAtPlayhead}
+                    title={
+                      canSplitAtPlayhead
+                        ? `Split scene at playhead position (${formatTimeMs(playheadMs)})`
+                        : 'Place playhead inside this scene to split'
+                    }
+                    style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                  >
+                    <ScissorsIcon size={13} />
+                    <span>Split Scene at Playhead</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className="ed-btn-action"
+                    onClick={() => onDuplicateScene(scene.sceneId)}
+                  >
+                    Duplicate Scene
+                  </button>
+
+                  {showDeleteConfirm ? (
+                    <div style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid #ef4444', borderRadius: '6px', padding: '8px' }}>
+                      <p style={{ margin: '0 0 8px 0', fontSize: '12px', color: '#fca5a5' }}>
+                        Delete Scene {scene.number}? This will ripple subsequent scenes.
+                      </p>
+                      <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                        <button
+                          type="button"
+                          className="ed-tool-btn"
+                          onClick={() => setShowDeleteConfirm(false)}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          className="ed-tool-btn"
+                          style={{ background: '#ef4444', color: 'white', borderColor: '#ef4444' }}
+                          onClick={() => {
+                            setShowDeleteConfirm(false);
+                            onDeleteScene(scene.sceneId);
+                          }}
+                        >
+                          Confirm Delete
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      className="ed-btn-action"
+                      style={{ color: '#f87171', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                      onClick={() => setShowDeleteConfirm(true)}
+                    >
+                      <TrashIcon size={13} />
+                      <span>Delete Scene</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
       </div>
       )}
 

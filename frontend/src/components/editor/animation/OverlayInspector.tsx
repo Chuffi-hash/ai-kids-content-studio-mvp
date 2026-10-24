@@ -369,7 +369,7 @@ export const OverlayInspector: React.FC<OverlayInspectorProps> = ({
               <input
                 type="text"
                 className="ed-input"
-                style={{ width: '100%', padding: '6px 8px', fontSize: '12px', background: '#0b101b', border: '1px solid #1e293b', borderRadius: '4px', color: '#ffffff' }}
+                style={{ width: '100%', padding: '6px 8px', fontSize: '12px', background: 'var(--ed-surface)', border: '1px solid var(--ed-border)', borderRadius: '4px', color: 'var(--ed-text)' }}
                 value={selectedOverlay.label || selectedOverlay.title || ''}
                 placeholder="e.g. Mount Everest or Pacific Ocean"
                 onChange={(e) => onUpdateOverlay(selectedOverlay.id, { label: e.target.value })}
@@ -386,7 +386,7 @@ export const OverlayInspector: React.FC<OverlayInspectorProps> = ({
               <input
                 type="text"
                 className="ed-input"
-                style={{ width: '100%', padding: '6px 8px', fontSize: '12px', background: '#0b101b', border: '1px solid #1e293b', borderRadius: '4px', color: '#ffffff' }}
+                style={{ width: '100%', padding: '6px 8px', fontSize: '12px', background: 'var(--ed-surface)', border: '1px solid var(--ed-border)', borderRadius: '4px', color: 'var(--ed-text)' }}
                 value={selectedOverlay.title || ''}
                 placeholder="e.g. Highest Peak on Earth"
                 onChange={(e) => onUpdateOverlay(selectedOverlay.id, { title: e.target.value })}
@@ -403,7 +403,7 @@ export const OverlayInspector: React.FC<OverlayInspectorProps> = ({
               <input
                 type="number"
                 className="ed-input"
-                style={{ width: '100%', padding: '5px 8px', fontSize: '12px', background: '#0b101b', border: '1px solid #1e293b', borderRadius: '4px', color: '#ffffff' }}
+                style={{ width: '100%', padding: '5px 8px', fontSize: '12px', background: 'var(--ed-surface)', border: '1px solid var(--ed-border)', borderRadius: '4px', color: 'var(--ed-text)' }}
                 value={selectedOverlay.x}
                 onChange={(e) => onUpdateOverlay(selectedOverlay.id, { x: Number(e.target.value) || 0 })}
               />
@@ -415,12 +415,13 @@ export const OverlayInspector: React.FC<OverlayInspectorProps> = ({
               <input
                 type="number"
                 className="ed-input"
-                style={{ width: '100%', padding: '5px 8px', fontSize: '12px', background: '#0b101b', border: '1px solid #1e293b', borderRadius: '4px', color: '#ffffff' }}
+                style={{ width: '100%', padding: '5px 8px', fontSize: '12px', background: 'var(--ed-surface)', border: '1px solid var(--ed-border)', borderRadius: '4px', color: 'var(--ed-text)' }}
                 value={selectedOverlay.y}
                 onChange={(e) => onUpdateOverlay(selectedOverlay.id, { y: Number(e.target.value) || 0 })}
               />
             </div>
           </div>
+
 
           {/* Target Coordinates (for Route, Arrow, Connector) */}
           {(selectedOverlay.type === 'route_line' || selectedOverlay.type === 'arrow_pointer' || selectedOverlay.type === 'callout_label') && (
@@ -432,7 +433,7 @@ export const OverlayInspector: React.FC<OverlayInspectorProps> = ({
                 <input
                   type="number"
                   className="ed-input"
-                  style={{ width: '100%', padding: '5px 8px', fontSize: '12px', background: '#0b101b', border: '1px solid #1e293b', borderRadius: '4px', color: '#ffffff' }}
+                  style={{ width: '100%', padding: '5px 8px', fontSize: '12px', background: 'var(--ed-surface)', border: '1px solid var(--ed-border)', borderRadius: '4px', color: 'var(--ed-text)' }}
                   value={selectedOverlay.targetX ?? selectedOverlay.x + 150}
                   onChange={(e) => onUpdateOverlay(selectedOverlay.id, { targetX: Number(e.target.value) || 0 })}
                 />
@@ -444,7 +445,7 @@ export const OverlayInspector: React.FC<OverlayInspectorProps> = ({
                 <input
                   type="number"
                   className="ed-input"
-                  style={{ width: '100%', padding: '5px 8px', fontSize: '12px', background: '#0b101b', border: '1px solid #1e293b', borderRadius: '4px', color: '#ffffff' }}
+                  style={{ width: '100%', padding: '5px 8px', fontSize: '12px', background: 'var(--ed-surface)', border: '1px solid var(--ed-border)', borderRadius: '4px', color: 'var(--ed-text)' }}
                   value={selectedOverlay.targetY ?? selectedOverlay.y + 60}
                   onChange={(e) => onUpdateOverlay(selectedOverlay.id, { targetY: Number(e.target.value) || 0 })}
                 />
@@ -478,7 +479,7 @@ export const OverlayInspector: React.FC<OverlayInspectorProps> = ({
                 step="0.1"
                 min="0"
                 className="ed-input"
-                style={{ width: '100%', padding: '5px 8px', fontSize: '12px', background: '#0b101b', border: '1px solid #1e293b', borderRadius: '4px', color: '#ffffff' }}
+                style={{ width: '100%', padding: '5px 8px', fontSize: '12px', background: 'var(--ed-surface)', border: '1px solid var(--ed-border)', borderRadius: '4px', color: 'var(--ed-text)' }}
                 value={Number((selectedOverlay.startMs / 1000).toFixed(2))}
                 onChange={(e) => onUpdateOverlay(selectedOverlay.id, { startMs: Math.round(Number(e.target.value) * 1000) })}
               />
@@ -492,12 +493,13 @@ export const OverlayInspector: React.FC<OverlayInspectorProps> = ({
                 step="0.1"
                 min="0.5"
                 className="ed-input"
-                style={{ width: '100%', padding: '5px 8px', fontSize: '12px', background: '#0b101b', border: '1px solid #1e293b', borderRadius: '4px', color: '#ffffff' }}
+                style={{ width: '100%', padding: '5px 8px', fontSize: '12px', background: 'var(--ed-surface)', border: '1px solid var(--ed-border)', borderRadius: '4px', color: 'var(--ed-text)' }}
                 value={Number(((selectedOverlay.durationMs || 5000) / 1000).toFixed(2))}
                 onChange={(e) => onUpdateOverlay(selectedOverlay.id, { durationMs: Math.round(Number(e.target.value) * 1000) })}
               />
             </div>
           </div>
+
 
           {/* Route Line: Draw Duration */}
           {selectedOverlay.type === 'route_line' && (

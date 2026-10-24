@@ -12,7 +12,8 @@ import {
   CheckIcon,
   AlertTriangleIcon,
 } from '../common/Icons';
-import { ThemeToggle } from '../common/ThemeToggle';
+import { ThemeSelector } from '../common/ThemeToggle';
+
 
 interface TopToolbarProps {
   title: string;
@@ -242,9 +243,9 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
               <input
                 style={{
                   width: '40px',
-                  background: '#1e293b',
-                  color: 'white',
-                  border: '1px solid #8b5cf6',
+                  background: 'var(--ed-surface-elevated)',
+                  color: 'var(--ed-text)',
+                  border: '1px solid var(--ed-border-focus)',
                   borderRadius: '3px',
                   padding: '2px 4px',
                   fontSize: '11px',
@@ -286,9 +287,9 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
         )}
       </div>
 
-      {/* Right: Export Button & Theme Toggle */}
+      {/* Right: Export Button & 3-way Theme Selector */}
       <div className="ed-toolbar-right">
-        <ThemeToggle showLabel={false} />
+        <ThemeSelector />
         <button
           type="button"
           className="ed-btn-export"
