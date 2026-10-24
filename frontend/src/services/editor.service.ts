@@ -370,6 +370,9 @@ export async function startExport(
     fps?: number;
     backgroundMusic?: string | null;
     musicVolume?: number;
+    format?: '16:9' | '9:16' | '1:1' | '4:5' | 'custom';
+    selectedSceneIds?: string[];
+    targetDurationSec?: number;
   }
 ): Promise<{ job: ExportJobStatus }> {
   const res = await fetch(`${API_URL}/api/production/story/${storyId}/export`, {
@@ -380,6 +383,28 @@ export async function startExport(
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({}));
     throw new Error(errorData.message || 'Failed to start export');
+  }
+  return res.json();
+}
+
+export async function importStory(data: {
+  rawText: string;
+  title?: string;
+  language?: string;
+  genre?: string;
+  visualStyle?: string;
+  topic?: string;
+  ageGroup?: string;
+  format?: string;
+}): Promise<any> {
+  const res = await fetch(`${API_URL}/api/content/story/import`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.message || 'Failed to import story');
   }
   return res.json();
 }

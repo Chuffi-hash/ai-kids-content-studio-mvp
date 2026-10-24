@@ -4,6 +4,7 @@ import path from "path";
 import { generateStory } from "../services/story.service.js";
 import { generateScenes } from "../services/scene.service.js";
 import { StoryGenerationService } from "../services/story-generation/story-generation.service.js";
+import { StoryImporterService } from "../services/story-generation/story-importer.service.js";
 import {
   getStoryByStoryId,
   getScenesByStoryId,
@@ -130,6 +131,46 @@ contentRouter.post("/story/generate", async (req, res) => {
   } catch (error: any) {
     console.error("[Content] Error generating structured story:", error);
     return res.status(500).json({ message: error?.message || "Failed to generate story" });
+  }
+});
+
+// Import or Write Story Route (instant parsing, no paid AI required)
+contentRouter.post("/story/import", async (req, res) => {
+  try {
+    const { rawText, title, language, genre, visualStyle, topic, ageGroup, format } = req.body;
+    if (!rawText || typeof rawText !== "string" || !rawText.trim()) {
+      return res.status(400).json({ message: "rawText (script or markdown) is required" });
+    }
+
+    const result = await StoryImporterService.importAndPersistStory({
+      rawText: rawText.trim(),
+      title,
+      language: language || "Hindi",
+      genre: genre || "Educational",
+      visualStyle: visualStyle || "Storybook",
+      topic,
+      ageGroup,
+      format,
+    });
+
+    return res.json({
+      id: result.story.id,
+      storyId: result.storyId,
+      title: result.story.title,
+      logline: result.story.logline,
+      lesson: result.story.lesson,
+      topic: result.story.topic,
+      ageGroup: result.story.ageGroup,
+      audience: result.story.audience,
+      genre: result.story.genre,
+      visualStyle: result.story.visualStyle,
+      targetDuration: result.story.targetDuration,
+      characters: result.characters,
+      scenes: result.scenes,
+    });
+  } catch (error: any) {
+    console.error("[Content] Error importing story:", error);
+    return res.status(500).json({ message: error?.message || "Failed to import story" });
   }
 });
 

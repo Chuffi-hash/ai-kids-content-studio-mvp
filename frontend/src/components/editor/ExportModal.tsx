@@ -25,6 +25,9 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   onExportSuccess,
 }) => {
   const [resolution, setResolution] = useState<'1080p' | '720p'>('720p');
+  const [format, setFormat] = useState<'16:9' | '9:16' | '1:1' | '4:5'>('16:9');
+  const [sceneScope, setSceneScope] = useState<'all' | 'single'>('all');
+  const [selectedSceneId, setSelectedSceneId] = useState<string>(story.scenes[0]?.sceneId || '');
   const [job, setJob] = useState<ExportJobStatus | null>(null);
   const [isStarting, setIsStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -59,6 +62,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({
         fps: 30,
         backgroundMusic: selectedMusic,
         musicVolume,
+        format,
+        selectedSceneIds: sceneScope === 'single' && selectedSceneId ? [selectedSceneId] : undefined,
       });
       setJob(startedJob);
     } catch (err: any) {
@@ -92,16 +97,59 @@ export const ExportModal: React.FC<ExportModalProps> = ({
           {!job ? (
             <>
               <div className="ed-field-group">
-                <label className="ed-field-label">Resolution & Aspect Ratio</label>
+                <label className="ed-field-label">Format & Aspect Ratio</label>
+                <select
+                  className="ed-select"
+                  value={format}
+                  onChange={(e) => setFormat(e.target.value as any)}
+                >
+                  <option value="16:9">16:9 Landscape (YouTube, Desktop, TV)</option>
+                  <option value="9:16">9:16 Vertical Reel / Short (YouTube Shorts, Instagram Reels, TikTok)</option>
+                  <option value="1:1">1:1 Square (Instagram Feed, Square Post)</option>
+                  <option value="4:5">4:5 Portrait (Instagram & Facebook Feed)</option>
+                </select>
+              </div>
+
+              <div className="ed-field-group">
+                <label className="ed-field-label">Resolution</label>
                 <select
                   className="ed-select"
                   value={resolution}
                   onChange={(e) => setResolution(e.target.value as any)}
                 >
-                  <option value="720p">720p HD (1280 × 720) — Faster Assembly</option>
-                  <option value="1080p">1080p Full HD (1920 × 1080) — Best Quality</option>
+                  <option value="720p">720p HD ({format === '9:16' ? '720 × 1280' : (format === '1:1' ? '720 × 720' : (format === '4:5' ? '720 × 900' : '1280 × 720'))}) — Fast Assembly</option>
+                  <option value="1080p">1080p Full HD ({format === '9:16' ? '1080 × 1920' : (format === '1:1' ? '1080 × 1080' : (format === '4:5' ? '1080 × 1350' : '1920 × 1080'))}) — Best Quality</option>
                 </select>
               </div>
+
+              <div className="ed-field-group">
+                <label className="ed-field-label">Export Scope</label>
+                <select
+                  className="ed-select"
+                  value={sceneScope}
+                  onChange={(e) => setSceneScope(e.target.value as any)}
+                >
+                  <option value="all">All Scenes ({story.scenes.length} scenes) — Complete Video</option>
+                  <option value="single">Single Scene Highlight (Short Clip / Reel)</option>
+                </select>
+              </div>
+
+              {sceneScope === 'single' && (
+                <div className="ed-field-group">
+                  <label className="ed-field-label">Select Scene to Export</label>
+                  <select
+                    className="ed-select"
+                    value={selectedSceneId}
+                    onChange={(e) => setSelectedSceneId(e.target.value)}
+                  >
+                    {story.scenes.map((s, idx) => (
+                      <option key={s.sceneId} value={s.sceneId}>
+                        Scene {s.number || idx + 1}: {s.title}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div
                 style={{

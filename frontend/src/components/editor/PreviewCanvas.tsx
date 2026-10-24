@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { EditorScene } from '../../types/editor';
-import { CharacterInstance, VectorSceneData } from '../../types/animation';
+import { CharacterInstance, VectorSceneData, AspectRatioType } from '../../types/animation';
 import { VectorSceneCanvas } from './animation/VectorSceneCanvas';
 import { formatTimeMs } from '../../utils/timingEngine';
 import { resolveAssetUrl } from '../../utils/urlHelper';
@@ -75,6 +75,17 @@ export const PreviewCanvas: React.FC<PreviewCanvasProps> = ({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [videoError, setVideoError] = useState<string | null>(null);
   const [forceStillPreview, setForceStillPreview] = useState(false);
+  const [activeFormat, setActiveFormat] = useState<AspectRatioType>(
+    activeScene?.animationData?.activeFormat || '16:9'
+  );
+  const [showSafeGuides, setShowSafeGuides] = useState<boolean>(true);
+
+  // Sync format if scene animationData changes
+  useEffect(() => {
+    if (activeScene?.animationData?.activeFormat) {
+      setActiveFormat(activeScene.animationData.activeFormat);
+    }
+  }, [activeScene?.animationData?.activeFormat]);
 
   // Scrubber drag management to avoid fighting with the 60fps playback loop
   const [isScrubbing, setIsScrubbing] = useState<boolean>(false);
@@ -167,8 +178,23 @@ export const PreviewCanvas: React.FC<PreviewCanvasProps> = ({
 
   return (
     <main className="ed-canvas-area ed-center-canvas" ref={containerRef}>
-      {/* 16:9 Aspect Ratio Viewport */}
-      <div className="ed-preview-viewport">
+      {/* Dynamic Aspect Ratio Viewport */}
+      <div className={`ed-preview-viewport format-${activeFormat.replace(':', '-')}`}>
+        {/* Mobile Reel / Shorts Safe Area Guidelines */}
+        {activeFormat === '9:16' && showSafeGuides && (
+          <div className="ed-safe-area-guide">
+            <div className="ed-safe-area-header">
+              <span>Top UI / Profile Safe Area</span>
+            </div>
+            <div className="ed-safe-area-center">
+              <div className="ed-safe-area-badge">Vertical Reel / Short Action Zone</div>
+            </div>
+            <div className="ed-safe-area-footer">
+              <span>Bottom Captions & Action Safe Area</span>
+            </div>
+          </div>
+        )}
+
         {/* Preview Mode Badge Overlay */}
         <div className="ed-preview-badge-overlay">
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
@@ -260,6 +286,70 @@ export const PreviewCanvas: React.FC<PreviewCanvasProps> = ({
               )}
             </button>
           )}
+
+          {/* Format Switcher Pills */}
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '5px' }}>
+            <button
+              type="button"
+              style={{
+                background: activeFormat === '16:9' ? 'var(--ed-accent)' : 'rgba(255, 255, 255, 0.1)',
+                border: '1px solid ' + (activeFormat === '16:9' ? 'var(--ed-accent)' : 'rgba(255, 255, 255, 0.2)'),
+                color: 'white',
+                fontSize: '10px',
+                borderRadius: '4px',
+                padding: '2px 8px',
+                cursor: 'pointer',
+                fontWeight: activeFormat === '16:9' ? 600 : 400,
+              }}
+              onClick={() => {
+                setActiveFormat('16:9');
+                if (onUpdateAnimationData && activeScene?.animationData) {
+                  onUpdateAnimationData({ ...activeScene.animationData, activeFormat: '16:9' });
+                }
+              }}
+            >
+              16:9 Landscape
+            </button>
+            <button
+              type="button"
+              style={{
+                background: activeFormat === '9:16' ? '#ec4899' : 'rgba(255, 255, 255, 0.1)',
+                border: '1px solid ' + (activeFormat === '9:16' ? '#ec4899' : 'rgba(255, 255, 255, 0.2)'),
+                color: 'white',
+                fontSize: '10px',
+                borderRadius: '4px',
+                padding: '2px 8px',
+                cursor: 'pointer',
+                fontWeight: activeFormat === '9:16' ? 600 : 400,
+              }}
+              onClick={() => {
+                setActiveFormat('9:16');
+                if (onUpdateAnimationData && activeScene?.animationData) {
+                  onUpdateAnimationData({ ...activeScene.animationData, activeFormat: '9:16' });
+                }
+              }}
+            >
+              9:16 Reel / Short
+            </button>
+            {activeFormat === '9:16' && (
+              <button
+                type="button"
+                style={{
+                  background: showSafeGuides ? 'rgba(56, 189, 248, 0.25)' : 'rgba(255, 255, 255, 0.1)',
+                  border: '1px solid ' + (showSafeGuides ? '#38bdf8' : 'rgba(255, 255, 255, 0.2)'),
+                  color: showSafeGuides ? '#7dd3fc' : '#94a3b8',
+                  fontSize: '10px',
+                  borderRadius: '4px',
+                  padding: '2px 6px',
+                  cursor: 'pointer',
+                }}
+                onClick={() => setShowSafeGuides(!showSafeGuides)}
+                title="Toggle mobile safe area guidelines"
+              >
+                Guides {showSafeGuides ? 'On' : 'Off'}
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Loading Overlay */}
@@ -327,6 +417,7 @@ export const PreviewCanvas: React.FC<PreviewCanvasProps> = ({
             animationData={effectiveAnimationData}
             currentTimeMs={currentTimeMs}
             sceneStartMs={(activeScene as any)?.startTimeMs ?? activeScene?.startMs ?? 0}
+            activeFormat={activeFormat}
             selectedInstanceId={selectedInstanceId || null}
             onSelectInstance={onSelectInstance || (() => {})}
             onUpdateInstance={onUpdateInstance || (() => {})}

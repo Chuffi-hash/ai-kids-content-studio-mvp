@@ -502,6 +502,92 @@ body.theme-light .ed-center-canvas {
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: max-width 0.2s ease, aspect-ratio 0.2s ease;
+}
+
+.ed-preview-viewport.format-16-9 {
+  aspect-ratio: 16 / 9;
+  max-width: 960px;
+}
+
+.ed-preview-viewport.format-9-16 {
+  aspect-ratio: 9 / 16;
+  max-width: 420px;
+  max-height: calc(100vh - 280px);
+}
+
+.ed-preview-viewport.format-1-1 {
+  aspect-ratio: 1 / 1;
+  max-width: 580px;
+  max-height: calc(100vh - 280px);
+}
+
+.ed-preview-viewport.format-4-5 {
+  aspect-ratio: 4 / 5;
+  max-width: 520px;
+  max-height: calc(100vh - 280px);
+}
+
+/* Mobile Reel / Shorts Safe Area Guidelines Overlay */
+.ed-safe-area-guide {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 15;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.ed-safe-area-header {
+  height: 14%;
+  border-bottom: 1px dashed rgba(244, 63, 94, 0.55);
+  background: rgba(244, 63, 94, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 600;
+  color: #fda4af;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.ed-safe-area-footer {
+  height: 24%;
+  border-top: 1px dashed rgba(244, 63, 94, 0.55);
+  background: rgba(244, 63, 94, 0.08);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #fda4af;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.ed-safe-area-center {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-left: 1px dashed rgba(56, 189, 248, 0.3);
+  border-right: 1px dashed rgba(56, 189, 248, 0.3);
+  margin: 0 5%;
+  position: relative;
+}
+
+.ed-safe-area-badge {
+  background: rgba(0, 0, 0, 0.65);
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  color: #7dd3fc;
+  font-size: 9px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 500;
 }
 
 .ed-preview-media {

@@ -622,6 +622,55 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
       baseOverlay.textColor = '#ffffff';
       baseOverlay.title = 'LESSON: OUR BLUE PLANET';
       baseOverlay.label = 'Educational Adventure';
+    } else if (type === 'rain') {
+      baseOverlay.color = '#38bdf8';
+      baseOverlay.strokeWidth = 1.8;
+      baseOverlay.title = 'Monsoon Rain';
+      baseOverlay.layerPosition = 'above_characters';
+    } else if (type === 'snowfall') {
+      baseOverlay.color = '#ffffff';
+      baseOverlay.title = 'Gentle Snowfall';
+      baseOverlay.layerPosition = 'above_characters';
+    } else if (type === 'wind') {
+      baseOverlay.color = '#e2e8f0';
+      baseOverlay.strokeWidth = 2;
+      baseOverlay.title = 'Wind Gusts';
+      baseOverlay.layerPosition = 'above_characters';
+    } else if (type === 'falling_leaves') {
+      baseOverlay.color = '#f59e0b';
+      baseOverlay.title = 'Falling Autumn Leaves';
+      baseOverlay.layerPosition = 'above_characters';
+    } else if (type === 'sunshine_rays') {
+      baseOverlay.color = '#fef08a';
+      baseOverlay.title = 'Volumetric Sunbeams';
+      baseOverlay.layerPosition = 'below_characters';
+    } else if (type === 'heat_shimmer') {
+      baseOverlay.color = '#fde047';
+      baseOverlay.y = 480;
+      baseOverlay.title = 'Summer Heat Shimmer';
+      baseOverlay.layerPosition = 'above_characters';
+    } else if (type === 'fog_mist') {
+      baseOverlay.color = '#f8fafc';
+      baseOverlay.y = 520;
+      baseOverlay.title = 'Morning Fog & Mist';
+      baseOverlay.layerPosition = 'below_characters';
+    } else if (type === 'lightning') {
+      baseOverlay.color = '#ffffff';
+      baseOverlay.title = 'Thunder Lightning Flash';
+      baseOverlay.layerPosition = 'above_characters';
+    } else if (type === 'water_splashes') {
+      baseOverlay.x = 640;
+      baseOverlay.y = 540;
+      baseOverlay.radius = 40;
+      baseOverlay.color = '#38bdf8';
+      baseOverlay.title = 'Water Splashes';
+      baseOverlay.layerPosition = 'above_characters';
+    } else if (type === 'butterflies') {
+      baseOverlay.x = 300;
+      baseOverlay.y = 400;
+      baseOverlay.color = '#f43f5e';
+      baseOverlay.title = 'Fluttering Butterflies';
+      baseOverlay.layerPosition = 'above_characters';
     }
 
     if (onAddOverlay) {

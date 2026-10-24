@@ -52,6 +52,16 @@ export const OverlayInspector: React.FC<OverlayInspectorProps> = ({
       case 'flying_birds': return '🦅';
       case 'moving_clouds': return '☁️';
       case 'title_card': return '🎬';
+      case 'rain': return '🌧️';
+      case 'snowfall': return '❄️';
+      case 'wind': return '💨';
+      case 'falling_leaves': return '🍂';
+      case 'sunshine_rays': return '☀️';
+      case 'heat_shimmer': return '♨️';
+      case 'fog_mist': return '🌫️';
+      case 'lightning': return '⚡';
+      case 'water_splashes': return '💦';
+      case 'butterflies': return '🦋';
       default: return '✨';
     }
   };
@@ -69,7 +79,41 @@ export const OverlayInspector: React.FC<OverlayInspectorProps> = ({
       case 'flying_birds': return 'Flying Birds';
       case 'moving_clouds': return 'Moving Clouds';
       case 'title_card': return 'Title Card';
+      case 'rain': return 'Monsoon Rain';
+      case 'snowfall': return 'Winter Snowfall';
+      case 'wind': return 'Wind Gusts';
+      case 'falling_leaves': return 'Autumn Leaves';
+      case 'sunshine_rays': return 'Sunbeams';
+      case 'heat_shimmer': return 'Heat Shimmer';
+      case 'fog_mist': return 'Morning Fog';
+      case 'lightning': return 'Lightning';
+      case 'water_splashes': return 'Water Splash';
+      case 'butterflies': return 'Butterflies';
       default: return 'Overlay';
+    }
+  };
+
+  const handleApplyPreset = (preset: string) => {
+    if (preset === 'monsoon') {
+      onAddOverlay('rain');
+      onAddOverlay('moving_clouds');
+      onAddOverlay('water_splashes');
+    } else if (preset === 'winter') {
+      onAddOverlay('snowfall');
+      onAddOverlay('fog_mist');
+    } else if (preset === 'summer') {
+      onAddOverlay('sunshine_rays');
+      onAddOverlay('heat_shimmer');
+    } else if (preset === 'autumn') {
+      onAddOverlay('falling_leaves');
+      onAddOverlay('flying_birds');
+    } else if (preset === 'spotlight') {
+      onAddOverlay('spotlight');
+      onAddOverlay('highlight_ring');
+    } else if (preset === 'location') {
+      onAddOverlay('location_pin');
+      onAddOverlay('highlight_ring');
+      onAddOverlay('callout_label');
     }
   };
 
@@ -77,113 +121,96 @@ export const OverlayInspector: React.FC<OverlayInspectorProps> = ({
     <div className="overlay-inspector" style={{ display: 'flex', flexDirection: 'column', gap: '14px', fontSize: '12px' }}>
       {/* 1. Header & Add Overlay Buttons */}
       <div style={{ background: 'var(--ed-surface-elevated, #161f33)', padding: '12px', borderRadius: '8px', border: '1px solid var(--ed-border, #1e293b)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
           <span style={{ fontWeight: 600, color: 'var(--ed-text, #f8fafc)', fontSize: '13px' }}>
-            Educational Overlays & VFX ({overlays.length})
+            Visual Effects & Overlays ({overlays.length})
           </span>
         </div>
 
-        {/* Quick Add Buttons */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
-          <button
-            type="button"
-            className="ed-tool-btn"
-            style={{ padding: '6px 4px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'center' }}
-            onClick={() => onAddOverlay('location_pin')}
-            title="Add a geographic map pin / marker"
-          >
-            <span>📍</span> Pin
-          </button>
-          <button
-            type="button"
-            className="ed-tool-btn"
-            style={{ padding: '6px 4px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'center' }}
-            onClick={() => onAddOverlay('route_line')}
-            title="Add an animated drawing route line"
-          >
-            <span>〰️</span> Route
-          </button>
-          <button
-            type="button"
-            className="ed-tool-btn"
-            style={{ padding: '6px 4px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'center' }}
-            onClick={() => onAddOverlay('highlight_ring')}
-            title="Add a pulsing area highlight circle"
-          >
-            <span>⭕</span> Ring
-          </button>
-          <button
-            type="button"
-            className="ed-tool-btn"
-            style={{ padding: '6px 4px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'center' }}
-            onClick={() => onAddOverlay('arrow_pointer')}
-            title="Add an arrow pointer to direct attention"
-          >
-            <span>↗️</span> Arrow
-          </button>
-          <button
-            type="button"
-            className="ed-tool-btn"
-            style={{ padding: '6px 4px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'center' }}
-            onClick={() => onAddOverlay('callout_label')}
-            title="Add an educational title or callout badge"
-          >
-            <span>🏷️</span> Callout
-          </button>
-          <button
-            type="button"
-            className="ed-tool-btn"
-            style={{ padding: '6px 4px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'center' }}
-            onClick={() => onAddOverlay('spotlight')}
-            title="Add a dramatic stage spotlight beam"
-          >
-            <span>🔦</span> Spotlight
-          </button>
-          <button
-            type="button"
-            className="ed-tool-btn"
-            style={{ padding: '6px 4px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'center' }}
-            onClick={() => onAddOverlay('glow')}
-            title="Add a soft pulsing atmospheric aura"
-          >
-            <span>💫</span> Glow
-          </button>
-          <button
-            type="button"
-            className="ed-tool-btn"
-            style={{ padding: '6px 4px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'center' }}
-            onClick={() => onAddOverlay('sparkles')}
-            title="Add twinkling star particles"
-          >
-            <span>✨</span> Sparkles
-          </button>
-          <button
-            type="button"
-            className="ed-tool-btn"
-            style={{ padding: '6px 4px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'center' }}
-            onClick={() => onAddOverlay('flying_birds')}
-            title="Add animated flying birds in the sky"
-          >
-            <span>🦅</span> Birds
-          </button>
-          <button
-            type="button"
-            className="ed-tool-btn"
-            style={{ padding: '6px 4px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'center' }}
-            onClick={() => onAddOverlay('moving_clouds')}
-            title="Add drifting clouds across scene"
-          >
-            <span>☁️</span> Clouds
-          </button>
-          <button
-            type="button"
-            className="ed-tool-btn"
-            style={{ padding: '6px 4px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'center', gridColumn: 'span 2' }}
-            onClick={() => onAddOverlay('title_card')}
-            title="Add a cinematic topic title or banner"
-          >
-            <span>🎬</span> Title Card
-          </button>
+        {/* Atmosphere & Weather Presets */}
+        <div style={{ marginBottom: '10px' }}>
+          <div style={{ fontSize: '10px', color: '#c4b5fd', fontWeight: 600, textTransform: 'uppercase', marginBottom: '4px' }}>
+            ⚡ One-Click Presets
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '4px' }}>
+            <button
+              type="button"
+              className="ed-tool-btn"
+              style={{ padding: '4px 2px', fontSize: '10px' }}
+              onClick={() => handleApplyPreset('summer')}
+              title="Add Sunny Summer effect preset (Sunbeams + Heat Shimmer)"
+            >
+              ☀️ Summer
+            </button>
+            <button
+              type="button"
+              className="ed-tool-btn"
+              style={{ padding: '4px 2px', fontSize: '10px' }}
+              onClick={() => handleApplyPreset('monsoon')}
+              title="Add Monsoon Rain preset (Rain + Clouds + Splash)"
+            >
+              🌧️ Monsoon
+            </button>
+            <button
+              type="button"
+              className="ed-tool-btn"
+              style={{ padding: '4px 2px', fontSize: '10px' }}
+              onClick={() => handleApplyPreset('winter')}
+              title="Add Snowy Winter preset (Snowfall + Mist)"
+            >
+              ❄️ Winter
+            </button>
+            <button
+              type="button"
+              className="ed-tool-btn"
+              style={{ padding: '4px 2px', fontSize: '10px' }}
+              onClick={() => handleApplyPreset('autumn')}
+              title="Add Autumn Leaves preset (Leaves + Birds)"
+            >
+              🍂 Autumn
+            </button>
+            <button
+              type="button"
+              className="ed-tool-btn"
+              style={{ padding: '4px 2px', fontSize: '10px' }}
+              onClick={() => handleApplyPreset('spotlight')}
+              title="Add Stage Focus preset (Spotlight + Ring)"
+            >
+              🔦 Focus
+            </button>
+            <button
+              type="button"
+              className="ed-tool-btn"
+              style={{ padding: '4px 2px', fontSize: '10px' }}
+              onClick={() => handleApplyPreset('location')}
+              title="Add Map Landmark preset (Pin + Ring + Callout)"
+            >
+              📍 Map Mark
+            </button>
+          </div>
+        </div>
+
+        {/* Quick Add Individual Elements */}
+        <div style={{ fontSize: '10px', color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', marginBottom: '4px' }}>
+          Add Element
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '4px' }}>
+          <button type="button" className="ed-tool-btn" style={{ padding: '5px 2px', fontSize: '10px' }} onClick={() => onAddOverlay('rain')}>🌧️ Rain</button>
+          <button type="button" className="ed-tool-btn" style={{ padding: '5px 2px', fontSize: '10px' }} onClick={() => onAddOverlay('snowfall')}>❄️ Snow</button>
+          <button type="button" className="ed-tool-btn" style={{ padding: '5px 2px', fontSize: '10px' }} onClick={() => onAddOverlay('sunshine_rays')}>☀️ Sun</button>
+          <button type="button" className="ed-tool-btn" style={{ padding: '5px 2px', fontSize: '10px' }} onClick={() => onAddOverlay('falling_leaves')}>🍂 Leaves</button>
+          <button type="button" className="ed-tool-btn" style={{ padding: '5px 2px', fontSize: '10px' }} onClick={() => onAddOverlay('moving_clouds')}>☁️ Clouds</button>
+          <button type="button" className="ed-tool-btn" style={{ padding: '5px 2px', fontSize: '10px' }} onClick={() => onAddOverlay('flying_birds')}>🦅 Birds</button>
+          <button type="button" className="ed-tool-btn" style={{ padding: '5px 2px', fontSize: '10px' }} onClick={() => onAddOverlay('spotlight')}>🔦 Spot</button>
+          <button type="button" className="ed-tool-btn" style={{ padding: '5px 2px', fontSize: '10px' }} onClick={() => onAddOverlay('glow')}>💫 Glow</button>
+          <button type="button" className="ed-tool-btn" style={{ padding: '5px 2px', fontSize: '10px' }} onClick={() => onAddOverlay('sparkles')}>✨ Sparkle</button>
+          <button type="button" className="ed-tool-btn" style={{ padding: '5px 2px', fontSize: '10px' }} onClick={() => onAddOverlay('butterflies')}>🦋 Butterfly</button>
+          <button type="button" className="ed-tool-btn" style={{ padding: '5px 2px', fontSize: '10px' }} onClick={() => onAddOverlay('lightning')}>⚡ Bolt</button>
+          <button type="button" className="ed-tool-btn" style={{ padding: '5px 2px', fontSize: '10px' }} onClick={() => onAddOverlay('location_pin')}>📍 Pin</button>
+          <button type="button" className="ed-tool-btn" style={{ padding: '5px 2px', fontSize: '10px' }} onClick={() => onAddOverlay('route_line')}>〰️ Route</button>
+          <button type="button" className="ed-tool-btn" style={{ padding: '5px 2px', fontSize: '10px' }} onClick={() => onAddOverlay('highlight_ring')}>⭕ Ring</button>
+          <button type="button" className="ed-tool-btn" style={{ padding: '5px 2px', fontSize: '10px' }} onClick={() => onAddOverlay('arrow_pointer')}>↗️ Arrow</button>
+          <button type="button" className="ed-tool-btn" style={{ padding: '5px 2px', fontSize: '10px' }} onClick={() => onAddOverlay('title_card')}>🎬 Title</button>
         </div>
       </div>
 
