@@ -1,10 +1,12 @@
 import React, { useRef } from 'react';
-import { VectorSceneData, CharacterInstance, MotionPath } from '../../../types/animation';
+import { VectorSceneData, CharacterInstance, MotionPath, EducationalOverlay } from '../../../types/animation';
 import { getVectorRig } from '../../../assets/characters/defaultCharacters';
 import { buildRigFromAppearance } from '../../../utils/customCharacterRig';
 import { evaluateCharacterPose } from '../../../utils/animationEngine';
 import { VectorCharacterRenderer } from './VectorCharacterRenderer';
 import { TransformGizmo } from './TransformGizmo';
+import { OverlayGizmo } from './OverlayGizmo';
+import { renderEducationalOverlayXml } from '../../../utils/educationalOverlayRenderer';
 import { resolveAssetUrl } from '../../../utils/urlHelper';
 
 interface VectorSceneCanvasProps {
@@ -14,6 +16,9 @@ interface VectorSceneCanvasProps {
   selectedInstanceId: string | null;
   onSelectInstance: (instanceId: string | null) => void;
   onUpdateInstance: (instanceId: string, updates: Partial<CharacterInstance>) => void;
+  selectedOverlayId?: string | null;
+  onSelectOverlay?: (overlayId: string | null) => void;
+  onUpdateOverlay?: (overlayId: string, updates: Partial<EducationalOverlay>) => void;
   onUpdateAnimationData?: (newData: VectorSceneData) => void;
 }
 
@@ -24,6 +29,9 @@ export const VectorSceneCanvas: React.FC<VectorSceneCanvasProps> = ({
   selectedInstanceId,
   onSelectInstance,
   onUpdateInstance,
+  selectedOverlayId,
+  onSelectOverlay,
+  onUpdateOverlay,
   onUpdateAnimationData,
 }) => {
   const svgRef = useRef<SVGSVGElement | null>(null);
@@ -31,6 +39,15 @@ export const VectorSceneCanvas: React.FC<VectorSceneCanvasProps> = ({
   const sceneRelativeMs = Math.max(0, currentTimeMs - sceneStartMs);
   const instances = animationData.characterInstances || [];
   const clips = animationData.animationClips || [];
+  const overlays = animationData.overlays || [];
+
+  const belowCharacterOverlays = overlays.filter(
+    (o) => o.layerPosition === 'below_characters' || (o.zIndex !== undefined && o.zIndex < 0)
+  );
+  const aboveCharacterOverlays = overlays.filter(
+    (o) => o.layerPosition !== 'below_characters' && (o.zIndex === undefined || o.zIndex >= 0)
+  );
+  const selectedOverlay = overlays.find((o) => o.id === selectedOverlayId) || null;
 
   // Sort instances by zIndex ascending
   const sortedInstances = [...instances].sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
@@ -51,8 +68,10 @@ export const VectorSceneCanvas: React.FC<VectorSceneCanvasProps> = ({
 
   // Handle clicking on background to deselect
   const handleSvgClick = (e: React.MouseEvent) => {
-    if (e.target === svgRef.current || (e.target as Element).id === 'scene-background-rect') {
+    const targetEl = e.target as Element;
+    if (targetEl === svgRef.current || targetEl.id === 'scene-background-rect' || targetEl.id === 'scene-background-image' || targetEl.id === 'scene-background-backdrop') {
       onSelectInstance(null);
+      onSelectOverlay?.(null);
     }
   };
 
@@ -118,7 +137,26 @@ export const VectorSceneCanvas: React.FC<VectorSceneCanvasProps> = ({
         </g>
       )}
 
-      {/* 2. Character Instances Layer */}
+      {/* 2. Below-Characters Overlays Layer */}
+      {belowCharacterOverlays.map((overlay) => {
+        const svgXml = renderEducationalOverlayXml(overlay, sceneRelativeMs);
+        if (!svgXml) return null;
+        return (
+          <g
+            key={overlay.id}
+            className={`interactive-overlay-group ${selectedOverlayId === overlay.id ? 'selected' : ''}`}
+            style={{ cursor: 'pointer' }}
+            onClick={(e) => {
+              e.stopPropagation();
+              onSelectOverlay?.(overlay.id);
+              onSelectInstance(null);
+            }}
+            dangerouslySetInnerHTML={{ __html: svgXml }}
+          />
+        );
+      })}
+
+      {/* 3. Character Instances Layer */}
       {sortedInstances.map((instance) => {
         const isSelected = instance.instanceId === selectedInstanceId;
         const hasHeadTags = instance.customRig?.parts?.head?.shapes?.some(
@@ -158,13 +196,33 @@ export const VectorSceneCanvas: React.FC<VectorSceneCanvasProps> = ({
               onClick={(e) => {
                 e.stopPropagation();
                 onSelectInstance(instance.instanceId);
+                onSelectOverlay?.(null);
               }}
             />
           </g>
         );
       })}
 
-      {/* 3. Interactive Transform Gizmo Overlay */}
+      {/* 4. Above-Characters Overlays Layer */}
+      {aboveCharacterOverlays.map((overlay) => {
+        const svgXml = renderEducationalOverlayXml(overlay, sceneRelativeMs);
+        if (!svgXml) return null;
+        return (
+          <g
+            key={overlay.id}
+            className={`interactive-overlay-group ${selectedOverlayId === overlay.id ? 'selected' : ''}`}
+            style={{ cursor: 'pointer' }}
+            onClick={(e) => {
+              e.stopPropagation();
+              onSelectOverlay?.(overlay.id);
+              onSelectInstance(null);
+            }}
+            dangerouslySetInnerHTML={{ __html: svgXml }}
+          />
+        );
+      })}
+
+      {/* 5. Interactive Transform Gizmo Overlay */}
       {selectedInstance && (
         <TransformGizmo
           instance={selectedInstance}
@@ -185,6 +243,14 @@ export const VectorSceneCanvas: React.FC<VectorSceneCanvasProps> = ({
           motionPath={selectedMotionPath}
           onUpdateInstance={(updates) => onUpdateInstance(selectedInstance.instanceId, updates)}
           onUpdateMotionPath={handleUpdateMotionPath}
+        />
+      )}
+
+      {/* 6. Interactive Overlay Gizmo */}
+      {selectedOverlay && onUpdateOverlay && (
+        <OverlayGizmo
+          overlay={selectedOverlay}
+          onUpdateOverlay={(updates) => onUpdateOverlay(selectedOverlay.id, updates)}
         />
       )}
     </svg>

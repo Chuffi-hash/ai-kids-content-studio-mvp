@@ -38,6 +38,9 @@ interface PreviewCanvasProps {
   selectedInstanceId?: string | null;
   onSelectInstance?: (instanceId: string | null) => void;
   onUpdateInstance?: (instanceId: string, updates: Partial<CharacterInstance>) => void;
+  selectedOverlayId?: string | null;
+  onSelectOverlay?: (overlayId: string | null) => void;
+  onUpdateOverlay?: (overlayId: string, updates: any) => void;
   onUpdateAnimationData?: (newData: VectorSceneData) => void;
 }
 
@@ -63,6 +66,9 @@ export const PreviewCanvas: React.FC<PreviewCanvasProps> = ({
   selectedInstanceId,
   onSelectInstance,
   onUpdateInstance,
+  selectedOverlayId,
+  onSelectOverlay,
+  onUpdateOverlay,
   onUpdateAnimationData,
 }) => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -324,6 +330,9 @@ export const PreviewCanvas: React.FC<PreviewCanvasProps> = ({
             selectedInstanceId={selectedInstanceId || null}
             onSelectInstance={onSelectInstance || (() => {})}
             onUpdateInstance={onUpdateInstance || (() => {})}
+            selectedOverlayId={selectedOverlayId || null}
+            onSelectOverlay={onSelectOverlay}
+            onUpdateOverlay={onUpdateOverlay}
             onUpdateAnimationData={onUpdateAnimationData}
           />
         ) : activeScene?.videoUrl && !forceStillPreview ? (

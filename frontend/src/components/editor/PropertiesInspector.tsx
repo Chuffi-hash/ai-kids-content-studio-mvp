@@ -7,8 +7,9 @@ import {
   formatTimeMs,
 } from '../../utils/timingEngine';
 import { resolveAssetUrl } from '../../utils/urlHelper';
-import { CharacterInstance, VectorSceneData } from '../../types/animation';
+import { CharacterInstance, VectorSceneData, EducationalOverlay, EducationalOverlayType } from '../../types/animation';
 import { CharacterAnimationInspector } from './animation/CharacterAnimationInspector';
+import { OverlayInspector } from './animation/OverlayInspector';
 import {
   getTTSVoices,
   previewVoice,
@@ -77,6 +78,13 @@ interface PropertiesInspectorProps {
   onRemoveCharacterFromScene?: (sceneId: string, instanceId: string) => void;
   isRippleOn?: boolean;
   onToggleRipple?: () => void;
+
+  selectedOverlayId?: string | null;
+  onSelectOverlay?: (overlayId: string | null) => void;
+  onUpdateOverlay?: (overlayId: string, updates: Partial<EducationalOverlay>) => void;
+  onAddOverlay?: (sceneId: string, overlay: EducationalOverlay) => void;
+  onDeleteOverlay?: (sceneId: string, overlayId: string) => void;
+  onReorderOverlays?: (sceneId: string, overlays: EducationalOverlay[]) => void;
 }
 
 export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
@@ -109,6 +117,12 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
   onRemoveCharacterFromScene,
   isRippleOn,
   onToggleRipple,
+  selectedOverlayId,
+  onSelectOverlay,
+  onUpdateOverlay,
+  onAddOverlay,
+  onDeleteOverlay,
+  onReorderOverlays,
 }) => {
   if (!scene) {
     return (
@@ -464,7 +478,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
   const canSplitAtPlayhead =
     playheadMs > scene.startMs + 500 && playheadMs < scene.endMs - 500;
 
-  const [activeInspectorTab, setActiveInspectorTab] = useState<'scene' | 'animation'>('scene');
+  const [activeInspectorTab, setActiveInspectorTab] = useState<'scene' | 'animation' | 'overlays'>('scene');
 
   useEffect(() => {
     if (selectedInstanceId) {
@@ -472,8 +486,161 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
     }
   }, [selectedInstanceId]);
 
+  useEffect(() => {
+    if (selectedOverlayId) {
+      setActiveInspectorTab('overlays');
+    }
+  }, [selectedOverlayId]);
+
   const characterInstances = scene.animationData?.characterInstances || [];
   const selectedCharacterInstance = characterInstances.find((i) => i.instanceId === selectedInstanceId) || null;
+
+  const currentAnimationData: VectorSceneData = scene.animationData || {
+    version: 1,
+    viewport: { width: 1280, height: 720 },
+    characterInstances: [],
+    animationClips: [],
+  };
+
+  const overlays = currentAnimationData.overlays || [];
+
+  const handleAddOverlayByType = (type: EducationalOverlayType) => {
+    const id = `overlay-${type}-${Date.now().toString(36)}`;
+    const baseOverlay: EducationalOverlay = {
+      id,
+      type,
+      x: 640,
+      y: 360,
+      startMs: 0,
+      durationMs: durationMs,
+      layerPosition: type === 'route_line' ? 'below_characters' : 'above_characters',
+      color: type === 'location_pin' ? '#ef4444' : type === 'route_line' ? '#38bdf8' : type === 'highlight_ring' ? '#f59e0b' : type === 'arrow_pointer' ? '#10b981' : '#ffffff',
+      title: type === 'location_pin' ? 'Location Pin' : type === 'route_line' ? 'Expedition Route' : type === 'highlight_ring' ? 'Key Region' : type === 'arrow_pointer' ? 'Point of Interest' : 'Fact Badge',
+    };
+
+    if (type === 'route_line') {
+      baseOverlay.targetX = 840;
+      baseOverlay.targetY = 260;
+      baseOverlay.strokeWidth = 4;
+      baseOverlay.progressDurationMs = Math.min(3000, durationMs);
+    } else if (type === 'highlight_ring') {
+      baseOverlay.radius = 60;
+      baseOverlay.pulseSpeedMs = 1500;
+    } else if (type === 'arrow_pointer') {
+      baseOverlay.targetX = 540;
+      baseOverlay.targetY = 260;
+      baseOverlay.strokeWidth = 4;
+    } else if (type === 'callout_label') {
+      baseOverlay.targetX = 640;
+      baseOverlay.targetY = 300;
+      baseOverlay.label = 'Mount Everest Peak';
+      baseOverlay.title = 'Elevation: 8,849 meters';
+      baseOverlay.hasConnectorLine = true;
+    } else if (type === 'location_pin') {
+      baseOverlay.icon = 'pin';
+      baseOverlay.label = 'Mount Everest';
+    }
+
+    if (onAddOverlay) {
+      onAddOverlay(scene.sceneId, baseOverlay);
+      return;
+    }
+
+    const updatedOverlays = [...overlays, baseOverlay];
+    const updatedAnimationData: VectorSceneData = {
+      ...currentAnimationData,
+      overlays: updatedOverlays,
+    };
+    if (onUpdateAnimationData) {
+      onUpdateAnimationData(scene.sceneId, updatedAnimationData);
+    }
+    onUpdateScene(scene.sceneId, { animationData: updatedAnimationData });
+    if (onSelectOverlay) onSelectOverlay(baseOverlay.id);
+  };
+
+  const handleUpdateOverlayInternal = (overlayId: string, updates: Partial<EducationalOverlay>) => {
+    if (onUpdateOverlay) {
+      onUpdateOverlay(overlayId, updates);
+      return;
+    }
+    const updatedOverlays = overlays.map((o) => (o.id === overlayId ? { ...o, ...updates } : o));
+    const updatedAnimationData: VectorSceneData = {
+      ...currentAnimationData,
+      overlays: updatedOverlays,
+    };
+    if (onUpdateAnimationData) {
+      onUpdateAnimationData(scene.sceneId, updatedAnimationData);
+    }
+    onUpdateScene(scene.sceneId, { animationData: updatedAnimationData });
+  };
+
+  const handleDeleteOverlayInternal = (overlayId: string) => {
+    if (onDeleteOverlay) {
+      onDeleteOverlay(scene.sceneId, overlayId);
+      return;
+    }
+    const updatedOverlays = overlays.filter((o) => o.id !== overlayId);
+    const updatedAnimationData: VectorSceneData = {
+      ...currentAnimationData,
+      overlays: updatedOverlays,
+    };
+    if (onUpdateAnimationData) {
+      onUpdateAnimationData(scene.sceneId, updatedAnimationData);
+    }
+    onUpdateScene(scene.sceneId, { animationData: updatedAnimationData });
+    if (selectedOverlayId === overlayId && onSelectOverlay) {
+      onSelectOverlay(null);
+    }
+  };
+
+  const handleDuplicateOverlayInternal = (overlayId: string) => {
+    const target = overlays.find((o) => o.id === overlayId);
+    if (!target) return;
+    const duplicated: EducationalOverlay = {
+      ...target,
+      id: `overlay-${target.type}-${Date.now().toString(36)}`,
+      x: target.x + 20,
+      y: target.y + 20,
+      ...(target.targetX !== undefined ? { targetX: target.targetX + 20 } : {}),
+      ...(target.targetY !== undefined ? { targetY: target.targetY + 20 } : {}),
+      title: `${target.title || target.type} (Copy)`,
+    };
+    const updatedOverlays = [...overlays, duplicated];
+    const updatedAnimationData: VectorSceneData = {
+      ...currentAnimationData,
+      overlays: updatedOverlays,
+    };
+    if (onUpdateAnimationData) {
+      onUpdateAnimationData(scene.sceneId, updatedAnimationData);
+    }
+    onUpdateScene(scene.sceneId, { animationData: updatedAnimationData });
+    if (onSelectOverlay) onSelectOverlay(duplicated.id);
+  };
+
+  const handleReorderOverlayDirection = (overlayId: string, direction: 'up' | 'down') => {
+    const idx = overlays.findIndex((o) => o.id === overlayId);
+    if (idx === -1) return;
+    if (direction === 'up' && idx === 0) return;
+    if (direction === 'down' && idx === overlays.length - 1) return;
+
+    const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
+    const reordered = [...overlays];
+    const [moved] = reordered.splice(idx, 1);
+    reordered.splice(targetIdx, 0, moved);
+
+    if (onReorderOverlays) {
+      onReorderOverlays(scene.sceneId, reordered);
+      return;
+    }
+    const updatedAnimationData: VectorSceneData = {
+      ...currentAnimationData,
+      overlays: reordered,
+    };
+    if (onUpdateAnimationData) {
+      onUpdateAnimationData(scene.sceneId, updatedAnimationData);
+    }
+    onUpdateScene(scene.sceneId, { animationData: updatedAnimationData });
+  };
 
   return (
     <aside className="ed-inspector">
@@ -526,7 +693,26 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
             onClick={() => setActiveInspectorTab('animation')}
           >
             <SparklesIcon size={12} />
-            <span>2D Animation ({characterInstances.length})</span>
+            <span>2D Rig ({characterInstances.length})</span>
+          </button>
+          <button
+            type="button"
+            className="ed-tool-btn"
+            style={{
+              flex: 1,
+              justifyContent: 'center',
+              fontSize: '11px',
+              background: activeInspectorTab === 'overlays' ? 'var(--ed-surface-elevated)' : 'transparent',
+              color: activeInspectorTab === 'overlays' ? '#67e8f9' : 'var(--ed-text-muted)',
+              fontWeight: activeInspectorTab === 'overlays' ? 600 : 400,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+            }}
+            onClick={() => setActiveInspectorTab('overlays')}
+          >
+            <span>📍</span>
+            <span>Overlays ({overlays.length})</span>
           </button>
         </div>
       </div>
@@ -662,6 +848,22 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
               </div>
             </div>
           )}
+        </div>
+      ) : activeInspectorTab === 'overlays' ? (
+        <div className="ed-inspector-content">
+          <OverlayInspector
+            animationData={currentAnimationData}
+            selectedOverlayId={selectedOverlayId || null}
+            onSelectOverlay={(id) => {
+              if (onSelectOverlay) onSelectOverlay(id);
+            }}
+            onAddOverlay={handleAddOverlayByType}
+            onUpdateOverlay={handleUpdateOverlayInternal}
+            onDeleteOverlay={handleDeleteOverlayInternal}
+            onDuplicateOverlay={handleDuplicateOverlayInternal}
+            onReorderOverlay={handleReorderOverlayDirection}
+            playheadMs={playheadMs}
+          />
         </div>
       ) : (
         <div className="ed-inspector-content">

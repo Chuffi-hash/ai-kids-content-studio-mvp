@@ -17,6 +17,13 @@ import {
   CustomCharacterAppearance,
 } from './templates/custom-character-rig.js';
 import { getHeadShapesForPose } from './face-renderer.js';
+import {
+  EducationalOverlay,
+  EducationalOverlayType,
+  renderEducationalOverlayXml,
+} from './educational-overlay.renderer.js';
+
+export type { EducationalOverlay, EducationalOverlayType };
 
 export interface MotionPath {
   startX: number;
@@ -124,6 +131,7 @@ export interface VectorSceneData {
   animationClips: AnimationClip[];
   expressionCues?: ExpressionCue[];
   dialogueLines?: SceneDialogue[];
+  overlays?: EducationalOverlay[];
 }
 
 export interface EvaluatedPose {
@@ -626,14 +634,34 @@ export class VectorAnimationEngine {
       })
       .join('\n');
 
+    const overlays = animationData.overlays || [];
+    const belowCharacterOverlays = overlays.filter(
+      (o) => o.layerPosition === 'below_characters' || (o.zIndex !== undefined && o.zIndex < 0)
+    );
+    const aboveCharacterOverlays = overlays.filter(
+      (o) => o.layerPosition !== 'below_characters' && (o.zIndex === undefined || o.zIndex >= 0)
+    );
+
+    const belowOverlaysXml = belowCharacterOverlays
+      .map((o) => renderEducationalOverlayXml(o, sceneRelativeMs))
+      .filter(Boolean)
+      .join('\n');
+
+    const aboveOverlaysXml = aboveCharacterOverlays
+      .map((o) => renderEducationalOverlayXml(o, sceneRelativeMs))
+      .filter(Boolean)
+      .join('\n');
+
     return `
       <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">
         <g id="background-layer">
           ${backgroundXml}
         </g>
+        ${belowOverlaysXml ? `<g id="below-characters-overlays-layer">\n${belowOverlaysXml}\n</g>` : ''}
         <g id="characters-layer">
           ${charactersXml}
         </g>
+        ${aboveOverlaysXml ? `<g id="above-characters-overlays-layer">\n${aboveOverlaysXml}\n</g>` : ''}
       </svg>
     `.trim();
   }
