@@ -71,6 +71,10 @@ export class KokoroTTSProvider implements TTSProvider {
     } catch (e) {
       // Fallback default list if script fails to execute
       return [
+        { id: 'hf_alpha', name: 'Alpha (Hindi Female - Clear & Storyteller)', gender: 'female', lang: 'hi', accent: 'Hindi' },
+        { id: 'hf_beta', name: 'Beta (Hindi Female - Expressive & Warm)', gender: 'female', lang: 'hi', accent: 'Hindi' },
+        { id: 'hm_omega', name: 'Omega (Hindi Male - Resonant & Warm)', gender: 'male', lang: 'hi', accent: 'Hindi' },
+        { id: 'hm_psi', name: 'Psi (Hindi Male - Deep & Storyteller)', gender: 'male', lang: 'hi', accent: 'Hindi' },
         { id: 'af_heart', name: 'Heart (Warm & Expressive)', gender: 'female', lang: 'en-us', accent: 'American' },
         { id: 'af_bella', name: 'Bella (Gentle & Clear)', gender: 'female', lang: 'en-us', accent: 'American' },
         { id: 'af_sarah', name: 'Sarah (Friendly Narration)', gender: 'female', lang: 'en-us', accent: 'American' },
@@ -93,10 +97,12 @@ export class KokoroTTSProvider implements TTSProvider {
       throw new Error('Text is required for TTS speech synthesis');
     }
 
-    const voice = options?.voice || 'af_heart';
-    const lang = options?.lang || (voice.startsWith('b') ? 'en-gb' : 'en-us');
+    const voice = options?.voice || ((options?.lang && options.lang.toLowerCase().includes('hi')) ? 'hf_alpha' : 'af_heart');
+    const lang = options?.lang || (voice.startsWith('h') ? 'hi' : (voice.startsWith('b') ? 'en-gb' : 'en-us'));
     const speed = Math.max(0.5, Math.min(2.0, options?.speed || 1.0));
     const effect = options?.effect || 'normal';
+    const sentencePause = options?.sentencePause !== undefined ? options.sentencePause : 0.25;
+    const clausePause = options?.clausePause !== undefined ? options.clausePause : 0.10;
 
     const tempDir = path.join(process.cwd(), 'storage', 'temp');
     if (!fs.existsSync(tempDir)) {
@@ -116,6 +122,8 @@ export class KokoroTTSProvider implements TTSProvider {
           '--voice', voice,
           '--speed', speed.toString(),
           '--lang', lang,
+          '--sentence-pause', sentencePause.toString(),
+          '--clause-pause', clausePause.toString(),
           '--output', rawFile,
           '--model-dir', this.modelDir,
         ],

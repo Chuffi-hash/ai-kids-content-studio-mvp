@@ -7,7 +7,7 @@ import {
   formatTimeMs,
 } from '../../utils/timingEngine';
 import { resolveAssetUrl } from '../../utils/urlHelper';
-import { CharacterInstance, VectorSceneData, EducationalOverlay, EducationalOverlayType } from '../../types/animation';
+import { CharacterInstance, VectorSceneData, EducationalOverlay, EducationalOverlayType, SpeakingEmotion } from '../../types/animation';
 import { CharacterAnimationInspector } from './animation/CharacterAnimationInspector';
 import { OverlayInspector } from './animation/OverlayInspector';
 import {
@@ -22,6 +22,7 @@ import {
   StoryBackgroundImage,
   generateAllSceneDialogueAudios,
 } from '../../services/editor.service';
+import { EMOTION_OPTIONS } from '../../utils/emotionSuggester';
 import {
   AlertTriangleIcon,
   CheckIcon,
@@ -55,8 +56,9 @@ interface PropertiesInspectorProps {
       provider?: string;
       voice?: string;
       speed?: number;
-      effect?: 'normal' | 'robot' | 'cartoon';
+      effect?: 'normal' | 'robot' | 'cartoon' | 'whisper' | 'shout';
       lang?: string;
+      emotion?: string;
     }
   ) => Promise<void>;
   onRemoveVoice?: (sceneId: string) => Promise<void>;
@@ -184,10 +186,11 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
   const [ttsVoices, setTtsVoices] = useState<SupportedVoice[]>([]);
   const [isKokoroAvailable, setIsKokoroAvailable] = useState<boolean>(true);
   const [selectedProvider, setSelectedProvider] = useState<'kokoro' | 'google'>('kokoro');
-  const [selectedLanguage, setSelectedLanguage] = useState<string>('en-us');
-  const [selectedVoice, setSelectedVoice] = useState<string>('af_heart');
+  const [selectedLanguage, setSelectedLanguage] = useState<string>('hi');
+  const [selectedVoice, setSelectedVoice] = useState<string>('hf_alpha');
+  const [voiceEmotion, setVoiceEmotion] = useState<SpeakingEmotion>('neutral');
   const [voiceSpeed, setVoiceSpeed] = useState<number>(1.0);
-  const [voiceEffect, setVoiceEffect] = useState<'normal' | 'robot' | 'cartoon'>('normal');
+  const [voiceEffect, setVoiceEffect] = useState<'normal' | 'robot' | 'cartoon' | 'whisper' | 'shout'>('normal');
 
   // Preview state
   const [isPreviewingVoice, setIsPreviewingVoice] = useState<boolean>(false);
@@ -203,8 +206,8 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
         setIsKokoroAvailable(data.isKokoroAvailable);
         setSelectedProvider(data.isKokoroAvailable ? 'kokoro' : 'google');
         if (data.voices.length > 0) {
-          const hasAfHeart = data.voices.some((v) => v.id === 'af_heart');
-          setSelectedVoice(hasAfHeart ? 'af_heart' : data.voices[0].id);
+          const hasHfAlpha = data.voices.some((v) => v.id === 'hf_alpha');
+          setSelectedVoice(hasHfAlpha ? 'hf_alpha' : data.voices[0].id);
         }
       })
       .catch((err) => console.warn('Could not load TTS voices:', err));
@@ -221,6 +224,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
         speed: voiceSpeed,
         effect: voiceEffect,
         lang: selectedLanguage,
+        emotion: voiceEmotion,
       });
       setPreviewAudioUrl(res.audioUrl);
       setTimeout(() => {
@@ -243,6 +247,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
       speed: voiceSpeed,
       effect: voiceEffect,
       lang: selectedLanguage,
+      emotion: voiceEmotion,
     });
   };
 
@@ -1059,12 +1064,14 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                   onChange={(e) => {
                     const l = e.target.value;
                     setSelectedLanguage(l);
-                    if (l === 'en-gb') setSelectedVoice('bf_emma');
+                    if (l === 'hi') setSelectedVoice('hf_alpha');
+                    else if (l === 'en-gb') setSelectedVoice('bf_emma');
                     else setSelectedVoice('af_heart');
                   }}
                 >
-                  <option value="en-us">English (US)</option>
-                  <option value="en-gb">English (UK)</option>
+                  <option value="hi">🇮🇳 Hindi (हिन्दी) [Default]</option>
+                  <option value="en-us">🇺🇸 English (US)</option>
+                  <option value="en-gb">🇬🇧 English (UK)</option>
                 </select>
               </div>
             </div>
@@ -1090,17 +1097,42 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                 onChange={(e) => setSelectedVoice(e.target.value)}
               >
                 {ttsVoices
-                  .filter(
-                    (v) =>
-                      !selectedLanguage ||
-                      v.lang.toLowerCase().includes(selectedLanguage.split('-')[1] || 'us') ||
-                      selectedProvider === 'google'
-                  )
+                  .filter((v) => {
+                    if (selectedLanguage === 'hi') {
+                      return v.lang === 'hi' || v.id.startsWith('hf_') || v.id.startsWith('hm_');
+                    }
+                    if (selectedLanguage === 'en-gb') {
+                      return v.lang === 'en-gb' || v.id.startsWith('bf_') || v.id.startsWith('bm_');
+                    }
+                    if (selectedLanguage === 'en-us') {
+                      return v.lang === 'en-us' || v.id.startsWith('af_') || v.id.startsWith('am_');
+                    }
+                    return true;
+                  })
                   .map((v) => (
                     <option key={v.id} value={v.id}>
                       {v.name} ({v.gender}, {v.accent || v.lang})
                     </option>
                   ))}
+              </select>
+            </div>
+
+            {/* Speaking Emotion */}
+            <div>
+              <label style={{ fontSize: '10px', color: 'var(--ed-text-muted)', display: 'block', marginBottom: '3px' }}>
+                Narrator Speaking Emotion
+              </label>
+              <select
+                className="ed-input"
+                style={{ fontSize: '11px', padding: '4px 6px', height: '30px' }}
+                value={voiceEmotion}
+                onChange={(e) => setVoiceEmotion(e.target.value as SpeakingEmotion)}
+              >
+                {EMOTION_OPTIONS.map((emo) => (
+                  <option key={emo.id} value={emo.id}>
+                    {emo.emoji} {emo.label} — {emo.desc}
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -1185,13 +1217,13 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
               <label style={{ fontSize: '10px', color: 'var(--ed-text-muted)', display: 'block', marginBottom: '4px' }}>
                 Narrator Voice Style & Audio Effect
               </label>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '4px' }}>
                 <button
                   type="button"
                   className={`ed-tool-btn ${voiceEffect === 'normal' ? 'primary' : ''}`}
                   style={{
                     fontSize: '10px',
-                    padding: '5px 4px',
+                    padding: '5px 2px',
                     justifyContent: 'center',
                     background: voiceEffect === 'normal' ? '#7c3aed' : undefined,
                     color: voiceEffect === 'normal' ? '#ffffff' : undefined,
@@ -1205,7 +1237,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                   className={`ed-tool-btn ${voiceEffect === 'robot' ? 'primary' : ''}`}
                   style={{
                     fontSize: '10px',
-                    padding: '5px 4px',
+                    padding: '5px 2px',
                     justifyContent: 'center',
                     background: voiceEffect === 'robot' ? '#7c3aed' : undefined,
                     color: voiceEffect === 'robot' ? '#ffffff' : undefined,
@@ -1220,7 +1252,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                   className={`ed-tool-btn ${voiceEffect === 'cartoon' ? 'primary' : ''}`}
                   style={{
                     fontSize: '10px',
-                    padding: '5px 4px',
+                    padding: '5px 2px',
                     justifyContent: 'center',
                     background: voiceEffect === 'cartoon' ? '#7c3aed' : undefined,
                     color: voiceEffect === 'cartoon' ? '#ffffff' : undefined,
@@ -1228,7 +1260,37 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                   onClick={() => setVoiceEffect('cartoon')}
                   title="Playful high-pitched cartoon creature"
                 >
-                  🐿️ Creature
+                  🐿️ Cartoon
+                </button>
+                <button
+                  type="button"
+                  className={`ed-tool-btn ${voiceEffect === 'whisper' ? 'primary' : ''}`}
+                  style={{
+                    fontSize: '10px',
+                    padding: '5px 2px',
+                    justifyContent: 'center',
+                    background: voiceEffect === 'whisper' ? '#7c3aed' : undefined,
+                    color: voiceEffect === 'whisper' ? '#ffffff' : undefined,
+                  }}
+                  onClick={() => setVoiceEffect('whisper')}
+                  title="Soft intimate whisper delivery"
+                >
+                  🤫 Whisper
+                </button>
+                <button
+                  type="button"
+                  className={`ed-tool-btn ${voiceEffect === 'shout' ? 'primary' : ''}`}
+                  style={{
+                    fontSize: '10px',
+                    padding: '5px 2px',
+                    justifyContent: 'center',
+                    background: voiceEffect === 'shout' ? '#7c3aed' : undefined,
+                    color: voiceEffect === 'shout' ? '#ffffff' : undefined,
+                  }}
+                  onClick={() => setVoiceEffect('shout')}
+                  title="Loud shouting projection"
+                >
+                  📢 Shout
                 </button>
               </div>
             </div>

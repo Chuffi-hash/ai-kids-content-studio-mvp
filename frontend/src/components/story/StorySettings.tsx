@@ -18,7 +18,7 @@ export interface StorySettingsProps {
 export default function StorySettings({
   ageGroup = '4-7 years',
   durationSeconds = 60,
-  language = 'English',
+  language = 'Hindi',
   audience,
   genre,
   visualStyle,
@@ -73,12 +73,12 @@ export default function StorySettings({
             value={language}
             onChange={(e) => onLanguageChange(e.target.value)}
           >
+            <option value="Hindi">Hindi (हिन्दी) [Default]</option>
             <option value="English">English</option>
             <option value="Spanish">Spanish</option>
             <option value="French">French</option>
             <option value="German">German</option>
             <option value="Japanese">Japanese</option>
-            <option value="Hindi">Hindi</option>
           </select>
         </label>
       )}

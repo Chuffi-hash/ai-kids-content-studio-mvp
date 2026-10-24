@@ -19,7 +19,7 @@ import {
 test('TTS Provider Factory - Voice Catalogue and Provider Resolution', async () => {
   const catalogue = await TTSProviderFactory.getAllVoices();
   assert.ok(Array.isArray(catalogue.voices), 'Voices should be an array');
-  assert.strictEqual(catalogue.voices.length, 27, 'Should provide 27 Kokoro voices catalogue');
+  assert.strictEqual(catalogue.voices.length, 32, 'Should provide 32 Kokoro voices catalogue (4 Hindi + 28 English)');
 
   const bella = catalogue.voices.find(v => v.id === 'af_bella');
   assert.ok(bella, 'Should contain af_bella');

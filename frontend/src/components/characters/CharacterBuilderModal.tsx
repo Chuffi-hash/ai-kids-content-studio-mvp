@@ -7,6 +7,7 @@ import {
   AnimationActionType,
   ArmLimbConfig,
   LegLimbConfig,
+  SpeakingEmotion,
 } from '../../types/animation';
 import {
   DEFAULT_APPEARANCE,
@@ -20,7 +21,54 @@ import { Character } from '../../services/character.service';
 import { previewVoice } from '../../services/editor.service';
 import { resolveAssetUrl } from '../../utils/urlHelper';
 import { CloseIcon, SparklesIcon, CheckIcon } from '../common/Icons';
+import { EMOTION_OPTIONS } from '../../utils/emotionSuggester';
 import './CharacterBuilderModal.css';
+
+export const KOKORO_VOICES_CATALOG = {
+  hindi: [
+    { id: 'hf_alpha', name: 'Alpha (Female • Clear & Storyteller)', gender: 'Female' },
+    { id: 'hf_beta', name: 'Beta (Female • Warm & Expressive)', gender: 'Female' },
+    { id: 'hm_omega', name: 'Omega (Male • Resonant & Warm)', gender: 'Male' },
+    { id: 'hm_psi', name: 'Psi (Male • Deep & Storyteller)', gender: 'Male' },
+  ],
+  english: [
+    // American Female
+    { id: 'af_heart', name: 'Heart (Warm & Expressive)', group: 'US Female' },
+    { id: 'af_bella', name: 'Bella (Gentle & Clear)', group: 'US Female' },
+    { id: 'af_sarah', name: 'Sarah (Storyteller)', group: 'US Female' },
+    { id: 'af_nova', name: 'Nova (Bright & Cheerful)', group: 'US Female' },
+    { id: 'af_sky', name: 'Sky (Playful Youth)', group: 'US Female' },
+    { id: 'af_alloy', name: 'Alloy (Energetic)', group: 'US Female' },
+    { id: 'af_jessica', name: 'Jessica (Conversational)', group: 'US Female' },
+    { id: 'af_river', name: 'River (Calm & Soothing)', group: 'US Female' },
+    { id: 'af_nicole', name: 'Nicole (Whispering / Soft)', group: 'US Female' },
+    { id: 'af_aoede', name: 'Aoede (Melodic)', group: 'US Female' },
+    { id: 'af_kore', name: 'Kore (Fairytale Reader)', group: 'US Female' },
+
+    // American Male
+    { id: 'am_adam', name: 'Adam (Clear & Confident)', group: 'US Male' },
+    { id: 'am_michael', name: 'Michael (Deep & Rich)', group: 'US Male' },
+    { id: 'am_echo', name: 'Echo (Storybook Male)', group: 'US Male' },
+    { id: 'am_eric', name: 'Eric (Warm & Friendly)', group: 'US Male' },
+    { id: 'am_fenrir', name: 'Fenrir (Strong Character)', group: 'US Male' },
+    { id: 'am_liam', name: 'Liam (Natural Casual)', group: 'US Male' },
+    { id: 'am_onyx', name: 'Onyx (Resonant)', group: 'US Male' },
+    { id: 'am_puck', name: 'Puck (Playful Character)', group: 'US Male' },
+    { id: 'am_santa', name: 'Santa (Jolly & Booming)', group: 'US Male' },
+
+    // British Female
+    { id: 'bf_emma', name: 'Emma (Classic British)', group: 'UK Female' },
+    { id: 'bf_isabella', name: 'Isabella (Refined British)', group: 'UK Female' },
+    { id: 'bf_alice', name: 'Alice (Fairytale Reader)', group: 'UK Female' },
+    { id: 'bf_lily', name: 'Lily (Bright British Youth)', group: 'UK Female' },
+
+    // British Male
+    { id: 'bm_george', name: 'George (Wise Bear / Storyteller)', group: 'UK Male' },
+    { id: 'bm_daniel', name: 'Daniel (Earth / Deep Mentor)', group: 'UK Male' },
+    { id: 'bm_fable', name: 'Fable (Grand Narrative)', group: 'UK Male' },
+    { id: 'bm_lewis', name: 'Lewis (Robot / Tech / Calm)', group: 'UK Male' },
+  ],
+};
 
 interface CharacterBuilderModalProps {
   isOpen: boolean;
@@ -217,17 +265,25 @@ export const CharacterBuilderModal: React.FC<CharacterBuilderModalProps> = ({
   const handleAuditionVoice = async () => {
     try {
       setIsPreviewingVoice(true);
-      const effectiveVoice = appearance.voiceConfig?.voiceId || (
+      const charLang = appearance.voiceConfig?.lang || 'hi';
+      const defaultVoice = charLang === 'hi' ? 'hf_alpha' : (
         appearance.species === 'planet' ? 'bm_daniel' :
         appearance.species === 'bear' ? 'bm_george' :
         appearance.species === 'robot' ? 'bm_lewis' :
         appearance.gender === 'girl' ? 'af_bella' : 'am_adam'
       );
-      const sampleText = `Hello! I'm ${name || 'your friend'}, and I'm ready to tell our story!`;
+      const effectiveVoice = appearance.voiceConfig?.voiceId || defaultVoice;
+      const effectiveEmotion = appearance.voiceConfig?.emotion || 'neutral';
+      const sampleText = charLang === 'hi'
+        ? `नमस्ते! मैं ${name || 'आपका दोस्त'} हूँ, और अपनी कहानी सुनाने के लिए तैयार हूँ!`
+        : `Hello! I'm ${name || 'your friend'}, and I'm ready to tell our story!`;
+
       const res = await previewVoice({
         voice: effectiveVoice,
+        lang: charLang,
         speed: appearance.voiceConfig?.speed ?? 1.0,
         effect: appearance.voiceConfig?.effect || 'normal',
+        emotion: effectiveEmotion,
         sampleText,
       });
       setPreviewAudioUrl(res.audioUrl);
@@ -956,49 +1012,145 @@ export const CharacterBuilderModal: React.FC<CharacterBuilderModalProps> = ({
                   )}
 
                   <div className="char-control-group">
+                    <label>Speech Language</label>
+                    <div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '8px' }}>
+                      Choose Hindi (default) or English for this character's spoken dialogue:
+                    </div>
+                    <div className="char-pill-row">
+                      <button
+                        type="button"
+                        className={`char-pill-btn ${(appearance.voiceConfig?.lang || 'hi') === 'hi' ? 'active' : ''}`}
+                        onClick={() => {
+                          updateAppearance((a) => ({
+                            ...a,
+                            voiceConfig: {
+                              ...a.voiceConfig,
+                              lang: 'hi',
+                              voiceId: a.voiceConfig?.voiceId?.startsWith('h') ? a.voiceConfig.voiceId : 'hf_alpha',
+                              speed: a.voiceConfig?.speed ?? 1.0,
+                              emotion: a.voiceConfig?.emotion || 'neutral',
+                              effect: a.voiceConfig?.effect || 'normal',
+                            },
+                          }));
+                        }}
+                      >
+                        🇮🇳 Hindi (हिन्दी)
+                      </button>
+                      <button
+                        type="button"
+                        className={`char-pill-btn ${(appearance.voiceConfig?.lang) === 'en' ? 'active' : ''}`}
+                        onClick={() => {
+                          updateAppearance((a) => ({
+                            ...a,
+                            voiceConfig: {
+                              ...a.voiceConfig,
+                              lang: 'en',
+                              voiceId: !a.voiceConfig?.voiceId?.startsWith('h') ? (a.voiceConfig?.voiceId || 'af_heart') : 'af_heart',
+                              speed: a.voiceConfig?.speed ?? 1.0,
+                              emotion: a.voiceConfig?.emotion || 'neutral',
+                              effect: a.voiceConfig?.effect || 'normal',
+                            },
+                          }));
+                        }}
+                      >
+                        🌐 English
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="char-control-group">
                     <label>Kokoro-82M Voice Assignment</label>
                     <div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '8px' }}>
                       Select the persistent default voice used when this character speaks dialogue in any scene:
                     </div>
-                    <div className="char-pill-row">
-                      {[
-                        { id: 'bm_daniel', name: 'Daniel (Earth / Deep / Mentor)' },
-                        { id: 'af_bella', name: 'Bella (Energetic Girl)' },
-                        { id: 'am_adam', name: 'Adam (Playful Boy)' },
-                        { id: 'bm_george', name: 'George (Warm Bear)' },
-                        { id: 'bm_lewis', name: 'Lewis (Robot / Tech)' },
-                        { id: 'af_heart', name: 'Heart (Warm Narrator)' },
-                        { id: 'af_nicole', name: 'Nicole (Curious)' },
-                        { id: 'af_sky', name: 'Sky (Cheerful)' },
-                      ].map((v) => {
-                        const currentVoice = appearance.voiceConfig?.voiceId || (
-                          appearance.species === 'planet' ? 'bm_daniel' :
-                          appearance.species === 'bear' ? 'bm_george' :
-                          appearance.species === 'robot' ? 'bm_lewis' :
-                          appearance.gender === 'girl' ? 'af_bella' : 'am_adam'
-                        );
-                        return (
-                          <button
-                            key={v.id}
-                            type="button"
-                            className={`char-pill-btn ${currentVoice === v.id ? 'active' : ''}`}
-                            onClick={() =>
-                              updateAppearance((a) => ({
-                                ...a,
-                                voiceConfig: {
-                                  speed: a.voiceConfig?.speed ?? 1.0,
-                                  style: a.voiceConfig?.style ?? 'cheerful',
-                                  effect: a.voiceConfig?.effect ?? 'normal',
-                                  voiceId: v.id,
-                                },
-                              }))
-                            }
-                          >
-                            {v.name}
-                          </button>
-                        );
-                      })}
-                    </div>
+                    {(appearance.voiceConfig?.lang || 'hi') === 'hi' ? (
+                      <div className="char-pill-row">
+                        {KOKORO_VOICES_CATALOG.hindi.map((v) => {
+                          const currentVoice = appearance.voiceConfig?.voiceId || 'hf_alpha';
+                          return (
+                            <button
+                              key={v.id}
+                              type="button"
+                              className={`char-pill-btn ${currentVoice === v.id ? 'active' : ''}`}
+                              onClick={() =>
+                                updateAppearance((a) => ({
+                                  ...a,
+                                  voiceConfig: {
+                                    ...a.voiceConfig,
+                                    lang: 'hi',
+                                    voiceId: v.id,
+                                    speed: a.voiceConfig?.speed ?? 1.0,
+                                    emotion: a.voiceConfig?.emotion || 'neutral',
+                                    effect: a.voiceConfig?.effect ?? 'normal',
+                                  },
+                                }))
+                              }
+                            >
+                              {v.name}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <div style={{ fontSize: '11px', fontWeight: 600, color: '#cbd5e1' }}>American Voices</div>
+                        <div className="char-pill-row">
+                          {KOKORO_VOICES_CATALOG.english.filter((v) => v.group.startsWith('US')).map((v) => {
+                            const currentVoice = appearance.voiceConfig?.voiceId || 'af_heart';
+                            return (
+                              <button
+                                key={v.id}
+                                type="button"
+                                className={`char-pill-btn ${currentVoice === v.id ? 'active' : ''}`}
+                                onClick={() =>
+                                  updateAppearance((a) => ({
+                                    ...a,
+                                    voiceConfig: {
+                                      ...a.voiceConfig,
+                                      lang: 'en',
+                                      voiceId: v.id,
+                                      speed: a.voiceConfig?.speed ?? 1.0,
+                                      emotion: a.voiceConfig?.emotion || 'neutral',
+                                      effect: a.voiceConfig?.effect ?? 'normal',
+                                    },
+                                  }))
+                                }
+                              >
+                                {v.name}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <div style={{ fontSize: '11px', fontWeight: 600, color: '#cbd5e1', marginTop: '4px' }}>British Voices</div>
+                        <div className="char-pill-row">
+                          {KOKORO_VOICES_CATALOG.english.filter((v) => v.group.startsWith('UK')).map((v) => {
+                            const currentVoice = appearance.voiceConfig?.voiceId || 'af_heart';
+                            return (
+                              <button
+                                key={v.id}
+                                type="button"
+                                className={`char-pill-btn ${currentVoice === v.id ? 'active' : ''}`}
+                                onClick={() =>
+                                  updateAppearance((a) => ({
+                                    ...a,
+                                    voiceConfig: {
+                                      ...a.voiceConfig,
+                                      lang: 'en',
+                                      voiceId: v.id,
+                                      speed: a.voiceConfig?.speed ?? 1.0,
+                                      emotion: a.voiceConfig?.emotion || 'neutral',
+                                      effect: a.voiceConfig?.effect ?? 'normal',
+                                    },
+                                  }))
+                                }
+                              >
+                                {v.name}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div className="char-control-group">
@@ -1013,23 +1165,17 @@ export const CharacterBuilderModal: React.FC<CharacterBuilderModalProps> = ({
                       value={appearance.voiceConfig?.speed ?? 1.0}
                       onChange={(e) => {
                         const val = parseFloat(e.target.value);
-                        updateAppearance((a) => {
-                          const currentVoice = a.voiceConfig?.voiceId || (
-                            a.species === 'planet' ? 'bm_daniel' :
-                            a.species === 'bear' ? 'bm_george' :
-                            a.species === 'robot' ? 'bm_lewis' :
-                            a.gender === 'girl' ? 'af_bella' : 'am_adam'
-                          );
-                          return {
-                            ...a,
-                            voiceConfig: {
-                              voiceId: currentVoice,
-                              style: a.voiceConfig?.style ?? 'cheerful',
-                              effect: a.voiceConfig?.effect ?? 'normal',
-                              speed: val,
-                            },
-                          };
-                        });
+                        updateAppearance((a) => ({
+                          ...a,
+                          voiceConfig: {
+                            lang: a.voiceConfig?.lang || 'hi',
+                            voiceId: a.voiceConfig?.voiceId || 'hf_alpha',
+                            emotion: a.voiceConfig?.emotion || 'neutral',
+                            style: a.voiceConfig?.style || 'cheerful',
+                            effect: a.voiceConfig?.effect ?? 'normal',
+                            speed: val,
+                          },
+                        }));
                       }}
                       className="char-builder-slider"
                     />
@@ -1041,38 +1187,33 @@ export const CharacterBuilderModal: React.FC<CharacterBuilderModalProps> = ({
                   </div>
 
                   <div className="char-control-group">
-                    <label>Default Speaking Style</label>
+                    <label>Default Speaking Emotion</label>
+                    <div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '8px' }}>
+                      Calibrates Kokoro speech prosody, tempo, and expressive pause rhythm:
+                    </div>
                     <select
                       className="char-builder-input"
-                      value={appearance.voiceConfig?.style || 'cheerful'}
+                      value={appearance.voiceConfig?.emotion || 'neutral'}
                       onChange={(e) => {
-                        const val = e.target.value as any;
-                        updateAppearance((a) => {
-                          const currentVoice = a.voiceConfig?.voiceId || (
-                            a.species === 'planet' ? 'bm_daniel' :
-                            a.species === 'bear' ? 'bm_george' :
-                            a.species === 'robot' ? 'bm_lewis' :
-                            a.gender === 'girl' ? 'af_bella' : 'am_adam'
-                          );
-                          return {
-                            ...a,
-                            voiceConfig: {
-                              voiceId: currentVoice,
-                              speed: a.voiceConfig?.speed ?? 1.0,
-                              effect: a.voiceConfig?.effect ?? 'normal',
-                              style: val,
-                            },
-                          };
-                        });
+                        const val = e.target.value as SpeakingEmotion;
+                        updateAppearance((a) => ({
+                          ...a,
+                          voiceConfig: {
+                            lang: a.voiceConfig?.lang || 'hi',
+                            voiceId: a.voiceConfig?.voiceId || 'hf_alpha',
+                            speed: a.voiceConfig?.speed ?? 1.0,
+                            effect: a.voiceConfig?.effect ?? 'normal',
+                            emotion: val,
+                            style: val,
+                          },
+                        }));
                       }}
                     >
-                      <option value="cheerful">Cheerful & Friendly</option>
-                      <option value="excited">Excited & Eager</option>
-                      <option value="calm">Calm & Gentle</option>
-                      <option value="curious">Curious & Inquiring</option>
-                      <option value="worried">Worried / Shy</option>
-                      <option value="sad">Sad / Soft</option>
-                      <option value="serious">Serious / Brave</option>
+                      {EMOTION_OPTIONS.map((opt) => (
+                        <option key={opt.id} value={opt.id}>
+                          {opt.emoji} {opt.label} — {opt.desc}
+                        </option>
+                      ))}
                     </select>
                   </div>
 
@@ -1083,29 +1224,25 @@ export const CharacterBuilderModal: React.FC<CharacterBuilderModalProps> = ({
                         { id: 'normal', label: 'Normal Clean' },
                         { id: 'cartoon', label: 'Cartoon Pitch (+3 semitones)' },
                         { id: 'robot', label: 'Robotic Vocoder' },
+                        { id: 'whisper', label: 'Soft Whisper' },
+                        { id: 'shout', label: 'Loud Shout' },
                       ].map((eff) => (
                         <button
                           key={eff.id}
                           type="button"
                           className={`char-pill-btn ${(appearance.voiceConfig?.effect || 'normal') === eff.id ? 'active' : ''}`}
                           onClick={() => {
-                            updateAppearance((a) => {
-                              const currentVoice = a.voiceConfig?.voiceId || (
-                                a.species === 'planet' ? 'bm_daniel' :
-                                a.species === 'bear' ? 'bm_george' :
-                                a.species === 'robot' ? 'bm_lewis' :
-                                a.gender === 'girl' ? 'af_bella' : 'am_adam'
-                              );
-                              return {
-                                ...a,
-                                voiceConfig: {
-                                  voiceId: currentVoice,
-                                  speed: a.voiceConfig?.speed ?? 1.0,
-                                  style: a.voiceConfig?.style ?? 'cheerful',
-                                  effect: eff.id as any,
-                                },
-                              };
-                            });
+                            updateAppearance((a) => ({
+                              ...a,
+                              voiceConfig: {
+                                lang: a.voiceConfig?.lang || 'hi',
+                                voiceId: a.voiceConfig?.voiceId || 'hf_alpha',
+                                speed: a.voiceConfig?.speed ?? 1.0,
+                                emotion: a.voiceConfig?.emotion || 'neutral',
+                                style: a.voiceConfig?.style || 'cheerful',
+                                effect: eff.id as any,
+                              },
+                            }));
                           }}
                         >
                           {eff.label}

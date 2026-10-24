@@ -73,14 +73,25 @@ export type FacialExpression =
 
 export type MouthShape = 'rest' | 'open' | 'wide' | 'round' | 'closed';
 
-export type SpeakingDirection =
-  | 'cheerful'
+export type SpeakingEmotion =
+  | 'neutral'
+  | 'happy'
   | 'excited'
-  | 'calm'
   | 'sad'
+  | 'sleepy'
+  | 'confused'
   | 'worried'
   | 'curious'
-  | 'serious';
+  | 'calm'
+  | 'serious'
+  | 'angry'
+  | 'surprised'
+  | 'whispering'
+  | 'shouting';
+
+export type SpeakingDirection =
+  | SpeakingEmotion
+  | 'cheerful';
 
 export interface ExpressionCue {
   id?: string;
@@ -98,14 +109,25 @@ export interface VisemeCue {
   durationMs: number;
 }
 
+export interface CharacterPerformanceOverride {
+  lang?: 'hi' | 'en' | string;
+  voiceId?: string;
+  emotion?: SpeakingEmotion;
+  speed?: number;
+  defaultExpression?: FacialExpression;
+}
+
 export interface SceneDialogue {
   id: string;
   characterId?: string;
   characterInstanceId?: string;
   characterName: string;
   text: string;
+  lang?: string;
   voice?: string;
   speakingDirection?: SpeakingDirection;
+  emotion?: SpeakingEmotion;
+  facialExpression?: FacialExpression;
   speed?: number;
   audioUrl?: string;
   startMs: number;
@@ -114,10 +136,12 @@ export interface SceneDialogue {
 }
 
 export interface CharacterVoiceConfig {
+  lang?: 'hi' | 'en' | string;
   voiceId: string;
   speed?: number;
+  emotion?: SpeakingEmotion;
   style?: SpeakingDirection;
-  effect?: 'normal' | 'cartoon' | 'robot';
+  effect?: 'normal' | 'cartoon' | 'robot' | 'whisper' | 'shout';
 }
 
 export interface VectorSceneData {
@@ -132,6 +156,7 @@ export interface VectorSceneData {
   expressionCues?: ExpressionCue[];
   dialogueLines?: SceneDialogue[];
   overlays?: EducationalOverlay[];
+  characterPerformances?: Record<string, CharacterPerformanceOverride>;
 }
 
 export interface EvaluatedPose {
@@ -379,7 +404,19 @@ export function evaluatePose(
     chestScaleY: Math.round(chestScaleY * 1000) / 1000,
     activeAction,
     expression: (() => {
-      // 1. Check timeline active expression cue
+      // 1. Check if active dialogue line has an explicit facialExpression override
+      const activeDialogue = dialogueLines.find((d) => {
+        const isSpeaker =
+          (d.characterInstanceId && d.characterInstanceId === instance.instanceId) ||
+          (d.characterId && d.characterId === instance.characterId) ||
+          (d.characterName && instance.name && d.characterName.trim().toLowerCase() === instance.name.trim().toLowerCase());
+        return isSpeaker && sceneRelativeMs >= d.startMs && sceneRelativeMs <= d.startMs + d.durationMs;
+      });
+      if (activeDialogue?.facialExpression) {
+        return activeDialogue.facialExpression;
+      }
+
+      // 2. Check timeline active expression cue
       const activeExpCue = (expressionCues || []).find((c) => {
         const matchesChar =
           c.instanceId === instance.instanceId ||
@@ -392,10 +429,35 @@ export function evaluatePose(
       });
       if (activeExpCue) return activeExpCue.expression;
 
-      // 2. Check direct character instance expression
+      // 3. Check direct character instance expression (scene-level default expression)
       if (instance.expression) return instance.expression;
 
-      // 3. Fallback to any expression cue set on this character in the scene
+      // 4. Fallback to active dialogue speaking direction / emotion mapping
+      const emotionOrDir = activeDialogue?.emotion || activeDialogue?.speakingDirection;
+      if (emotionOrDir) {
+        const dirMap: Record<string, FacialExpression> = {
+          neutral: 'neutral',
+          happy: 'happy',
+          cheerful: 'happy',
+          excited: 'surprised',
+          calm: 'neutral',
+          sad: 'sad',
+          sleepy: 'neutral',
+          confused: 'confused',
+          worried: 'scared',
+          curious: 'curious',
+          serious: 'angry',
+          angry: 'angry',
+          surprised: 'surprised',
+          whispering: 'curious',
+          shouting: 'angry',
+        };
+        if (dirMap[emotionOrDir]) {
+          return dirMap[emotionOrDir];
+        }
+      }
+
+      // 5. Fallback to any expression cue set on this character in the scene
       const charCue = (expressionCues || []).find(
         (c) =>
           c.instanceId === instance.instanceId ||
@@ -403,30 +465,6 @@ export function evaluatePose(
           (c.characterId && c.characterId === instance.characterId)
       );
       if (charCue) return charCue.expression;
-
-      // 4. Check active dialogue speaking direction
-      const activeDialogue = dialogueLines.find((d) => {
-        const isSpeaker =
-          (d.characterInstanceId && d.characterInstanceId === instance.instanceId) ||
-          (d.characterId && d.characterId === instance.characterId) ||
-          (d.characterName && instance.name && d.characterName.trim().toLowerCase() === instance.name.trim().toLowerCase());
-        return isSpeaker && sceneRelativeMs >= d.startMs && sceneRelativeMs <= d.startMs + d.durationMs;
-      });
-
-      if (activeDialogue?.speakingDirection) {
-        const dirMap: Record<string, FacialExpression> = {
-          cheerful: 'happy',
-          excited: 'surprised',
-          calm: 'neutral',
-          sad: 'sad',
-          worried: 'scared',
-          curious: 'curious',
-          serious: 'angry',
-        };
-        if (dirMap[activeDialogue.speakingDirection]) {
-          return dirMap[activeDialogue.speakingDirection];
-        }
-      }
 
       return 'neutral';
     })(),

@@ -271,9 +271,10 @@ export async function previewVoice(options: {
   voice: string;
   provider?: string;
   speed?: number;
-  effect?: 'normal' | 'robot' | 'cartoon';
+  effect?: 'normal' | 'robot' | 'cartoon' | 'whisper' | 'shout';
   sampleText?: string;
   lang?: string;
+  emotion?: string;
 }): Promise<{ audioUrl: string; durationMs: number; voice: string; effect: string }> {
   const res = await fetch(`${API_URL}/api/content/tts/preview`, {
     method: 'POST',
@@ -287,6 +288,22 @@ export async function previewVoice(options: {
   return res.json();
 }
 
+export async function suggestEmotion(text: string): Promise<{
+  emotion: string;
+  facialExpression: string;
+  confidence: number;
+  rationale: string;
+}> {
+  const res = await fetch(`${API_URL}/api/content/suggest-emotion`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text }),
+  });
+  if (!res.ok) throw new Error('Failed to suggest emotion');
+  const data = await res.json();
+  return data.suggestion;
+}
+
 export async function generateSceneVoice(
   sceneId: string,
   narration?: string,
@@ -294,8 +311,9 @@ export async function generateSceneVoice(
     provider?: string;
     voice?: string;
     speed?: number;
-    effect?: 'normal' | 'robot' | 'cartoon';
+    effect?: 'normal' | 'robot' | 'cartoon' | 'whisper' | 'shout';
     lang?: string;
+    emotion?: string;
   }
 ): Promise<{
   audioUrl: string;
@@ -584,9 +602,12 @@ export async function generateSceneDialogueAudio(
     text: string;
     voice?: string;
     speakingDirection?: string;
+    emotion?: string;
+    facialExpression?: string;
     speed?: number;
     startMs?: number;
     effect?: string;
+    lang?: string;
   }
 ): Promise<{ success: boolean; sceneId: string; dialogue: SceneDialogue }> {
   const res = await fetch(`${API_URL}/api/content/scenes/${sceneId}/dialogue/generate`, {

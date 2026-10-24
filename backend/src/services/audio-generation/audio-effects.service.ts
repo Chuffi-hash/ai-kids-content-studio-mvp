@@ -54,6 +54,12 @@ export class AudioEffectsService {
     } else if (effect === 'cartoon') {
       // Playful cartoon pitch shift with synchronized tempo preservation
       filterString = 'asetrate=24000*1.32,atempo=1/1.32,volume=1.1';
+    } else if (effect === 'whisper') {
+      // Soft, highpass filtered breathy voice
+      filterString = 'highpass=f=350,lowpass=f=7500,volume=0.9';
+    } else if (effect === 'shout') {
+      // Powerful, compressed voice with presence boost
+      filterString = 'equalizer=f=2400:width_type=o:width=1.2:g=3.5,acompressor=threshold=-14dB:ratio=3:attack=5:release=50,volume=1.25';
     } else {
       filterString = 'anull';
     }

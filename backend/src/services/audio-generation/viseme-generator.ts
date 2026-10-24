@@ -7,6 +7,30 @@ function charToViseme(ch: string, nextCh?: string): MouthShape {
   const c = ch.toLowerCase();
   const next = nextCh?.toLowerCase() || '';
 
+  // Devanagari Hindi phonemes mapping
+  // Bilabials & Labiodentals (lips closed): म, ब, भ, प, फ, व (ma, ba, bha, pa, pha, va)
+  if (/[\u092A-\u092E\u0935]/.test(c)) {
+    return 'closed';
+  }
+  // Rounded vowels & matras: उ, ऊ, ओ, औ, ु, ू, ो, ौ
+  if (/[\u0909\u090A\u0913\u0914\u0941\u0942\u094B\u094C]/.test(c)) {
+    return 'round';
+  }
+  // Wide front vowels & matras, and sibilants / dentals / affricates:
+  // इ, ई, ए, ऐ, ि, ी, े, ै, स, श, ष, ज, झ, च, छ, त, थ, द, ध, न
+  if (/[\u0907\u0908\u090F\u0910\u093F\u0940\u0947\u0948\u0938\u0936\u0937\u091C\u091D\u091A\u091B\u0924\u0925\u0926\u0927\u0928]/.test(c)) {
+    return 'wide';
+  }
+  // Open vowels & matras: अ, आ, ा
+  if (/[\u0905\u0906\u093E]/.test(c)) {
+    return 'open';
+  }
+  // Other Devanagari consonants: open
+  if (/[\u0900-\u097F]/.test(c)) {
+    return 'open';
+  }
+
+  // English letters
   // Bilabial consonants (lips firmly shut)
   if (c === 'm' || c === 'b' || c === 'p') {
     return 'closed';
@@ -74,7 +98,7 @@ export function generateVisemeCues(text: string, durationMs: number): VisemeCue[
 
     for (let i = 0; i < word.length; i++) {
       const char = word[i];
-      if (!/[a-zA-Z]/.test(char)) continue;
+      if (!/[a-zA-Z\u0900-\u097F]/.test(char)) continue;
 
       const shape = charToViseme(char, word[i + 1]);
       // Avoid repetitive identical adjacent frames within a single syllable
