@@ -1,13 +1,19 @@
-import React, { useRef } from 'react';
-import { VectorSceneData, CharacterInstance, MotionPath, EducationalOverlay, AspectRatioType } from '../../../types/animation';
-import { getVectorRig } from '../../../assets/characters/defaultCharacters';
-import { buildRigFromAppearance } from '../../../utils/customCharacterRig';
-import { evaluateCharacterPose } from '../../../utils/animationEngine';
-import { VectorCharacterRenderer } from './VectorCharacterRenderer';
-import { TransformGizmo } from './TransformGizmo';
-import { OverlayGizmo } from './OverlayGizmo';
-import { renderEducationalOverlayXml } from '../../../utils/educationalOverlayRenderer';
-import { resolveAssetUrl } from '../../../utils/urlHelper';
+import React, { useRef } from "react";
+import {
+  VectorSceneData,
+  CharacterInstance,
+  MotionPath,
+  EducationalOverlay,
+  AspectRatioType,
+} from "../../../types/animation";
+import { getVectorRig } from "../../../assets/characters/defaultCharacters";
+import { buildRigFromAppearance } from "../../../utils/customCharacterRig";
+import { evaluateCharacterPose } from "../../../utils/animationEngine";
+import { VectorCharacterRenderer } from "./VectorCharacterRenderer";
+import { TransformGizmo } from "./TransformGizmo";
+import { OverlayGizmo } from "./OverlayGizmo";
+import { renderEducationalOverlayXml } from "../../../utils/educationalOverlayRenderer";
+import { resolveAssetUrl } from "../../../utils/urlHelper";
 
 interface VectorSceneCanvasProps {
   animationData: VectorSceneData;
@@ -16,10 +22,16 @@ interface VectorSceneCanvasProps {
   activeFormat?: AspectRatioType;
   selectedInstanceId: string | null;
   onSelectInstance: (instanceId: string | null) => void;
-  onUpdateInstance: (instanceId: string, updates: Partial<CharacterInstance>) => void;
+  onUpdateInstance: (
+    instanceId: string,
+    updates: Partial<CharacterInstance>,
+  ) => void;
   selectedOverlayId?: string | null;
   onSelectOverlay?: (overlayId: string | null) => void;
-  onUpdateOverlay?: (overlayId: string, updates: Partial<EducationalOverlay>) => void;
+  onUpdateOverlay?: (
+    overlayId: string,
+    updates: Partial<EducationalOverlay>,
+  ) => void;
   onUpdateAnimationData?: (newData: VectorSceneData) => void;
 }
 
@@ -38,9 +50,10 @@ export const VectorSceneCanvas: React.FC<VectorSceneCanvasProps> = ({
 }) => {
   const svgRef = useRef<SVGSVGElement | null>(null);
 
-  const effectiveFormat: AspectRatioType = activeFormat || animationData.activeFormat || '16:9';
-  const canvasWidth = effectiveFormat === '9:16' ? 720 : 1280;
-  const canvasHeight = effectiveFormat === '9:16' ? 1280 : 720;
+  const effectiveFormat: AspectRatioType =
+    activeFormat || animationData.activeFormat || "16:9";
+  const canvasWidth = effectiveFormat === "9:16" ? 720 : 1280;
+  const canvasHeight = effectiveFormat === "9:16" ? 1280 : 720;
 
   const sceneRelativeMs = Math.max(0, currentTimeMs - sceneStartMs);
   const rawInstances = animationData.characterInstances || [];
@@ -61,12 +74,15 @@ export const VectorSceneCanvas: React.FC<VectorSceneCanvasProps> = ({
         scale: override.scale !== undefined ? override.scale : inst.scale,
       };
     }
-    if (effectiveFormat === '9:16') {
+    if (effectiveFormat === "9:16") {
       const xOffset = inst.x - 640;
-      const newX = (canvasWidth / 2) + (xOffset * (canvasWidth / 1280));
+      const newX = canvasWidth / 2 + xOffset * (canvasWidth / 1280);
       const yRatio = inst.y / 720;
       const newY = yRatio * canvasHeight;
-      const newScale = (inst.scale || 1.0) <= 1.0 ? (inst.scale || 1.0) * 1.15 : (inst.scale || 1.0);
+      const newScale =
+        (inst.scale || 1.0) <= 1.0
+          ? (inst.scale || 1.0) * 1.15
+          : inst.scale || 1.0;
       return {
         ...inst,
         x: Math.round(newX),
@@ -78,24 +94,35 @@ export const VectorSceneCanvas: React.FC<VectorSceneCanvasProps> = ({
   });
 
   const belowCharacterOverlays = overlays.filter(
-    (o) => o.layerPosition === 'below_characters' || (o.zIndex !== undefined && o.zIndex < 0)
+    (o) =>
+      o.layerPosition === "below_characters" ||
+      (o.zIndex !== undefined && o.zIndex < 0),
   );
   const aboveCharacterOverlays = overlays.filter(
-    (o) => o.layerPosition !== 'below_characters' && (o.zIndex === undefined || o.zIndex >= 0)
+    (o) =>
+      o.layerPosition !== "below_characters" &&
+      (o.zIndex === undefined || o.zIndex >= 0),
   );
-  const selectedOverlay = overlays.find((o) => o.id === selectedOverlayId) || null;
+  const selectedOverlay =
+    overlays.find((o) => o.id === selectedOverlayId) || null;
 
   // Sort instances by zIndex ascending
-  const sortedInstances = [...instances].sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
+  const sortedInstances = [...instances].sort(
+    (a, b) => (a.zIndex || 0) - (b.zIndex || 0),
+  );
 
   // Find currently selected instance
-  const selectedInstance = instances.find((i) => i.instanceId === selectedInstanceId) || null;
+  const selectedInstance =
+    instances.find((i) => i.instanceId === selectedInstanceId) || null;
 
   // Find if selected instance has an active motion path clip
   let selectedMotionPath: MotionPath | null = null;
   if (selectedInstance) {
     const activeClip = clips.find(
-      (c) => c.instanceId === selectedInstance.instanceId && c.action === 'walk' && c.motionMode === 'motion_path'
+      (c) =>
+        c.instanceId === selectedInstance.instanceId &&
+        c.action === "walk" &&
+        c.motionMode === "motion_path",
     );
     if (activeClip && activeClip.motionPath) {
       selectedMotionPath = activeClip.motionPath;
@@ -105,7 +132,12 @@ export const VectorSceneCanvas: React.FC<VectorSceneCanvasProps> = ({
   // Handle clicking on background to deselect
   const handleSvgClick = (e: React.MouseEvent) => {
     const targetEl = e.target as Element;
-    if (targetEl === svgRef.current || targetEl.id === 'scene-background-rect' || targetEl.id === 'scene-background-image' || targetEl.id === 'scene-background-backdrop') {
+    if (
+      targetEl === svgRef.current ||
+      targetEl.id === "scene-background-rect" ||
+      targetEl.id === "scene-background-image" ||
+      targetEl.id === "scene-background-backdrop"
+    ) {
       onSelectInstance(null);
       onSelectOverlay?.(null);
     }
@@ -114,10 +146,10 @@ export const VectorSceneCanvas: React.FC<VectorSceneCanvasProps> = ({
   const handleUpdateMotionPath = (newPath: MotionPath) => {
     if (!selectedInstance || !onUpdateAnimationData) return;
     const updatedClips = clips.map((c) => {
-      if (c.instanceId === selectedInstance.instanceId && c.action === 'walk') {
+      if (c.instanceId === selectedInstance.instanceId && c.action === "walk") {
         return {
           ...c,
-          motionMode: 'motion_path' as const,
+          motionMode: "motion_path" as const,
           motionPath: newPath,
         };
       }
@@ -129,10 +161,18 @@ export const VectorSceneCanvas: React.FC<VectorSceneCanvasProps> = ({
     });
   };
 
-  const handleInstanceTransformUpdate = (instanceId: string, updates: Partial<CharacterInstance>) => {
-    if (effectiveFormat === '9:16') {
+  const handleInstanceTransformUpdate = (
+    instanceId: string,
+    updates: Partial<CharacterInstance>,
+  ) => {
+    if (effectiveFormat === "9:16") {
       const currentVariants = animationData.formatVariants || {};
-      const current9x16 = currentVariants['9:16'] || { aspectRatio: '9:16', width: 720, height: 1280, characterOverrides: {} };
+      const current9x16 = currentVariants["9:16"] || {
+        aspectRatio: "9:16",
+        width: 720,
+        height: 1280,
+        characterOverrides: {},
+      };
       const currentOverrides = current9x16.characterOverrides || {};
       const updatedOverrides = {
         ...currentOverrides,
@@ -148,7 +188,7 @@ export const VectorSceneCanvas: React.FC<VectorSceneCanvasProps> = ({
           ...animationData,
           formatVariants: {
             ...currentVariants,
-            '9:16': {
+            "9:16": {
               ...current9x16,
               characterOverrides: updatedOverrides,
             },
@@ -166,10 +206,10 @@ export const VectorSceneCanvas: React.FC<VectorSceneCanvasProps> = ({
       viewBox={`0 0 ${canvasWidth} ${canvasHeight}`}
       className="vector-scene-svg-canvas"
       style={{
-        width: '100%',
-        height: '100%',
-        display: 'block',
-        backgroundColor: '#090d16',
+        width: "100%",
+        height: "100%",
+        display: "block",
+        backgroundColor: "#090d16",
       }}
       onClick={handleSvgClick}
     >
@@ -184,7 +224,12 @@ export const VectorSceneCanvas: React.FC<VectorSceneCanvasProps> = ({
       {/* 1. Background Layer */}
       {animationData.background?.imageUrl ? (
         <g id="scene-background-group">
-          <rect id="scene-background-backdrop" width={canvasWidth} height={canvasHeight} fill="#090d16" />
+          <rect
+            id="scene-background-backdrop"
+            width={canvasWidth}
+            height={canvasHeight}
+            fill="#090d16"
+          />
           <image
             id="scene-background-image"
             href={resolveAssetUrl(animationData.background.imageUrl)}
@@ -192,14 +237,37 @@ export const VectorSceneCanvas: React.FC<VectorSceneCanvasProps> = ({
             y={0}
             width={canvasWidth}
             height={canvasHeight}
-            preserveAspectRatio={animationData.background.fit === 'contain' ? 'xMidYMid meet' : 'xMidYMid slice'}
+            preserveAspectRatio={
+              animationData.background.fit === "contain"
+                ? "xMidYMid meet"
+                : "xMidYMid slice"
+            }
           />
         </g>
       ) : (
         <g id="default-stylized-background">
-          <rect id="scene-background-rect" width={canvasWidth} height={canvasHeight} fill="#101726" />
-          <line x1={0} y1={Math.round(canvasHeight * 0.75)} x2={canvasWidth} y2={Math.round(canvasHeight * 0.75)} stroke="#1e293b" strokeWidth={2} />
-          <rect x={0} y={Math.round(canvasHeight * 0.75)} width={canvasWidth} height={canvasHeight - Math.round(canvasHeight * 0.75)} fill="#0d131f" opacity={0.6} />
+          <rect
+            id="scene-background-rect"
+            width={canvasWidth}
+            height={canvasHeight}
+            fill="#101726"
+          />
+          <line
+            x1={0}
+            y1={Math.round(canvasHeight * 0.75)}
+            x2={canvasWidth}
+            y2={Math.round(canvasHeight * 0.75)}
+            stroke="#1e293b"
+            strokeWidth={2}
+          />
+          <rect
+            x={0}
+            y={Math.round(canvasHeight * 0.75)}
+            width={canvasWidth}
+            height={canvasHeight - Math.round(canvasHeight * 0.75)}
+            fill="#0d131f"
+            opacity={0.6}
+          />
         </g>
       )}
 
@@ -210,8 +278,8 @@ export const VectorSceneCanvas: React.FC<VectorSceneCanvasProps> = ({
         return (
           <g
             key={overlay.id}
-            className={`interactive-overlay-group ${selectedOverlayId === overlay.id ? 'selected' : ''}`}
-            style={{ cursor: 'pointer' }}
+            className={`interactive-overlay-group ${selectedOverlayId === overlay.id ? "selected" : ""}`}
+            style={{ cursor: "pointer" }}
             onClick={(e) => {
               e.stopPropagation();
               onSelectOverlay?.(overlay.id);
@@ -226,20 +294,24 @@ export const VectorSceneCanvas: React.FC<VectorSceneCanvasProps> = ({
       {sortedInstances.map((instance) => {
         const isSelected = instance.instanceId === selectedInstanceId;
         const hasHeadTags = instance.customRig?.parts?.head?.shapes?.some(
-          (s) => s.tag === 'eyes' || s.tag === 'mouth'
+          (s) => s.tag === "eyes" || s.tag === "mouth",
         );
         const rig =
-          (instance.customRig && hasHeadTags)
+          instance.customRig && hasHeadTags
             ? instance.customRig
-            : (instance.appearance
-                ? buildRigFromAppearance(instance.characterId, instance.name || 'Character', instance.appearance)
-                : (instance.customRig || getVectorRig(instance.characterId)));
+            : instance.appearance
+              ? buildRigFromAppearance(
+                  instance.characterId,
+                  instance.name || "Character",
+                  instance.appearance,
+                )
+              : instance.customRig || getVectorRig(instance.characterId);
         const pose = evaluateCharacterPose(
           instance,
           clips,
           sceneRelativeMs,
           animationData.expressionCues,
-          animationData.dialogueLines
+          animationData.dialogueLines,
         );
 
         return (
@@ -276,8 +348,8 @@ export const VectorSceneCanvas: React.FC<VectorSceneCanvasProps> = ({
         return (
           <g
             key={overlay.id}
-            className={`interactive-overlay-group ${selectedOverlayId === overlay.id ? 'selected' : ''}`}
-            style={{ cursor: 'pointer' }}
+            className={`interactive-overlay-group ${selectedOverlayId === overlay.id ? "selected" : ""}`}
+            style={{ cursor: "pointer" }}
             onClick={(e) => {
               e.stopPropagation();
               onSelectOverlay?.(overlay.id);
@@ -293,21 +365,25 @@ export const VectorSceneCanvas: React.FC<VectorSceneCanvasProps> = ({
         <TransformGizmo
           instance={selectedInstance}
           rig={(() => {
-            const hasHeadTags = selectedInstance.customRig?.parts?.head?.shapes?.some(
-              (s) => s.tag === 'eyes' || s.tag === 'mouth'
-            );
-            return (selectedInstance.customRig && hasHeadTags)
+            const hasHeadTags =
+              selectedInstance.customRig?.parts?.head?.shapes?.some(
+                (s) => s.tag === "eyes" || s.tag === "mouth",
+              );
+            return selectedInstance.customRig && hasHeadTags
               ? selectedInstance.customRig
-              : (selectedInstance.appearance
-                  ? buildRigFromAppearance(
-                      selectedInstance.characterId,
-                      selectedInstance.name || 'Character',
-                      selectedInstance.appearance
-                    )
-                  : (selectedInstance.customRig || getVectorRig(selectedInstance.characterId)));
+              : selectedInstance.appearance
+                ? buildRigFromAppearance(
+                    selectedInstance.characterId,
+                    selectedInstance.name || "Character",
+                    selectedInstance.appearance,
+                  )
+                : selectedInstance.customRig ||
+                  getVectorRig(selectedInstance.characterId);
           })()}
           motionPath={selectedMotionPath}
-          onUpdateInstance={(updates) => handleInstanceTransformUpdate(selectedInstance.instanceId, updates)}
+          onUpdateInstance={(updates) =>
+            handleInstanceTransformUpdate(selectedInstance.instanceId, updates)
+          }
           onUpdateMotionPath={handleUpdateMotionPath}
         />
       )}
@@ -316,10 +392,11 @@ export const VectorSceneCanvas: React.FC<VectorSceneCanvasProps> = ({
       {selectedOverlay && onUpdateOverlay && (
         <OverlayGizmo
           overlay={selectedOverlay}
-          onUpdateOverlay={(updates) => onUpdateOverlay(selectedOverlay.id, updates)}
+          onUpdateOverlay={(updates) =>
+            onUpdateOverlay(selectedOverlay.id, updates)
+          }
         />
       )}
     </svg>
   );
 };
-

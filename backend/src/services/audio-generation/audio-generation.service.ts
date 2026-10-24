@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { promisify } from 'util';
 import { execFile } from 'child_process';
-import { randomUUID } from 'crypto';
+import { randomUUID, createHash } from 'crypto';
 // @ts-ignore
 import ffprobeStatic from '@ffprobe-installer/ffprobe';
 import { updateScene, createSceneVersion, getSceneBySceneId, getCharacterById, getCharacterByName, getScenesByStoryId, getStoryByStoryId } from '../database/database.service.js';
@@ -10,7 +10,7 @@ import { TTSProviderFactory } from './tts-provider.factory.js';
 import { AudioEffectType, SupportedVoice } from './tts-provider.interface.js';
 import { generateVisemeCues } from './viseme-generator.js';
 import { SceneDialogue, SpeakingDirection, FacialExpression } from '../animation/vector-animation.engine.js';
-import { EMOTION_DELIVERY_MAP, SpeakingEmotion } from './emotion-suggester.service.js';
+import { EMOTION_DELIVERY_MAP, SpeakingEmotion, calculateEmotionDelivery, normalizeEmotionIntensity } from './emotion-suggester.service.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -40,6 +40,7 @@ export class AudioGenerationService {
 
   /**
    * Generates a short voice preview audio sample for user auditioning.
+   * Deterministically cached based on text, language, voice, emotion, intensity, speed, and effect.
    */
   async previewVoice(options: {
     voice?: string;
@@ -49,12 +50,15 @@ export class AudioGenerationService {
     sampleText?: string;
     lang?: string;
     emotion?: SpeakingEmotion;
+    emotionIntensity?: number;
   }): Promise<{
     audioUrl: string;
     durationMs: number;
     voice: string;
     provider: string;
     effect: AudioEffectType;
+    emotion: SpeakingEmotion;
+    emotionIntensity: number;
   }> {
     const providerInstance = await TTSProviderFactory.getProvider(options.provider);
     const lang = options.lang || (options.voice?.startsWith('h') ? 'hi' : (options.voice?.startsWith('b') ? 'en-gb' : (options.voice ? 'en-us' : 'hi')));
@@ -63,43 +67,86 @@ export class AudioGenerationService {
     const speed = options.speed || 1.0;
     const emotion = (options.emotion || 'neutral') as SpeakingEmotion;
 
-    const emotionConfig = EMOTION_DELIVERY_MAP[emotion] || EMOTION_DELIVERY_MAP.neutral;
-    const calibratedSpeed = Math.max(0.5, Math.min(2.0, speed * (emotionConfig.speedMultiplier || 1.0)));
-    const effectiveEffect = (effect === 'normal' && emotionConfig.audioEffect) ? emotionConfig.audioEffect : effect;
+    // Delivery calculation with emotion intensity
+    const delivery = calculateEmotionDelivery({
+      emotion,
+      intensity: options.emotionIntensity,
+      baseSpeed: speed,
+      baseEffect: effect,
+    });
 
     const defaultHindiSample = "नमस्ते! मैं आपके साथ एक शानदार कहानी सुनाने के लिए तैयार हूँ।";
     const defaultEnglishSample = "Hello! I am ready to tell a wonderful story for you.";
-    const previewText = options.sampleText || (lang === 'hi' ? defaultHindiSample : defaultEnglishSample);
+    const previewText = (options.sampleText || (lang === 'hi' ? defaultHindiSample : defaultEnglishSample)).trim();
+
+    // Deterministic cache key incorporating text, lang, voice, emotion, intensity, speed, effect, pitch, presence
+    const cacheKey = createHash('sha256')
+      .update(JSON.stringify({
+        text: previewText,
+        lang,
+        voice,
+        emotion,
+        intensity: delivery.intensity,
+        speed: delivery.calibratedSpeed,
+        effect: delivery.effectiveEffect,
+        pitch: delivery.pitchShiftSemitones,
+        presence: delivery.presenceGainDb,
+      }))
+      .digest('hex')
+      .substring(0, 16);
+
+    const cachedFilename = `preview-${voice}-${cacheKey}.wav`;
+    const cachedFilePath = path.join(this.audioDir, cachedFilename);
+
+    // Reuse existing cached preview if file exists and has valid size
+    if (fs.existsSync(cachedFilePath) && fs.statSync(cachedFilePath).size > 1000) {
+      let durationMs = 0;
+      try {
+        durationMs = await this.probeAudioDuration(cachedFilePath);
+      } catch {
+        durationMs = 2500;
+      }
+      return {
+        audioUrl: `/storage/audio/${cachedFilename}`,
+        durationMs,
+        voice,
+        provider: providerInstance.name,
+        effect: delivery.effectiveEffect,
+        emotion,
+        emotionIntensity: delivery.intensity,
+      };
+    }
 
     const result = await providerInstance.generateSpeech(previewText, {
       voice,
-      speed: calibratedSpeed,
-      effect: effectiveEffect,
+      speed: delivery.calibratedSpeed,
+      effect: delivery.effectiveEffect,
       lang,
-      sentencePause: emotionConfig.sentencePause,
-      clausePause: emotionConfig.clausePause,
+      sentencePause: delivery.sentencePause,
+      clausePause: delivery.clausePause,
+      pitchShiftSemitones: delivery.pitchShiftSemitones,
+      presenceGainDb: delivery.presenceGainDb,
     });
 
-    const previewFilename = `preview-${Date.now()}-${Math.random().toString(36).substring(7)}.${result.format}`;
-    const filePath = path.join(this.audioDir, previewFilename);
-
-    await fs.promises.writeFile(filePath, result.audioBuffer);
+    await fs.promises.writeFile(cachedFilePath, result.audioBuffer);
 
     let durationMs = result.durationMs;
     if (!durationMs || durationMs <= 0) {
       try {
-        durationMs = await this.probeAudioDuration(filePath);
+        durationMs = await this.probeAudioDuration(cachedFilePath);
       } catch {
         durationMs = 2500;
       }
     }
 
     return {
-      audioUrl: `/storage/audio/${previewFilename}`,
+      audioUrl: `/storage/audio/${cachedFilename}`,
       durationMs,
       voice,
       provider: providerInstance.name,
-      effect: effectiveEffect,
+      effect: delivery.effectiveEffect,
+      emotion,
+      emotionIntensity: delivery.intensity,
     };
   }
 
@@ -117,6 +164,7 @@ export class AudioGenerationService {
     effect?: AudioEffectType;
     lang?: string;
     emotion?: SpeakingEmotion;
+    emotionIntensity?: number;
   }): Promise<{
     audioUrl: string;
     durationMs: number;
@@ -124,8 +172,10 @@ export class AudioGenerationService {
     provider: string;
     voice: string;
     effect: AudioEffectType;
+    emotion: SpeakingEmotion;
+    emotionIntensity: number;
   }> {
-    const { sceneId, narration, provider, voice, speed = 1.0, effect = 'normal', lang, emotion = 'neutral' } = options;
+    const { sceneId, narration, provider, voice, speed = 1.0, effect = 'normal', lang, emotion = 'neutral', emotionIntensity } = options;
 
     if (!narration || narration.trim().length === 0) {
       throw new Error('Narration text is required for audio generation');
@@ -136,7 +186,14 @@ export class AudioGenerationService {
     const projectLang = ((story as any)?.language && (story as any).language.toLowerCase().includes('english')) ? 'en-us' : 'hi';
     const effectiveLang = lang || (voice?.startsWith('h') ? 'hi' : (voice?.startsWith('b') ? 'en-gb' : (voice ? 'en-us' : projectLang)));
 
-    console.log(`[AudioGeneration] Generating narration for scene ${sceneId}: "${narration.substring(0, 60)}..." (provider: ${provider || 'default'}, voice: ${voice || 'default'}, lang: ${effectiveLang}, emotion: ${emotion})`);
+    const delivery = calculateEmotionDelivery({
+      emotion,
+      intensity: emotionIntensity,
+      baseSpeed: speed,
+      baseEffect: effect,
+    });
+
+    console.log(`[AudioGeneration] Generating narration for scene ${sceneId}: "${narration.substring(0, 60)}..." (provider: ${provider || 'default'}, voice: ${voice || 'default'}, lang: ${effectiveLang}, emotion: ${emotion}, intensity: ${delivery.intensity}%)`);
 
     // Clean narration text: remove markdown formatting, stage directions, or extra symbols
     const cleanText = narration
@@ -151,19 +208,17 @@ export class AudioGenerationService {
     const providerInstance = await TTSProviderFactory.getProvider(provider);
     const selectedVoice = voice || (effectiveLang === 'hi' ? 'hf_alpha' : (providerInstance.name === 'kokoro' ? 'af_heart' : 'en-US-Standard'));
 
-    const emotionConfig = EMOTION_DELIVERY_MAP[emotion] || EMOTION_DELIVERY_MAP.neutral;
-    const calibratedSpeed = Math.max(0.5, Math.min(2.0, speed * (emotionConfig.speedMultiplier || 1.0)));
-    const effectiveEffect = (effect === 'normal' && emotionConfig.audioEffect) ? emotionConfig.audioEffect : effect;
-
     let ttsResult;
     try {
       ttsResult = await providerInstance.generateSpeech(textToSpeak, {
         voice: selectedVoice,
-        speed: calibratedSpeed,
-        effect: effectiveEffect,
+        speed: delivery.calibratedSpeed,
+        effect: delivery.effectiveEffect,
         lang: effectiveLang,
-        sentencePause: emotionConfig.sentencePause,
-        clausePause: emotionConfig.clausePause,
+        sentencePause: delivery.sentencePause,
+        clausePause: delivery.clausePause,
+        pitchShiftSemitones: delivery.pitchShiftSemitones,
+        presenceGainDb: delivery.presenceGainDb,
       });
     } catch (err: any) {
       console.warn(`[AudioGeneration] TTS generation with provider "${providerInstance.name}" failed:`, err);
@@ -173,8 +228,8 @@ export class AudioGenerationService {
         const fallbackProvider = await TTSProviderFactory.getProvider('google');
         ttsResult = await fallbackProvider.generateSpeech(textToSpeak, {
           voice: 'en-US-Standard',
-          speed,
-          effect,
+          speed: delivery.calibratedSpeed,
+          effect: delivery.effectiveEffect,
           lang: lang || 'en',
         });
       } else {
@@ -232,6 +287,8 @@ export class AudioGenerationService {
       provider: ttsResult.provider,
       voice: ttsResult.voice,
       effect: ttsResult.effect,
+      emotion,
+      emotionIntensity: delivery.intensity,
     };
   }
 
@@ -253,6 +310,7 @@ export class AudioGenerationService {
     voice?: string;
     speakingDirection?: SpeakingDirection;
     emotion?: SpeakingEmotion;
+    emotionIntensity?: number;
     facialExpression?: FacialExpression;
     speed?: number;
     effect?: AudioEffectType;
@@ -268,6 +326,7 @@ export class AudioGenerationService {
       text,
       speakingDirection,
       emotion,
+      emotionIntensity,
       facialExpression,
       startMs = 0,
       effect = 'normal',
@@ -299,6 +358,7 @@ export class AudioGenerationService {
     let charVoiceId: string | undefined;
     let charSpeed: number | undefined;
     let charEmotion: string | undefined;
+    let charIntensity: number | undefined;
     let charEffect: AudioEffectType | undefined;
 
     try {
@@ -312,6 +372,7 @@ export class AudioGenerationService {
         charVoiceId = voiceConfig.voiceId;
         charSpeed = voiceConfig.speed;
         charEmotion = voiceConfig.emotion || voiceConfig.style;
+        charIntensity = voiceConfig.emotionIntensity;
         charEffect = voiceConfig.effect;
       }
     } catch (err) {
@@ -356,12 +417,14 @@ export class AudioGenerationService {
     const sceneVoiceId = scenePerf?.voiceId;
     const sceneSpeed = scenePerf?.speed;
     const sceneEmotion = scenePerf?.emotion;
+    const sceneIntensity = scenePerf?.emotionIntensity;
 
     // D. Dialogue-line overrides
     const lineLang = options.lang;
     const lineVoiceId = (options.voice && options.voice !== 'default') ? options.voice : undefined;
     const lineSpeed = options.speed;
     const lineEmotion = emotion || speakingDirection;
+    const lineIntensity = emotionIntensity;
     const lineEffect = (effect && effect !== 'normal') ? effect : undefined;
 
     // Effective values according to strict precedence:
@@ -395,13 +458,23 @@ export class AudioGenerationService {
     const baseSpeed = lineSpeed ?? sceneSpeed ?? charSpeed ?? 1.0;
     const baseEffect = lineEffect || charEffect || 'normal';
 
-    // Apply emotion-calibrated speed, pauses, and acoustic delivery
-    const emotionConfig = EMOTION_DELIVERY_MAP[effectiveEmotion] || EMOTION_DELIVERY_MAP.neutral;
-    const calibratedSpeed = Math.max(0.5, Math.min(2.0, baseSpeed * (emotionConfig.speedMultiplier || 1.0)));
-    const effectiveEffect = (baseEffect === 'normal' && emotionConfig.audioEffect) ? emotionConfig.audioEffect : baseEffect;
+    // Effective intensity according to strict precedence
+    const effectiveIntensity = lineIntensity !== undefined
+      ? lineIntensity
+      : (sceneIntensity !== undefined
+        ? sceneIntensity
+        : (charIntensity !== undefined ? charIntensity : undefined));
+
+    // Calculate emotion delivery with intensity
+    const delivery = calculateEmotionDelivery({
+      emotion: effectiveEmotion,
+      intensity: effectiveIntensity,
+      baseSpeed,
+      baseEffect,
+    });
 
     console.log(
-      `[AudioGeneration] Generating dialogue for character "${characterName}": "${textToSpeak.slice(0, 40)}..." (lang: ${effectiveLang}, voice: ${effectiveVoice}, speed: ${calibratedSpeed}, effect: ${effectiveEffect}, emotion: ${effectiveEmotion})`
+      `[AudioGeneration] Generating dialogue for character "${characterName}": "${textToSpeak.slice(0, 40)}..." (lang: ${effectiveLang}, voice: ${effectiveVoice}, speed: ${delivery.calibratedSpeed}, effect: ${delivery.effectiveEffect}, emotion: ${effectiveEmotion}, intensity: ${delivery.intensity}%)`
     );
 
     // 2. Synthesize speech using TTS provider (Kokoro-82M by default)
@@ -410,11 +483,13 @@ export class AudioGenerationService {
     try {
       ttsResult = await providerInstance.generateSpeech(textToSpeak, {
         voice: effectiveVoice,
-        speed: calibratedSpeed,
-        effect: effectiveEffect,
+        speed: delivery.calibratedSpeed,
+        effect: delivery.effectiveEffect,
         lang: effectiveLang,
-        sentencePause: emotionConfig.sentencePause,
-        clausePause: emotionConfig.clausePause,
+        sentencePause: delivery.sentencePause,
+        clausePause: delivery.clausePause,
+        pitchShiftSemitones: delivery.pitchShiftSemitones,
+        presenceGainDb: delivery.presenceGainDb,
       });
     } catch (err: any) {
       console.warn(`[AudioGeneration] Dialogue TTS with provider "${providerInstance.name}" failed:`, err);
@@ -423,8 +498,8 @@ export class AudioGenerationService {
         const fallback = await TTSProviderFactory.getProvider('google');
         ttsResult = await fallback.generateSpeech(textToSpeak, {
           voice: 'en-US-Standard',
-          speed: calibratedSpeed,
-          effect: effectiveEffect,
+          speed: delivery.calibratedSpeed,
+          effect: delivery.effectiveEffect,
           lang: effectiveLang || 'en',
         });
       } else {
@@ -445,7 +520,7 @@ export class AudioGenerationService {
       durationMs = await this.probeAudioDuration(filePath);
     } catch {
       const words = textToSpeak.split(/\s+/).length;
-      durationMs = Math.round((words * 400 + 400) / calibratedSpeed);
+      durationMs = Math.round((words * 400 + 400) / delivery.calibratedSpeed);
     }
 
     // 4. Derive deterministic lip-sync viseme cues
@@ -461,9 +536,20 @@ export class AudioGenerationService {
       voice: ttsResult.voice || effectiveVoice,
       speakingDirection: effectiveEmotion,
       emotion: effectiveEmotion,
+      emotionIntensity: delivery.intensity,
       facialExpression,
       speed: baseSpeed,
+      effect: delivery.effectiveEffect,
       audioUrl: `/storage/audio/${filename}`,
+      audioMeta: {
+        text: textToSpeak,
+        lang: effectiveLang,
+        voice: ttsResult.voice || effectiveVoice,
+        emotion: effectiveEmotion,
+        emotionIntensity: delivery.intensity,
+        speed: baseSpeed,
+        effect: delivery.effectiveEffect,
+      },
       startMs,
       durationMs,
       visemeCues,
@@ -500,15 +586,6 @@ export class AudioGenerationService {
       const line = updatedDialogueLines[i];
       if (!line.text || !line.text.trim()) continue;
 
-      // If audio already exists and we are not forcing regeneration, verify file existence
-      if (line.audioUrl && !options.forceRegenerate) {
-        const localRel = line.audioUrl.startsWith('/') ? line.audioUrl.slice(1) : line.audioUrl;
-        const absPath = path.join(process.cwd(), localRel);
-        if (fs.existsSync(absPath)) {
-          continue;
-        }
-      }
-
       let lineVoice = line.voice;
       if (options.forceRegenerate || !lineVoice || lineVoice === 'default') {
         try {
@@ -525,6 +602,25 @@ export class AudioGenerationService {
         }
       }
 
+      // If audio already exists and we are not forcing regeneration, verify file existence and settings compatibility
+      if (line.audioUrl && !options.forceRegenerate) {
+        const localRel = line.audioUrl.startsWith('/') ? line.audioUrl.slice(1) : line.audioUrl;
+        const absPath = path.join(process.cwd(), localRel);
+        const meta = (line as any).audioMeta;
+        const targetIntensity = normalizeEmotionIntensity(line.emotionIntensity, line.emotion);
+        const isCompatible = !meta || (
+          meta.text === line.text.trim() &&
+          meta.voice === (line.voice || lineVoice) &&
+          meta.emotion === (line.emotion || line.speakingDirection || 'neutral') &&
+          meta.emotionIntensity === targetIntensity &&
+          meta.speed === (line.speed || 1.0)
+        );
+
+        if (fs.existsSync(absPath) && isCompatible) {
+          continue;
+        }
+      }
+
       try {
         const generated = await this.generateCharacterDialogueAudio({
           sceneId: scene.sceneId,
@@ -536,6 +632,7 @@ export class AudioGenerationService {
           voice: lineVoice,
           speakingDirection: line.speakingDirection,
           emotion: line.emotion,
+          emotionIntensity: line.emotionIntensity,
           facialExpression: line.facialExpression,
           speed: line.speed,
           startMs: line.startMs,
@@ -610,6 +707,7 @@ export class AudioGenerationService {
           voice: resolvedVoice || line.voice,
           speakingDirection: line.speakingDirection,
           emotion: line.emotion,
+          emotionIntensity: line.emotionIntensity,
           facialExpression: line.facialExpression,
           speed: line.speed,
           startMs: line.startMs,

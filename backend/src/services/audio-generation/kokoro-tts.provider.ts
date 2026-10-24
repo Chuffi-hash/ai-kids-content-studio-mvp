@@ -141,11 +141,16 @@ export class KokoroTTSProvider implements TTSProvider {
         throw new Error(inferenceRes.error || 'Kokoro inference failed');
       }
 
-      // Apply audio effect (normal, robot, cartoon)
+      // Apply audio effect (normal, robot, cartoon, whisper, shout) and calibrated emotion prosody
       const { durationMs } = await this.effectsService.applyEffect(
         rawFile,
         processedFile,
-        effect
+        effect,
+        {
+          pitchShiftSemitones: options?.pitchShiftSemitones,
+          presenceGainDb: options?.presenceGainDb,
+          sampleRate: inferenceRes.sampleRate || 24000,
+        }
       );
 
       const audioBuffer = await fs.promises.readFile(processedFile);

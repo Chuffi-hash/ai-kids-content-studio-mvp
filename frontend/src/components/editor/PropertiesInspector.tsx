@@ -59,6 +59,7 @@ interface PropertiesInspectorProps {
       effect?: 'normal' | 'robot' | 'cartoon' | 'whisper' | 'shout';
       lang?: string;
       emotion?: string;
+      emotionIntensity?: number;
     }
   ) => Promise<void>;
   onRemoveVoice?: (sceneId: string) => Promise<void>;
@@ -189,6 +190,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
   const [selectedLanguage, setSelectedLanguage] = useState<string>('hi');
   const [selectedVoice, setSelectedVoice] = useState<string>('hf_alpha');
   const [voiceEmotion, setVoiceEmotion] = useState<SpeakingEmotion>('neutral');
+  const [voiceEmotionIntensity, setVoiceEmotionIntensity] = useState<number>(0);
   const [voiceSpeed, setVoiceSpeed] = useState<number>(1.0);
   const [voiceEffect, setVoiceEffect] = useState<'normal' | 'robot' | 'cartoon' | 'whisper' | 'shout'>('normal');
 
@@ -225,6 +227,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
         effect: voiceEffect,
         lang: selectedLanguage,
         emotion: voiceEmotion,
+        emotionIntensity: voiceEmotionIntensity,
       });
       setPreviewAudioUrl(res.audioUrl);
       setTimeout(() => {
@@ -248,6 +251,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
       effect: voiceEffect,
       lang: selectedLanguage,
       emotion: voiceEmotion,
+      emotionIntensity: voiceEmotionIntensity,
     });
   };
 
@@ -1253,7 +1257,11 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                 className="ed-input"
                 style={{ fontSize: '11px', padding: '4px 6px', height: '30px' }}
                 value={voiceEmotion}
-                onChange={(e) => setVoiceEmotion(e.target.value as SpeakingEmotion)}
+                onChange={(e) => {
+                  const em = e.target.value as SpeakingEmotion;
+                  setVoiceEmotion(em);
+                  setVoiceEmotionIntensity(em === 'happy' ? 60 : (em === 'neutral' ? 0 : 50));
+                }}
               >
                 {EMOTION_OPTIONS.map((emo) => (
                   <option key={emo.id} value={emo.id}>
@@ -1261,6 +1269,67 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                   </option>
                 ))}
               </select>
+            </div>
+
+            {/* Narrator Emotion Intensity Slider */}
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px', marginBottom: '4px' }}>
+                <span style={{ color: 'var(--ed-text-muted)' }}>Emotion Intensity</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ fontSize: '10px', color: '#c4b5fd' }}>
+                    {voiceEmotionIntensity <= 0
+                      ? '0% Neutral'
+                      : voiceEmotionIntensity <= 25
+                      ? '25% Subtle'
+                      : voiceEmotionIntensity <= 50
+                      ? '50% Moderate'
+                      : voiceEmotionIntensity === 60
+                      ? '60% Happy'
+                      : voiceEmotionIntensity <= 75
+                      ? '75% Strong'
+                      : '100% Max'}
+                  </span>
+                  <span style={{ fontWeight: 700, color: 'var(--ed-text)', minWidth: '38px', textAlign: 'right' }}>
+                    {voiceEmotionIntensity}%
+                  </span>
+                </div>
+              </div>
+              <input
+                type="range"
+                className="ed-inspector-slider"
+                min="0"
+                max="100"
+                step="1"
+                value={voiceEmotionIntensity}
+                onChange={(e) => setVoiceEmotionIntensity(parseInt(e.target.value, 10) || 0)}
+              />
+              <div style={{ display: 'flex', gap: '4px', marginTop: '4px', flexWrap: 'wrap' }}>
+                {[
+                  { val: 0, label: '0% Min' },
+                  { val: 25, label: '25% Subtle' },
+                  { val: 50, label: '50% Mod' },
+                  { val: 60, label: '60% Happy' },
+                  { val: 75, label: '75% Strong' },
+                  { val: 100, label: '100% Max' },
+                ].map((p) => (
+                  <button
+                    key={p.val}
+                    type="button"
+                    onClick={() => setVoiceEmotionIntensity(p.val)}
+                    style={{
+                      fontSize: '9px',
+                      padding: '2px 5px',
+                      borderRadius: '4px',
+                      border: voiceEmotionIntensity === p.val ? '1px solid #8b5cf6' : '1px solid var(--ed-border)',
+                      background: voiceEmotionIntensity === p.val ? 'rgba(139, 92, 246, 0.25)' : 'var(--ed-surface-elevated)',
+                      color: voiceEmotionIntensity === p.val ? '#c4b5fd' : 'var(--ed-text-muted)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* In-line Voice Preview Player */}

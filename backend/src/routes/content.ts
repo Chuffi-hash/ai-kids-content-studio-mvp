@@ -895,7 +895,7 @@ contentRouter.get("/tts/voices", async (_req, res) => {
 // Preview voice with sample speech and effect
 contentRouter.post("/tts/preview", async (req, res) => {
   try {
-    const { voice, provider, speed, effect, sampleText, lang, emotion } = req.body;
+    const { voice, provider, speed, effect, sampleText, lang, emotion, emotionIntensity } = req.body;
     const result = await audioGenerationService.previewVoice({
       voice,
       provider,
@@ -904,6 +904,7 @@ contentRouter.post("/tts/preview", async (req, res) => {
       sampleText,
       lang,
       emotion,
+      emotionIntensity: emotionIntensity !== undefined ? Number(emotionIntensity) : undefined,
     });
     return res.json({ success: true, ...result });
   } catch (error: any) {
@@ -927,7 +928,7 @@ contentRouter.post("/suggest-emotion", async (req, res) => {
 contentRouter.post("/scenes/:sceneId/voice", async (req, res) => {
   try {
     const { sceneId } = req.params;
-    const { narration, lang, provider, voice, speed, effect, emotion } = req.body;
+    const { narration, lang, provider, voice, speed, effect, emotion, emotionIntensity } = req.body;
 
     const scene = await getSceneBySceneId(sceneId);
     if (!scene) {
@@ -948,6 +949,7 @@ contentRouter.post("/scenes/:sceneId/voice", async (req, res) => {
       speed: speed ? parseFloat(speed) : undefined,
       effect,
       emotion,
+      emotionIntensity: emotionIntensity !== undefined ? Number(emotionIntensity) : undefined,
     });
 
     return res.json({
@@ -958,6 +960,8 @@ contentRouter.post("/scenes/:sceneId/voice", async (req, res) => {
       provider: result.provider,
       voice: result.voice,
       effect: result.effect,
+      emotion: result.emotion,
+      emotionIntensity: result.emotionIntensity,
     });
   } catch (error: any) {
     console.error(`[Content] Voice generation failed for scene ${req.params.sceneId}:`, error);
@@ -989,6 +993,7 @@ contentRouter.post("/scenes/:sceneId/dialogue/generate", async (req, res) => {
       voice,
       speakingDirection,
       emotion,
+      emotionIntensity,
       facialExpression,
       speed,
       startMs,
@@ -1015,6 +1020,7 @@ contentRouter.post("/scenes/:sceneId/dialogue/generate", async (req, res) => {
       voice,
       speakingDirection,
       emotion,
+      emotionIntensity: emotionIntensity !== undefined ? Number(emotionIntensity) : undefined,
       facialExpression,
       speed: speed ? parseFloat(speed) : undefined,
       startMs: typeof startMs === "number" ? startMs : 0,

@@ -109,11 +109,15 @@ export interface VisemeCue {
   durationMs: number;
 }
 
+export type AudioEffectType = 'normal' | 'robot' | 'cartoon' | 'whisper' | 'shout';
+
 export interface CharacterPerformanceOverride {
   lang?: 'hi' | 'en' | string;
   voiceId?: string;
   emotion?: SpeakingEmotion;
+  emotionIntensity?: number;
   speed?: number;
+  effect?: 'normal' | 'cartoon' | 'robot' | 'whisper' | 'shout';
   defaultExpression?: FacialExpression;
 }
 
@@ -127,9 +131,20 @@ export interface SceneDialogue {
   voice?: string;
   speakingDirection?: SpeakingDirection;
   emotion?: SpeakingEmotion;
+  emotionIntensity?: number; // 0 - 100%
   facialExpression?: FacialExpression;
   speed?: number;
+  effect?: AudioEffectType;
   audioUrl?: string;
+  audioMeta?: {
+    text: string;
+    lang: string;
+    voice: string;
+    emotion: string;
+    emotionIntensity: number;
+    speed: number;
+    effect?: string;
+  };
   startMs: number;
   durationMs: number;
   visemeCues?: VisemeCue[];
@@ -140,6 +155,7 @@ export interface CharacterVoiceConfig {
   voiceId: string;
   speed?: number;
   emotion?: SpeakingEmotion;
+  emotionIntensity?: number; // 0 - 100%
   style?: SpeakingDirection;
   effect?: 'normal' | 'cartoon' | 'robot' | 'whisper' | 'shout';
 }

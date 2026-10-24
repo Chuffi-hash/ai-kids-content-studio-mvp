@@ -275,7 +275,8 @@ export async function previewVoice(options: {
   sampleText?: string;
   lang?: string;
   emotion?: string;
-}): Promise<{ audioUrl: string; durationMs: number; voice: string; effect: string }> {
+  emotionIntensity?: number;
+}): Promise<{ audioUrl: string; durationMs: number; voice: string; effect: string; emotion?: string; emotionIntensity?: number }> {
   const res = await fetch(`${API_URL}/api/content/tts/preview`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -314,6 +315,7 @@ export async function generateSceneVoice(
     effect?: 'normal' | 'robot' | 'cartoon' | 'whisper' | 'shout';
     lang?: string;
     emotion?: string;
+    emotionIntensity?: number;
   }
 ): Promise<{
   audioUrl: string;
@@ -321,6 +323,8 @@ export async function generateSceneVoice(
   provider?: string;
   voice?: string;
   effect?: string;
+  emotion?: string;
+  emotionIntensity?: number;
 }> {
   const res = await fetch(`${API_URL}/api/content/scenes/${sceneId}/voice`, {
     method: 'POST',
@@ -628,6 +632,7 @@ export async function generateSceneDialogueAudio(
     voice?: string;
     speakingDirection?: string;
     emotion?: string;
+    emotionIntensity?: number;
     facialExpression?: string;
     speed?: number;
     startMs?: number;

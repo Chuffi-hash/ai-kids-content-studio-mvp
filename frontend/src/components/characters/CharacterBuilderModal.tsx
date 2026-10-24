@@ -284,6 +284,7 @@ export const CharacterBuilderModal: React.FC<CharacterBuilderModalProps> = ({
         speed: appearance.voiceConfig?.speed ?? 1.0,
         effect: appearance.voiceConfig?.effect || 'normal',
         emotion: effectiveEmotion,
+        emotionIntensity: appearance.voiceConfig?.emotionIntensity,
         sampleText,
       });
       setPreviewAudioUrl(res.audioUrl);
@@ -1196,6 +1197,7 @@ export const CharacterBuilderModal: React.FC<CharacterBuilderModalProps> = ({
                       value={appearance.voiceConfig?.emotion || 'neutral'}
                       onChange={(e) => {
                         const val = e.target.value as SpeakingEmotion;
+                        const defaultInt = val === 'happy' ? 60 : (val === 'neutral' ? 0 : 50);
                         updateAppearance((a) => ({
                           ...a,
                           voiceConfig: {
@@ -1205,6 +1207,7 @@ export const CharacterBuilderModal: React.FC<CharacterBuilderModalProps> = ({
                             effect: a.voiceConfig?.effect ?? 'normal',
                             emotion: val,
                             style: val,
+                            emotionIntensity: defaultInt,
                           },
                         }));
                       }}
@@ -1215,6 +1218,93 @@ export const CharacterBuilderModal: React.FC<CharacterBuilderModalProps> = ({
                         </option>
                       ))}
                     </select>
+                  </div>
+
+                  <div className="char-control-group">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                      <label style={{ margin: 0 }}>Emotion Intensity</label>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ fontSize: '11px', color: '#c4b5fd' }}>
+                          {(appearance.voiceConfig?.emotionIntensity ?? (appearance.voiceConfig?.emotion === 'happy' ? 60 : (appearance.voiceConfig?.emotion === 'neutral' ? 0 : 50))) <= 0
+                            ? '0% Neutral'
+                            : (appearance.voiceConfig?.emotionIntensity ?? 50) <= 25
+                            ? '25% Subtle'
+                            : (appearance.voiceConfig?.emotionIntensity ?? 50) <= 50
+                            ? '50% Moderate'
+                            : (appearance.voiceConfig?.emotionIntensity ?? 50) === 60
+                            ? '60% Happy'
+                            : (appearance.voiceConfig?.emotionIntensity ?? 50) <= 75
+                            ? '75% Strong'
+                            : '100% Max'}
+                        </span>
+                        <span style={{ fontWeight: 700, color: '#f8fafc', minWidth: '38px', textAlign: 'right' }}>
+                          {appearance.voiceConfig?.emotionIntensity ?? (appearance.voiceConfig?.emotion === 'happy' ? 60 : (appearance.voiceConfig?.emotion === 'neutral' ? 0 : 50))}%
+                        </span>
+                      </div>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      step="1"
+                      value={appearance.voiceConfig?.emotionIntensity ?? (appearance.voiceConfig?.emotion === 'happy' ? 60 : (appearance.voiceConfig?.emotion === 'neutral' ? 0 : 50))}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value, 10) || 0;
+                        updateAppearance((a) => ({
+                          ...a,
+                          voiceConfig: {
+                            lang: a.voiceConfig?.lang || 'hi',
+                            voiceId: a.voiceConfig?.voiceId || 'hf_alpha',
+                            speed: a.voiceConfig?.speed ?? 1.0,
+                            effect: a.voiceConfig?.effect ?? 'normal',
+                            emotion: a.voiceConfig?.emotion || 'neutral',
+                            style: a.voiceConfig?.style || 'cheerful',
+                            emotionIntensity: val,
+                          },
+                        }));
+                      }}
+                      className="char-builder-slider"
+                    />
+                    <div style={{ display: 'flex', gap: '4px', marginTop: '6px', flexWrap: 'wrap' }}>
+                      {[
+                        { val: 0, label: '0% Min' },
+                        { val: 25, label: '25% Subtle' },
+                        { val: 50, label: '50% Mod' },
+                        { val: 60, label: '60% Happy' },
+                        { val: 75, label: '75% Strong' },
+                        { val: 100, label: '100% Max' },
+                      ].map((p) => (
+                        <button
+                          key={p.val}
+                          type="button"
+                          onClick={() => {
+                            updateAppearance((a) => ({
+                              ...a,
+                              voiceConfig: {
+                                lang: a.voiceConfig?.lang || 'hi',
+                                voiceId: a.voiceConfig?.voiceId || 'hf_alpha',
+                                speed: a.voiceConfig?.speed ?? 1.0,
+                                effect: a.voiceConfig?.effect ?? 'normal',
+                                emotion: a.voiceConfig?.emotion || 'neutral',
+                                style: a.voiceConfig?.style || 'cheerful',
+                                emotionIntensity: p.val,
+                              },
+                            }));
+                          }}
+                          style={{
+                            fontSize: '10px',
+                            padding: '3px 8px',
+                            borderRadius: '4px',
+                            border: (appearance.voiceConfig?.emotionIntensity ?? (appearance.voiceConfig?.emotion === 'happy' ? 60 : (appearance.voiceConfig?.emotion === 'neutral' ? 0 : 50))) === p.val ? '1px solid #8b5cf6' : '1px solid #334155',
+                            background: (appearance.voiceConfig?.emotionIntensity ?? (appearance.voiceConfig?.emotion === 'happy' ? 60 : (appearance.voiceConfig?.emotion === 'neutral' ? 0 : 50))) === p.val ? 'rgba(139, 92, 246, 0.3)' : '#1e293b',
+                            color: (appearance.voiceConfig?.emotionIntensity ?? (appearance.voiceConfig?.emotion === 'happy' ? 60 : (appearance.voiceConfig?.emotion === 'neutral' ? 0 : 50))) === p.val ? '#c4b5fd' : '#94a3b8',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          {p.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
 
                   <div className="char-control-group">
