@@ -44,11 +44,37 @@ body.theme-light .ed-center-canvas {
   background: #f1f5f9;
 }
 
+/* Sleek Dark Scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #334155 #0a0f1d;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0a0f1d;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
 .editor-root {
   position: fixed;
   inset: 0;
   width: 100vw;
   height: 100vh;
+  min-width: 0;
+  min-height: 0;
   background: var(--ed-bg);
   color: var(--ed-text);
   display: flex;
@@ -243,6 +269,8 @@ body.theme-light .ed-center-canvas {
   display: flex;
   overflow: hidden;
   position: relative;
+  min-width: 0;
+  min-height: 0;
 }
 
 /* ---------------- Left Asset Panel ---------------- */
@@ -254,6 +282,9 @@ body.theme-light .ed-center-canvas {
   flex-direction: column;
   flex-shrink: 0;
   overflow: hidden;
+  min-width: 0;
+  min-height: 0;
+  transition: width 0.2s ease, opacity 0.2s ease;
 }
 
 .ed-asset-tabs-header {
@@ -849,6 +880,9 @@ body.theme-light .ed-center-canvas {
   flex-shrink: 0;
   overflow: hidden;
   box-sizing: border-box;
+  min-width: 0;
+  min-height: 0;
+  transition: width 0.2s ease, opacity 0.2s ease;
 }
 
 .ed-inspector-header {
@@ -1841,6 +1875,207 @@ body.theme-light .ed-center-canvas {
   right: 0;
   border-top-right-radius: 3px;
   border-bottom-right-radius: 3px;
+}
+
+/* ============================================================
+   Primary Sidebar Navigation (Vertical)
+   ============================================================ */
+.ed-primary-sidebar {
+  background: var(--ed-surface);
+  border-right: 1px solid var(--ed-border);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  box-sizing: border-box;
+  transition: width 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 30;
+  user-select: none;
+}
+
+.ed-sidebar-section-title {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ed-text-faint);
+  padding: 12px 14px 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ed-sidebar-nav-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 12px;
+  background: transparent;
+  border: none;
+  border-left: 3px solid transparent;
+  color: var(--ed-text-muted);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  text-align: left;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  box-sizing: border-box;
+  border-radius: 0 6px 6px 0;
+}
+
+.ed-sidebar-nav-btn:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--ed-text);
+}
+
+.ed-sidebar-nav-btn.active {
+  background: rgba(139, 92, 246, 0.16);
+  border-left-color: #8b5cf6;
+  color: #f8fafc;
+  font-weight: 600;
+}
+
+.ed-sidebar-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--ed-text-muted);
+  line-height: 1.2;
+}
+
+.ed-sidebar-nav-btn.active .ed-sidebar-badge {
+  background: rgba(139, 92, 246, 0.3);
+  color: #c4b5fd;
+}
+
+.ed-sidebar-toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: transparent;
+  border: none;
+  border-top: 1px solid var(--ed-border);
+  color: var(--ed-text-faint);
+  font-size: 11px;
+  cursor: pointer;
+  width: 100%;
+  box-sizing: border-box;
+  transition: color 0.15s, background 0.15s;
+}
+
+.ed-sidebar-toggle-btn:hover {
+  color: var(--ed-text);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* ============================================================
+   Timeline Right-Click Context Menu
+   ============================================================ */
+.ed-context-menu {
+  position: fixed;
+  z-index: 1000;
+  min-width: 210px;
+  max-width: 280px;
+  background: #111827;
+  border: 1px solid #1f293d;
+  border-radius: 8px;
+  padding: 6px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  backdrop-filter: blur(8px);
+  animation: edContextMenuFadeIn 0.1s ease-out;
+}
+
+@keyframes edContextMenuFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.ed-context-header {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ed-text-faint);
+  padding: 6px 8px 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ed-context-time {
+  font-family: monospace;
+  font-size: 10px;
+  color: var(--ed-text-muted);
+  background: rgba(255, 255, 255, 0.08);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+.ed-context-divider {
+  height: 1px;
+  background: var(--ed-border);
+  margin: 4px 0;
+}
+
+.ed-context-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 9px;
+  border: none;
+  background: transparent;
+  color: var(--ed-text);
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 5px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s, color 0.12s;
+  box-sizing: border-box;
+}
+
+.ed-context-item:hover {
+  background: rgba(139, 92, 246, 0.2);
+  color: #f8fafc;
+}
+
+.ed-context-item.danger {
+  color: #f87171;
+}
+
+.ed-context-item.danger:hover {
+  background: rgba(239, 68, 68, 0.2);
+  color: #fca5a5;
+}
+
+.ed-context-item:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.ed-context-kbd {
+  margin-left: auto;
+  font-size: 10px;
+  font-family: monospace;
+  color: var(--ed-text-faint);
 }
 
 

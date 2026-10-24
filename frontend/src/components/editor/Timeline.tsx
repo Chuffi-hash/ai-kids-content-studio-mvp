@@ -1,5 +1,7 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { EditorScene } from '../../types/editor';
+import { EducationalOverlayType, SceneDialogue } from '../../types/animation';
+import { TimelineContextMenu, TimelineContextMenuTarget } from './TimelineContextMenu';
 import {
   formatTimeMs,
   formatDurationHuman,
@@ -53,6 +55,18 @@ interface TimelineProps {
   onSelectOverlay?: (overlayId: string | null) => void;
   isRippleOn?: boolean;
   onToggleRipple?: () => void;
+
+  // Context Menu Actions
+  onDuplicateScene?: (sceneId: string) => void;
+  onDeleteScene?: (sceneId: string) => void;
+  onDeleteDialogue?: (dialogueId: string) => void;
+  onDeleteOverlay?: (sceneId: string, overlayId: string) => void;
+  onDeleteInstance?: (sceneId: string, instanceId: string) => void;
+  onAddDialogue?: (sceneId: string, startOffsetMs?: number) => void;
+  onAddOverlay?: (sceneId: string, type: EducationalOverlayType, startOffsetMs?: number) => void;
+  onAddCharacter?: (sceneId: string, charId: 'pip_the_bear' | 'sammy_the_kid') => void;
+  onPreviewDialogue?: (dialogue: SceneDialogue) => void;
+  onRegenerateDialogue?: (sceneId: string, dialogueId: string) => void;
 }
 
 interface TimelineLayoutItem<T> {
@@ -121,7 +135,24 @@ export const Timeline: React.FC<TimelineProps> = ({
   onSelectOverlay,
   isRippleOn: isRippleOnProp,
   onToggleRipple,
+  onDuplicateScene,
+  onDeleteScene,
+  onDeleteDialogue,
+  onDeleteOverlay,
+  onDeleteInstance,
+  onAddDialogue,
+  onAddOverlay,
+  onAddCharacter,
+  onPreviewDialogue,
+  onRegenerateDialogue,
 }) => {
+  // Right-click context menu state
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    target: TimelineContextMenuTarget;
+  } | null>(null);
+
   // Zoom: pixels per second
   const [pxPerSec, setPxPerSec] = useState<number>(45);
   const [localIsRippleOn, setLocalIsRippleOn] = useState<boolean>(true);
@@ -133,6 +164,30 @@ export const Timeline: React.FC<TimelineProps> = ({
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   const activeScene = scenes.find((s) => s.sceneId === activeSceneId) || null;
+
+  // Convert milliseconds to pixels & vice-versa
+  const msToPx = (ms: number) => (ms / 1000) * pxPerSec;
+  const pxToMs = (px: number) => Math.round((px / pxPerSec) * 1000);
+
+  const handleTrackContextMenu = (e: React.MouseEvent, track: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const rect = scrollContainerRef.current?.getBoundingClientRect();
+    const scrollLeft = scrollContainerRef.current?.scrollLeft || 0;
+    const clickPx = e.clientX - (rect?.left || 0) + scrollLeft - 140; // minus 140px for header
+    const clickMs = Math.max(0, pxToMs(clickPx));
+    const sceneAtTime = scenes.find((s) => clickMs >= s.startMs && clickMs < s.endMs) || activeScene;
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      target: {
+        type: 'empty',
+        track,
+        timeMs: clickMs,
+        sceneId: sceneAtTime?.sceneId,
+      },
+    });
+  };
 
   // Sub-lane packing for dialogues
   const packedDialogues = React.useMemo(() => {
@@ -201,11 +256,6 @@ export const Timeline: React.FC<TimelineProps> = ({
     const fitPx = Math.max(15, Math.min(120, Math.floor(availableWidth / totalSecs)));
     setPxPerSec(fitPx);
   };
-
-  // Convert milliseconds to pixels
-  const msToPx = (ms: number) => (ms / 1000) * pxPerSec;
-  // Convert pixels to milliseconds
-  const pxToMs = (px: number) => Math.round((px / pxPerSec) * 1000);
 
   // Ruler click to scrub playhead
   const handleRulerClick = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -504,7 +554,7 @@ export const Timeline: React.FC<TimelineProps> = ({
               color: isRippleOn ? '#c4b5fd' : 'var(--ed-text-muted)',
             }}
             onClick={handleToggleRipple}
-            title="When ripple is ON, resizing a scene shifts all subsequent scenes"
+            title="Ripple Edit (ON/OFF): When ripple edit is ON, adjusting a scene duration automatically shifts all downstream scenes and audio to prevent unwanted gaps or overlaps."
           >
             Ripple Edit: {isRippleOn ? 'ON' : 'OFF'}
           </button>
@@ -531,17 +581,36 @@ export const Timeline: React.FC<TimelineProps> = ({
         {/* Sticky Left Track Labels */}
         <div className="ed-tracks-headers">
           <div className="ed-track-header ruler-header">Time</div>
-          <div className="ed-track-header track-visuals">
+          <div
+            className="ed-track-header track-visuals"
+            onContextMenu={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setContextMenu({ x: e.clientX, y: e.clientY, target: { type: 'header', track: 'track-visuals' } });
+            }}
+          >
             <FilmIcon size={13} />
             <span>Visuals</span>
           </div>
-          <div className="ed-track-header track-rig">
+          <div
+            className="ed-track-header track-rig"
+            onContextMenu={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setContextMenu({ x: e.clientX, y: e.clientY, target: { type: 'header', track: 'track-rig' } });
+            }}
+          >
             <SparklesIcon size={13} color="#a78bfa" />
             <span>2D Rig</span>
           </div>
           <div
             className="ed-track-header track-dialogue"
             style={{ height: `${dialogueTrackHeight}px`, minHeight: `${dialogueTrackHeight}px` }}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setContextMenu({ x: e.clientX, y: e.clientY, target: { type: 'header', track: 'track-dialogue' } });
+            }}
           >
             <span style={{ fontSize: '13px' }}>👄</span>
             <span>Dialogue {packedDialogues.totalLanes > 1 ? `(${packedDialogues.totalLanes})` : ''}</span>
@@ -549,15 +618,34 @@ export const Timeline: React.FC<TimelineProps> = ({
           <div
             className="ed-track-header track-overlays"
             style={{ height: `${overlayTrackHeight}px`, minHeight: `${overlayTrackHeight}px` }}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setContextMenu({ x: e.clientX, y: e.clientY, target: { type: 'header', track: 'track-overlays' } });
+            }}
           >
             <span style={{ fontSize: '13px' }}>📍</span>
             <span>Overlays {packedOverlays.totalLanes > 1 ? `(${packedOverlays.totalLanes})` : ''}</span>
           </div>
-          <div className="ed-track-header track-narration">
+          <div
+            className="ed-track-header track-narration"
+            onContextMenu={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setContextMenu({ x: e.clientX, y: e.clientY, target: { type: 'header', track: 'track-narration' } });
+            }}
+          >
             <MicIcon size={13} />
             <span>Narration</span>
           </div>
-          <div className="ed-track-header track-soundtrack">
+          <div
+            className="ed-track-header track-soundtrack"
+            onContextMenu={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setContextMenu({ x: e.clientX, y: e.clientY, target: { type: 'header', track: 'track-soundtrack' } });
+            }}
+          >
             <MusicIcon size={13} />
             <span>Soundtrack</span>
           </div>
@@ -591,7 +679,10 @@ export const Timeline: React.FC<TimelineProps> = ({
           </div>
 
           {/* Track 1: Visuals (Scene Clips) */}
-          <div className="ed-track-row track-visuals">
+          <div
+            className="ed-track-row track-visuals"
+            onContextMenu={(e) => handleTrackContextMenu(e, 'track-visuals')}
+          >
             {scenes.map((scene) => {
               const isSelected = scene.sceneId === activeSceneId;
               const leftPx = msToPx(scene.startMs);
@@ -612,6 +703,16 @@ export const Timeline: React.FC<TimelineProps> = ({
                   onDragOver={handleDragOver}
                   onDrop={(e) => handleDrop(e, scene.sceneId)}
                   onClick={() => onSelectScene(scene.sceneId)}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onSelectScene(scene.sceneId);
+                    setContextMenu({
+                      x: e.clientX,
+                      y: e.clientY,
+                      target: { type: 'scene', scene },
+                    });
+                  }}
                   title={`${scene.title} (${formatDurationHuman(scene.endMs - scene.startMs)})`}
                 >
                   {thumb && <img src={resolveAssetUrl(thumb)} alt="" className="ed-clip-thumb" />}
@@ -649,7 +750,10 @@ export const Timeline: React.FC<TimelineProps> = ({
           </div>
 
           {/* Track 2: 2D Characters & Animation Clips */}
-          <div className="ed-track-row track-rig">
+          <div
+            className="ed-track-row track-rig"
+            onContextMenu={(e) => handleTrackContextMenu(e, 'track-rig')}
+          >
             {scenes.map((scene) => {
               const instances = scene.animationData?.characterInstances || [];
               const clips = scene.animationData?.animationClips || [];
@@ -704,6 +808,22 @@ export const Timeline: React.FC<TimelineProps> = ({
                       onSelectScene(scene.sceneId);
                       if (onSelectInstance) onSelectInstance(inst.instanceId);
                     }}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onSelectScene(scene.sceneId);
+                      if (onSelectInstance) onSelectInstance(inst.instanceId);
+                      setContextMenu({
+                        x: e.clientX,
+                        y: e.clientY,
+                        target: {
+                          type: 'instance',
+                          scene,
+                          instanceId: inst.instanceId,
+                          characterName: inst.name,
+                        },
+                      });
+                    }}
                     title={`${inst.name}: ${action.toUpperCase()} (${isMotionPath ? 'Motion Path' : 'In-Place'}) - ${formatDurationHuman(clipDurationMs)}`}
                   >
                     <span>{inst.characterId === 'pip_the_bear' ? '🐻' : '🧒'}</span>
@@ -752,6 +872,7 @@ export const Timeline: React.FC<TimelineProps> = ({
           <div
             className="ed-track-row track-dialogue"
             style={{ height: `${dialogueTrackHeight}px`, minHeight: `${dialogueTrackHeight}px`, position: 'relative' }}
+            onContextMenu={(e) => handleTrackContextMenu(e, 'track-dialogue')}
           >
             {packedDialogues.items.map(({ item: dlg, scene, startMs, durationMs, lane }) => {
               const leftPx = msToPx(startMs);
@@ -802,6 +923,17 @@ export const Timeline: React.FC<TimelineProps> = ({
                     e.stopPropagation();
                     onSelectScene(scene.sceneId);
                     if (onSelectDialogue) onSelectDialogue(dlg.id);
+                  }}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onSelectScene(scene.sceneId);
+                    if (onSelectDialogue) onSelectDialogue(dlg.id);
+                    setContextMenu({
+                      x: e.clientX,
+                      y: e.clientY,
+                      target: { type: 'dialogue', scene, dialogue: dlg },
+                    });
                   }}
                   title={`${dlg.characterName}: "${dlg.text}" (Offset: +${formatDurationHuman(dlg.startMs || 0)}, Dur: ${formatDurationHuman(durationMs)})${isOverflow ? ' - EXCEEDS SCENE DURATION!' : ''}`}
                 >
@@ -890,6 +1022,7 @@ export const Timeline: React.FC<TimelineProps> = ({
           <div
             className="ed-track-row track-overlays"
             style={{ height: `${overlayTrackHeight}px`, minHeight: `${overlayTrackHeight}px`, position: 'relative' }}
+            onContextMenu={(e) => handleTrackContextMenu(e, 'track-overlays')}
           >
             {packedOverlays.items.map(({ item: ov, scene, startMs, durationMs, lane }) => {
               const leftPx = msToPx(startMs);
@@ -943,6 +1076,17 @@ export const Timeline: React.FC<TimelineProps> = ({
                     onSelectScene(scene.sceneId);
                     if (onSelectOverlay) onSelectOverlay(ov.id);
                   }}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onSelectScene(scene.sceneId);
+                    if (onSelectOverlay) onSelectOverlay(ov.id);
+                    setContextMenu({
+                      x: e.clientX,
+                      y: e.clientY,
+                      target: { type: 'overlay', scene, overlay: ov },
+                    });
+                  }}
                   title={`${ov.title || ov.type} (${ov.layerPosition === 'below_characters' ? 'Below Characters' : 'Above Characters'}) - ${formatDurationHuman(durationMs)}`}
                 >
                   <span style={{ fontSize: '12px', flexShrink: 0 }}>{getOverlayIcon(ov.type)}</span>
@@ -985,7 +1129,10 @@ export const Timeline: React.FC<TimelineProps> = ({
           </div>
 
           {/* Track 4: Narration Voice */}
-          <div className="ed-track-row track-narration">
+          <div
+            className="ed-track-row track-narration"
+            onContextMenu={(e) => handleTrackContextMenu(e, 'track-narration')}
+          >
             {scenes.map((scene) => {
               if (!scene.narration && !scene.audioUrl) return null;
               const isSelected = scene.sceneId === activeSceneId;
@@ -1029,7 +1176,10 @@ export const Timeline: React.FC<TimelineProps> = ({
           </div>
 
           {/* Track 3: Soundtrack */}
-          <div className="ed-track-row track-soundtrack">
+          <div
+            className="ed-track-row track-soundtrack"
+            onContextMenu={(e) => handleTrackContextMenu(e, 'track-soundtrack')}
+          >
             {selectedMusic && selectedMusic !== 'none' && totalDurationMs > 0 && (
               <div
                 className="ed-music-block"
@@ -1051,6 +1201,34 @@ export const Timeline: React.FC<TimelineProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Right-click Context Menu */}
+      {contextMenu && (
+        <TimelineContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          target={contextMenu.target}
+          onClose={() => setContextMenu(null)}
+          playheadMs={playheadMs}
+          onAddScene={onAddScene}
+          onAddDialogue={onAddDialogue}
+          onAddOverlay={onAddOverlay}
+          onAddCharacter={onAddCharacter}
+          onSeek={onSeek}
+          onSelectScene={onSelectScene}
+          onSelectDialogue={onSelectDialogue}
+          onSelectOverlay={onSelectOverlay}
+          onSelectInstance={onSelectInstance}
+          onDuplicateScene={onDuplicateScene}
+          onDeleteScene={onDeleteScene}
+          onSplitScene={onSplitScene}
+          onDeleteDialogue={onDeleteDialogue}
+          onDeleteOverlay={onDeleteOverlay}
+          onDeleteInstance={onDeleteInstance}
+          onPreviewDialogue={onPreviewDialogue}
+          onRegenerateDialogue={onRegenerateDialogue}
+        />
+      )}
     </div>
   );
 };
