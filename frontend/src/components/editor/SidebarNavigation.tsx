@@ -9,6 +9,8 @@ import {
   SettingsIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
+  ScissorsIcon,
+  VolumeHighIcon,
 } from '../common/Icons';
 
 export type SidebarSection =
@@ -17,7 +19,11 @@ export type SidebarSection =
   | 'images'
   | 'videos'
   | 'audio'
+  | 'overview'
   | 'scene_settings'
+  | 'timing'
+  | 'narration'
+  | 'background'
   | 'rig'
   | 'dialogue'
   | 'overlays';
@@ -91,15 +97,30 @@ export const SidebarNavigation: React.FC<SidebarNavigationProps> = ({
     count?: number;
   }> = [
     {
-      id: 'scene_settings',
-      label: 'Scene Settings',
+      id: 'overview',
+      label: 'Overview',
       icon: <SettingsIcon size={16} />,
+    },
+    {
+      id: 'timing',
+      label: 'Timing',
+      icon: <ScissorsIcon size={16} />,
+    },
+    {
+      id: 'narration',
+      label: 'Narration',
+      icon: <VolumeHighIcon size={16} />,
+    },
+    {
+      id: 'background',
+      label: 'Background',
+      icon: <ImageIcon size={16} />,
     },
     {
       id: 'rig',
       label: '2D Rig',
-      icon: <SparklesIcon size={16} color="#a78bfa" />,
-      count: counts.rig,
+      icon: <SparklesIcon size={16} color="currentColor" />,
+      count: counts.rig || counts.characters,
     },
     {
       id: 'dialogue',
@@ -121,7 +142,11 @@ export const SidebarNavigation: React.FC<SidebarNavigationProps> = ({
     icon: React.ReactNode;
     count?: number;
   }) => {
-    const isActive = activeSection === item.id;
+    const isActive =
+      activeSection === item.id ||
+      (item.id === 'overview' && activeSection === 'scene_settings') ||
+      (item.id === 'rig' && (activeSection === 'characters' as any));
+
     return (
       <button
         key={item.id}
@@ -130,21 +155,22 @@ export const SidebarNavigation: React.FC<SidebarNavigationProps> = ({
         onClick={() => onSelectSection(item.id)}
         title={isCollapsed ? `${item.label}${item.count !== undefined ? ` (${item.count})` : ''}` : undefined}
         aria-label={item.label}
+        aria-selected={isActive}
         style={{
           display: 'flex',
           alignItems: 'center',
           gap: isCollapsed ? '0' : '10px',
           justifyContent: isCollapsed ? 'center' : 'flex-start',
           width: '100%',
-          padding: isCollapsed ? '10px 0' : '9px 12px',
-          background: isActive ? 'rgba(139, 92, 246, 0.16)' : 'transparent',
+          padding: isCollapsed ? '10px 0' : '8px 12px',
+          background: isActive ? '#7c3aed' : 'transparent',
           border: 'none',
-          borderLeft: isActive ? '3px solid #8b5cf6' : '3px solid transparent',
-          color: isActive ? '#f8fafc' : 'var(--ed-text-muted)',
+          borderLeft: isActive ? '3px solid #ffffff' : '3px solid transparent',
+          color: isActive ? '#ffffff' : 'var(--ed-text)',
           cursor: 'pointer',
           borderRadius: isCollapsed ? '6px' : '0 6px 6px 0',
           fontSize: '12px',
-          fontWeight: isActive ? 600 : 500,
+          fontWeight: isActive ? 700 : 500,
           transition: 'all 0.15s ease',
           position: 'relative',
           boxSizing: 'border-box',
@@ -157,7 +183,7 @@ export const SidebarNavigation: React.FC<SidebarNavigationProps> = ({
             justifyContent: 'center',
             width: '20px',
             height: '20px',
-            color: isActive ? '#c4b5fd' : 'inherit',
+            color: isActive ? '#ffffff' : 'currentColor',
             flexShrink: 0,
           }}
         >
@@ -172,6 +198,7 @@ export const SidebarNavigation: React.FC<SidebarNavigationProps> = ({
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
+              color: isActive ? '#ffffff' : 'inherit',
             }}
           >
             {item.label}
@@ -185,8 +212,9 @@ export const SidebarNavigation: React.FC<SidebarNavigationProps> = ({
               fontFamily: 'monospace',
               padding: '1px 5px',
               borderRadius: '10px',
-              background: isActive ? 'rgba(139, 92, 246, 0.35)' : 'rgba(255, 255, 255, 0.08)',
-              color: isActive ? '#fbcfe8' : 'var(--ed-text-faint)',
+              background: isActive ? 'rgba(255, 255, 255, 0.28)' : 'var(--ed-surface-elevated)',
+              color: isActive ? '#ffffff' : 'var(--ed-text-muted)',
+              border: isActive ? '1px solid rgba(255, 255, 255, 0.4)' : '1px solid var(--ed-border)',
               fontWeight: 700,
               flexShrink: 0,
               marginLeft: isCollapsed ? '0' : 'auto',

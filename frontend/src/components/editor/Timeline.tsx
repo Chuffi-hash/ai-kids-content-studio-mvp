@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { EditorScene } from '../../types/editor';
 import { EducationalOverlayType, SceneDialogue } from '../../types/animation';
 import { TimelineContextMenu, TimelineContextMenuTarget } from './TimelineContextMenu';
@@ -19,6 +19,9 @@ import {
   AlertTriangleIcon,
   CheckIcon,
   SparklesIcon,
+  TrashIcon,
+  SearchIcon,
+  PlayIcon,
 } from '../common/Icons';
 
 function getExpressionEmoji(expr?: string): string {
@@ -33,6 +36,50 @@ function getExpressionEmoji(expr?: string): string {
     case 'neutral': return '😐';
     default: return '😐';
   }
+}
+
+function getOverlayIcon(t: string): string {
+  switch (t) {
+    case 'location_pin': return '📍';
+    case 'route_line': return '〰️';
+    case 'highlight_ring': return '⭕';
+    case 'arrow_pointer': return '↗️';
+    case 'callout_label': return '🏷️';
+    case 'title_card': return '🪧';
+    case 'spotlight': return '🔦';
+    case 'glow': return '✨';
+    case 'sparkles': return '⭐';
+    case 'flying_birds': return '🦅';
+    case 'moving_clouds': return '☁️';
+    case 'rain': return '🌧️';
+    case 'snowfall': return '❄️';
+    case 'wind': return '💨';
+    case 'falling_leaves': return '🍂';
+    case 'sunshine_rays': return '☀️';
+    case 'heat_shimmer': return '🔥';
+    case 'fog_mist': return '🌫️';
+    case 'lightning': return '⚡';
+    case 'water_splashes': return '💦';
+    case 'butterflies': return '🦋';
+    default: return '📍';
+  }
+}
+
+export interface TimelineOverlayItem {
+  item: any;
+  scene: EditorScene;
+  startMs: number;
+  durationMs: number;
+  endMs: number;
+}
+
+export interface OverlayCluster {
+  id: string;
+  scene: EditorScene;
+  startMs: number;
+  endMs: number;
+  items: TimelineOverlayItem[];
+  isGroup: boolean;
 }
 
 interface TimelineProps {
@@ -61,6 +108,7 @@ interface TimelineProps {
   onDeleteScene?: (sceneId: string) => void;
   onDeleteDialogue?: (dialogueId: string) => void;
   onDeleteOverlay?: (sceneId: string, overlayId: string) => void;
+  onDuplicateOverlay?: (sceneId: string, overlayId: string) => void;
   onDeleteInstance?: (sceneId: string, instanceId: string) => void;
   onAddDialogue?: (sceneId: string, startOffsetMs?: number) => void;
   onAddOverlay?: (sceneId: string, type: EducationalOverlayType, startOffsetMs?: number) => void;
@@ -139,6 +187,7 @@ export const Timeline: React.FC<TimelineProps> = ({
   onDeleteScene,
   onDeleteDialogue,
   onDeleteOverlay,
+  onDuplicateOverlay,
   onDeleteInstance,
   onAddDialogue,
   onAddOverlay,
@@ -189,6 +238,54 @@ export const Timeline: React.FC<TimelineProps> = ({
     });
   };
 
+  // Sub-lane expand / collapse state
+  const [isDialogueExpanded, setIsDialogueExpanded] = useState<boolean>(false);
+
+  // Group popover state for overlapping overlays
+  const [activeOverlayGroupPopover, setActiveOverlayGroupPopover] = useState<{
+    cluster: OverlayCluster;
+    anchorRect: { top: number; left: number; bottom: number; right: number };
+  } | null>(null);
+
+  // Live search query for effect group popover
+  const [overlaySearchQuery, setOverlaySearchQuery] = useState<string>('');
+
+  // Reset search query whenever active popover changes
+  useEffect(() => {
+    setOverlaySearchQuery('');
+  }, [activeOverlayGroupPopover?.cluster.id]);
+
+  const filteredOverlayItems = useMemo(() => {
+    if (!activeOverlayGroupPopover) return [];
+    const query = overlaySearchQuery.trim().toLowerCase();
+    if (!query) return activeOverlayGroupPopover.cluster.items;
+    return activeOverlayGroupPopover.cluster.items.filter(({ item: ov }) => {
+      const title = (ov.title || '').toLowerCase();
+      const type = (ov.type || '').toLowerCase();
+      const pos = (ov.layerPosition || '').toLowerCase();
+      return title.includes(query) || type.includes(query) || pos.includes(query);
+    });
+  }, [activeOverlayGroupPopover, overlaySearchQuery]);
+
+  useEffect(() => {
+    if (!activeOverlayGroupPopover) return;
+    const handleOutsideClick = (e: MouseEvent) => {
+      const popoverEl = document.getElementById('ed-overlay-group-popover');
+      if (popoverEl && !popoverEl.contains(e.target as Node)) {
+        setActiveOverlayGroupPopover(null);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setActiveOverlayGroupPopover(null);
+    };
+    window.addEventListener('mousedown', handleOutsideClick);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('mousedown', handleOutsideClick);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [activeOverlayGroupPopover]);
+
   // Sub-lane packing for dialogues
   const packedDialogues = React.useMemo(() => {
     const raw: Array<{
@@ -215,36 +312,133 @@ export const Timeline: React.FC<TimelineProps> = ({
     return packClipsIntoSubLanes(raw);
   }, [scenes]);
 
-  const dialogueTrackHeight = Math.max(46, packedDialogues.totalLanes * 36 + 8);
+  const dialogueTrackHeight = isDialogueExpanded
+    ? Math.max(46, packedDialogues.totalLanes * 26 + 8)
+    : (packedDialogues.totalLanes > 1 ? 58 : 46);
 
-  // Sub-lane packing for educational overlays
-  const packedOverlays = React.useMemo(() => {
-    const raw: Array<{
-      item: any;
-      scene: EditorScene;
-      startMs: number;
-      durationMs: number;
-      endMs: number;
-    }> = [];
+  // Compact non-stacking overlay clustering: groups overlapping effects into a single badge
+  const overlayClusters = React.useMemo<OverlayCluster[]>(() => {
+    const clusters: OverlayCluster[] = [];
+
     for (const scene of scenes) {
       const ovs = scene.animationData?.overlays || [];
-      const sceneDuration = scene.endMs - scene.startMs;
-      for (const ov of ovs) {
-        const startMs = scene.startMs + (ov.startMs || 0);
-        const durationMs = ov.durationMs !== undefined ? ov.durationMs : sceneDuration;
-        raw.push({
+      if (ovs.length === 0) continue;
+      const sceneDuration = scene.endMs > scene.startMs ? scene.endMs - scene.startMs : scene.estimatedDurationMs || 5000;
+
+      // Default duration to min(6000, sceneDuration) instead of the entire sceneDuration
+      // to avoid artificial whole-scene group stretching.
+      const rawItems = ovs.map((ov) => {
+        const startOffset = Math.max(0, ov.startMs || 0);
+        const startMs = scene.startMs + startOffset;
+        const rawDur = ov.durationMs !== undefined ? Math.max(300, ov.durationMs) : Math.min(6000, sceneDuration);
+        return {
           item: ov,
           scene,
           startMs,
-          durationMs,
-          endMs: startMs + durationMs,
+          durationMs: rawDur,
+          endMs: startMs + rawDur,
+        };
+      });
+
+      // Sort ascending by startMs, then by endMs
+      rawItems.sort((a, b) => a.startMs - b.startMs || a.endMs - b.endMs);
+
+      // Check if all items in this scene share essentially identical timing
+      const allShareIdenticalTiming =
+        rawItems.length > 1 &&
+        rawItems.every(
+          (it) =>
+            Math.abs(it.startMs - rawItems[0].startMs) < 250 &&
+            Math.abs(it.durationMs - rawItems[0].durationMs) < 250
+        );
+
+      if (allShareIdenticalTiming) {
+        clusters.push({
+          id: `cluster-${scene.sceneId}-all`,
+          scene,
+          startMs: rawItems[0].startMs,
+          endMs: rawItems[0].endMs,
+          items: rawItems,
+          isGroup: true,
         });
+        continue;
+      }
+
+      // When effects do NOT all share identical timing:
+      // Do not show a scene-wide group clip!
+      // If an initial ambient effect begins at scene start and spans >= 85% of scene,
+      // but there are other localized effects starting later, clamp the visual bar
+      // of the first effect to the start of the next effect or min(6000, sceneDuration)
+      // so the initial weather effect renders cleanly (like "sunshine rays" or "falling leaves 6.0s" in Photo 2)
+      // without swallowing all subsequent effects.
+      const hasLaterItems = rawItems.length > 1 && rawItems.some((it) => it.startMs - scene.startMs >= 2000);
+      const items: TimelineOverlayItem[] = rawItems.map((it, idx) => {
+        if (hasLaterItems && idx === 0 && it.startMs === scene.startMs && it.durationMs >= sceneDuration - 500) {
+          const nextStart = rawItems[1].startMs;
+          const effectiveDur = Math.max(1500, Math.min(6000, nextStart - scene.startMs));
+          return {
+            ...it,
+            durationMs: effectiveDur,
+            endMs: it.startMs + effectiveDur,
+          };
+        }
+        return it;
+      });
+
+      let currentCluster: OverlayCluster | null = null;
+      for (const it of items) {
+        if (!currentCluster) {
+          currentCluster = {
+            id: `cluster-${scene.sceneId}-${it.item.id}`,
+            scene,
+            startMs: it.startMs,
+            endMs: it.endMs,
+            items: [it],
+            isGroup: false,
+          };
+        } else {
+          // If overlaps with current cluster (with 80ms buffer)
+          if (it.startMs < currentCluster.endMs - 80) {
+            currentCluster.items.push(it);
+            currentCluster.endMs = Math.max(currentCluster.endMs, it.endMs);
+            currentCluster.isGroup = true;
+          } else {
+            clusters.push(currentCluster);
+            currentCluster = {
+              id: `cluster-${scene.sceneId}-${it.item.id}`,
+              scene,
+              startMs: it.startMs,
+              endMs: it.endMs,
+              items: [it],
+              isGroup: false,
+            };
+          }
+        }
+      }
+      if (currentCluster) {
+        clusters.push(currentCluster);
       }
     }
-    return packClipsIntoSubLanes(raw);
+
+    return clusters;
   }, [scenes]);
 
-  const overlayTrackHeight = Math.max(46, packedOverlays.totalLanes * 36 + 8);
+  // Synchronize activeOverlayGroupPopover when overlayClusters changes (e.g., overlay deleted or added)
+  useEffect(() => {
+    if (!activeOverlayGroupPopover) return;
+    const matching = overlayClusters.find(
+      (c) =>
+        c.id === activeOverlayGroupPopover.cluster.id ||
+        (c.scene.sceneId === activeOverlayGroupPopover.cluster.scene.sceneId && c.isGroup)
+    );
+    if (!matching || matching.items.length <= 1) {
+      setActiveOverlayGroupPopover(null);
+    } else {
+      setActiveOverlayGroupPopover((prev) => (prev ? { ...prev, cluster: matching } : null));
+    }
+  }, [overlayClusters]);
+
+  const overlayTrackHeight = 44;
 
   // Zoom controls
   const handleZoomIn = () => setPxPerSec((prev) => Math.min(160, Math.round(prev * 1.3)));
@@ -458,6 +652,136 @@ export const Timeline: React.FC<TimelineProps> = ({
     window.addEventListener('mouseup', onMouseUp);
   };
 
+  // Dragging overlay clip horizontally within scene
+  const handleOverlayMouseDown = (
+    e: React.MouseEvent,
+    scene: EditorScene,
+    overlayId: string
+  ) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onSelectScene(scene.sceneId);
+
+    const overlays = scene.animationData?.overlays || [];
+    const targetOv = overlays.find((o) => o.id === overlayId);
+    if (!targetOv) return;
+
+    if (onSelectOverlay) {
+      onSelectOverlay(overlayId);
+    }
+
+    const startX = e.clientX;
+    const initialStartMs = targetOv.startMs || 0;
+    const sceneDuration = scene.endMs - scene.startMs;
+    const ovDuration = targetOv.durationMs !== undefined ? targetOv.durationMs : sceneDuration;
+    const maxStart = Math.max(0, sceneDuration - Math.min(ovDuration, 500));
+
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      const deltaPx = moveEvent.clientX - startX;
+      const deltaMs = pxToMs(deltaPx);
+      let newStartMs = initialStartMs + deltaMs;
+
+      // Snap to 0ms if within 150ms of scene start
+      if (newStartMs < 150) {
+        newStartMs = 0;
+      } else {
+        // Snap to nearest 100ms grid
+        newStartMs = Math.round(newStartMs / 100) * 100;
+      }
+      newStartMs = Math.max(0, Math.min(maxStart, newStartMs));
+
+      const updatedOverlays = overlays.map((o) =>
+        o.id === overlayId ? { ...o, startMs: newStartMs } : o
+      );
+
+      const updatedScenes: EditorScene[] = scenes.map((s) => {
+        if (s.sceneId !== scene.sceneId) return s;
+        const baseAnim = s.animationData || {
+          version: 1 as const,
+          viewport: { width: 1280 as const, height: 720 as const },
+          characterInstances: [],
+          animationClips: [],
+        };
+        return {
+          ...s,
+          animationData: {
+            ...baseAnim,
+            version: 1 as const,
+            overlays: updatedOverlays,
+          },
+        };
+      });
+
+      onUpdateScenes(updatedScenes);
+    };
+
+    const onMouseUp = () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  };
+
+  // Trimming / resizing overlay right handle
+  const handleOverlayResizeRightMouseDown = (
+    e: React.MouseEvent,
+    scene: EditorScene,
+    overlayId: string
+  ) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const overlays = scene.animationData?.overlays || [];
+    const targetOv = overlays.find((o) => o.id === overlayId);
+    if (!targetOv) return;
+
+    const startX = e.clientX;
+    const sceneDuration = scene.endMs - scene.startMs;
+    const initialDuration = targetOv.durationMs !== undefined ? targetOv.durationMs : sceneDuration;
+
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      const deltaPx = moveEvent.clientX - startX;
+      const deltaMs = pxToMs(deltaPx);
+      let newDuration = Math.round((initialDuration + deltaMs) / 50) * 50;
+      const maxDuration = Math.max(500, sceneDuration - (targetOv.startMs || 0));
+      newDuration = Math.max(500, Math.min(maxDuration, newDuration));
+
+      const updatedOverlays = overlays.map((o) =>
+        o.id === overlayId ? { ...o, durationMs: newDuration } : o
+      );
+
+      const updatedScenes: EditorScene[] = scenes.map((s) => {
+        if (s.sceneId !== scene.sceneId) return s;
+        const baseAnim = s.animationData || {
+          version: 1 as const,
+          viewport: { width: 1280 as const, height: 720 as const },
+          characterInstances: [],
+          animationClips: [],
+        };
+        return {
+          ...s,
+          animationData: {
+            ...baseAnim,
+            version: 1 as const,
+            overlays: updatedOverlays,
+          },
+        };
+      });
+
+      onUpdateScenes(updatedScenes);
+    };
+
+    const onMouseUp = () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  };
+
   // Drag and drop reordering of clips
   const handleDragStart = (e: React.DragEvent, sceneId: string) => {
     setDraggedSceneId(sceneId);
@@ -613,7 +937,20 @@ export const Timeline: React.FC<TimelineProps> = ({
             }}
           >
             <span style={{ fontSize: '13px' }}>👄</span>
-            <span>Dialogue {packedDialogues.totalLanes > 1 ? `(${packedDialogues.totalLanes})` : ''}</span>
+            <span style={{ flex: 1 }}>Dialogue</span>
+            {packedDialogues.totalLanes > 1 && (
+              <button
+                type="button"
+                className="ed-track-lane-toggle"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsDialogueExpanded(!isDialogueExpanded);
+                }}
+                title={isDialogueExpanded ? 'Collapse dialogue sub-lanes' : 'Expand all dialogue sub-lanes'}
+              >
+                {isDialogueExpanded ? `▾ ${packedDialogues.totalLanes}L` : `▸ ${packedDialogues.totalLanes}L`}
+              </button>
+            )}
           </div>
           <div
             className="ed-track-header track-overlays"
@@ -625,7 +962,7 @@ export const Timeline: React.FC<TimelineProps> = ({
             }}
           >
             <span style={{ fontSize: '13px' }}>📍</span>
-            <span>Overlays {packedOverlays.totalLanes > 1 ? `(${packedOverlays.totalLanes})` : ''}</span>
+            <span style={{ flex: 1 }}>Overlays</span>
           </div>
           <div
             className="ed-track-header track-narration"
@@ -787,17 +1124,17 @@ export const Timeline: React.FC<TimelineProps> = ({
                       height: '36px',
                       borderRadius: '4px',
                       background: isSelected
-                        ? 'rgba(139, 92, 246, 0.35)'
-                        : 'rgba(139, 92, 246, 0.18)',
+                        ? 'var(--ed-rig-border)'
+                        : 'var(--ed-rig-bg)',
                       border: isSelected
-                        ? '2px solid #8b5cf6'
-                        : '1px solid rgba(139, 92, 246, 0.45)',
+                        ? '2px solid var(--ed-rig-border)'
+                        : '1px solid var(--ed-rig-border)',
                       display: 'flex',
                       alignItems: 'center',
                       padding: '0 8px',
                       gap: '6px',
                       fontSize: '11px',
-                      color: '#c4b5fd',
+                      color: isSelected ? 'var(--ed-rig-text-dim)' : 'var(--ed-rig-text)',
                       cursor: 'pointer',
                       overflow: 'hidden',
                       whiteSpace: 'nowrap',
@@ -882,7 +1219,7 @@ export const Timeline: React.FC<TimelineProps> = ({
               const isOverflow = (dlg.startMs || 0) + durationMs > sceneDuration;
               const hasAudio = Boolean(dlg.audioUrl);
               const visemeCount = dlg.visemeCues?.length || 0;
-              const topPx = 4 + lane * 36;
+              const topPx = 3 + lane * 26;
 
               return (
                 <div
@@ -893,24 +1230,24 @@ export const Timeline: React.FC<TimelineProps> = ({
                     width: `${Math.max(28, widthPx)}px`,
                     position: 'absolute',
                     top: `${topPx}px`,
-                    height: '32px',
+                    height: '22px',
                     borderRadius: '4px',
                     background: isOverflow
                       ? 'rgba(239, 68, 68, 0.25)'
                       : isSelected
-                      ? 'rgba(236, 72, 153, 0.35)'
-                      : 'rgba(236, 72, 153, 0.18)',
+                      ? 'var(--ed-dialogue-border)'
+                      : 'var(--ed-dialogue-bg)',
                     border: isOverflow
                       ? '2px solid #ef4444'
                       : isSelected
-                      ? '2px solid #ec4899'
-                      : '1px solid rgba(236, 72, 153, 0.45)',
+                      ? '2px solid var(--ed-dialogue-border)'
+                      : '1px solid var(--ed-dialogue-border)',
                     display: 'flex',
                     alignItems: 'center',
                     padding: '0 6px',
                     gap: '5px',
                     fontSize: '11px',
-                    color: isOverflow ? '#fca5a5' : '#fbcfe8',
+                    color: isOverflow ? '#ef4444' : isSelected ? 'var(--ed-dialogue-text-dim)' : 'var(--ed-dialogue-text)',
                     overflow: 'hidden',
                     whiteSpace: 'nowrap',
                     boxShadow: isSelected ? '0 0 10px rgba(236, 72, 153, 0.5)' : undefined,
@@ -1024,22 +1361,57 @@ export const Timeline: React.FC<TimelineProps> = ({
             style={{ height: `${overlayTrackHeight}px`, minHeight: `${overlayTrackHeight}px`, position: 'relative' }}
             onContextMenu={(e) => handleTrackContextMenu(e, 'track-overlays')}
           >
-            {packedOverlays.items.map(({ item: ov, scene, startMs, durationMs, lane }) => {
+            {overlayClusters.map((cluster) => {
+              if (cluster.isGroup) {
+                const leftPx = msToPx(cluster.startMs);
+                const widthPx = msToPx(cluster.endMs - cluster.startMs);
+                const hasSelected = cluster.items.some((i) => i.item.id === selectedOverlayId);
+                const primaryItem = cluster.items[0].item;
+                const primaryIcon = getOverlayIcon(primaryItem.type);
+                const primaryTitle = primaryItem.title || primaryItem.type;
+                const durationSec = ((cluster.endMs - cluster.startMs) / 1000).toFixed(1);
+
+                return (
+                  <div
+                    key={cluster.id}
+                    className={`ed-overlay-group-badge ${hasSelected ? 'has-selected' : ''}`}
+                    style={{
+                      left: `${leftPx}px`,
+                      width: `${Math.max(72, widthPx)}px`,
+                      zIndex: hasSelected ? 6 : 3,
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      setActiveOverlayGroupPopover(
+                        activeOverlayGroupPopover?.cluster.id === cluster.id ? null : { cluster, anchorRect: rect }
+                      );
+                    }}
+                    title={`${cluster.items.length} Effects: ${cluster.items.map((i) => i.item.title || i.item.type).join(', ')} (${durationSec}s) - Click to inspect/edit`}
+                  >
+                    <span style={{ fontSize: '12px', flexShrink: 0 }}>{primaryIcon}</span>
+                    {widthPx >= 90 && (
+                      <span className="ed-overlay-group-title">
+                        {primaryTitle}
+                      </span>
+                    )}
+                    <span className="ed-overlay-group-count">
+                      {cluster.items.length} effects
+                    </span>
+                    {widthPx >= 140 && (
+                      <span className="ed-overlay-group-duration">
+                        {durationSec}s
+                      </span>
+                    )}
+                    <span style={{ fontSize: '9px', opacity: 0.8, flexShrink: 0 }}>▾</span>
+                  </div>
+                );
+              }
+
+              const { item: ov, scene, startMs, durationMs } = cluster.items[0];
               const leftPx = msToPx(startMs);
               const widthPx = msToPx(durationMs);
               const isSelected = ov.id === selectedOverlayId;
-              const topPx = 4 + lane * 36;
-
-              const getOverlayIcon = (t: string) => {
-                switch (t) {
-                  case 'location_pin': return '📍';
-                  case 'route_line': return '〰️';
-                  case 'highlight_ring': return '⭕';
-                  case 'arrow_pointer': return '↗️';
-                  case 'callout_label': return '🏷️';
-                  default: return '📍';
-                }
-              };
 
               return (
                 <div
@@ -1049,28 +1421,29 @@ export const Timeline: React.FC<TimelineProps> = ({
                     left: `${leftPx}px`,
                     width: `${Math.max(26, widthPx)}px`,
                     position: 'absolute',
-                    top: `${topPx}px`,
-                    height: '32px',
+                    top: '10px',
+                    height: '24px',
                     borderRadius: '4px',
                     background: isSelected
-                      ? 'rgba(6, 182, 212, 0.35)'
-                      : 'rgba(6, 182, 212, 0.18)',
+                      ? 'var(--ed-overlay-border)'
+                      : 'var(--ed-overlay-bg)',
                     border: isSelected
-                      ? '2px solid #06b6d4'
-                      : '1px solid rgba(6, 182, 212, 0.45)',
+                      ? '2px solid var(--ed-overlay-border)'
+                      : '1px solid var(--ed-overlay-border)',
                     display: 'flex',
                     alignItems: 'center',
                     padding: '0 6px',
-                    gap: '5px',
+                    gap: '4px',
                     fontSize: '11px',
-                    color: isSelected ? '#a5f3fc' : '#67e8f9',
-                    cursor: 'pointer',
+                    color: isSelected ? 'var(--ed-overlay-text-dim)' : 'var(--ed-overlay-text)',
+                    cursor: 'grab',
                     overflow: 'hidden',
                     whiteSpace: 'nowrap',
                     boxShadow: isSelected ? '0 0 10px rgba(6, 182, 212, 0.5)' : undefined,
                     zIndex: isSelected ? 5 : 2,
                     boxSizing: 'border-box',
                   }}
+                  onMouseDown={(e) => handleOverlayMouseDown(e, scene, ov.id)}
                   onClick={(e) => {
                     e.stopPropagation();
                     onSelectScene(scene.sceneId);
@@ -1087,9 +1460,9 @@ export const Timeline: React.FC<TimelineProps> = ({
                       target: { type: 'overlay', scene, overlay: ov },
                     });
                   }}
-                  title={`${ov.title || ov.type} (${ov.layerPosition === 'below_characters' ? 'Below Characters' : 'Above Characters'}) - ${formatDurationHuman(durationMs)}`}
+                  title={`${ov.title || ov.type} (${ov.layerPosition === 'below_characters' ? 'Below Characters' : 'Above Characters'}) • Start: +${((ov.startMs || 0) / 1000).toFixed(1)}s • Duration: ${(durationMs / 1000).toFixed(1)}s`}
                 >
-                  <span style={{ fontSize: '12px', flexShrink: 0 }}>{getOverlayIcon(ov.type)}</span>
+                  <span style={{ fontSize: '11px', flexShrink: 0 }}>{getOverlayIcon(ov.type)}</span>
                   {widthPx >= 50 && (
                     <span
                       style={{
@@ -1108,10 +1481,9 @@ export const Timeline: React.FC<TimelineProps> = ({
                     <span
                       style={{
                         fontSize: '9px',
-                        padding: '1px 4px',
+                        padding: '1px 3px',
                         borderRadius: '3px',
-                        background: 'rgba(255, 255, 255, 0.1)',
-                        color: ov.layerPosition === 'below_characters' ? '#93c5fd' : '#a5f3fc',
+                        background: 'rgba(0, 0, 0, 0.1)',
                         flexShrink: 0,
                       }}
                     >
@@ -1119,10 +1491,17 @@ export const Timeline: React.FC<TimelineProps> = ({
                     </span>
                   )}
                   {widthPx >= 160 && (
-                    <span style={{ fontSize: '10px', opacity: 0.8, fontFamily: 'monospace', flexShrink: 0 }}>
+                    <span style={{ fontSize: '9px', opacity: 0.8, fontFamily: 'monospace', flexShrink: 0 }}>
                       {formatDurationHuman(durationMs)}
                     </span>
                   )}
+
+                  {/* Right trim handle */}
+                  <div
+                    className="ed-overlay-handle right"
+                    onMouseDown={(e) => handleOverlayResizeRightMouseDown(e, scene, ov.id)}
+                    title="Drag to trim overlay duration"
+                  />
                 </div>
               );
             })}
@@ -1202,6 +1581,181 @@ export const Timeline: React.FC<TimelineProps> = ({
         </div>
       </div>
 
+      {/* Overlapping Effects Popover */}
+      {activeOverlayGroupPopover && (() => {
+        const popoverWidth = 320;
+        const popoverMaxHeight = Math.min(360, Math.max(160, activeOverlayGroupPopover.anchorRect.top - 24));
+        const top = Math.max(12, activeOverlayGroupPopover.anchorRect.top - popoverMaxHeight - 8);
+        const left = Math.max(12, Math.min(window.innerWidth - popoverWidth - 12, activeOverlayGroupPopover.anchorRect.left));
+
+        return (
+          <div
+            id="ed-overlay-group-popover"
+            className="ed-overlay-popover"
+            style={{
+              position: 'fixed',
+              top: `${top}px`,
+              left: `${left}px`,
+              width: `${popoverWidth}px`,
+              maxHeight: `${popoverMaxHeight}px`,
+              zIndex: 9999,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="ed-overlay-popover-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ fontSize: '13px' }}>✨</span>
+                <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--ed-text)' }}>
+                  Effect Group ({activeOverlayGroupPopover.cluster.items.length})
+                </span>
+                <span className="ed-overlay-popover-badge">
+                  {((activeOverlayGroupPopover.cluster.endMs - activeOverlayGroupPopover.cluster.startMs) / 1000).toFixed(1)}s
+                </span>
+              </div>
+              <button
+                type="button"
+                className="ed-icon-btn"
+                onClick={() => setActiveOverlayGroupPopover(null)}
+                title="Close"
+                style={{ width: '22px', height: '22px', fontSize: '10px', display: 'grid', placeItems: 'center' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Live Search Input */}
+            <div className="ed-overlay-popover-search">
+              <SearchIcon size={12} color="var(--ed-text-muted)" />
+              <input
+                type="text"
+                className="ed-overlay-popover-input"
+                placeholder="Filter effects in group..."
+                value={overlaySearchQuery}
+                onChange={(e) => setOverlaySearchQuery(e.target.value)}
+                autoFocus
+              />
+              {overlaySearchQuery && (
+                <button
+                  type="button"
+                  className="ed-overlay-popover-clear"
+                  onClick={() => setOverlaySearchQuery('')}
+                  title="Clear search"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            {/* Scrollable list of effects */}
+            <div className="ed-overlay-popover-list">
+              {filteredOverlayItems.length === 0 ? (
+                <div className="ed-overlay-popover-empty">
+                  No effects matching "{overlaySearchQuery}"
+                </div>
+              ) : (
+                filteredOverlayItems.map(({ item: ov, scene, startMs, durationMs }) => {
+                  const isSelected = ov.id === selectedOverlayId;
+                  return (
+                    <div
+                      key={ov.id}
+                      className={`ed-overlay-popover-item ${isSelected ? 'selected' : ''}`}
+                      onClick={() => {
+                        onSelectScene(scene.sceneId);
+                        if (onSelectOverlay) onSelectOverlay(ov.id);
+                        setActiveOverlayGroupPopover(null);
+                      }}
+                      title="Click to select and inspect"
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1 }}>
+                        <span style={{ fontSize: '14px', flexShrink: 0 }}>{getOverlayIcon(ov.type)}</span>
+                        <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
+                          <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--ed-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {ov.title || ov.type}
+                          </span>
+                          <span style={{ fontSize: '9px', color: 'var(--ed-text-muted)', fontFamily: 'monospace' }}>
+                            +{((ov.startMs || 0) / 1000).toFixed(1)}s | {(durationMs / 1000).toFixed(1)}s • {ov.layerPosition === 'below_characters' ? 'below' : 'above'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
+                        <button
+                          type="button"
+                          className="ed-tool-btn"
+                          style={{ fontSize: '10px', padding: '2px 5px', display: 'inline-flex', alignItems: 'center', gap: '2px' }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onSeek(startMs);
+                          }}
+                          title="Seek playhead to effect start to preview"
+                        >
+                          <PlayIcon size={9} />
+                          <span>Seek</span>
+                        </button>
+                        <button
+                          type="button"
+                          className="ed-tool-btn primary"
+                          style={{ fontSize: '10px', padding: '2px 6px' }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onSelectScene(scene.sceneId);
+                            if (onSelectOverlay) onSelectOverlay(ov.id);
+                            setActiveOverlayGroupPopover(null);
+                          }}
+                          title="Inspect and edit overlay"
+                        >
+                          Edit
+                        </button>
+                        {onDuplicateOverlay && (
+                          <button
+                            type="button"
+                            className="ed-tool-btn"
+                            style={{ fontSize: '10px', padding: '2px 5px' }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onDuplicateOverlay(scene.sceneId, ov.id);
+                            }}
+                            title="Duplicate effect"
+                          >
+                            Copy
+                          </button>
+                        )}
+                        {onDeleteOverlay && (
+                          <button
+                            type="button"
+                            className="ed-tool-btn"
+                            style={{ fontSize: '10px', padding: '2px 5px', color: '#ef4444' }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onDeleteOverlay(scene.sceneId, ov.id);
+                              setActiveOverlayGroupPopover((prev) => {
+                                if (!prev) return null;
+                                const remaining = prev.cluster.items.filter((it) => it.item.id !== ov.id);
+                                if (remaining.length <= 1) return null;
+                                return {
+                                  ...prev,
+                                  cluster: {
+                                    ...prev.cluster,
+                                    items: remaining,
+                                  },
+                                };
+                              });
+                            }}
+                            title="Delete effect"
+                          >
+                            <TrashIcon size={11} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Right-click Context Menu */}
       {contextMenu && (
         <TimelineContextMenu
@@ -1224,6 +1778,7 @@ export const Timeline: React.FC<TimelineProps> = ({
           onSplitScene={onSplitScene}
           onDeleteDialogue={onDeleteDialogue}
           onDeleteOverlay={onDeleteOverlay}
+          onDuplicateOverlay={onDuplicateOverlay}
           onDeleteInstance={onDeleteInstance}
           onPreviewDialogue={onPreviewDialogue}
           onRegenerateDialogue={onRegenerateDialogue}

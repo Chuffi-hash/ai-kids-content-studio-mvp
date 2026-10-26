@@ -38,7 +38,31 @@ import {
   SparklesIcon,
   ImageIcon,
   UploadIcon,
+  SettingsIcon,
 } from '../common/Icons';
+
+
+export type InspectorSection =
+  | 'overview'
+  | 'timing'
+  | 'narration'
+  | 'background'
+  | 'characters'
+  | 'dialogue'
+  | 'overlays'
+  | 'operations';
+
+export function normalizeInspectorSection(tab?: string): InspectorSection {
+  if (!tab || tab === 'scene' || tab === 'scene_settings' || tab === 'overview') return 'overview';
+  if (tab === 'animation' || tab === 'rig' || tab === 'characters') return 'characters';
+  if (tab === 'timing') return 'timing';
+  if (tab === 'narration') return 'narration';
+  if (tab === 'background') return 'background';
+  if (tab === 'dialogue') return 'dialogue';
+  if (tab === 'overlays') return 'overlays';
+  if (tab === 'operations') return 'operations';
+  return 'overview';
+}
 
 interface PropertiesInspectorProps {
   scene: EditorScene | null;
@@ -88,6 +112,7 @@ interface PropertiesInspectorProps {
   onUpdateOverlay?: (overlayId: string, updates: Partial<EducationalOverlay>) => void;
   onAddOverlay?: (sceneId: string, overlay: EducationalOverlay) => void;
   onDeleteOverlay?: (sceneId: string, overlayId: string) => void;
+  onDuplicateOverlay?: (sceneId: string, overlayId: string) => void;
   onReorderOverlays?: (sceneId: string, overlays: EducationalOverlay[]) => void;
 
   selectedDialogueId?: string | null;
@@ -96,8 +121,8 @@ interface PropertiesInspectorProps {
   onDeleteDialogue?: (dialogueId: string) => Promise<void>;
   onAddDialogue?: (dialogue: SceneDialogue) => void;
   onSaveCharacterDefault?: (characterId: string, settings: { voice?: string; lang?: string; emotion?: SpeakingEmotion; emotionIntensity?: number }) => Promise<void>;
-  activeInspectorTab?: 'scene' | 'animation' | 'dialogue' | 'overlays';
-  onTabChange?: (tab: 'scene' | 'animation' | 'dialogue' | 'overlays') => void;
+  activeInspectorTab?: string;
+  onTabChange?: (tab: string) => void;
   isOpen?: boolean;
   onClose?: () => void;
 }
@@ -137,6 +162,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
   onUpdateOverlay,
   onAddOverlay,
   onDeleteOverlay,
+  onDuplicateOverlay,
   onReorderOverlays,
   selectedDialogueId,
   onSelectDialogue,
@@ -184,25 +210,6 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
   const [localCamera, setLocalCamera] = useState(scene.cameraDirection || 'Eye level wide establishing shot');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showRemoveVoiceConfirm, setShowRemoveVoiceConfirm] = useState(false);
-
-  // Collapsible Accordion Sections State for Scene Inspector
-  const [openSections, setOpenSections] = useState<Record<string, boolean>>({
-    overview: true,
-    timing: true,
-    background: true,
-    narration: true,
-    characters: true,
-    dialogue: false,
-    operations: false,
-  });
-
-  const toggleSection = (sectionId: string) => {
-    setOpenSections((prev) => ({
-      ...prev,
-      [sectionId]: !prev[sectionId],
-    }));
-  };
-
 
   // Scene Background State (Phase 1)
   const bgFileInputRef = useRef<HTMLInputElement | null>(null);
@@ -576,37 +583,37 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
   const canSplitAtPlayhead =
     playheadMs > scene.startMs + 500 && playheadMs < scene.endMs - 500;
 
-  const [internalInspectorTab, setInternalInspectorTab] = useState<'scene' | 'animation' | 'dialogue' | 'overlays'>(
-    activeInspectorTabProp || 'scene'
+  const [internalSection, setInternalSection] = useState<InspectorSection>(
+    normalizeInspectorSection(activeInspectorTabProp)
   );
-  const activeInspectorTab = activeInspectorTabProp || internalInspectorTab;
+  const activeSection = normalizeInspectorSection(activeInspectorTabProp) || internalSection;
 
-  const setActiveInspectorTab = (tab: 'scene' | 'animation' | 'dialogue' | 'overlays') => {
-    setInternalInspectorTab(tab);
-    if (onTabChange) onTabChange(tab);
+  const handleSectionChange = (sec: InspectorSection) => {
+    setInternalSection(sec);
+    if (onTabChange) onTabChange(sec);
   };
 
   useEffect(() => {
     if (activeInspectorTabProp) {
-      setInternalInspectorTab(activeInspectorTabProp);
+      setInternalSection(normalizeInspectorSection(activeInspectorTabProp));
     }
   }, [activeInspectorTabProp]);
 
   useEffect(() => {
     if (selectedInstanceId) {
-      setActiveInspectorTab('animation');
+      handleSectionChange('characters');
     }
   }, [selectedInstanceId]);
 
   useEffect(() => {
     if (selectedDialogueId) {
-      setActiveInspectorTab('dialogue');
+      handleSectionChange('dialogue');
     }
   }, [selectedDialogueId]);
 
   useEffect(() => {
     if (selectedOverlayId) {
-      setActiveInspectorTab('overlays');
+      handleSectionChange('overlays');
     }
   }, [selectedOverlayId]);
 
@@ -696,7 +703,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
       x: 640,
       y: 360,
       startMs: 0,
-      durationMs: durationMs,
+      durationMs: Math.min(5000, durationMs),
       layerPosition: type === 'route_line' ? 'below_characters' : 'above_characters',
       color: type === 'location_pin' ? '#ef4444' : type === 'route_line' ? '#38bdf8' : type === 'highlight_ring' ? '#f59e0b' : type === 'arrow_pointer' ? '#10b981' : '#ffffff',
       title: type === 'location_pin' ? 'Location Pin' : type === 'route_line' ? 'Expedition Route' : type === 'highlight_ring' ? 'Key Region' : type === 'arrow_pointer' ? 'Point of Interest' : 'Fact Badge',
@@ -872,6 +879,10 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
   };
 
   const handleDuplicateOverlayInternal = (overlayId: string) => {
+    if (onDuplicateOverlay) {
+      onDuplicateOverlay(scene.sceneId, overlayId);
+      return;
+    }
     const target = overlays.find((o) => o.id === overlayId);
     if (!target) return;
     const duplicated: EducationalOverlay = {
@@ -922,293 +933,39 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
 
   return (
     <aside className="ed-inspector">
-      <div className="ed-inspector-header" style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'stretch' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div>
-            <h3 style={{ fontSize: '13px', fontWeight: 700, margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              {activeInspectorTab === 'scene' && `Scene ${scene.number} Settings`}
-              {activeInspectorTab === 'animation' && `2D Character Rig`}
-              {activeInspectorTab === 'dialogue' && `Dialogue Voice & Lip-Sync`}
-              {activeInspectorTab === 'overlays' && `Educational Overlays`}
-            </h3>
-            <span style={{ fontSize: '10px', color: 'var(--ed-text-muted)' }}>
-              Scene {scene.number} &bull; <span style={{ color: scene.generationStatus === 'completed' ? '#34d399' : 'inherit' }}>{scene.generationStatus || 'draft'}</span>
-            </span>
-          </div>
-          {onClose && (
-            <button
-              type="button"
-              className="ed-icon-btn"
-              onClick={onClose}
-              title="Collapse inspector"
-              style={{ width: '26px', height: '26px', fontSize: '11px', display: 'grid', placeItems: 'center' }}
-            >
-              ✕
-            </button>
-          )}
+      <div className="ed-inspector-header">
+        <div>
+          <h3 style={{ fontSize: '13px', fontWeight: 700, margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            {activeSection === 'overview' && 'Scene Overview'}
+            {activeSection === 'timing' && 'Timing & Duration'}
+            {activeSection === 'narration' && 'Narration Voice Studio'}
+            {activeSection === 'background' && 'Stage Background'}
+            {activeSection === 'characters' && (selectedCharacterInstance ? '2D Rig Editor' : 'Characters & 2D Rig')}
+            {activeSection === 'dialogue' && 'Dialogue Voice & Lip-Sync'}
+            {activeSection === 'overlays' && 'Educational Overlays'}
+            {activeSection === 'operations' && 'Scene Operations'}
+          </h3>
+          <span style={{ fontSize: '10px', color: 'var(--ed-text-muted)' }}>
+            Scene {scene.number} &bull; <span style={{ color: scene.generationStatus === 'completed' ? '#34d399' : 'inherit' }}>{scene.generationStatus || 'draft'}</span>
+          </span>
         </div>
-
-        {/* Tab Switcher */}
-        <div style={{ display: 'flex', gap: '4px', background: 'var(--ed-bg)', padding: '2px', borderRadius: '6px' }}>
+        {onClose && (
           <button
             type="button"
-            className="ed-tool-btn"
-            style={{
-              flex: 1,
-              justifyContent: 'center',
-              fontSize: '11px',
-              background: activeInspectorTab === 'scene' ? 'var(--ed-surface-elevated)' : 'transparent',
-              color: activeInspectorTab === 'scene' ? 'var(--ed-text)' : 'var(--ed-text-muted)',
-              fontWeight: activeInspectorTab === 'scene' ? 600 : 400,
-            }}
-            onClick={() => setActiveInspectorTab('scene')}
+            className="ed-icon-btn"
+            onClick={onClose}
+            title="Collapse inspector"
+            style={{ width: '26px', height: '26px', fontSize: '11px', display: 'grid', placeItems: 'center' }}
           >
-            Scene Settings
+            ✕
           </button>
-          <button
-            type="button"
-            className="ed-tool-btn"
-            style={{
-              flex: 1,
-              justifyContent: 'center',
-              fontSize: '11px',
-              background: activeInspectorTab === 'animation' ? 'var(--ed-surface-elevated)' : 'transparent',
-              color: activeInspectorTab === 'animation' ? '#93c5fd' : 'var(--ed-text-muted)',
-              fontWeight: activeInspectorTab === 'animation' ? 600 : 400,
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '4px',
-            }}
-            onClick={() => setActiveInspectorTab('animation')}
-          >
-            <SparklesIcon size={12} />
-            <span>2D Rig ({characterInstances.length})</span>
-          </button>
-          <button
-            type="button"
-            className="ed-tool-btn"
-            style={{
-              flex: 1,
-              justifyContent: 'center',
-              fontSize: '11px',
-              background: activeInspectorTab === 'dialogue' ? 'var(--ed-surface-elevated)' : 'transparent',
-              color: activeInspectorTab === 'dialogue' ? '#f472b6' : 'var(--ed-text-muted)',
-              fontWeight: activeInspectorTab === 'dialogue' ? 600 : 400,
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '4px',
-            }}
-            onClick={() => setActiveInspectorTab('dialogue')}
-          >
-            <span style={{ fontSize: '12px' }}>👄</span>
-            <span>Dialogue ({scene.animationData?.dialogueLines?.length || 0})</span>
-          </button>
-          <button
-            type="button"
-            className="ed-tool-btn"
-            style={{
-              flex: 1,
-              justifyContent: 'center',
-              fontSize: '11px',
-              background: activeInspectorTab === 'overlays' ? 'var(--ed-surface-elevated)' : 'transparent',
-              color: activeInspectorTab === 'overlays' ? '#67e8f9' : 'var(--ed-text-muted)',
-              fontWeight: activeInspectorTab === 'overlays' ? 600 : 400,
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '4px',
-            }}
-            onClick={() => setActiveInspectorTab('overlays')}
-          >
-            <span>📍</span>
-            <span>Overlays ({overlays.length})</span>
-          </button>
-        </div>
+        )}
       </div>
 
-      {activeInspectorTab === 'animation' ? (
-        <div className="ed-inspector-content">
-          {selectedCharacterInstance && scene.animationData ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--ed-border)', paddingBottom: '8px' }}>
-                <button
-                  type="button"
-                  className="ed-tool-btn"
-                  onClick={() => onSelectInstance && onSelectInstance(null)}
-                  style={{ fontSize: '11px' }}
-                >
-                  ← All Characters
-                </button>
-                <span style={{ fontSize: '11px', color: 'var(--ed-text-muted)' }}>
-                  Selected Rig
-                </span>
-              </div>
-
-              <CharacterAnimationInspector
-                instance={selectedCharacterInstance}
-                animationData={scene.animationData}
-                sceneDurationMs={durationMs}
-                sceneId={scene.sceneId}
-                characters={characters}
-                onUpdateInstance={(id, updates) => onUpdateInstance && onUpdateInstance(id, updates)}
-                onUpdateAnimationData={(newData) => onUpdateAnimationData && onUpdateAnimationData(scene.sceneId, newData)}
-                onRemoveInstance={(id) => onRemoveCharacterFromScene && onRemoveCharacterFromScene(scene.sceneId, id)}
-              />
-            </div>
-          ) : (
+      {/* Content area */}
+      <div className="ed-inspector-content">
+          {activeSection === 'overview' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <div className="ed-field-group">
-                <div className="ed-field-label">
-                  <span>Characters in this Scene ({characterInstances.length})</span>
-                </div>
-
-                {characterInstances.length > 0 ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    {characterInstances.map((inst) => (
-                      <div
-                        key={inst.instanceId}
-                        className="ed-asset-item-card"
-                        style={{
-                          padding: '8px 12px',
-                          cursor: 'pointer',
-                          borderColor: inst.instanceId === selectedInstanceId ? 'var(--ed-accent)' : undefined,
-                        }}
-                        onClick={() => onSelectInstance && onSelectInstance(inst.instanceId)}
-                      >
-                        <div className="ed-asset-info">
-                          <div className="ed-asset-title">{inst.name}</div>
-                          <div className="ed-asset-subtitle">
-                            Scale: {Math.round(inst.scale * 100)}% • Z: {inst.zIndex}
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          className="ed-tool-btn primary"
-                          style={{ fontSize: '11px' }}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (onSelectInstance) onSelectInstance(inst.instanceId);
-                          }}
-                        >
-                          Edit Rig
-                        </button>
-                        <button
-                          type="button"
-                          className="ed-tool-btn"
-                          style={{ fontSize: '11px', color: '#f87171', padding: '4px' }}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (onRemoveCharacterFromScene) onRemoveCharacterFromScene(scene.sceneId, inst.instanceId);
-                          }}
-                          title="Remove character"
-                        >
-                          <TrashIcon size={12} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div
-                    style={{
-                      textAlign: 'center',
-                      padding: '20px 12px',
-                      background: 'var(--ed-bg)',
-                      borderRadius: '8px',
-                      border: '1px solid var(--ed-border)',
-                      color: 'var(--ed-text-muted)',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      gap: '8px',
-                    }}
-                  >
-                    <SparklesIcon size={24} color="#8b5cf6" />
-                    <span style={{ fontWeight: 600, color: 'var(--ed-text)', fontSize: '13px' }}>
-                      No 2D Characters in Scene
-                    </span>
-                    <p style={{ margin: 0, fontSize: '11px', lineHeight: 1.4 }}>
-                      Add a modular SVG character rig below to animate walking, waving, and motion paths.
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              {/* Add Character Section */}
-              <div className="ed-field-group" style={{ borderTop: '1px solid var(--ed-border)', paddingTop: '12px' }}>
-                <span className="ed-field-label">Add Vector Character Rig</span>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                  <button
-                    type="button"
-                    className="ed-btn-action primary"
-                    style={{ fontSize: '11px', padding: '8px 4px', textAlign: 'center' }}
-                    onClick={() => onAddCharacterToScene && onAddCharacterToScene(scene.sceneId, 'pip_the_bear')}
-                  >
-                    + Pip the Bear
-                  </button>
-                  <button
-                    type="button"
-                    className="ed-btn-action primary"
-                    style={{ fontSize: '11px', padding: '8px 4px', textAlign: 'center' }}
-                    onClick={() => onAddCharacterToScene && onAddCharacterToScene(scene.sceneId, 'sammy_the_kid')}
-                  >
-                    + Sammy the Kid
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      ) : activeInspectorTab === 'dialogue' ? (
-        <div className="ed-inspector-content">
-          <DialogueInspector
-            scene={scene}
-            characters={characters}
-            selectedDialogueId={selectedDialogueId || null}
-            onSelectDialogue={(id) => (onSelectDialogue ? onSelectDialogue(id) : undefined)}
-            onUpdateDialogue={handleUpdateDialogueLine}
-            onDeleteDialogue={handleDeleteDialogueLine}
-            onAddDialogue={handleAddDialogueLine}
-            onSaveCharacterDefault={onSaveCharacterDefault}
-          />
-        </div>
-      ) : activeInspectorTab === 'overlays' ? (
-        <div className="ed-inspector-content">
-          <OverlayInspector
-            animationData={currentAnimationData}
-            selectedOverlayId={selectedOverlayId || null}
-            onSelectOverlay={(id) => {
-              if (onSelectOverlay) onSelectOverlay(id);
-            }}
-            onAddOverlay={handleAddOverlayByType}
-            onUpdateOverlay={handleUpdateOverlayInternal}
-            onDeleteOverlay={handleDeleteOverlayInternal}
-            onDuplicateOverlay={handleDuplicateOverlayInternal}
-            onReorderOverlay={handleReorderOverlayDirection}
-            playheadMs={playheadMs}
-          />
-        </div>
-      ) : (
-        <div className="ed-inspector-content">
-        {/* ============================================================ */}
-        {/* Accordion 1: Overview & Visual Media */}
-        {/* ============================================================ */}
-        <div className={`ed-accordion-section ${openSections.overview ? 'is-open' : ''}`}>
-          <button
-            type="button"
-            className="ed-accordion-header"
-            onClick={() => toggleSection('overview')}
-            aria-expanded={openSections.overview}
-          >
-            <div className="ed-accordion-header-left">
-              <span className="ed-accordion-icon">🎬</span>
-              <span className="ed-accordion-title">Overview & Visual Media</span>
-            </div>
-            <div className="ed-accordion-header-right">
-              <span className="ed-accordion-badge">Scene {scene.number}</span>
-              <span className="ed-accordion-chevron">{openSections.overview ? '▾' : '▸'}</span>
-            </div>
-          </button>
-          {openSections.overview && (
-            <div className="ed-accordion-body">
               <div className="ed-field-group">
                 <label className="ed-field-label">Scene Title</label>
                 <input
@@ -1315,29 +1072,9 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
               })()}
             </div>
           )}
-        </div>
 
-        {/* ============================================================ */}
-        {/* Accordion 2: Timing & Trimming */}
-        {/* ============================================================ */}
-        <div className={`ed-accordion-section ${openSections.timing ? 'is-open' : ''}`}>
-          <button
-            type="button"
-            className="ed-accordion-header"
-            onClick={() => toggleSection('timing')}
-            aria-expanded={openSections.timing}
-          >
-            <div className="ed-accordion-header-left">
-              <span className="ed-accordion-icon">⏱️</span>
-              <span className="ed-accordion-title">Timing & Trimming</span>
-            </div>
-            <div className="ed-accordion-header-right">
-              <span className="ed-accordion-badge">{formatDurationHuman(durationMs)}</span>
-              <span className="ed-accordion-chevron">{openSections.timing ? '▾' : '▸'}</span>
-            </div>
-          </button>
-          {openSections.timing && (
-            <div className="ed-accordion-body">
+          {activeSection === 'timing' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div className="ed-field-group">
                 <div className="ed-field-label">
                   <span>Start / End Timecode</span>
@@ -1436,32 +1173,9 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
               </div>
             </div>
           )}
-        </div>
 
-
-        {/* ============================================================ */}
-        {/* Accordion 4: Narration Voice Studio */}
-        {/* ============================================================ */}
-        <div className={`ed-accordion-section ${openSections.narration ? 'is-open' : ''}`}>
-          <button
-            type="button"
-            className="ed-accordion-header"
-            onClick={() => toggleSection('narration')}
-            aria-expanded={openSections.narration}
-          >
-            <div className="ed-accordion-header-left">
-              <span className="ed-accordion-icon">🎙️</span>
-              <span className="ed-accordion-title">Narration Voice Studio</span>
-            </div>
-            <div className="ed-accordion-header-right">
-              <span className="ed-accordion-badge">
-                {scene.actualAudioDurationMs ? `${(scene.actualAudioDurationMs / 1000).toFixed(1)}s Verified` : 'Kokoro TTS'}
-              </span>
-              <span className="ed-accordion-chevron">{openSections.narration ? '▾' : '▸'}</span>
-            </div>
-          </button>
-          {openSections.narration && (
-            <div className="ed-accordion-body">
+          {activeSection === 'narration' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               {/* Narration Section */}
               <div className="ed-field-group">
                 <div className="ed-field-label">
@@ -2044,31 +1758,9 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
               </div>
             </div>
           )}
-        </div>
 
-        {/* ============================================================ */}
-        {/* Accordion 3: Stage Background */}
-        {/* ============================================================ */}
-        <div className={`ed-accordion-section ${openSections.background ? 'is-open' : ''}`}>
-          <button
-            type="button"
-            className="ed-accordion-header"
-            onClick={() => toggleSection('background')}
-            aria-expanded={openSections.background}
-          >
-            <div className="ed-accordion-header-left">
-              <span className="ed-accordion-icon">🖼️</span>
-              <span className="ed-accordion-title">Stage Background</span>
-            </div>
-            <div className="ed-accordion-header-right">
-              <span className="ed-accordion-badge">
-                {currentBgUrl ? currentBgFit.toUpperCase() : 'Default'}
-              </span>
-              <span className="ed-accordion-chevron">{openSections.background ? '▾' : '▸'}</span>
-            </div>
-          </button>
-          {openSections.background && (
-            <div className="ed-accordion-body">
+          {activeSection === 'background' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div className="ed-field-group ed-background-card">
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
                   <label className="ed-field-label" style={{ margin: 0, fontWeight: 600 }}>Scene Background</label>
@@ -2238,358 +1930,199 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
         </div>
             </div>
           )}
-        </div>
 
-        {/* ============================================================ */}
-        {/* Accordion 6: Structured Dialogue & Character Actions */}
-        {/* ============================================================ */}
-        <div className={`ed-accordion-section ${openSections.dialogue ? 'is-open' : ''}`}>
-          <button
-            type="button"
-            className="ed-accordion-header"
-            onClick={() => toggleSection('dialogue')}
-            aria-expanded={openSections.dialogue}
-          >
-            <div className="ed-accordion-header-left">
-              <span className="ed-accordion-icon">💬</span>
-              <span className="ed-accordion-title">Structured Dialogue & Actions</span>
-            </div>
-            <div className="ed-accordion-header-right">
-              <span className="ed-accordion-badge">{dialogueList.length} Lines</span>
-              <span className="ed-accordion-chevron">{openSections.dialogue ? '▾' : '▸'}</span>
-            </div>
-          </button>
-          {openSections.dialogue && (
-            <div className="ed-accordion-body">
-              {/* Structured Dialogue Section */}
-              <div className="ed-field-group">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <label className="ed-field-label">Structured Dialogue</label>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    {(dialogueList.length > 0 || (scene.animationData?.dialogueLines?.length || 0) > 0) && (
-                      <button
-
+          {activeSection === 'characters' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              {selectedCharacterInstance && scene.animationData ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--ed-border)', paddingBottom: '8px' }}>
+                <button
                   type="button"
-                  className="ed-tool-btn primary"
-                  style={{ fontSize: '10px', padding: '2px 8px' }}
-                  disabled={isBatchGeneratingDialogue}
-                  onClick={handleBatchGenerateDialogueAudio}
-                  title="Generate Kokoro-82M speech audio for all dialogue lines in this scene"
+                  className="ed-tool-btn"
+                  onClick={() => onSelectInstance && onSelectInstance(null)}
+                  style={{ fontSize: '11px' }}
                 >
-                  {isBatchGeneratingDialogue ? '⏳ Generating Audio...' : '⚡ Generate All Audio'}
+                  ← All Characters
                 </button>
-              )}
-              <button
-                type="button"
-                className="ed-tool-btn"
-                style={{ fontSize: '10px', padding: '2px 6px' }}
-                onClick={() => {
-                  const defaultSpeaker = characters[0]?.name || (characterInstances[0]?.name) || 'Narrator';
-                  handleUpdateDialogue([...dialogueList, { speaker: defaultSpeaker, text: '' }]);
-                }}
-              >
-                + Add Line
-              </button>
+                <span style={{ fontSize: '11px', color: 'var(--ed-text-muted)' }}>
+                  Selected Rig
+                </span>
+              </div>
+
+              <CharacterAnimationInspector
+                instance={selectedCharacterInstance}
+                animationData={scene.animationData}
+                sceneDurationMs={durationMs}
+                sceneId={scene.sceneId}
+                characters={characters}
+                onUpdateInstance={(id, updates) => onUpdateInstance && onUpdateInstance(id, updates)}
+                onUpdateAnimationData={(newData) => onUpdateAnimationData && onUpdateAnimationData(scene.sceneId, newData)}
+                onRemoveInstance={(id) => onRemoveCharacterFromScene && onRemoveCharacterFromScene(scene.sceneId, id)}
+              />
             </div>
-          </div>
+              ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div className="ed-field-group">
+                <div className="ed-field-label">
+                  <span>Characters in this Scene ({characterInstances.length})</span>
+                </div>
 
-          {dialogueList.length > 0 ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              {dialogueList.map((dlg, idx) => {
-                const matchingLine = (scene.animationData?.dialogueLines || []).find(
-                  (l) => l.text === dlg.text && l.characterName === dlg.speaker
-                ) || scene.animationData?.dialogueLines?.[idx];
-                const hasAudio = Boolean(matchingLine?.audioUrl);
-
-                return (
+                {characterInstances.length > 0 ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {characterInstances.map((inst) => (
+                      <div
+                        key={inst.instanceId}
+                        className="ed-asset-item-card"
+                        style={{
+                          padding: '8px 12px',
+                          cursor: 'pointer',
+                          borderColor: inst.instanceId === selectedInstanceId ? 'var(--ed-accent)' : undefined,
+                        }}
+                        onClick={() => onSelectInstance && onSelectInstance(inst.instanceId)}
+                      >
+                        <div className="ed-asset-info">
+                          <div className="ed-asset-title">{inst.name}</div>
+                          <div className="ed-asset-subtitle">
+                            Scale: {Math.round(inst.scale * 100)}% • Z: {inst.zIndex}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          className="ed-tool-btn primary"
+                          style={{ fontSize: '11px' }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (onSelectInstance) onSelectInstance(inst.instanceId);
+                          }}
+                        >
+                          Edit Rig
+                        </button>
+                        <button
+                          type="button"
+                          className="ed-tool-btn"
+                          style={{ fontSize: '11px', color: '#f87171', padding: '4px' }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (onRemoveCharacterFromScene) onRemoveCharacterFromScene(scene.sceneId, inst.instanceId);
+                          }}
+                          title="Remove character"
+                        >
+                          <TrashIcon size={12} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
                   <div
-                    key={idx}
                     style={{
+                      textAlign: 'center',
+                      padding: '20px 12px',
                       background: 'var(--ed-bg)',
-                      padding: '8px',
-                      borderRadius: '6px',
+                      borderRadius: '8px',
                       border: '1px solid var(--ed-border)',
+                      color: 'var(--ed-text-muted)',
                       display: 'flex',
                       flexDirection: 'column',
-                      gap: '4px',
+                      alignItems: 'center',
+                      gap: '8px',
                     }}
                   >
-                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                      <input
-                        className="ed-input"
-                        style={{ flex: '0 0 100px', fontSize: '11px', padding: '3px 6px' }}
-                        value={dlg.speaker}
-                        placeholder="Speaker"
-                        onChange={(e) => {
-                          const updated = [...dialogueList];
-                          updated[idx] = { ...updated[idx], speaker: e.target.value };
-                          handleUpdateDialogue(updated);
-                        }}
-                      />
-                      <input
-                        className="ed-input"
-                        style={{ flex: 1, fontSize: '11px', padding: '3px 6px' }}
-                        value={dlg.text}
-                        placeholder="Dialogue line..."
-                        onChange={(e) => {
-                          const updated = [...dialogueList];
-                          updated[idx] = { ...updated[idx], text: e.target.value };
-                          handleUpdateDialogue(updated);
-                        }}
-                      />
-                      <button
-                        type="button"
-                        className="ed-tool-btn"
-                        style={{ color: '#f87171', padding: '3px 5px' }}
-                        onClick={() => {
-                          const updated = dialogueList.filter((_, i) => i !== idx);
-                          handleUpdateDialogue(updated);
-                        }}
-                        title="Delete dialogue line"
-                      >
-                        <TrashIcon size={11} />
-                      </button>
-                    </div>
-
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '2px', fontSize: '10px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        {hasAudio ? (
-                          <span
-                            style={{
-                              padding: '1px 6px',
-                              borderRadius: '3px',
-                              background: 'rgba(59, 130, 246, 0.15)',
-                              color: '#60a5fa',
-                              fontWeight: 600,
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '3px',
-                            }}
-                            title="Dialogue audio file ready"
-                          >
-                            🔊 Audio Ready
-                          </span>
-                        ) : (
-                          <span
-                            style={{
-                              padding: '1px 6px',
-                              borderRadius: '3px',
-                              background: 'rgba(239, 68, 68, 0.15)',
-                              color: '#f87171',
-                              fontWeight: 600,
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '3px',
-                            }}
-                            title="No audio generated yet — click 'Generate All Audio'"
-                          >
-                            🔇 Audio Pending
-                          </span>
-                        )}
-                        {matchingLine?.voice && (
-                          <span style={{ color: 'var(--ed-text-muted)' }}>Voice: {matchingLine.voice}</span>
-                        )}
-                      </div>
-                    </div>
+                    <SparklesIcon size={24} color="#8b5cf6" />
+                    <span style={{ fontWeight: 600, color: 'var(--ed-text)', fontSize: '13px' }}>
+                      No 2D Characters in Scene
+                    </span>
+                    <p style={{ margin: 0, fontSize: '11px', lineHeight: 1.4 }}>
+                      Add a modular SVG character rig below to animate walking, waving, and motion paths.
+                    </p>
                   </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div style={{ fontSize: '11px', color: 'var(--ed-text-muted)', fontStyle: 'italic' }}>
-              No structured dialogue in this scene yet. Click "+ Add Line" to add speaker lines.
-            </div>
-          )}
-        </div>
+                )}
+              </div>
 
-        {/* Character Actions Section */}
-        <div className="ed-field-group">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <label className="ed-field-label">Character Actions</label>
-            <button
-              type="button"
-              className="ed-tool-btn primary"
-              style={{ fontSize: '10px', padding: '2px 6px' }}
-              onClick={() => {
-                const defaultChar = characters[0]?.name || (characterInstances[0]?.name) || 'Hero';
-                handleUpdateActions([...actionList, { characterName: defaultChar, action: 'waves happily', pose: 'wave' }]);
-              }}
-            >
-              + Add Action
-            </button>
-          </div>
-
-          {actionList.length > 0 ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              {actionList.map((act, idx) => (
-                <div
-                  key={idx}
-                  style={{
-                    background: 'var(--ed-bg)',
-                    padding: '8px',
-                    borderRadius: '6px',
-                    border: '1px solid var(--ed-border)',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '4px',
-                  }}
-                >
-                  <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                    <input
-                      className="ed-input"
-                      style={{ flex: '0 0 90px', fontSize: '11px', padding: '3px 6px' }}
-                      value={act.characterName}
-                      placeholder="Character"
-                      onChange={(e) => {
-                        const updated = [...actionList];
-                        updated[idx] = { ...updated[idx], characterName: e.target.value };
-                        handleUpdateActions(updated);
-                      }}
-                    />
-                    <input
-                      className="ed-input"
-                      style={{ flex: 1, fontSize: '11px', padding: '3px 6px' }}
-                      value={act.action}
-                      placeholder="Action description..."
-                      onChange={(e) => {
-                        const updated = [...actionList];
-                        updated[idx] = { ...updated[idx], action: e.target.value };
-                        handleUpdateActions(updated);
-                      }}
-                    />
-                    <select
-                      className="ed-select"
-                      style={{ flex: '0 0 75px', fontSize: '11px', padding: '3px 4px' }}
-                      value={act.pose || 'idle'}
-                      onChange={(e) => {
-                        const updated = [...actionList];
-                        updated[idx] = { ...updated[idx], pose: e.target.value };
-                        handleUpdateActions(updated);
-                      }}
-                    >
-                      <option value="idle">idle</option>
-                      <option value="walk">walk</option>
-                      <option value="wave">wave</option>
-                      <option value="jump">jump</option>
-                    </select>
-                    <button
-                      type="button"
-                      className="ed-tool-btn"
-                      style={{ color: '#f87171', padding: '3px 5px' }}
-                      onClick={() => {
-                        const updated = actionList.filter((_, i) => i !== idx);
-                        handleUpdateActions(updated);
-                      }}
-                      title="Delete action"
-                    >
-                      <TrashIcon size={11} />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div style={{ fontSize: '11px', color: 'var(--ed-text-muted)', fontStyle: 'italic' }}>
-              No character actions set. Click "+ Add Action" to record choreographed character actions.
-            </div>
-          )}
-        </div>
-            </div>
-          )}
-        </div>
-
-        {/* ============================================================ */}
-        {/* Accordion 5: Characters on Stage & 2D Rigging */}
-        {/* ============================================================ */}
-        <div className={`ed-accordion-section ${openSections.characters ? 'is-open' : ''}`}>
-          <button
-            type="button"
-            className="ed-accordion-header"
-            onClick={() => toggleSection('characters')}
-            aria-expanded={openSections.characters}
-          >
-            <div className="ed-accordion-header-left">
-              <span className="ed-accordion-icon">🎭</span>
-              <span className="ed-accordion-title">Characters & 2D Rigging</span>
-            </div>
-            <div className="ed-accordion-header-right">
-              <span className="ed-accordion-badge">{characterInstances.length} on Stage</span>
-              <span className="ed-accordion-chevron">{openSections.characters ? '▾' : '▸'}</span>
-            </div>
-          </button>
-          {openSections.characters && (
-            <div className="ed-accordion-body">
-              {/* 2D Character Animation Summary & Access */}
-              <div style={{ background: 'var(--ed-surface-elevated)', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--ed-border)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--ed-text-muted)', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                    <SparklesIcon size={12} color="#8b5cf6" />
-                    <span>2D Character Animation</span>
-                  </span>
-                  <span style={{ fontSize: '10px', color: '#c4b5fd', background: 'rgba(139, 92, 246, 0.16)', padding: '1px 6px', borderRadius: '4px' }}>
-                    {characterInstances.length} {characterInstances.length === 1 ? 'character' : 'characters'}
-                  </span>
-                </div>
-
-                <div style={{ display: 'flex', gap: '6px' }}>
+              {/* Add Character Section */}
+              <div className="ed-field-group" style={{ borderTop: '1px solid var(--ed-border)', paddingTop: '12px' }}>
+                <span className="ed-field-label">Add Vector Character Rig</span>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                   <button
                     type="button"
                     className="ed-btn-action primary"
-                    style={{ flex: 1, fontSize: '11px', padding: '6px 8px' }}
-                    onClick={() => setActiveInspectorTab('animation')}
+                    style={{ fontSize: '11px', padding: '8px 4px', textAlign: 'center' }}
+                    onClick={() => onAddCharacterToScene && onAddCharacterToScene(scene.sceneId, 'pip_the_bear')}
                   >
-                    {characterInstances.length > 0 ? 'Edit Animation Rigs' : '+ Add 2D Character Rig'}
+                    + Pip the Bear
+                  </button>
+                  <button
+                    type="button"
+                    className="ed-btn-action primary"
+                    style={{ fontSize: '11px', padding: '8px 4px', textAlign: 'center' }}
+                    onClick={() => onAddCharacterToScene && onAddCharacterToScene(scene.sceneId, 'sammy_the_kid')}
+                  >
+                    + Sammy the Kid
                   </button>
                 </div>
               </div>
-
-              {/* Character References */}
-              {characters.length > 0 && (
-                <div className="ed-field-group">
-                  <label className="ed-field-label">Characters in this Scene</label>
-                  <div className="ed-char-chips">
-                    {characters.map((char) => {
-                      const isSelected = scene.characterIds?.includes(char.id);
-                      return (
-                        <button
-                          key={char.id}
-                          type="button"
-                          className={`ed-char-chip ${isSelected ? 'selected' : ''}`}
-                          onClick={() => handleToggleCharacter(char.id)}
-                          style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                        >
-                          <span>{isSelected ? <CheckIcon size={11} /> : <PlusIcon size={11} />}</span>
-                          <span>{char.name}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
+                  {/* Story Character References */}
+                  {characters.length > 0 && (
+                    <div className="ed-field-group" style={{ borderTop: '1px solid var(--ed-border)', paddingTop: '12px' }}>
+                      <label className="ed-field-label">Story Characters in this Scene</label>
+                      <div className="ed-char-chips">
+                        {characters.map((char) => {
+                          const isSelected = scene.characterIds?.includes(char.id);
+                          return (
+                            <button
+                              key={char.id}
+                              type="button"
+                              className={`ed-char-chip ${isSelected ? 'selected' : ''}`}
+                              onClick={() => handleToggleCharacter(char.id)}
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                            >
+                              <span>{isSelected ? <CheckIcon size={11} /> : <PlusIcon size={11} />}</span>
+                              <span>{char.name}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
           )}
-        </div>
 
-        {/* ============================================================ */}
-        {/* Accordion 7: Scene Operations & Version History */}
-        {/* ============================================================ */}
-        <div className={`ed-accordion-section ${openSections.operations ? 'is-open' : ''}`}>
-          <button
-            type="button"
-            className="ed-accordion-header"
-            onClick={() => toggleSection('operations')}
-            aria-expanded={openSections.operations}
-          >
-            <div className="ed-accordion-header-left">
-              <span className="ed-accordion-icon">⚙️</span>
-              <span className="ed-accordion-title">Operations & History</span>
+          {activeSection === 'dialogue' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          <DialogueInspector
+            scene={scene}
+            characters={characters}
+            selectedDialogueId={selectedDialogueId || null}
+            onSelectDialogue={(id) => (onSelectDialogue ? onSelectDialogue(id) : undefined)}
+            onUpdateDialogue={handleUpdateDialogueLine}
+            onDeleteDialogue={handleDeleteDialogueLine}
+            onAddDialogue={handleAddDialogueLine}
+            onSaveCharacterDefault={onSaveCharacterDefault}
+          />
             </div>
-            <div className="ed-accordion-header-right">
-              <span className="ed-accordion-chevron">{openSections.operations ? '▾' : '▸'}</span>
+          )}
+
+          {activeSection === 'overlays' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          <OverlayInspector
+            animationData={currentAnimationData}
+            selectedOverlayId={selectedOverlayId || null}
+            onSelectOverlay={(id) => {
+              if (onSelectOverlay) onSelectOverlay(id);
+            }}
+            onAddOverlay={handleAddOverlayByType}
+            onUpdateOverlay={handleUpdateOverlayInternal}
+            onDeleteOverlay={handleDeleteOverlayInternal}
+            onDuplicateOverlay={handleDuplicateOverlayInternal}
+            onReorderOverlay={handleReorderOverlayDirection}
+            playheadMs={playheadMs}
+          />
             </div>
-          </button>
-          {openSections.operations && (
-            <div className="ed-accordion-body">
+          )}
+
+          {activeSection === 'operations' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               {/* Version History */}
               {versions && versions.length > 0 && (
                 <div className="ed-field-group">
@@ -2696,10 +2229,6 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
           )}
         </div>
 
-      </div>
-      )}
-
-      {/* Story Backgrounds Picker Modal */}
       {showBgPicker && (
         <div className="ed-bg-modal-overlay" onClick={() => setShowBgPicker(false)}>
           <div className="ed-bg-modal-card" onClick={(e) => e.stopPropagation()}>
@@ -2783,4 +2312,3 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
     </aside>
   );
 };
-

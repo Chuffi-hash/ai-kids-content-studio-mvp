@@ -129,6 +129,113 @@ body.theme-light {
   justify-content: center;
 }
 
+/* ---------------- 3-Way Theme Segmented Control (Global & Editor) ---------------- */
+.theme-segmented-control,
+.ed-theme-segmented-control {
+  display: inline-flex;
+  align-items: center;
+  background: var(--color-surface-elevated, #162035);
+  border: 1px solid var(--color-border, #202d45);
+  border-radius: 6px;
+  padding: 2px;
+  gap: 2px;
+  box-sizing: border-box;
+}
+
+.theme-segmented-control.full-width,
+.ed-theme-segmented-control.full-width {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  width: 100%;
+}
+
+.theme-segmented-btn,
+.ed-theme-segmented-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted, #94a3b8);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.theme-segmented-btn:hover,
+.ed-theme-segmented-btn:hover {
+  color: var(--color-text, #ffffff);
+  background: var(--color-surface-hover, #1e2c46);
+}
+
+.theme-segmented-btn.active,
+.ed-theme-segmented-btn.active {
+  background: var(--color-surface, #101726);
+  color: var(--color-text, #ffffff);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+
+/* Light mode specific refinements */
+[data-theme="light"] .theme-segmented-control,
+[data-theme="light"] .ed-theme-segmented-control,
+body.theme-light .theme-segmented-control,
+body.theme-light .ed-theme-segmented-control {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+[data-theme="light"] .theme-segmented-btn,
+[data-theme="light"] .ed-theme-segmented-btn,
+body.theme-light .theme-segmented-btn,
+body.theme-light .ed-theme-segmented-btn {
+  color: #475569;
+}
+
+[data-theme="light"] .theme-segmented-btn:hover,
+[data-theme="light"] .ed-theme-segmented-btn:hover,
+body.theme-light .theme-segmented-btn:hover,
+body.theme-light .ed-theme-segmented-btn:hover {
+  color: #0f172a;
+  background: rgba(124, 58, 237, 0.08);
+}
+
+[data-theme="light"] .theme-segmented-btn.active,
+[data-theme="light"] .ed-theme-segmented-btn.active,
+body.theme-light .theme-segmented-btn.active,
+body.theme-light .ed-theme-segmented-btn.active {
+  background: #ffffff;
+  color: #0f172a;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.theme-segmented-icon,
+.ed-theme-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.theme-segmented-label,
+.ed-theme-btn-label {
+  display: inline-block;
+}
+
+@media (max-width: 900px) {
+  .ed-toolbar .theme-segmented-label,
+  .ed-toolbar .ed-theme-btn-label {
+    display: none;
+  }
+}
+
 * {
   box-sizing: border-box;
 }

@@ -8,33 +8,50 @@ interface ThemeToggleProps {
 }
 
 export const ThemeToggle: React.FC<ThemeToggleProps> = ({ className = '', showLabel = true }) => {
-  const { theme, toggleTheme } = useTheme();
+  const { themeMode, effectiveTheme, toggleTheme } = useTheme();
+
+  const modeConfig = {
+    dark: {
+      icon: <MoonIcon size={15} color="#c4b5fd" />,
+      label: 'Dark Mode',
+      title: 'Current theme: Dark. Click to switch to Light Mode',
+    },
+    light: {
+      icon: <SunIcon size={15} color="#f59e0b" />,
+      label: 'Light Mode',
+      title: 'Current theme: Light. Click to switch to Auto (System)',
+    },
+    system: {
+      icon: <MonitorIcon size={15} color="#38bdf8" />,
+      label: `Auto (${effectiveTheme === 'dark' ? 'Dark' : 'Light'})`,
+      title: `Current theme: Auto System (${effectiveTheme}). Click to switch to Dark Mode`,
+    },
+  };
+
+  const current = modeConfig[themeMode] || modeConfig.dark;
 
   return (
     <button
       type="button"
-      className={`theme-toggle-btn ${theme} ${className}`}
+      className={`theme-toggle-btn ${themeMode} ${className}`.trim()}
       onClick={toggleTheme}
-      title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-      aria-label="Toggle theme"
+      title={current.title}
+      aria-label={`Toggle theme (currently ${themeMode})`}
     >
-      <span className="theme-toggle-icon">
-        {theme === 'dark' ? (
-          <SunIcon size={15} color="#fbbf24" />
-        ) : (
-          <MoonIcon size={15} color="#4f46e5" />
-        )}
-      </span>
+      <span className="theme-toggle-icon">{current.icon}</span>
       {showLabel && (
-        <span className="theme-toggle-label">
-          {theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
-        </span>
+        <span className="theme-toggle-label">{current.label}</span>
       )}
     </button>
   );
 };
 
-export const ThemeSelector: React.FC<{ className?: string }> = ({ className = '' }) => {
+export interface ThemeSelectorProps {
+  className?: string;
+  fullWidth?: boolean;
+}
+
+export const ThemeSelector: React.FC<ThemeSelectorProps> = ({ className = '', fullWidth = false }) => {
   const { themeMode, effectiveTheme, setThemeMode } = useTheme();
 
   const options: Array<{ mode: ThemeMode; label: string; icon: React.ReactNode; tooltip: string }> = [
@@ -59,7 +76,11 @@ export const ThemeSelector: React.FC<{ className?: string }> = ({ className = ''
   ];
 
   return (
-    <div className={`ed-theme-segmented-control ${className}`} role="radiogroup" aria-label="Theme selector">
+    <div
+      className={`theme-segmented-control ed-theme-segmented-control ${fullWidth ? 'full-width' : ''} ${className}`.trim()}
+      role="radiogroup"
+      aria-label="Theme selector"
+    >
       {options.map((opt) => {
         const isActive = themeMode === opt.mode;
         return (
@@ -68,12 +89,12 @@ export const ThemeSelector: React.FC<{ className?: string }> = ({ className = ''
             type="button"
             role="radio"
             aria-checked={isActive}
-            className={`ed-theme-segmented-btn ${isActive ? 'active' : ''}`}
+            className={`theme-segmented-btn ed-theme-segmented-btn ${isActive ? 'active' : ''}`}
             onClick={() => setThemeMode(opt.mode)}
             title={opt.tooltip}
           >
-            <span className="ed-theme-icon">{opt.icon}</span>
-            <span className="ed-theme-btn-label">{opt.label}</span>
+            <span className="theme-segmented-icon ed-theme-icon">{opt.icon}</span>
+            <span className="theme-segmented-label ed-theme-btn-label">{opt.label}</span>
           </button>
         );
       })}
