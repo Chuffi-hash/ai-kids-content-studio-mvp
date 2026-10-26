@@ -517,3 +517,8 @@ body.theme-light .topbar-tag {
   width: 100%;
   justify-content: center;
 }
+
+.sidebar-footer .theme-segmented-control,
+.sidebar-footer .ed-theme-segmented-control {
+  width: 100%;
+}

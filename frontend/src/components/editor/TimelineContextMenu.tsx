@@ -39,6 +39,7 @@ interface TimelineContextMenuProps {
   onSplitScene?: (sceneId: string, splitMs: number) => void;
   onDeleteDialogue?: (dialogueId: string) => void;
   onDeleteOverlay?: (sceneId: string, overlayId: string) => void;
+  onDuplicateOverlay?: (sceneId: string, overlayId: string) => void;
   onDeleteInstance?: (sceneId: string, instanceId: string) => void;
   onPreviewDialogue?: (dialogue: SceneDialogue) => void;
   onRegenerateDialogue?: (sceneId: string, dialogueId: string) => void;
@@ -64,6 +65,7 @@ export const TimelineContextMenu: React.FC<TimelineContextMenuProps> = ({
   onSplitScene,
   onDeleteDialogue,
   onDeleteOverlay,
+  onDuplicateOverlay,
   onDeleteInstance,
   onPreviewDialogue,
   onRegenerateDialogue,
@@ -384,6 +386,20 @@ export const TimelineContextMenu: React.FC<TimelineContextMenuProps> = ({
           </button>
         )}
 
+        {onDuplicateOverlay && (
+          <button
+            type="button"
+            className="ed-context-item"
+            onClick={() => {
+              onDuplicateOverlay(scene.sceneId, overlay.id);
+              onClose();
+            }}
+          >
+            <CopyIcon size={13} color="#38bdf8" />
+            <span>Duplicate Overlay</span>
+          </button>
+        )}
+
         <div className="ed-context-divider" />
 
         {onDeleteOverlay && (
@@ -397,6 +413,47 @@ export const TimelineContextMenu: React.FC<TimelineContextMenuProps> = ({
           >
             <TrashIcon size={13} color="#ef4444" />
             <span>Delete Overlay</span>
+          </button>
+        )}
+      </>
+    );
+  };
+
+  const renderInstanceClipMenu = (scene: EditorScene, instanceId: string, characterName?: string) => {
+    return (
+      <>
+        <div className="ed-context-header">
+          🎭 {characterName || '2D Character Rig'}
+        </div>
+
+        {onSelectInstance && (
+          <button
+            type="button"
+            className="ed-context-item"
+            onClick={() => {
+              if (onSelectScene) onSelectScene(scene.sceneId);
+              onSelectInstance(instanceId);
+              onClose();
+            }}
+          >
+            <SparklesIcon size={13} color="#a78bfa" />
+            <span>Edit Character Rig & Animation</span>
+          </button>
+        )}
+
+        <div className="ed-context-divider" />
+
+        {onDeleteInstance && (
+          <button
+            type="button"
+            className="ed-context-item danger"
+            onClick={() => {
+              onDeleteInstance(scene.sceneId, instanceId);
+              onClose();
+            }}
+          >
+            <TrashIcon size={13} color="#ef4444" />
+            <span>Remove Character from Scene</span>
           </button>
         )}
       </>
@@ -461,6 +518,7 @@ export const TimelineContextMenu: React.FC<TimelineContextMenuProps> = ({
     >
       {target.type === 'empty' && renderEmptyTrackMenu(target.track, target.timeMs, target.sceneId)}
       {target.type === 'scene' && renderSceneClipMenu(target.scene)}
+      {target.type === 'instance' && renderInstanceClipMenu(target.scene, target.instanceId, target.characterName)}
       {target.type === 'dialogue' && renderDialogueClipMenu(target.scene, target.dialogue)}
       {target.type === 'overlay' && renderOverlayClipMenu(target.scene, target.overlay)}
       {target.type === 'header' && renderHeaderMenu(target.track)}

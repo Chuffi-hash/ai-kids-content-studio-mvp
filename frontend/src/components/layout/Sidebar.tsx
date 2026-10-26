@@ -6,7 +6,7 @@ import {
   UsersIcon,
   FilmIcon,
 } from "../common/Icons";
-import { ThemeToggle } from "../common/ThemeToggle";
+import { ThemeSelector } from "../common/ThemeToggle";
 
 interface NavItem {
   label: string;
@@ -71,7 +71,7 @@ export default function Sidebar() {
       </nav>
 
       <div className="sidebar-footer">
-        <ThemeToggle />
+        <ThemeSelector fullWidth />
       </div>
     </aside>
   );

@@ -1,4 +1,4 @@
-import { ThemeToggle } from "../common/ThemeToggle";
+import { ThemeSelector } from "../common/ThemeToggle";
 
 export default function Header() {
   return (
@@ -8,7 +8,7 @@ export default function Header() {
         <span className="topbar-tag">Kids Media Studio</span>
       </div>
       <div className="topbar-actions">
-        <ThemeToggle />
+        <ThemeSelector />
         <span className="status">MVP</span>
       </div>
     </header>

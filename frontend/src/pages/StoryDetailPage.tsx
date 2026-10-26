@@ -48,7 +48,7 @@ export default function StoryDetailPage() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
   const [isLeftDrawerOpen, setIsLeftDrawerOpen] = useState<boolean>(true);
   const [isInspectorOpen, setIsInspectorOpen] = useState<boolean>(true);
-  const [activeInspectorTab, setActiveInspectorTab] = useState<'scene' | 'animation' | 'dialogue' | 'overlays'>('scene');
+  const [activeInspectorTab, setActiveInspectorTab] = useState<string>('overview');
 
   // Playback & timeline state
   const [currentTimeMs, setCurrentTimeMs] = useState<number>(0);
@@ -655,11 +655,30 @@ export default function StoryDetailPage() {
   // ----------------------------------------------------
   // 2D Character Animation & Overlay Operations
   // ----------------------------------------------------
+  const handleUpdateAnimationData = useCallback(
+    (sceneId: string, newData: VectorSceneData) => {
+      pushHistorySnapshot(scenes);
+      const updated = scenes.map((s) => {
+        if (s.sceneId !== sceneId) return s;
+        return {
+          ...s,
+          animationData: newData,
+        };
+      });
+      setScenes(updated);
+      triggerDebouncedSave(updated);
+    },
+    [scenes, pushHistorySnapshot, triggerDebouncedSave]
+  );
+
   const handleSelectInstance = useCallback((instanceId: string | null) => {
     setSelectedInstanceId(instanceId);
     if (instanceId) {
       setSelectedOverlayId(null);
       setSelectedDialogueId(null);
+      setActiveSidebarSection('rig');
+      setActiveInspectorTab('animation');
+      setIsInspectorOpen(true);
     }
   }, []);
 
@@ -668,6 +687,9 @@ export default function StoryDetailPage() {
     if (overlayId) {
       setSelectedInstanceId(null);
       setSelectedDialogueId(null);
+      setActiveSidebarSection('overlays');
+      setActiveInspectorTab('overlays');
+      setIsInspectorOpen(true);
     }
   }, []);
 
@@ -688,8 +710,11 @@ export default function StoryDetailPage() {
       setIsLeftDrawerOpen(true);
     } else {
       setIsInspectorOpen(true);
-      if (section === 'scene_settings') setActiveInspectorTab('scene');
-      else if (section === 'rig') setActiveInspectorTab('animation');
+      if (section === 'overview' || section === 'scene_settings') setActiveInspectorTab('overview');
+      else if (section === 'timing') setActiveInspectorTab('timing');
+      else if (section === 'narration') setActiveInspectorTab('narration');
+      else if (section === 'background') setActiveInspectorTab('background');
+      else if (section === 'characters' || section === 'rig') setActiveInspectorTab('characters');
       else if (section === 'dialogue') setActiveInspectorTab('dialogue');
       else if (section === 'overlays') setActiveInspectorTab('overlays');
     }
@@ -710,24 +735,115 @@ export default function StoryDetailPage() {
         setSelectedDialogueId(null);
       }
     },
-    [activeSceneId, scenes, selectedDialogueId]
+    [activeSceneId, scenes, selectedDialogueId, handleUpdateAnimationData]
   );
 
   const handleDeleteOverlay = useCallback(
     (sceneId: string, overlayId: string) => {
-      const targetScene = scenes.find((s) => s.sceneId === sceneId);
-      if (!targetScene?.animationData) return;
-
-      const updatedOverlays = (targetScene.animationData.overlays || []).filter((o) => o.id !== overlayId);
-      handleUpdateAnimationData(sceneId, {
-        ...targetScene.animationData,
-        overlays: updatedOverlays,
+      pushHistorySnapshot(latestScenesRef.current);
+      setScenes((prevScenes) => {
+        const nextScenes = prevScenes.map((s) => {
+          if (s.sceneId !== sceneId) return s;
+          const currentAnim = s.animationData || {
+            version: 1,
+            viewport: { width: 1280, height: 720 },
+            characterInstances: [],
+            animationClips: [],
+          };
+          const currentOverlays = currentAnim.overlays || [];
+          return {
+            ...s,
+            animationData: {
+              ...currentAnim,
+              overlays: currentOverlays.filter((o) => o.id !== overlayId),
+            },
+          };
+        });
+        triggerDebouncedSave(nextScenes);
+        return nextScenes;
       });
+
       if (selectedOverlayId === overlayId) {
         setSelectedOverlayId(null);
       }
     },
-    [scenes, selectedOverlayId]
+    [selectedOverlayId, pushHistorySnapshot, triggerDebouncedSave]
+  );
+
+  const handleDuplicateOverlay = useCallback(
+    (sceneId: string, overlayId: string) => {
+      pushHistorySnapshot(latestScenesRef.current);
+      let duplicatedId: string | null = null;
+      setScenes((prevScenes) => {
+        const nextScenes = prevScenes.map((s) => {
+          if (s.sceneId !== sceneId) return s;
+          const currentAnim = s.animationData || {
+            version: 1,
+            viewport: { width: 1280, height: 720 },
+            characterInstances: [],
+            animationClips: [],
+          };
+          const currentOverlays = currentAnim.overlays || [];
+          const ov = currentOverlays.find((o) => o.id === overlayId);
+          if (!ov) return s;
+
+          const duplicatedOverlay: EducationalOverlay = {
+            ...ov,
+            id: `overlay-${ov.type}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`,
+            title: ov.title ? `${ov.title} (Copy)` : undefined,
+            x: Math.min(1200, (ov.x || 0) + 30),
+            y: Math.min(680, (ov.y || 0) + 30),
+            startMs: (ov.startMs || 0) + 300,
+          };
+          duplicatedId = duplicatedOverlay.id;
+
+          return {
+            ...s,
+            animationData: {
+              ...currentAnim,
+              overlays: [...currentOverlays, duplicatedOverlay],
+            },
+          };
+        });
+        triggerDebouncedSave(nextScenes);
+        return nextScenes;
+      });
+
+      if (duplicatedId) {
+        setSelectedOverlayId(duplicatedId);
+        setActiveSidebarSection('overlays');
+        setActiveInspectorTab('overlays');
+        setIsInspectorOpen(true);
+      }
+    },
+    [pushHistorySnapshot, triggerDebouncedSave]
+  );
+
+  const handleReorderOverlays = useCallback(
+    (sceneId: string, reorderedOverlays: EducationalOverlay[]) => {
+      pushHistorySnapshot(latestScenesRef.current);
+      setScenes((prevScenes) => {
+        const nextScenes = prevScenes.map((s) => {
+          if (s.sceneId !== sceneId) return s;
+          const currentAnim = s.animationData || {
+            version: 1,
+            viewport: { width: 1280, height: 720 },
+            characterInstances: [],
+            animationClips: [],
+          };
+          return {
+            ...s,
+            animationData: {
+              ...currentAnim,
+              overlays: reorderedOverlays,
+            },
+          };
+        });
+        triggerDebouncedSave(nextScenes);
+        return nextScenes;
+      });
+    },
+    [pushHistorySnapshot, triggerDebouncedSave]
   );
 
   const handleAddDialogue = useCallback(
@@ -846,23 +962,7 @@ export default function StoryDetailPage() {
         console.error('Failed to regenerate dialogue audio:', err);
       }
     },
-    [scenes]
-  );
-
-  const handleUpdateAnimationData = useCallback(
-    (sceneId: string, newData: VectorSceneData) => {
-      pushHistorySnapshot(scenes);
-      const updated = scenes.map((s) => {
-        if (s.sceneId !== sceneId) return s;
-        return {
-          ...s,
-          animationData: newData,
-        };
-      });
-      setScenes(updated);
-      triggerDebouncedSave(updated);
-    },
-    [scenes, pushHistorySnapshot, triggerDebouncedSave]
+    [scenes, handleUpdateAnimationData]
   );
 
   const handleUpdateInstance = useCallback(
@@ -1649,6 +1749,9 @@ export default function StoryDetailPage() {
           selectedOverlayId={selectedOverlayId}
           onSelectOverlay={handleSelectOverlay}
           onUpdateOverlay={handleUpdateOverlay}
+          onDeleteOverlay={handleDeleteOverlay}
+          onDuplicateOverlay={handleDuplicateOverlay}
+          onReorderOverlays={handleReorderOverlays}
           selectedDialogueId={selectedDialogueId}
           onSelectDialogue={handleSelectDialogue}
           onUpdateAnimationData={handleUpdateAnimationData}
@@ -1659,10 +1762,13 @@ export default function StoryDetailPage() {
           isOpen={isInspectorOpen}
           onClose={() => setIsInspectorOpen(false)}
           activeInspectorTab={activeInspectorTab}
-          onTabChange={(tab) => {
+          onTabChange={(tab: any) => {
             setActiveInspectorTab(tab);
-            if (tab === 'scene') setActiveSidebarSection('scene_settings');
-            else if (tab === 'animation') setActiveSidebarSection('rig');
+            if (tab === 'overview' || tab === 'scene') setActiveSidebarSection('overview');
+            else if (tab === 'timing') setActiveSidebarSection('timing');
+            else if (tab === 'narration') setActiveSidebarSection('narration');
+            else if (tab === 'background') setActiveSidebarSection('background');
+            else if (tab === 'characters' || tab === 'animation' || tab === 'rig') setActiveSidebarSection('characters');
             else if (tab === 'dialogue') setActiveSidebarSection('dialogue');
             else if (tab === 'overlays') setActiveSidebarSection('overlays');
           }}
@@ -1694,6 +1800,7 @@ export default function StoryDetailPage() {
         onDeleteScene={handleDeleteScene}
         onDeleteDialogue={handleDeleteDialogue}
         onDeleteOverlay={handleDeleteOverlay}
+        onDuplicateOverlay={handleDuplicateOverlay}
         onDeleteInstance={(scId, instId) => handleRemoveCharacterFromScene(scId, instId)}
         onAddDialogue={handleAddDialogue}
         onAddOverlay={handleAddOverlay}
