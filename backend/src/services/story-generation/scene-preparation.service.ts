@@ -19,7 +19,7 @@ import {
 import { estimateSpeechDurationMs } from '../timing/timing.service.js';
 import { generateVisemeCues } from '../audio-generation/viseme-generator.js';
 
-export type SupportedActionType = 'idle' | 'walk' | 'wave' | 'jump';
+export type SupportedActionType = 'idle' | 'walk' | 'wave' | 'jump' | 'point';
 
 export interface PreparedSceneRecord {
   sceneNumber: number;
@@ -292,6 +292,8 @@ export class ScenePreparationService {
             actionType = 'wave';
           } else if (rawAct === 'jump') {
             actionType = 'jump';
+          } else if (rawAct === 'point') {
+            actionType = 'point';
           } else {
             actionType = 'idle';
           }

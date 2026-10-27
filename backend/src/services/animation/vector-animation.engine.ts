@@ -52,7 +52,7 @@ export interface CharacterInstance {
 export interface AnimationClip {
   clipId: string;
   instanceId: string;
-  action: 'idle' | 'walk' | 'wave' | 'jump';
+  action: 'idle' | 'walk' | 'wave' | 'jump' | 'point';
   startMs: number;
   durationMs: number;
   loop: boolean;
@@ -408,6 +408,25 @@ export function evaluatePose(
         break;
       }
 
+      case 'point': {
+        const pointFreq = 1.0 * speed;
+        const phase = 2 * Math.PI * pointFreq * (clipOffsetMs / 1000);
+        if (isPlanet) {
+          rightArmAngle = -45 + 5 * Math.sin(phase);
+          rightForearmAngle = -10;
+          leftArmAngle = 8 + 2 * Math.sin(phase * 0.3);
+          torsoBobY = 5 * Math.sin(phase * 0.5);
+          headAngle = 4;
+        } else {
+          rightArmAngle = -75;
+          rightForearmAngle = -15 + 4 * Math.sin(phase);
+          leftArmAngle = 10 + 2 * Math.sin(phase * 0.3);
+          torsoAngle = -3;
+          headAngle = 5;
+        }
+        break;
+      }
+
       case 'idle':
       default: {
         const idleFreq = 0.6 * speed;
@@ -599,7 +618,15 @@ export class VectorAnimationEngine {
     resolveLocalPath?: (url: string) => string;
   }): string {
     const { animationData, timestampSec, width = 1280, height = 720, resolveLocalPath } = options;
-    const activeFormat: AspectRatioType = options.activeFormat || animationData?.activeFormat || (width < height ? '9:16' : '16:9');
+    const activeFormat: AspectRatioType =
+      options.activeFormat ||
+      (width < height
+        ? width / height <= 0.6
+          ? '9:16'
+          : '4:5'
+        : width === height
+          ? '1:1'
+          : '16:9');
     const sceneRelativeMs = timestampSec * 1000;
     const formatVariant = animationData?.formatVariants?.[activeFormat];
 
@@ -656,18 +683,59 @@ export class VectorAnimationEngine {
           scale: override.scale !== undefined ? override.scale : inst.scale,
         };
       }
-      if (activeFormat === '9:16' && width < height) {
-        // Adapt 16:9 (1280x720) coordinates to 9:16 vertical (e.g. 720x1280)
+      if (width === 1280 && height === 720) {
+        return inst;
+      }
+      if (activeFormat === '16:9') {
+        const scale = width / 1280;
+        return {
+          ...inst,
+          x: Math.round(inst.x * scale),
+          y: Math.round(inst.y * scale),
+          scale: Number(((inst.scale || 1.0) * scale).toFixed(2)),
+        };
+      }
+      if (activeFormat === '9:16' || width < height) {
+        // Adapt 16:9 (1280x720) coordinates to 9:16 vertical (e.g. 720x1280 or 1080x1920)
         const xOffset = inst.x - 640;
         const newX = (width / 2) + (xOffset * (width / 1280));
         const yRatio = inst.y / 720;
         const newY = yRatio * height;
-        const newScale = (inst.scale || 1.0) <= 1.0 ? (inst.scale || 1.0) * 1.15 : (inst.scale || 1.0);
+        const scaleMult = height / 1280;
+        const baseScale = (inst.scale || 1.0) <= 1.0 ? (inst.scale || 1.0) * 1.15 : (inst.scale || 1.0);
         return {
           ...inst,
           x: Math.round(newX),
           y: Math.round(newY),
-          scale: Number(newScale.toFixed(2)),
+          scale: Number((baseScale * scaleMult).toFixed(2)),
+        };
+      }
+      if (activeFormat === '1:1') {
+        // Adapt 16:9 (1280x720) coordinates to 1:1 square (e.g. 720x720 or 1080x1080)
+        const xOffset = inst.x - 640;
+        const newX = (width / 2) + (xOffset * (width / 1280));
+        const yRatio = inst.y / 720;
+        const newY = yRatio * height;
+        const scaleMult = width / 720;
+        return {
+          ...inst,
+          x: Math.round(newX),
+          y: Math.round(newY),
+          scale: Number(((inst.scale || 1.0) * scaleMult).toFixed(2)),
+        };
+      }
+      if (activeFormat === '4:5') {
+        // Adapt 16:9 (1280x720) coordinates to 4:5 portrait (e.g. 720x900 or 1080x1350)
+        const xOffset = inst.x - 640;
+        const newX = (width / 2) + (xOffset * (width / 1280));
+        const yRatio = inst.y / 720;
+        const newY = yRatio * height;
+        const scaleMult = width / 720;
+        return {
+          ...inst,
+          x: Math.round(newX),
+          y: Math.round(newY),
+          scale: Number(((inst.scale || 1.0) * 1.08 * scaleMult).toFixed(2)),
         };
       }
       return inst;
@@ -758,9 +826,27 @@ export class VectorAnimationEngine {
           y: override.y !== undefined ? override.y : o.y,
         };
       }
-      if (activeFormat === '9:16' && width < height) {
+      if (width === 1280 && height === 720) {
+        return o;
+      }
+      if (activeFormat === '16:9') {
+        const scale = width / 1280;
+        return { ...o, x: Math.round(o.x * scale), y: Math.round(o.y * scale) };
+      }
+      if (activeFormat === '9:16' || width < height) {
         if (o.type === 'title_card') {
-          return { ...o, x: width / 2, y: o.y > 450 ? Math.round(height * 0.78) : o.y };
+          return { ...o, x: width / 2, y: o.y > 450 ? Math.round(height * 0.78) : Math.round((o.y / 720) * height) };
+        }
+        if (o.type === 'spotlight' || o.type === 'glow' || o.type === 'sparkles') {
+          const xOffset = o.x - 640;
+          const newX = (width / 2) + (xOffset * (width / 1280));
+          const yRatio = o.y / 720;
+          return { ...o, x: Math.round(newX), y: Math.round(yRatio * height) };
+        }
+      }
+      if (activeFormat === '1:1' || activeFormat === '4:5') {
+        if (o.type === 'title_card') {
+          return { ...o, x: width / 2, y: Math.round((o.y / 720) * height) };
         }
         if (o.type === 'spotlight' || o.type === 'glow' || o.type === 'sparkles') {
           const xOffset = o.x - 640;

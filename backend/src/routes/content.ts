@@ -174,6 +174,154 @@ contentRouter.post("/story/import", async (req, res) => {
   }
 });
 
+// Parse unstructured script into draft storyboard scenes for user review
+contentRouter.post("/story/parse-script", async (req, res) => {
+  try {
+    const { rawText, language, title, targetDuration, storyId } = req.body;
+    if (!rawText || typeof rawText !== "string" || !rawText.trim()) {
+      return res.status(400).json({ message: "rawText (script or markdown) is required" });
+    }
+
+    const draftResult = StoryImporterService.parseScriptForDraft(rawText.trim(), {
+      language: language || "Hindi",
+      defaultTitle: title,
+      targetDuration: typeof targetDuration === "number" ? targetDuration : undefined,
+    });
+
+    return res.json(draftResult);
+  } catch (error: any) {
+    console.error("[Content] Failed to parse story script:", error);
+    return res.status(500).json({ message: error?.message || "Failed to parse script" });
+  }
+});
+
+// Generate structured draft storyboard for user review (Create Story with AI flow)
+contentRouter.post("/story/generate-draft", async (req, res) => {
+  try {
+    const {
+      topic,
+      ageGroup,
+      lesson,
+      audience,
+      genre,
+      visualStyle,
+      characterIds,
+      newCharacters,
+      desiredDurationSeconds,
+      targetDuration,
+      language,
+      title,
+      sceneCount,
+      tone,
+      contentRestrictions,
+    } = req.body;
+
+    if (!topic || typeof topic !== "string" || !topic.trim()) {
+      return res.status(400).json({ message: "topic is required" });
+    }
+
+    const duration = desiredDurationSeconds || targetDuration || 60;
+    const draftResult = await StoryGenerationService.generateDraftStory({
+      topic: topic.trim(),
+      ageGroup: ageGroup || audience || "4-7 years",
+      desiredDurationSeconds: duration,
+      language: language || "Hindi",
+      title,
+      genre: genre || "Adventure",
+      lesson,
+      characterIds: Array.isArray(characterIds) ? characterIds : [],
+      newCharacters: Array.isArray(newCharacters) ? newCharacters : [],
+      sceneCount: typeof sceneCount === "number" ? sceneCount : undefined,
+      tone,
+      contentRestrictions,
+      visualStyle,
+      audience,
+    });
+
+    return res.json(draftResult);
+  } catch (error: any) {
+    console.error("[Content] Failed to generate draft story:", error);
+    return res.status(500).json({ message: error?.message || "Failed to generate draft story" });
+  }
+});
+
+// Create new story and scenes from reviewed/edited draft storyboard (both AI and Import flows)
+contentRouter.post("/story/create-from-draft", async (req, res) => {
+  try {
+    const {
+      title,
+      targetDurationSeconds,
+      language,
+      logline,
+      lesson,
+      genre,
+      visualStyle,
+      audience,
+      topic,
+      characters,
+      scenes,
+    } = req.body;
+
+    if (!Array.isArray(scenes) || scenes.length === 0) {
+      return res.status(400).json({ message: "scenes array cannot be empty" });
+    }
+
+    const result = await StoryImporterService.createStoryFromDraft({
+      title: title || "Untitled Story",
+      targetDurationSeconds: typeof targetDurationSeconds === "number" ? targetDurationSeconds : 60,
+      language: language || "Hindi",
+      logline,
+      lesson,
+      genre,
+      visualStyle,
+      audience,
+      topic,
+      characters,
+      scenes,
+    });
+
+    return res.json({
+      success: true,
+      storyId: result.storyId,
+      story: result.story,
+      scenes: result.scenes,
+    });
+  } catch (error: any) {
+    console.error("[Content] Failed to create story from draft:", error);
+    return res.status(500).json({ message: error?.message || "Failed to create story from draft" });
+  }
+});
+
+// Commit reviewed/edited draft storyboard scenes into existing story without auto-generating media
+contentRouter.post("/story/:storyId/scenes/import-draft", async (req, res) => {
+  try {
+    const { storyId } = req.params;
+    const { scenes, importMode = "replace", updateStoryMetadata, title, targetDurationSeconds, language } = req.body;
+
+    if (!Array.isArray(scenes) || scenes.length === 0) {
+      return res.status(400).json({ message: "scenes array cannot be empty" });
+    }
+
+    const savedScenes = await StoryImporterService.importDraftScenesToStory({
+      storyId,
+      scenes,
+      importMode: importMode === "append" ? "append" : "replace",
+      updateStoryMetadata: Boolean(updateStoryMetadata),
+      title,
+      targetDurationSeconds,
+      language: language || "Hindi",
+    });
+
+    return res.json({
+      success: true,
+      scenes: savedScenes,
+    });
+  } catch (error: any) {
+    console.error("[Content] Failed to import draft scenes:", error);
+    return res.status(500).json({ message: error?.message || "Failed to import draft scenes" });
+  }
+});
+
 contentRouter.post("/story/:storyId/scenes/generate", async (req, res) => {
   try {
     const { storyId } = req.params;
