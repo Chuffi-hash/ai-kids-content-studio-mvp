@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import StoryCard from "../components/story/StoryCard";
 import { getAllStories, deleteStory, Story } from "../services/story.service";
 import { ConfirmModal } from "../components/common/ConfirmModal";
-import { SearchIcon, CloseIcon } from "../components/common/Icons";
+import { SearchIcon, CloseIcon, SparklesIcon, BookOpenIcon } from "../components/common/Icons";
 import "../components/story/stories-library.css";
 
 export default function StoriesPage() {
@@ -90,10 +90,46 @@ export default function StoriesPage() {
 
   return (
     <div className="stories-page">
-      <div className="page-header">
+      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
         <div>
           <h1>Stories</h1>
           <p className="muted">Your generated stories</p>
+        </div>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => navigate('/?mode=ai')}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '10px 18px',
+              fontWeight: 600,
+              fontSize: '13px',
+              borderRadius: '8px',
+            }}
+          >
+            <SparklesIcon size={16} />
+            <span>Create Story with AI</span>
+          </button>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => navigate('/?mode=import')}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '10px 18px',
+              fontWeight: 600,
+              fontSize: '13px',
+              borderRadius: '8px',
+            }}
+          >
+            <BookOpenIcon size={16} />
+            <span>Import Existing Script</span>
+          </button>
         </div>
       </div>
 
@@ -181,9 +217,72 @@ export default function StoriesPage() {
       {loading ? (
         <div className="stories-loading">Loading stories...</div>
       ) : filteredStories.length === 0 ? (
-        <div className="stories-empty-state">
-          <h3>No stories yet</h3>
-          <p className="muted">Generate your first story to get started.</p>
+        <div className="stories-empty-state" style={{ padding: '48px 24px', textAlign: 'center' }}>
+          <div style={{ maxWidth: '640px', margin: '0 auto' }}>
+            <h3 style={{ fontSize: '20px', marginBottom: '8px' }}>No stories created yet</h3>
+            <p className="muted" style={{ marginBottom: '28px' }}>
+              Choose how you want to start: spark a new idea with AI or import an existing story script from Claude, Gemini, or ChatGPT.
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '16px' }}>
+              <div
+                onClick={() => navigate('/?mode=ai')}
+                style={{
+                  background: 'var(--ed-surface-elevated, #162035)',
+                  border: '1px solid var(--ed-border, #1f293d)',
+                  borderRadius: '12px',
+                  padding: '24px',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  transition: 'transform 0.15s ease, border-color 0.15s ease',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--ed-accent, #8b5cf6)';
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--ed-border, #1f293d)';
+                  e.currentTarget.style.transform = 'translateY(0)';
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px', color: '#c084fc', fontWeight: 600, fontSize: '15px' }}>
+                  <SparklesIcon size={18} />
+                  <span>Create Story with AI</span>
+                </div>
+                <p style={{ fontSize: '13px', color: 'var(--ed-text-muted, #94a3b8)', margin: 0, lineHeight: 1.5 }}>
+                  Enter a concept, select characters, and let AI generate a structured storyboard script ready for review.
+                </p>
+              </div>
+
+              <div
+                onClick={() => navigate('/?mode=import')}
+                style={{
+                  background: 'var(--ed-surface-elevated, #162035)',
+                  border: '1px solid var(--ed-border, #1f293d)',
+                  borderRadius: '12px',
+                  padding: '24px',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  transition: 'transform 0.15s ease, border-color 0.15s ease',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--ed-accent, #8b5cf6)';
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--ed-border, #1f293d)';
+                  e.currentTarget.style.transform = 'translateY(0)';
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px', color: '#38bdf8', fontWeight: 600, fontSize: '15px' }}>
+                  <BookOpenIcon size={18} />
+                  <span>Import Existing Script</span>
+                </div>
+                <p style={{ fontSize: '13px', color: 'var(--ed-text-muted, #94a3b8)', margin: 0, lineHeight: 1.5 }}>
+                  Paste a full screenplay or Markdown script to automatically convert it into editable scenes.
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
       ) : (
         <div className="stories-grid">

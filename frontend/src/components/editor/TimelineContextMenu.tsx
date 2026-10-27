@@ -14,10 +14,11 @@ import {
 export type TimelineContextMenuTarget =
   | { type: 'empty'; track: string; timeMs: number; sceneId?: string }
   | { type: 'scene'; scene: EditorScene }
+  | { type: 'narration'; scene: EditorScene }
   | { type: 'dialogue'; scene: EditorScene; dialogue: SceneDialogue }
   | { type: 'overlay'; scene: EditorScene; overlay: EducationalOverlay }
   | { type: 'instance'; scene: EditorScene; instanceId: string; characterName?: string }
-  | { type: 'header'; track: string };
+  | { type: 'header'; track: string; sceneId?: string };
 
 interface TimelineContextMenuProps {
   x: number;
@@ -34,6 +35,10 @@ interface TimelineContextMenuProps {
   onSelectDialogue?: (dialogueId: string) => void;
   onSelectOverlay?: (overlayId: string) => void;
   onSelectInstance?: (instanceId: string) => void;
+  onSelectNarration?: (sceneId: string) => void;
+  onPreviewNarration?: (scene: EditorScene) => void;
+  onRegenerateNarration?: (sceneId: string) => void;
+  onSelectTrack?: (track: string) => void;
   onDuplicateScene?: (sceneId: string) => void;
   onDeleteScene?: (sceneId: string) => void;
   onSplitScene?: (sceneId: string, splitMs: number) => void;
@@ -60,6 +65,10 @@ export const TimelineContextMenu: React.FC<TimelineContextMenuProps> = ({
   onSelectDialogue,
   onSelectOverlay,
   onSelectInstance,
+  onSelectNarration,
+  onPreviewNarration,
+  onRegenerateNarration,
+  onSelectTrack,
   onDuplicateScene,
   onDeleteScene,
   onSplitScene,
@@ -218,6 +227,24 @@ export const TimelineContextMenu: React.FC<TimelineContextMenuProps> = ({
               <span>Add Sammy the Kid Rig</span>
             </button>
           </>
+        )}
+
+        {track === 'track-narration' && (
+          <button
+            type="button"
+            className="ed-context-item"
+            onClick={() => {
+              if (sceneId && onSelectNarration) {
+                onSelectNarration(sceneId);
+              } else if (onSelectTrack) {
+                onSelectTrack('narration');
+              }
+              onClose();
+            }}
+          >
+            <EditIcon size={13} color="#34d399" />
+            <span>Open Narration Voice Studio</span>
+          </button>
         )}
       </>
     );
@@ -460,7 +487,76 @@ export const TimelineContextMenu: React.FC<TimelineContextMenuProps> = ({
     );
   };
 
-  const renderHeaderMenu = (track: string) => {
+  const renderNarrationClipMenu = (scene: EditorScene) => {
+    return (
+      <>
+        <div className="ed-context-header">
+          🎙️ Scene {scene.number} Narration Voice
+        </div>
+
+        {onSelectNarration && (
+          <button
+            type="button"
+            className="ed-context-item"
+            onClick={() => {
+              if (onSelectScene) onSelectScene(scene.sceneId);
+              onSelectNarration(scene.sceneId);
+              onClose();
+            }}
+          >
+            <EditIcon size={13} color="#34d399" />
+            <span>Open Narration Voice Studio</span>
+          </button>
+        )}
+
+        {scene.audioUrl && onPreviewNarration && (
+          <button
+            type="button"
+            className="ed-context-item"
+            onClick={() => {
+              onPreviewNarration(scene);
+              onClose();
+            }}
+          >
+            <PlayIcon size={13} color="#10b981" />
+            <span>Preview Narration Audio</span>
+          </button>
+        )}
+
+        {onRegenerateNarration && (
+          <button
+            type="button"
+            className="ed-context-item"
+            onClick={() => {
+              onRegenerateNarration(scene.sceneId);
+              onClose();
+            }}
+          >
+            <SparklesIcon size={13} color="#8b5cf6" />
+            <span>Regenerate Narration Voice</span>
+          </button>
+        )}
+
+        <div className="ed-context-divider" />
+
+        {onSeek && (
+          <button
+            type="button"
+            className="ed-context-item"
+            onClick={() => {
+              onSeek(scene.startMs);
+              onClose();
+            }}
+          >
+            <PlayIcon size={13} color="#a78bfa" />
+            <span>Move Playhead to Scene Start</span>
+          </button>
+        )}
+      </>
+    );
+  };
+
+  const renderHeaderMenu = (track: string, sceneId?: string) => {
     return (
       <>
         <div className="ed-context-header">
@@ -472,17 +568,109 @@ export const TimelineContextMenu: React.FC<TimelineContextMenuProps> = ({
           {track === 'track-soundtrack' && 'Soundtrack Track'}
         </div>
 
-        {track === 'track-visuals' && onAddScene && (
+        {track === 'track-visuals' && (
+          <>
+            {onSelectTrack && (
+              <button
+                type="button"
+                className="ed-context-item"
+                onClick={() => {
+                  onSelectTrack('visuals');
+                  onClose();
+                }}
+              >
+                <EditIcon size={13} color="#38bdf8" />
+                <span>Open Scene Overview Inspector</span>
+              </button>
+            )}
+            {onAddScene && (
+              <button
+                type="button"
+                className="ed-context-item"
+                onClick={() => {
+                  onAddScene();
+                  onClose();
+                }}
+              >
+                <PlusIcon size={13} color="#34d399" />
+                <span>Add New Scene</span>
+              </button>
+            )}
+          </>
+        )}
+
+        {track === 'track-narration' && (
+          <>
+            <button
+              type="button"
+              className="ed-context-item"
+              onClick={() => {
+                if (sceneId && onSelectNarration) {
+                  onSelectNarration(sceneId);
+                } else if (onSelectTrack) {
+                  onSelectTrack('narration');
+                }
+                onClose();
+              }}
+            >
+              <EditIcon size={13} color="#34d399" />
+              <span>Open Narration Voice Studio</span>
+            </button>
+            {sceneId && onRegenerateNarration && (
+              <button
+                type="button"
+                className="ed-context-item"
+                onClick={() => {
+                  onRegenerateNarration(sceneId);
+                  onClose();
+                }}
+              >
+                <SparklesIcon size={13} color="#8b5cf6" />
+                <span>Regenerate Scene Narration</span>
+              </button>
+            )}
+          </>
+        )}
+
+        {track === 'track-dialogue' && (
           <button
             type="button"
             className="ed-context-item"
             onClick={() => {
-              onAddScene();
+              if (onSelectTrack) onSelectTrack('dialogue');
               onClose();
             }}
           >
-            <PlusIcon size={13} color="#34d399" />
-            <span>Add New Scene</span>
+            <EditIcon size={13} color="#f472b6" />
+            <span>Open Dialogue Inspector</span>
+          </button>
+        )}
+
+        {track === 'track-rig' && (
+          <button
+            type="button"
+            className="ed-context-item"
+            onClick={() => {
+              if (onSelectTrack) onSelectTrack('rig');
+              onClose();
+            }}
+          >
+            <SparklesIcon size={13} color="#a78bfa" />
+            <span>Open 2D Rigging Inspector</span>
+          </button>
+        )}
+
+        {track === 'track-overlays' && (
+          <button
+            type="button"
+            className="ed-context-item"
+            onClick={() => {
+              if (onSelectTrack) onSelectTrack('overlays');
+              onClose();
+            }}
+          >
+            <EditIcon size={13} color="#06b6d4" />
+            <span>Open Overlays Inspector</span>
           </button>
         )}
 
@@ -518,10 +706,11 @@ export const TimelineContextMenu: React.FC<TimelineContextMenuProps> = ({
     >
       {target.type === 'empty' && renderEmptyTrackMenu(target.track, target.timeMs, target.sceneId)}
       {target.type === 'scene' && renderSceneClipMenu(target.scene)}
+      {target.type === 'narration' && renderNarrationClipMenu(target.scene)}
       {target.type === 'instance' && renderInstanceClipMenu(target.scene, target.instanceId, target.characterName)}
       {target.type === 'dialogue' && renderDialogueClipMenu(target.scene, target.dialogue)}
       {target.type === 'overlay' && renderOverlayClipMenu(target.scene, target.overlay)}
-      {target.type === 'header' && renderHeaderMenu(target.track)}
+      {target.type === 'header' && renderHeaderMenu(target.track, target.sceneId)}
     </div>
   );
 };

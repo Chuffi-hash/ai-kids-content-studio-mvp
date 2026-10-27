@@ -60,6 +60,7 @@ interface LeftAssetPanelProps {
   onTabChange?: (tab: AssetTab) => void;
   isOpen?: boolean;
   onClose?: () => void;
+  onOpenImportScript?: () => void;
 }
 
 export const LeftAssetPanel: React.FC<LeftAssetPanelProps> = ({
@@ -93,6 +94,7 @@ export const LeftAssetPanel: React.FC<LeftAssetPanelProps> = ({
   onTabChange,
   isOpen = true,
   onClose,
+  onOpenImportScript,
 }) => {
   const [internalTab, setInternalTab] = useState<AssetTab>(activeTabProp || 'scenes');
   const activeTab = activeTabProp || internalTab;
@@ -262,13 +264,26 @@ export const LeftAssetPanel: React.FC<LeftAssetPanelProps> = ({
           <>
             <div className="ed-asset-section-title">
               <span>Project Scenes ({scenes.length})</span>
-              <button
-                className="ed-tool-btn"
-                onClick={onAddScene}
-                style={{ background: 'var(--ed-surface-elevated)' }}
-              >
-                + Add Scene
-              </button>
+              <div style={{ display: 'flex', gap: '6px' }}>
+                {onOpenImportScript && (
+                  <button
+                    type="button"
+                    className="ed-tool-btn"
+                    onClick={onOpenImportScript}
+                    title="Import script from Claude, Gemini, ChatGPT or Markdown"
+                    style={{ background: 'rgba(168, 85, 247, 0.15)', borderColor: '#8b5cf6', color: '#c084fc', fontSize: '11px', padding: '3px 7px' }}
+                  >
+                    Import Script
+                  </button>
+                )}
+                <button
+                  className="ed-tool-btn"
+                  onClick={onAddScene}
+                  style={{ background: 'var(--ed-surface-elevated)' }}
+                >
+                  + Add Scene
+                </button>
+              </div>
             </div>
 
             {scenes.map((scene, idx) => {

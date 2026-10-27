@@ -492,6 +492,7 @@ export const CharacterBuilderModal: React.FC<CharacterBuilderModalProps> = ({
     walk: 1200,
     wave: 1400,
     jump: 1300,
+    point: 1500,
   };
 
   const actionCycleMs = ACTION_CYCLES[activeAction] || 2000;
@@ -2756,6 +2757,13 @@ export const CharacterBuilderModal: React.FC<CharacterBuilderModalProps> = ({
                     onClick={() => handleSelectAction('jump')}
                   >
                     🦘 Jump
+                  </button>
+                  <button
+                    type="button"
+                    className={`char-action-btn ${activeAction === 'point' ? 'active' : ''}`}
+                    onClick={() => handleSelectAction('point')}
+                  >
+                    👉 Point
                   </button>
                 </div>
               </div>

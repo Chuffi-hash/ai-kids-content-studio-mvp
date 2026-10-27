@@ -444,10 +444,11 @@ export class VideoAssemblyService {
         job.stage = 'Mixing soundtrack with audio ducking and mastering output audio...';
         const effectiveMusicVol = Math.max(0.01, Math.min(1.0, musicVolume));
         const duckingFilter = [
-          `[0:a]volume=1.0,aresample=44100,asplit=2[speech_main][speech_sc]`,
-          `[1:a]volume=${effectiveMusicVol.toFixed(2)},aresample=44100[bgm_in]`,
+          `[0:a]aresample=44100,aformat=channel_layouts=stereo,volume=1.0,asplit=2[speech_main][speech_sc_raw]`,
+          `[speech_sc_raw]aformat=channel_layouts=stereo[speech_sc]`,
+          `[1:a]aresample=44100,aformat=channel_layouts=stereo,volume=${effectiveMusicVol.toFixed(2)}[bgm_in]`,
           `[bgm_in][speech_sc]sidechaincompress=threshold=0.03:ratio=4:attack=50:release=400[bgm_ducked]`,
-          `[speech_main][bgm_ducked]amix=inputs=2:duration=first:dropout_transition=2,volume=1.5,loudnorm=I=-16:TP=-1.5:LRA=11[aout]`,
+          `[speech_main][bgm_ducked]amix=inputs=2:duration=first:dropout_transition=2,volume=1.5,aformat=channel_layouts=stereo,loudnorm=I=-16:TP=-1.5:LRA=11[aout]`,
         ].join(';');
 
         await execFileAsync(ffmpegPath, [
@@ -474,7 +475,7 @@ export class VideoAssemblyService {
           '-y',
           '-thread_queue_size', '512',
           '-i', assembledPath,
-          '-filter_complex', '[0:a]aresample=44100,loudnorm=I=-16:TP=-1.5:LRA=11[aout]',
+          '-filter_complex', '[0:a]aresample=44100,aformat=channel_layouts=stereo,loudnorm=I=-16:TP=-1.5:LRA=11[aout]',
           '-map', '0:v',
           '-map', '[aout]',
           '-c:v', 'copy',
@@ -567,7 +568,7 @@ export class VideoAssemblyService {
         '-i', audioPath!,
         ...dialogueAudios.flatMap((d) => ['-thread_queue_size', '512', '-i', d.path])
       ];
-      filterParts.push(`[${videoInputCount}:a]volume=1.0,aresample=44100[a_narr]`);
+      filterParts.push(`[${videoInputCount}:a]volume=1.0,aresample=44100,aformat=channel_layouts=stereo[a_narr]`);
       const mixInputs: string[] = ['[a_narr]'];
 
       dialogueAudios.forEach((d, idx) => {
@@ -575,12 +576,12 @@ export class VideoAssemblyService {
         const safeDelay = Math.max(1, d.startMs || 0);
         const vol = typeof d.volume === 'number' && Number.isFinite(d.volume) ? Math.max(0, Math.min(2.0, d.volume)) : 1.0;
         const label = `[a_dlg${idx}]`;
-        filterParts.push(`[${inputIdx}:a]adelay=${safeDelay}|${safeDelay},volume=${vol.toFixed(2)},aresample=44100${label}`);
+        filterParts.push(`[${inputIdx}:a]adelay=${safeDelay}|${safeDelay},volume=${vol.toFixed(2)},aresample=44100,aformat=channel_layouts=stereo${label}`);
         mixInputs.push(label);
       });
 
       filterParts.push(
-        `${mixInputs.join('')}amix=inputs=${mixInputs.length}:dropout_transition=0:duration=longest,volume=${mixInputs.length},alimiter=limit=0.95,apad=whole_len=${wholeSamples},atrim=0:${safeDurationStr},aresample=44100[aout]`
+        `${mixInputs.join('')}amix=inputs=${mixInputs.length}:dropout_transition=0:duration=longest,volume=${mixInputs.length},alimiter=limit=0.95,apad=whole_len=${wholeSamples},atrim=0:${safeDurationStr},aresample=44100,aformat=channel_layouts=stereo[aout]`
       );
 
       return {
@@ -590,7 +591,7 @@ export class VideoAssemblyService {
       };
     } else if (hasNarration && !hasDialogue) {
       const audioInputArgs = ['-thread_queue_size', '512', '-i', audioPath!];
-      filterParts.push(`[${videoInputCount}:a]volume=1.0,apad=whole_len=${wholeSamples},atrim=0:${safeDurationStr},aresample=44100[aout]`);
+      filterParts.push(`[${videoInputCount}:a]volume=1.0,apad=whole_len=${wholeSamples},atrim=0:${safeDurationStr},aresample=44100,aformat=channel_layouts=stereo[aout]`);
       return {
         audioInputArgs,
         filterComplexArgs: ['-filter_complex', filterParts.join(';')],
@@ -605,15 +606,15 @@ export class VideoAssemblyService {
         const safeDelay = Math.max(1, d.startMs || 0);
         const vol = typeof d.volume === 'number' && Number.isFinite(d.volume) ? Math.max(0, Math.min(2.0, d.volume)) : 1.0;
         const label = `[a_dlg${idx}]`;
-        filterParts.push(`[${inputIdx}:a]adelay=${safeDelay}|${safeDelay},volume=${vol.toFixed(2)},aresample=44100${label}`);
+        filterParts.push(`[${inputIdx}:a]adelay=${safeDelay}|${safeDelay},volume=${vol.toFixed(2)},aresample=44100,aformat=channel_layouts=stereo${label}`);
         mixInputs.push(label);
       });
 
       if (dialogueAudios.length === 1) {
-        filterParts.push(`[a_dlg0]apad=whole_len=${wholeSamples},atrim=0:${safeDurationStr},aresample=44100[aout]`);
+        filterParts.push(`[a_dlg0]apad=whole_len=${wholeSamples},atrim=0:${safeDurationStr},aresample=44100,aformat=channel_layouts=stereo[aout]`);
       } else {
         filterParts.push(
-          `${mixInputs.join('')}amix=inputs=${mixInputs.length}:dropout_transition=0:duration=longest,volume=${mixInputs.length},alimiter=limit=0.95,apad=whole_len=${wholeSamples},atrim=0:${safeDurationStr},aresample=44100[aout]`
+          `${mixInputs.join('')}amix=inputs=${mixInputs.length}:dropout_transition=0:duration=longest,volume=${mixInputs.length},alimiter=limit=0.95,apad=whole_len=${wholeSamples},atrim=0:${safeDurationStr},aresample=44100,aformat=channel_layouts=stereo[aout]`
         );
       }
 
@@ -628,7 +629,7 @@ export class VideoAssemblyService {
         '-f', 'lavfi',
         '-i', 'anullsrc=channel_layout=stereo:sample_rate=44100',
       ];
-      filterParts.push(`[${videoInputCount}:a]atrim=0:${safeDurationStr},aresample=44100[aout]`);
+      filterParts.push(`[${videoInputCount}:a]atrim=0:${safeDurationStr},aresample=44100,aformat=channel_layouts=stereo[aout]`);
       return {
         audioInputArgs,
         filterComplexArgs: ['-filter_complex', filterParts.join(';')],

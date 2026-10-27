@@ -34,6 +34,7 @@ interface TopToolbarProps {
   onRewind: () => void;
   onOpenExport: () => void;
   onOpenStoryDetails?: () => void;
+  onOpenImportScript?: () => void;
   hasValidationErrors?: boolean;
   validationMessage?: string;
 }
@@ -57,6 +58,7 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
   onRewind,
   onOpenExport,
   onOpenStoryDetails,
+  onOpenImportScript,
   hasValidationErrors,
   validationMessage,
 }) => {
@@ -136,6 +138,19 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
             style={{ fontSize: '11px', padding: '3px 8px', borderColor: '#8b5cf6', color: '#c084fc', background: 'rgba(139, 92, 246, 0.12)' }}
           >
             Story Details & Roles
+          </button>
+        )}
+
+        {onOpenImportScript && (
+          <button
+            type="button"
+            className="ed-tool-btn"
+            onClick={onOpenImportScript}
+            title="Import script from Claude, Gemini, ChatGPT or Markdown into storyboard"
+            style={{ fontSize: '11px', padding: '3px 8px', borderColor: '#a855f7', color: '#c084fc', background: 'rgba(168, 85, 247, 0.15)', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+          >
+            <span>📜</span>
+            <span>Import Script</span>
           </button>
         )}
 
