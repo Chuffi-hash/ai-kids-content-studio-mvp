@@ -98,3 +98,57 @@ export interface HistorySnapshot {
   activeSceneId: string | null;
 }
 
+export interface DraftDialogueLine {
+  id: string;
+  characterName: string;
+  characterId?: string;
+  text: string;
+  emotion: string;
+  voice: string;
+  action?: string;
+  expression?: string;
+}
+
+export interface DraftOverlayItem {
+  id: string;
+  type: string;
+  label: string;
+  color?: string;
+}
+
+export interface DraftStoryboardScene {
+  sceneNumber: number;
+  title: string;
+  durationSeconds: number;
+  visualPrompt: string;
+  narration: string;
+  dialogue: DraftDialogueLine[];
+  characterActions: Array<{ characterName: string; action: string }>;
+  suggestedOverlays: DraftOverlayItem[];
+}
+
+export interface DraftStoryboardResult {
+  title: string;
+  targetDurationSeconds: number;
+  language: string;
+  logline?: string;
+  lesson?: string;
+  metadata?: {
+    topic?: string;
+    audience?: string;
+    ageGroup?: string;
+    genre?: string;
+    visualStyle?: string;
+    lesson?: string;
+  };
+  characters: Array<{
+    id?: string;
+    name: string;
+    species?: string;
+    role?: string;
+    voice?: string;
+    description?: string;
+  }>;
+  scenes: DraftStoryboardScene[];
+}
+

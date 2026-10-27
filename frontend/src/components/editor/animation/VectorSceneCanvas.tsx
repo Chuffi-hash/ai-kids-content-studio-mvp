@@ -50,15 +50,28 @@ export const VectorSceneCanvas: React.FC<VectorSceneCanvasProps> = ({
 }) => {
   const svgRef = useRef<SVGSVGElement | null>(null);
 
-  const effectiveFormat: AspectRatioType =
-    activeFormat || animationData.activeFormat || "16:9";
-  const canvasWidth = effectiveFormat === "9:16" ? 720 : 1280;
-  const canvasHeight = effectiveFormat === "9:16" ? 1280 : 720;
+  const effectiveFormat: AspectRatioType = activeFormat || "16:9";
+  const canvasWidth =
+    effectiveFormat === "9:16"
+      ? 720
+      : effectiveFormat === "1:1"
+        ? 720
+        : effectiveFormat === "4:5"
+          ? 720
+          : 1280;
+  const canvasHeight =
+    effectiveFormat === "9:16"
+      ? 1280
+      : effectiveFormat === "1:1"
+        ? 720
+        : effectiveFormat === "4:5"
+          ? 900
+          : 720;
 
   const sceneRelativeMs = Math.max(0, currentTimeMs - sceneStartMs);
   const rawInstances = animationData.characterInstances || [];
   const clips = animationData.animationClips || [];
-  const overlays = animationData.overlays || [];
+  const rawOverlays = animationData.overlays || [];
 
   const formatVariant = animationData.formatVariants?.[effectiveFormat];
   const characterOverrides = formatVariant?.characterOverrides;
@@ -90,7 +103,66 @@ export const VectorSceneCanvas: React.FC<VectorSceneCanvasProps> = ({
         scale: Number(newScale.toFixed(2)),
       };
     }
+    if (effectiveFormat === "1:1") {
+      const xOffset = inst.x - 640;
+      const newX = canvasWidth / 2 + xOffset * (canvasWidth / 1280);
+      const yRatio = inst.y / 720;
+      const newY = yRatio * canvasHeight;
+      return {
+        ...inst,
+        x: Math.round(newX),
+        y: Math.round(newY),
+        scale: Number((inst.scale || 1.0).toFixed(2)),
+      };
+    }
+    if (effectiveFormat === "4:5") {
+      const xOffset = inst.x - 640;
+      const newX = canvasWidth / 2 + xOffset * (canvasWidth / 1280);
+      const yRatio = inst.y / 720;
+      const newY = yRatio * canvasHeight;
+      const newScale = (inst.scale || 1.0) * 1.08;
+      return {
+        ...inst,
+        x: Math.round(newX),
+        y: Math.round(newY),
+        scale: Number(newScale.toFixed(2)),
+      };
+    }
     return inst;
+  });
+
+  const overlays = rawOverlays.map((o) => {
+    const override = formatVariant?.overlayOverrides?.[o.id];
+    if (override) {
+      return {
+        ...o,
+        x: override.x !== undefined ? override.x : o.x,
+        y: override.y !== undefined ? override.y : o.y,
+      };
+    }
+    if (effectiveFormat === "9:16") {
+      if (o.type === "title_card") {
+        return { ...o, x: canvasWidth / 2, y: o.y > 450 ? Math.round(canvasHeight * 0.78) : o.y };
+      }
+      if (o.type === "spotlight" || o.type === "glow" || o.type === "sparkles") {
+        const xOffset = o.x - 640;
+        const newX = canvasWidth / 2 + xOffset * (canvasWidth / 1280);
+        const yRatio = o.y / 720;
+        return { ...o, x: Math.round(newX), y: Math.round(yRatio * canvasHeight) };
+      }
+    }
+    if (effectiveFormat === "1:1" || effectiveFormat === "4:5") {
+      if (o.type === "title_card") {
+        return { ...o, x: canvasWidth / 2, y: Math.round((o.y / 720) * canvasHeight) };
+      }
+      if (o.type === "spotlight" || o.type === "glow" || o.type === "sparkles") {
+        const xOffset = o.x - 640;
+        const newX = canvasWidth / 2 + xOffset * (canvasWidth / 1280);
+        const yRatio = o.y / 720;
+        return { ...o, x: Math.round(newX), y: Math.round(yRatio * canvasHeight) };
+      }
+    }
+    return o;
   });
 
   const belowCharacterOverlays = overlays.filter(

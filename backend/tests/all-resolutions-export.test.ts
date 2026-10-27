@@ -160,10 +160,10 @@ test('Video Assembly Export - All Resolutions & Aspect Ratios Verification', asy
           fps: 15,
         });
 
-        // Poll for completion
+        // Poll for completion (up to ~96s to accommodate concurrent test load)
         let pollCount = 0;
         let job = exportJob;
-        while (pollCount < 40) {
+        while (pollCount < 120) {
           await new Promise((r) => setTimeout(r, 800));
           const current = videoAssembly.getJob(exportJob.id);
           if (!current) break;

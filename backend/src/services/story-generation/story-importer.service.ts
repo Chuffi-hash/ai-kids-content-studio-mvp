@@ -40,6 +40,16 @@ import {
 import { estimateSpeechDurationMs } from '../timing/timing.service.js';
 import { generateVisemeCues } from '../audio-generation/viseme-generator.js';
 import { randomUUID } from 'crypto';
+import {
+  IntelligentScriptParser,
+  ProductionBreakdownExtractor,
+  PromptSynthesizer,
+  StoryboardIntermediateRepresentation,
+  ProductionBreakdown,
+  ProjectLookDNA,
+  ScriptWarning,
+  DEFAULT_PROJECT_LOOK,
+} from './parser/index.js';
 
 export interface StoryImportInput {
   rawText: string;
@@ -77,6 +87,8 @@ export interface DraftStoryboardScene {
   dialogue: DraftDialogueLine[];
   characterActions: Array<{ characterName: string; action: string; description?: string }>;
   suggestedOverlays: DraftOverlayItem[];
+  breakdown?: ProductionBreakdown;
+  shots?: any[];
 }
 
 export interface DraftStoryboardResult {
@@ -94,6 +106,8 @@ export interface DraftStoryboardResult {
     description?: string;
   }>;
   scenes: DraftStoryboardScene[];
+  look?: ProjectLookDNA;
+  warnings?: ScriptWarning[];
 }
 
 export interface ImportDraftScenesInput {
@@ -128,6 +142,44 @@ export interface CreateStoryFromDraftInput {
 }
 
 export class StoryImporterService {
+  /**
+   * Master intelligent screenplay & production script parser.
+   * Produces a fully validated StoryboardIntermediateRepresentation with semantic AST,
+   * source position tracking, production element breakdown, Look DNA, and bibles.
+   */
+  public static parseIntelligentScript(
+    rawText: string,
+    options?: {
+      language?: string;
+      defaultTitle?: string;
+      targetDuration?: number;
+      visualStyle?: string;
+      genre?: string;
+    }
+  ): StoryboardIntermediateRepresentation {
+    return IntelligentScriptParser.parse(rawText, options);
+  }
+
+  /**
+   * Serializes a StoryboardIntermediateRepresentation or DraftStoryboardResult to Fountain screenplay text.
+   */
+  public static serializeToFountain(irOrDraft: any): string {
+    if (irOrDraft && Array.isArray(irOrDraft.scenes)) {
+      return IntelligentScriptParser.serializeToFountain(irOrDraft);
+    }
+    return '';
+  }
+
+  /**
+   * Serializes a StoryboardIntermediateRepresentation or DraftStoryboardResult to clean production Markdown.
+   */
+  public static serializeToMarkdown(irOrDraft: any): string {
+    if (irOrDraft && Array.isArray(irOrDraft.scenes)) {
+      return IntelligentScriptParser.serializeToMarkdown(irOrDraft);
+    }
+    return '';
+  }
+
   /**
    * Intelligently parses Markdown, Screenplay, Plaintext, or JSON into a StructuredStory.
    */
@@ -797,6 +849,50 @@ export class StoryImporterService {
           }
         }
 
+        // 10b. Fountain character cue (all-caps or forced @ on its own line followed by dialogue speech)
+        const fountainCharMatch = line.match(/^@?([A-Z0-9\u0900-\u097F][A-Z0-9\u0900-\u097F\s\-_\.']{1,40})(?:\s*\((.*?)\))?$/);
+        if (fountainCharMatch && !line.includes(':') && !line.startsWith('#') && !line.startsWith('**')) {
+          const candName = fountainCharMatch[1].trim();
+          const paren = fountainCharMatch[2]?.trim();
+          if (
+            !['INT', 'EXT', 'FADE IN', 'SCENE', 'CUT TO', 'TRANSITION', 'THE END'].some((kw) =>
+              candName.toUpperCase().startsWith(kw)
+            ) &&
+            !isReservedMetadataKey(candName)
+          ) {
+            const nextIdx = block.lines.indexOf(rawLine) + 1;
+            if (nextIdx < block.lines.length) {
+              const nextLine = block.lines[nextIdx].trim();
+              let speechText = '';
+              let charEmotion = paren || pendingEmotion || 'cheerful';
+              if (nextLine.startsWith('(') && nextLine.endsWith(')')) {
+                charEmotion = nextLine.slice(1, -1).trim();
+                const afterNextIdx = nextIdx + 1;
+                if (afterNextIdx < block.lines.length) {
+                  speechText = block.lines[afterNextIdx].trim();
+                }
+              } else if (!nextLine.includes(':') && nextLine.length > 0) {
+                speechText = nextLine;
+              }
+
+              if (speechText && speechText.length > 0) {
+                const cleanSpeaker = cleanSpeakerName(candName);
+                const assignedVoice = resolveDefaultVoiceForCharacter(cleanSpeaker, isHindi);
+                dialogue.push({
+                  id: randomUUID(),
+                  characterName: cleanSpeaker,
+                  text: speechText.replace(/^["“]|["”]$/g, '').trim(),
+                  emotion: charEmotion,
+                  expression: pendingExpression,
+                  voice: assignedVoice,
+                });
+                detectedCharacterNames.add(cleanSpeaker);
+                continue;
+              }
+            }
+          }
+        }
+
         // 11. Fallback for unmarked line: if no narration yet, and not a header or metadata line
         if (!narration && !line.startsWith('#') && !line.startsWith('**') && line.length > 5 && !isReservedMetadataKey(line.split(':')[0])) {
           narration = line;
@@ -838,6 +934,25 @@ export class StoryImporterService {
         }
       }
 
+      // Deterministic production element breakdown (ScriptBreak)
+      const breakdown = ProductionBreakdownExtractor.extractSceneBreakdown({
+        title: block.headerTitle,
+        visualPrompt,
+        narration,
+        dialogueTexts: dialogue.map((d) => d.text),
+        actionTexts: characterActions.map((a) => a.description || a.action),
+        explicitEffects,
+        characterNames: Array.from(detectedCharacterNames),
+      });
+
+      // If suggestedOverlays was empty, map any detected vfx from breakdown
+      if (suggestedOverlays.length === 0 && breakdown.vfx.length > 0) {
+        const mapped = ProductionBreakdownExtractor.mapVfxToStudioOverlays(breakdown.vfx);
+        for (const m of mapped) {
+          suggestedOverlays.push(m);
+        }
+      }
+
       return {
         sceneNumber: block.sceneNum,
         title: block.headerTitle,
@@ -847,6 +962,8 @@ export class StoryImporterService {
         dialogue,
         characterActions,
         suggestedOverlays,
+        breakdown,
+        shots: breakdown.shots,
       };
     });
 
@@ -899,6 +1016,8 @@ export class StoryImporterService {
       lesson: lesson || 'Learning through nature and stories.',
       characters: finalCharacters,
       scenes: parsedScenes,
+      look: PromptSynthesizer ? { ...DEFAULT_PROJECT_LOOK } : undefined,
+      warnings: [],
     };
   }
 
@@ -1630,6 +1749,32 @@ export function matchSceneHeader(rawLine: string, inPreamble: boolean): { sceneN
       if (!candidateTitle.includes(':') && candidateTitle.length > 2) {
         m = listMatch;
       }
+    }
+  }
+
+  // 5. Matches Forced Scene Headings: ".MEADOW - DAY", ".SCENE 1: SUMMER"
+  if (!m) {
+    const forced = line.match(/^\.([A-Za-z0-9\u0900-\u097F].*)$/);
+    if (forced) {
+      const hashMatch = forced[1].match(/#([a-zA-Z0-9\-.]+)#\s*$/);
+      const sceneNum = hashMatch ? parseInt(hashMatch[1], 10) : undefined;
+      const cleanTitle = forced[1].replace(/#([a-zA-Z0-9\-.]+)#\s*$/, '').trim();
+      const numMatch = cleanTitle.match(/(?:Scene|दृश्य)\s*(\d+)/i);
+      const finalNum = sceneNum || (numMatch ? parseInt(numMatch[1], 10) : 1);
+      m = [line, String(finalNum), cleanTitle];
+    }
+  }
+
+  // 6. Matches Standard Fountain Headings: "INT. MEADOW - DAY", "EXT. MOUNTAINS - NIGHT #2#"
+  if (!m) {
+    const fountain = line.match(/^\s*(?:(INT|EXT|EST|INT\.\/EXT|INT\/EXT|I\/E)(\.|\s)|(FADE IN:\s*))(.*)$/i);
+    if (fountain) {
+      const hashMatch = line.match(/#([a-zA-Z0-9\-.]+)#\s*$/);
+      const sceneNum = hashMatch ? parseInt(hashMatch[1], 10) : undefined;
+      const cleanSlug = line.replace(/#([a-zA-Z0-9\-.]+)#\s*$/, '').trim();
+      const numMatch = cleanSlug.match(/(?:Scene|दृश्य)\s*(\d+)/i);
+      const finalNum = sceneNum || (numMatch ? parseInt(numMatch[1], 10) : 1);
+      m = [line, String(finalNum), cleanSlug];
     }
   }
 

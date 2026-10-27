@@ -21,10 +21,11 @@ import { PropertiesInspector } from '../components/editor/PropertiesInspector';
 import { Timeline } from '../components/editor/Timeline';
 import { ExportModal } from '../components/editor/ExportModal';
 import { StoryDetailsModal } from '../components/editor/StoryDetailsModal';
+import { ImportScriptModal } from '../components/editor/ImportScriptModal';
 import { CharacterBuilderModal } from '../components/characters/CharacterBuilderModal';
 import { buildRigFromAppearance } from '../utils/customCharacterRig';
 import { createCharacter, updateCharacter } from '../services/character.service';
-import { SceneDialogue, EducationalOverlayType } from '../types/animation';
+import { SceneDialogue, EducationalOverlayType, AspectRatioType } from '../types/animation';
 import { AlertTriangleIcon, ArrowLeftIcon, FilmIcon, SparklesIcon, PlusIcon } from '../components/common/Icons';
 import '../components/editor/editor.css';
 
@@ -76,8 +77,12 @@ export default function StoryDetailPage() {
   const [generatingVideoForScene, setGeneratingVideoForScene] = useState<string | null>(null);
   const [generatingAllScenes, setGeneratingAllScenes] = useState<boolean>(false);
 
+  // Global canvas preview format (preview viewport only, does not mutate scene records)
+  const [previewFormat, setPreviewFormat] = useState<AspectRatioType>('16:9');
+
   // Export modal state
   const [isExportModalOpen, setIsExportModalOpen] = useState<boolean>(false);
+  const [isImportScriptOpen, setIsImportScriptOpen] = useState<boolean>(false);
 
   // Loading & error state
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -626,6 +631,21 @@ export default function StoryDetailPage() {
     triggerDebouncedSave(updatedScenes);
   };
 
+  // Handler for script-to-storyboard import
+  const handleImportSuccess = (importedScenes: EditorScene[], updatedTitle?: string) => {
+    pushHistorySnapshot(scenes);
+    const contiguous = recalculateContiguousTimeline(importedScenes);
+    setScenes(contiguous);
+    if (contiguous.length > 0) {
+      setActiveSceneId(contiguous[0].sceneId);
+    }
+    if (updatedTitle && updatedTitle.trim()) {
+      setStory((prev) => (prev ? { ...prev, title: updatedTitle.trim() } : prev));
+    }
+    triggerDebouncedSave(contiguous, updatedTitle ? { title: updatedTitle } : undefined);
+    setSaveStatus('saved');
+  };
+
   // Scene metadata update from Properties Inspector
   const handleUpdateActiveScene = (sceneId: string, updates: Partial<EditorScene>) => {
     pushHistorySnapshot(scenes);
@@ -703,6 +723,66 @@ export default function StoryDetailPage() {
       setIsInspectorOpen(true);
     }
   }, []);
+
+  const handleSelectNarration = useCallback((sceneId: string) => {
+    setActiveSceneId(sceneId);
+    setSelectedInstanceId(null);
+    setSelectedOverlayId(null);
+    setSelectedDialogueId(null);
+    setActiveSidebarSection('narration');
+    setActiveInspectorTab('narration');
+    setIsInspectorOpen(true);
+  }, []);
+
+  const handlePreviewNarration = useCallback((scene: EditorScene) => {
+    if (scene.audioUrl) {
+      const audio = new Audio(scene.audioUrl);
+      audio.play().catch((err) => console.warn('Narration audio preview failed:', err));
+    }
+  }, []);
+
+  const handleRegenerateNarration = useCallback((sceneId: string) => {
+    handleGenerateVoice(sceneId);
+  }, []);
+
+  const handleSelectTrack = useCallback((track: string) => {
+    if (track === 'track-narration' || track === 'narration') {
+      if (activeSceneId) handleSelectNarration(activeSceneId);
+      else {
+        setSelectedInstanceId(null);
+        setSelectedOverlayId(null);
+        setSelectedDialogueId(null);
+        setActiveSidebarSection('narration');
+        setActiveInspectorTab('narration');
+        setIsInspectorOpen(true);
+      }
+    } else if (track === 'track-dialogue' || track === 'dialogue') {
+      setSelectedInstanceId(null);
+      setSelectedOverlayId(null);
+      setActiveSidebarSection('dialogue');
+      setActiveInspectorTab('dialogue');
+      setIsInspectorOpen(true);
+    } else if (track === 'track-rig' || track === 'rig') {
+      setSelectedDialogueId(null);
+      setSelectedOverlayId(null);
+      setActiveSidebarSection('rig');
+      setActiveInspectorTab('characters');
+      setIsInspectorOpen(true);
+    } else if (track === 'track-overlays' || track === 'overlays') {
+      setSelectedInstanceId(null);
+      setSelectedDialogueId(null);
+      setActiveSidebarSection('overlays');
+      setActiveInspectorTab('overlays');
+      setIsInspectorOpen(true);
+    } else if (track === 'track-visuals' || track === 'visuals') {
+      setActiveSidebarSection('overview');
+      setActiveInspectorTab('overview');
+      setIsInspectorOpen(true);
+    } else if (track === 'track-soundtrack' || track === 'soundtrack') {
+      setActiveSidebarSection('audio');
+      setIsLeftDrawerOpen(true);
+    }
+  }, [activeSceneId, handleSelectNarration]);
 
   const handleSelectSidebarSection = useCallback((section: SidebarSection) => {
     setActiveSidebarSection(section);
@@ -858,14 +938,20 @@ export default function StoryDetailPage() {
         animationClips: [],
       };
 
-      const defaultChar = currentAnimData.characterInstances[0] || (story?.characters || [])[0] || { name: 'Pip the Bear' };
+      const defaultChar = currentAnimData.characterInstances[0] || (story?.characters || [])[0] || { name: 'Earth' };
+      const defaultCharId = (defaultChar as any).characterId || (defaultChar as any).instanceId || (defaultChar as any).id;
+      const isEarth = (defaultChar.name || '').toLowerCase().includes('earth');
+
       const newDlg: SceneDialogue = {
         id: `dlg-${Date.now().toString(36)}`,
-        characterName: defaultChar.name,
-        text: 'Hello, welcome to our story!',
+        characterId: defaultCharId,
+        characterName: defaultChar.name || 'Earth',
+        text: isEarth ? 'नमस्ते बच्चों, मैं पृथ्वी हूँ!' : 'नमस्ते, हमारी कहानी में आपका स्वागत है!',
+        lang: 'hi',
+        voice: 'hf_alpha',
         startMs: startOffsetMs !== undefined ? Math.max(0, startOffsetMs - targetScene.startMs) : 0,
         durationMs: 3000,
-        emotion: 'neutral',
+        emotion: 'happy',
         emotionIntensity: 50,
         speed: 1.0,
         volume: 1.0,
@@ -1582,6 +1668,7 @@ export default function StoryDetailPage() {
         onRewind={handleRewind}
         onOpenExport={() => setIsExportModalOpen(true)}
         onOpenStoryDetails={() => setIsStoryDetailsOpen(true)}
+        onOpenImportScript={() => setIsImportScriptOpen(true)}
         hasValidationErrors={hasValidationErrors}
         validationMessage={validationMessage}
       />
@@ -1634,6 +1721,7 @@ export default function StoryDetailPage() {
           onGenerateCharacterReference={handleGenerateCharacterReference}
           onAddCharacterToScene={handleAddCharacterToScene}
           onSetBackgroundForScene={handleSetBackgroundForScene}
+          onOpenImportScript={() => setIsImportScriptOpen(true)}
           isOpen={isLeftDrawerOpen && ['scenes', 'characters', 'images', 'videos', 'audio'].includes(activeSidebarSection)}
           onClose={() => setIsLeftDrawerOpen(false)}
           activeTab={
@@ -1679,6 +1767,8 @@ export default function StoryDetailPage() {
             selectedOverlayId={selectedOverlayId}
             onSelectOverlay={handleSelectOverlay}
             onUpdateOverlay={handleUpdateOverlay}
+            activeFormat={previewFormat}
+            onFormatChange={setPreviewFormat}
             onUpdateAnimationData={(newData) => activeSceneId && handleUpdateAnimationData(activeSceneId, newData)}
           />
         ) : (
@@ -1701,17 +1791,27 @@ export default function StoryDetailPage() {
               <p style={{ color: 'var(--ed-text-muted)', fontSize: '13px', margin: '0 0 20px' }}>
                 Generate scripted scenes automatically using the AI Story Engine, or add your first scene manually to begin editing.
               </p>
-              <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
                 <button
+                  type="button"
                   className="ed-btn-export"
+                  onClick={() => setIsImportScriptOpen(true)}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                >
+                  <span>📜</span>
+                  <span>Import Story Script</span>
+                </button>
+                <button
+                  type="button"
+                  className="ed-tool-btn"
                   onClick={handleGenerateAllScenesInitial}
                   disabled={generatingAllScenes}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'var(--ed-surface-elevated)' }}
                 >
                   <SparklesIcon size={14} />
                   <span>{generatingAllScenes ? 'Generating Scenes...' : 'Generate AI Scenes'}</span>
                 </button>
-                <button className="ed-brand-btn" onClick={handleAddScene} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                <button type="button" className="ed-brand-btn" onClick={handleAddScene} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
                   <PlusIcon size={14} />
                   <span>Add Empty Scene</span>
                 </button>
@@ -1807,6 +1907,10 @@ export default function StoryDetailPage() {
         onAddCharacter={handleAddCharacterToScene}
         onPreviewDialogue={handlePreviewDialogue}
         onRegenerateDialogue={handleRegenerateDialogue}
+        onSelectNarration={handleSelectNarration}
+        onPreviewNarration={handlePreviewNarration}
+        onRegenerateNarration={handleRegenerateNarration}
+        onSelectTrack={handleSelectTrack}
       />
 
       {/* 4. Real Media Assembly & Video Export Modal */}
@@ -1817,6 +1921,7 @@ export default function StoryDetailPage() {
         totalDurationMs={totalDurationMs}
         selectedMusic={selectedMusic}
         musicVolume={musicVolume}
+        initialFormat={previewFormat}
         onExportSuccess={(downloadUrl) => {
           setExportVideoUrl(downloadUrl);
           setPreviewMode('export');
@@ -1851,6 +1956,18 @@ export default function StoryDetailPage() {
           }
         }}
       />
+
+      {/* 7. Script-to-Storyboard Import Modal */}
+      {story && (
+        <ImportScriptModal
+          isOpen={isImportScriptOpen}
+          onClose={() => setIsImportScriptOpen(false)}
+          storyId={story.storyId}
+          storyTitle={story.title}
+          existingCharacters={(story.characters || []).map((c) => ({ id: c.id, name: c.name }))}
+          onImportSuccess={handleImportSuccess}
+        />
+      )}
     </div>
   );
 }

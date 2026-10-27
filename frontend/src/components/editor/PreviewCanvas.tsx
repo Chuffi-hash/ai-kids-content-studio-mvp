@@ -83,30 +83,24 @@ export const PreviewCanvas: React.FC<PreviewCanvasProps> = ({
   const [videoError, setVideoError] = useState<string | null>(null);
   const [forceStillPreview, setForceStillPreview] = useState(false);
   const [activeFormat, setActiveFormat] = useState<AspectRatioType>(
-    propsActiveFormat || activeScene?.animationData?.activeFormat || "16:9"
+    propsActiveFormat || "16:9"
   );
   const [showSafeGuides, setShowSafeGuides] = useState<boolean>(true);
 
-  // Sync format if props or scene animationData changes
+  // Sync format purely with global preview format prop if supplied
   useEffect(() => {
     if (propsActiveFormat) {
       setActiveFormat(propsActiveFormat);
-    } else if (activeScene?.animationData?.activeFormat) {
-      setActiveFormat(activeScene.animationData.activeFormat);
     }
-  }, [propsActiveFormat, activeScene?.animationData?.activeFormat]);
+  }, [propsActiveFormat]);
 
   const handleFormatChange = (fmt: AspectRatioType) => {
     setActiveFormat(fmt);
     if (onFormatChange) {
       onFormatChange(fmt);
     }
-    if (onUpdateAnimationData && activeScene?.animationData) {
-      onUpdateAnimationData({
-        ...activeScene.animationData,
-        activeFormat: fmt,
-      });
-    }
+    // Format switcher above the canvas is strictly a preview viewport control.
+    // It does NOT mutate or auto-save per-scene aspect ratios to the database.
   };
 
   // Scrubber drag management to avoid fighting with the 60fps playback loop

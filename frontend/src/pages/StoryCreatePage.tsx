@@ -1,25 +1,34 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import StoryBuilder from "../components/story/StoryBuilder";
-import GeneratedStory from "../components/story/GeneratedStory";
-import { PageHeader } from "../components/common/PageHeader";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import StoryBuilder, { StoryFormState } from "../components/story/StoryBuilder";
+import { StoryboardReviewScreen } from "../components/story/StoryboardReviewScreen";
 import { CloseIcon, SparklesIcon } from "../components/common/Icons";
 import { getAllCharacters, Character } from "../services/character.service";
-import { Story, Scene } from "../types/story";
-import { ProductionState, ProductionScene } from "../types/production";
-import { generateScenes } from "../services/content.service";
-import { getApiUrl } from "../utils/urlHelper";
-import { fetchStory } from "../services/storybook.service";
-import { importStory } from "../services/editor.service";
+import { DraftStoryboardResult } from "../types/editor";
+import {
+  generateDraftStory,
+  parseScriptForDraft,
+  createStoryFromDraft,
+} from "../services/editor.service";
 
 export default function StoryCreatePage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const initialModeParam = searchParams.get("mode");
+  const initialWorkflowMode = initialModeParam === "import" ? "import" : "generate";
+
   const [characters, setCharacters] = useState<Character[]>([]);
-  const [story, setStory] = useState<Story | null>(null);
   const [loading, setLoading] = useState(false);
-  const [scenes, setScenes] = useState<Scene[]>([]);
-  const [generatingScenes, setGeneratingScenes] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState<string | null>(null);
   const [apiError, setApiError] = useState<string | null>(null);
+
+  // Storyboard Review state
+  const [step, setStep] = useState<"input" | "review">("input");
+  const [reviewMode, setReviewMode] = useState<"ai" | "import">("ai");
+  const [draftResult, setDraftResult] = useState<DraftStoryboardResult | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
+  const [isRegenerating, setIsRegenerating] = useState(false);
+  const [lastAiInput, setLastAiInput] = useState<StoryFormState | null>(null);
 
   useEffect(() => {
     loadCharacters();
@@ -34,140 +43,141 @@ export default function StoryCreatePage() {
     }
   }
 
-  async function generateStory(data: any) {
+  /**
+   * Generates a draft storyboard using AI and transitions to the review screen.
+   */
+  async function handleGenerateDraft(data: StoryFormState) {
     setLoading(true);
+    setLoadingMessage("Drafting structured storyboard scenes with AI...");
     setApiError(null);
+    setLastAiInput(data);
+    setReviewMode("ai");
 
     try {
-      const API_URL = getApiUrl();
-      const response = await fetch(`${API_URL}/api/content/story/generate`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          topic: data.topic,
-          ageGroup: data.ageGroup,
-          desiredDurationSeconds: data.desiredDurationSeconds,
-          language: data.language,
-          title: data.title || undefined,
-          genre: data.genre,
-          visualStyle: data.visualStyle,
-          lesson: data.lesson || undefined,
-          sceneCount: data.sceneCount || undefined,
-          tone: data.tone || undefined,
-          contentRestrictions: data.contentRestrictions || undefined,
-          characterIds: data.characterIds,
-        }),
+      const draft = await generateDraftStory({
+        topic: data.topic,
+        ageGroup: data.ageGroup,
+        desiredDurationSeconds: data.desiredDurationSeconds,
+        language: data.language || "Hindi",
+        title: data.title || undefined,
+        genre: data.genre,
+        visualStyle: data.visualStyle,
+        lesson: data.lesson || undefined,
+        sceneCount: data.sceneCount || undefined,
+        tone: data.tone || undefined,
+        contentRestrictions: data.contentRestrictions || undefined,
+        characterIds: data.characterIds,
       });
 
-      if (!response.ok) {
-        const errJson = await response.json().catch(() => null);
-        throw new Error(errJson?.message || "Request failed");
-      }
-
-      const result = await response.json();
-
-      // Navigate to story detail page after successful generation
-      navigate(`/stories/${result.storyId}`);
+      setDraftResult(draft);
+      setStep("review");
     } catch (error: any) {
-      console.error(error);
-      setApiError(error?.message || "Failed to generate story. Please try again.");
+      console.error("Failed to generate draft story:", error);
+      setApiError(error?.message || "Failed to generate story draft. Please try again.");
     } finally {
       setLoading(false);
+      setLoadingMessage(null);
     }
   }
 
-  async function handleImportStory(data: any) {
+  /**
+   * Parses an unstructured or markdown script into structured draft scenes and transitions to the review screen.
+   */
+  async function handleImportScript(data: {
+    rawText: string;
+    title?: string;
+    language?: string;
+    format?: string;
+    genre?: string;
+    targetDurationSeconds?: number;
+  }) {
     setLoading(true);
+    setLoadingMessage("Parsing script and detecting storyboard scenes...");
     setApiError(null);
+    setReviewMode("import");
 
     try {
-      const result = await importStory(data);
-      navigate(`/stories/${result.storyId}`);
+      const draft = await parseScriptForDraft({
+        rawText: data.rawText,
+        title: data.title,
+        language: data.language || "Hindi",
+        targetDuration: data.targetDurationSeconds || 60,
+      });
+
+      setDraftResult(draft);
+      setStep("review");
     } catch (error: any) {
-      console.error(error);
-      setApiError(error?.message || "Failed to import story. Please check your text format.");
+      console.error("Failed to parse script:", error);
+      setApiError(error?.message || "Failed to parse script. Please check your text format.");
     } finally {
       setLoading(false);
+      setLoadingMessage(null);
     }
   }
 
-  async function handleGenerateScenes() {
-    if (!story) return;
-
-    setGeneratingScenes(true);
+  /**
+   * Re-generates story draft from the review screen if the user requests another take.
+   */
+  async function handleRegenerateStory() {
+    if (!lastAiInput) return;
+    setIsRegenerating(true);
     setApiError(null);
 
     try {
-      const generatedScenes = await generateScenes(
-        story.id,
-        {
-          title: story.title,
-          logline: story.logline,
-          lesson: story.lesson,
-        },
-        story.characters,
-      );
+      const draft = await generateDraftStory({
+        topic: lastAiInput.topic,
+        ageGroup: lastAiInput.ageGroup,
+        desiredDurationSeconds: lastAiInput.desiredDurationSeconds,
+        language: lastAiInput.language || "Hindi",
+        title: lastAiInput.title || undefined,
+        genre: lastAiInput.genre,
+        visualStyle: lastAiInput.visualStyle,
+        lesson: lastAiInput.lesson || undefined,
+        sceneCount: lastAiInput.sceneCount || undefined,
+        tone: lastAiInput.tone || undefined,
+        contentRestrictions: lastAiInput.contentRestrictions || undefined,
+        characterIds: lastAiInput.characterIds,
+      });
 
-      setScenes(generatedScenes);
-    } catch (error) {
-      console.error(error);
-      setApiError("Failed to generate scenes. Please try again.");
+      setDraftResult(draft);
+    } catch (error: any) {
+      console.error("Failed to regenerate story:", error);
+      setApiError(error?.message || "Failed to regenerate storyboard.");
     } finally {
-      setGeneratingScenes(false);
+      setIsRegenerating(false);
     }
   }
 
-  async function goToProduction() {
-    if (!story || scenes.length === 0) return;
+  /**
+   * Atomically saves the finalized draft storyboard as a new draft story project and opens it in the editor.
+   */
+  async function handleCreateStoryFromDraft() {
+    if (!draftResult) return;
+    setIsCreating(true);
+    setApiError(null);
 
-    let savedImageUrls = new Map<string, string>();
     try {
-      const savedStory = await fetchStory(story.id);
-      savedImageUrls = new Map(
-        savedStory.scenes
-          .filter(
-            (scene) =>
-              scene.image?.status === "completed" && scene.image.imageUrl,
-          )
-          .map((scene) => [scene.sceneId, scene.image!.imageUrl]),
-      );
-    } catch (error) {
-      console.info("No saved scene images found for this story yet.", error);
+      const res = await createStoryFromDraft({
+        title: draftResult.title,
+        targetDurationSeconds: draftResult.targetDurationSeconds,
+        language: draftResult.language || "Hindi",
+        topic: draftResult.metadata?.topic || lastAiInput?.topic,
+        audience: draftResult.metadata?.audience || draftResult.metadata?.ageGroup || lastAiInput?.ageGroup,
+        genre: draftResult.metadata?.genre || lastAiInput?.genre,
+        visualStyle: draftResult.metadata?.visualStyle || lastAiInput?.visualStyle,
+        lesson: draftResult.lesson || draftResult.metadata?.lesson || lastAiInput?.lesson,
+        logline: draftResult.logline,
+        characters: draftResult.characters,
+        scenes: draftResult.scenes,
+      });
+
+      // Open the story in the studio editor
+      navigate(`/stories/${res.storyId}`);
+    } catch (error: any) {
+      console.error("Failed to create story from draft:", error);
+      setApiError(error?.message || "Failed to create story project. Please try again.");
+      setIsCreating(false);
     }
-
-    const productionScenes: ProductionScene[] = scenes.map((scene) => {
-      const sceneId = `scene-${scene.sceneNumber}`;
-      const savedImageUrl = savedImageUrls.get(sceneId);
-
-      return {
-        sceneId,
-        sceneNumber: scene.sceneNumber,
-        title: scene.description.split(".")[0] || `Scene ${scene.sceneNumber}`,
-        description: scene.description,
-        narration: scene.narration,
-        image: savedImageUrl
-          ? { status: "completed", url: savedImageUrl }
-          : { status: "pending" },
-        voice: { status: "pending" },
-        animation: { status: "pending" },
-        video: { status: "pending" },
-      };
-    });
-
-    const productionState: ProductionState = {
-      storyId: story.id,
-      storyTitle: story.title,
-      storyLogline: story.logline,
-      storyLesson: story.lesson,
-      currentStage: "scenes",
-      scenes: productionScenes,
-    };
-
-    navigate("/production", {
-      state: { productionState },
-    });
   }
 
   return (
@@ -177,9 +187,13 @@ export default function StoryCreatePage() {
           <SparklesIcon size={12} />
           <span>AI Story Studio</span>
         </div>
-        <h1 className="studio-hero-title">Create Children's Story</h1>
+        <h1 className="studio-hero-title">
+          {step === "review" ? "Review & Fine-Tune Storyboard" : "Create Children's Story"}
+        </h1>
         <p className="studio-hero-subtitle">
-          Spark an imaginative idea, cast favorite characters, and direct your animated storybook in seconds.
+          {step === "review"
+            ? "Inspect each scene, adjust narration, tune character emotions, and add atmospheric overlays before entering the editor."
+            : "Spark an imaginative idea or import an existing script to generate a full editable storyboard in seconds."}
         </p>
       </div>
 
@@ -191,12 +205,62 @@ export default function StoryCreatePage() {
           </button>
         </div>
       )}
-      <StoryBuilder
-        characters={characters}
-        loading={loading}
-        onGenerate={generateStory}
-        onImport={handleImportStory}
-      />
+
+      {loading && (
+        <div
+          style={{
+            maxWidth: "700px",
+            margin: "40px auto",
+            padding: "36px 24px",
+            background: "var(--ed-surface, #111827)",
+            border: "1px solid var(--ed-border, #1f293d)",
+            borderRadius: "16px",
+            textAlign: "center",
+            boxShadow: "0 10px 25px rgba(0,0,0,0.3)",
+          }}
+        >
+          <div
+            style={{
+              width: "48px",
+              height: "48px",
+              border: "4px solid rgba(139, 92, 246, 0.2)",
+              borderTopColor: "var(--ed-accent, #8b5cf6)",
+              borderRadius: "50%",
+              margin: "0 auto 20px",
+              animation: "spin 1s linear infinite",
+            }}
+          />
+          <h3 style={{ fontSize: "18px", fontWeight: 600, color: "var(--ed-text, #f8fafc)", marginBottom: "8px" }}>
+            {loadingMessage || "Processing..."}
+          </h3>
+          <p style={{ fontSize: "14px", color: "var(--ed-text-muted, #94a3b8)" }}>
+            Structuring scene descriptions, setting Hindi audio narration, assigning Earth voice tags, and preparing storyboard...
+          </p>
+        </div>
+      )}
+
+      {!loading && step === "review" && draftResult && (
+        <StoryboardReviewScreen
+          draft={draftResult}
+          onChange={setDraftResult}
+          onCreateStory={handleCreateStoryFromDraft}
+          isCreating={isCreating}
+          onBackToInput={() => setStep("input")}
+          onRegenerate={reviewMode === "ai" ? handleRegenerateStory : undefined}
+          isRegenerating={isRegenerating}
+          mode={reviewMode}
+        />
+      )}
+
+      {!loading && step === "input" && (
+        <StoryBuilder
+          characters={characters}
+          initialMode={initialWorkflowMode}
+          loading={loading}
+          onGenerate={handleGenerateDraft}
+          onImport={handleImportScript}
+        />
+      )}
     </div>
   );
 }

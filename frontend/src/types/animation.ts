@@ -29,7 +29,7 @@ export interface CharacterInstance {
   expression?: FacialExpression;
 }
 
-export type AnimationActionType = 'idle' | 'walk' | 'wave' | 'jump';
+export type AnimationActionType = 'idle' | 'walk' | 'wave' | 'jump' | 'point';
 
 export interface AnimationClip {
   clipId: string;

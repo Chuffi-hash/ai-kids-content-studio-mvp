@@ -1521,8 +1521,8 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
       {/* 6. Animation Action Controls */}
       <div className="ed-inspector-section">
         <label className="ed-field-label">Animation Action</label>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '4px', marginBottom: '12px' }}>
-          {(['walk', 'wave', 'idle', 'jump'] as AnimationActionType[]).map((action) => (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '4px', marginBottom: '12px' }}>
+          {(['idle', 'walk', 'wave', 'jump', 'point'] as AnimationActionType[]).map((action) => (
             <button
               key={action}
               type="button"

@@ -115,6 +115,11 @@ interface TimelineProps {
   onAddCharacter?: (sceneId: string, charId: 'pip_the_bear' | 'sammy_the_kid') => void;
   onPreviewDialogue?: (dialogue: SceneDialogue) => void;
   onRegenerateDialogue?: (sceneId: string, dialogueId: string) => void;
+  /** Called when user clicks a narration clip or the Narration track header — opens Narration inspector */
+  onSelectNarration?: (sceneId: string) => void;
+  onPreviewNarration?: (scene: EditorScene) => void;
+  onRegenerateNarration?: (sceneId: string) => void;
+  onSelectTrack?: (track: string) => void;
 }
 
 interface TimelineLayoutItem<T> {
@@ -194,6 +199,10 @@ export const Timeline: React.FC<TimelineProps> = ({
   onAddCharacter,
   onPreviewDialogue,
   onRegenerateDialogue,
+  onSelectNarration,
+  onPreviewNarration,
+  onRegenerateNarration,
+  onSelectTrack,
 }) => {
   // Right-click context menu state
   const [contextMenu, setContextMenu] = useState<{
@@ -907,10 +916,14 @@ export const Timeline: React.FC<TimelineProps> = ({
           <div className="ed-track-header ruler-header">Time</div>
           <div
             className="ed-track-header track-visuals"
+            style={{ cursor: 'pointer' }}
+            onClick={() => onSelectTrack?.('visuals')}
+            title="Click to open Scene Overview properties"
             onContextMenu={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              setContextMenu({ x: e.clientX, y: e.clientY, target: { type: 'header', track: 'track-visuals' } });
+              onSelectTrack?.('visuals');
+              setContextMenu({ x: e.clientX, y: e.clientY, target: { type: 'header', track: 'track-visuals', sceneId: activeSceneId || undefined } });
             }}
           >
             <FilmIcon size={13} />
@@ -918,10 +931,14 @@ export const Timeline: React.FC<TimelineProps> = ({
           </div>
           <div
             className="ed-track-header track-rig"
+            style={{ cursor: 'pointer' }}
+            onClick={() => onSelectTrack?.('rig')}
+            title="Click to open 2D Rigging & Character settings"
             onContextMenu={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              setContextMenu({ x: e.clientX, y: e.clientY, target: { type: 'header', track: 'track-rig' } });
+              onSelectTrack?.('rig');
+              setContextMenu({ x: e.clientX, y: e.clientY, target: { type: 'header', track: 'track-rig', sceneId: activeSceneId || undefined } });
             }}
           >
             <SparklesIcon size={13} color="#a78bfa" />
@@ -929,11 +946,14 @@ export const Timeline: React.FC<TimelineProps> = ({
           </div>
           <div
             className="ed-track-header track-dialogue"
-            style={{ height: `${dialogueTrackHeight}px`, minHeight: `${dialogueTrackHeight}px` }}
+            style={{ height: `${dialogueTrackHeight}px`, minHeight: `${dialogueTrackHeight}px`, cursor: 'pointer' }}
+            onClick={() => onSelectTrack?.('dialogue')}
+            title="Click to open Character Dialogue & Voice settings"
             onContextMenu={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              setContextMenu({ x: e.clientX, y: e.clientY, target: { type: 'header', track: 'track-dialogue' } });
+              onSelectTrack?.('dialogue');
+              setContextMenu({ x: e.clientX, y: e.clientY, target: { type: 'header', track: 'track-dialogue', sceneId: activeSceneId || undefined } });
             }}
           >
             <span style={{ fontSize: '13px' }}>👄</span>
@@ -954,11 +974,14 @@ export const Timeline: React.FC<TimelineProps> = ({
           </div>
           <div
             className="ed-track-header track-overlays"
-            style={{ height: `${overlayTrackHeight}px`, minHeight: `${overlayTrackHeight}px` }}
+            style={{ height: `${overlayTrackHeight}px`, minHeight: `${overlayTrackHeight}px`, cursor: 'pointer' }}
+            onClick={() => onSelectTrack?.('overlays')}
+            title="Click to open Overlays & Effects settings"
             onContextMenu={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              setContextMenu({ x: e.clientX, y: e.clientY, target: { type: 'header', track: 'track-overlays' } });
+              onSelectTrack?.('overlays');
+              setContextMenu({ x: e.clientX, y: e.clientY, target: { type: 'header', track: 'track-overlays', sceneId: activeSceneId || undefined } });
             }}
           >
             <span style={{ fontSize: '13px' }}>📍</span>
@@ -966,10 +989,18 @@ export const Timeline: React.FC<TimelineProps> = ({
           </div>
           <div
             className="ed-track-header track-narration"
+            style={{ cursor: 'pointer' }}
+            onClick={() => {
+              if (activeSceneId && onSelectNarration) onSelectNarration(activeSceneId);
+              else onSelectTrack?.('narration');
+            }}
+            title="Click to open Narration Voice Studio in the right panel"
             onContextMenu={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              setContextMenu({ x: e.clientX, y: e.clientY, target: { type: 'header', track: 'track-narration' } });
+              if (activeSceneId && onSelectNarration) onSelectNarration(activeSceneId);
+              else onSelectTrack?.('narration');
+              setContextMenu({ x: e.clientX, y: e.clientY, target: { type: 'header', track: 'track-narration', sceneId: activeSceneId || undefined } });
             }}
           >
             <MicIcon size={13} />
@@ -977,10 +1008,14 @@ export const Timeline: React.FC<TimelineProps> = ({
           </div>
           <div
             className="ed-track-header track-soundtrack"
+            style={{ cursor: 'pointer' }}
+            onClick={() => onSelectTrack?.('soundtrack')}
+            title="Click to open Soundtrack & Music audio options"
             onContextMenu={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              setContextMenu({ x: e.clientX, y: e.clientY, target: { type: 'header', track: 'track-soundtrack' } });
+              onSelectTrack?.('soundtrack');
+              setContextMenu({ x: e.clientX, y: e.clientY, target: { type: 'header', track: 'track-soundtrack', sceneId: activeSceneId || undefined } });
             }}
           >
             <MusicIcon size={13} />
@@ -1510,7 +1545,10 @@ export const Timeline: React.FC<TimelineProps> = ({
           {/* Track 4: Narration Voice */}
           <div
             className="ed-track-row track-narration"
-            onContextMenu={(e) => handleTrackContextMenu(e, 'track-narration')}
+            onContextMenu={(e) => {
+              if (activeSceneId && onSelectNarration) onSelectNarration(activeSceneId);
+              handleTrackContextMenu(e, 'track-narration');
+            }}
           >
             {scenes.map((scene) => {
               if (!scene.narration && !scene.audioUrl) return null;
@@ -1529,11 +1567,26 @@ export const Timeline: React.FC<TimelineProps> = ({
                     left: `${leftPx}px`,
                     width: `${Math.max(20, widthPx)}px`,
                   }}
-                  onClick={() => onSelectScene(scene.sceneId)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSelectScene(scene.sceneId);
+                    if (onSelectNarration) onSelectNarration(scene.sceneId);
+                  }}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onSelectScene(scene.sceneId);
+                    if (onSelectNarration) onSelectNarration(scene.sceneId);
+                    setContextMenu({
+                      x: e.clientX,
+                      y: e.clientY,
+                      target: { type: 'narration', scene },
+                    });
+                  }}
                   title={
                     isOverflow
                       ? `Narration (${formatDurationHuman(audioDuration)}) exceeds clip duration!`
-                      : `Narration: ${scene.narration?.slice(0, 40)}...`
+                      : `Narration: ${scene.narration?.slice(0, 40)}... (Click or right-click to edit voice & script in Narration Studio)`
                   }
                 >
                   <span style={{ display: 'inline-flex', alignItems: 'center' }}>
@@ -1782,6 +1835,10 @@ export const Timeline: React.FC<TimelineProps> = ({
           onDeleteInstance={onDeleteInstance}
           onPreviewDialogue={onPreviewDialogue}
           onRegenerateDialogue={onRegenerateDialogue}
+          onSelectNarration={onSelectNarration}
+          onPreviewNarration={onPreviewNarration}
+          onRegenerateNarration={onRegenerateNarration}
+          onSelectTrack={onSelectTrack}
         />
       )}
     </div>

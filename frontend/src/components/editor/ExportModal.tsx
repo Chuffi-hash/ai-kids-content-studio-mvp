@@ -4,6 +4,7 @@ import { startExport, pollExportStatus } from '../../services/editor.service';
 import { formatTimeMs, formatDurationHuman } from '../../utils/timingEngine';
 import { getApiUrl, resolveAssetUrl } from '../../utils/urlHelper';
 import { CloseIcon, AlertTriangleIcon, CheckIcon } from '../common/Icons';
+import { AspectRatioType } from '../../types/animation';
 
 interface ExportModalProps {
   isOpen: boolean;
@@ -12,6 +13,7 @@ interface ExportModalProps {
   totalDurationMs: number;
   selectedMusic: string | null;
   musicVolume: number;
+  initialFormat?: AspectRatioType;
   onExportSuccess: (videoUrl: string) => void;
 }
 
@@ -22,15 +24,24 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   totalDurationMs,
   selectedMusic,
   musicVolume,
+  initialFormat = '16:9',
   onExportSuccess,
 }) => {
+  const normalizedInitial = initialFormat && initialFormat !== 'custom' ? initialFormat : '16:9';
   const [resolution, setResolution] = useState<'1080p' | '720p'>('720p');
-  const [format, setFormat] = useState<'16:9' | '9:16' | '1:1' | '4:5'>('16:9');
+  const [format, setFormat] = useState<'16:9' | '9:16' | '1:1' | '4:5'>(normalizedInitial);
   const [sceneScope, setSceneScope] = useState<'all' | 'single'>('all');
   const [selectedSceneId, setSelectedSceneId] = useState<string>(story.scenes[0]?.sceneId || '');
   const [job, setJob] = useState<ExportJobStatus | null>(null);
   const [isStarting, setIsStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Sync format with initialFormat whenever modal opens
+  useEffect(() => {
+    if (isOpen && initialFormat && initialFormat !== 'custom') {
+      setFormat(initialFormat);
+    }
+  }, [isOpen, initialFormat]);
 
   // Poll job status if processing
   useEffect(() => {

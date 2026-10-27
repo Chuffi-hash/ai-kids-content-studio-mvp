@@ -208,6 +208,25 @@ export function evaluateCharacterPose(
         break;
       }
 
+      case 'point': {
+        const pointFreq = 1.0 * speed;
+        const phase = 2 * Math.PI * pointFreq * (clipOffsetMs / 1000);
+        if (isPlanet) {
+          rightArmAngle = -45 + 5 * Math.sin(phase);
+          rightForearmAngle = -10;
+          leftArmAngle = 8 + 2 * Math.sin(phase * 0.3);
+          torsoBobY = 5 * Math.sin(phase * 0.5);
+          headAngle = 4;
+        } else {
+          rightArmAngle = -75;
+          rightForearmAngle = -15 + 4 * Math.sin(phase);
+          leftArmAngle = 10 + 2 * Math.sin(phase * 0.3);
+          torsoAngle = -3;
+          headAngle = 5;
+        }
+        break;
+      }
+
       case 'idle':
       default: {
         const idleFreq = 0.6 * speed;

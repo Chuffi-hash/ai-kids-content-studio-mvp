@@ -1,5 +1,12 @@
 import { getApiUrl } from '../utils/urlHelper';
-import { EditorStory, EditorScene, ExportJobStatus, SceneVersionItem } from '../types/editor';
+import {
+  EditorStory,
+  EditorScene,
+  ExportJobStatus,
+  SceneVersionItem,
+  DraftStoryboardResult,
+  DraftStoryboardScene,
+} from '../types/editor';
 import { SceneDialogue } from '../types/animation';
 
 const API_URL = getApiUrl();
@@ -696,5 +703,123 @@ export async function deleteSceneDialogue(
   return res.json();
 }
 
+/**
+ * Parses an unstructured raw script into structured draft storyboard scenes for user review.
+ */
+export async function parseScriptForDraft(payload: {
+  rawText: string;
+  language?: string;
+  title?: string;
+  targetDuration?: number;
+  storyId?: string;
+}): Promise<DraftStoryboardResult> {
+  const res = await fetch(`${API_URL}/api/content/story/parse-script`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
 
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.message || 'Failed to parse story script');
+  }
+
+  return res.json();
+}
+
+/**
+ * Commits confirmed/edited draft scenes into an existing story without generating media automatically.
+ */
+export async function importDraftScenes(
+  storyId: string,
+  payload: {
+    scenes: DraftStoryboardScene[];
+    importMode?: 'replace' | 'append';
+    updateStoryMetadata?: boolean;
+    title?: string;
+    targetDurationSeconds?: number;
+    language?: string;
+  }
+): Promise<{ success: boolean; scenes: EditorScene[] }> {
+  const res = await fetch(`${API_URL}/api/content/story/${storyId}/scenes/import-draft`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.message || 'Failed to import draft scenes');
+  }
+
+  return res.json();
+}
+
+/**
+ * Generates structured draft storyboard scenes using AI for user review.
+ */
+export async function generateDraftStory(payload: {
+  topic: string;
+  ageGroup?: string;
+  desiredDurationSeconds?: number;
+  language?: string;
+  title?: string;
+  genre?: string;
+  visualStyle?: string;
+  lesson?: string;
+  sceneCount?: number;
+  tone?: string;
+  contentRestrictions?: string;
+  characterIds?: string[];
+}): Promise<DraftStoryboardResult> {
+  const res = await fetch(`${API_URL}/api/content/story/generate-draft`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.message || 'Failed to generate draft story');
+  }
+
+  return res.json();
+}
+
+/**
+ * Creates a brand new story with draft scenes from the Storyboard Review Screen.
+ */
+export async function createStoryFromDraft(payload: {
+  title: string;
+  targetDurationSeconds?: number;
+  language?: string;
+  logline?: string;
+  lesson?: string;
+  genre?: string;
+  visualStyle?: string;
+  audience?: string;
+  topic?: string;
+  characters?: Array<{
+    id?: string;
+    name: string;
+    species?: string;
+    role?: string;
+    voice?: string;
+    description?: string;
+  }>;
+  scenes: DraftStoryboardScene[];
+}): Promise<{ success: boolean; storyId: string; story: any; scenes: any[] }> {
+  const res = await fetch(`${API_URL}/api/content/story/create-from-draft`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.message || 'Failed to create story from draft');
+  }
+
+  return res.json();
+}
 

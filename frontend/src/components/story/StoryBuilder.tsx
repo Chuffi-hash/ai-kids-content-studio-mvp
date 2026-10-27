@@ -21,6 +21,7 @@ export interface StoryFormState {
 
 interface StoryBuilderProps {
   initialState?: Partial<StoryFormState>;
+  initialMode?: "generate" | "import";
   characters: Character[];
   loading?: boolean;
   onGenerate: (data: StoryFormState) => void;
@@ -30,6 +31,7 @@ interface StoryBuilderProps {
     language?: string;
     format?: string;
     genre?: string;
+    targetDurationSeconds?: number;
   }) => void;
 }
 
@@ -119,6 +121,7 @@ export const INSPIRATION_CHIPS = [
 
 export default function StoryBuilder({
   initialState = {},
+  initialMode = "generate",
   characters = [],
   loading = false,
   onGenerate,
@@ -178,14 +181,21 @@ export default function StoryBuilder({
   }
 
   const [studioMode, setStudioMode] = useState<"generate" | "import">(
-    "generate",
+    initialMode,
   );
   const [importText, setImportText] = useState<string>("");
   const [importTitle, setImportTitle] = useState<string>("");
   const [importLanguage, setImportLanguage] = useState<string>("Hindi");
+  const [importDuration, setImportDuration] = useState<number>(60);
   const [importFormat, setImportFormat] = useState<"16:9" | "9:16">("16:9");
   const [importGenre, setImportGenre] = useState<string>("Educational");
   const [importError, setImportError] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (initialMode) {
+      setStudioMode(initialMode);
+    }
+  }, [initialMode]);
 
   const SAMPLE_FOUR_SEASONS = `# Title: Earth's Promise: The Four Seasons
 Logline: Earth teaches children how the four seasons bring balance, beauty, and life to our planet.
@@ -219,6 +229,7 @@ Earth: पतझड़ के बाद नया बसंत आता है!
     setImportTitle("Earth's Promise: The Four Seasons");
     setImportText(SAMPLE_FOUR_SEASONS);
     setImportLanguage("Hindi");
+    setImportDuration(60);
     setImportError(null);
   }
 
@@ -235,6 +246,7 @@ Earth: पतझड़ के बाद नया बसंत आता है!
         language: importLanguage,
         format: importFormat,
         genre: importGenre,
+        targetDurationSeconds: importDuration,
       });
     }
   }
@@ -248,73 +260,70 @@ Earth: पतझड़ के बाद नया बसंत आता है!
 
   return (
     <div className="story-studio-workbench">
-      {/* Studio Mode Selector (AI Generator vs Import/Write Script) */}
+      {/* Studio Mode Selector (AI Generator vs Import Script) */}
       <div
         style={{
-          display: "flex",
-          gap: "8px",
-          marginBottom: "16px",
-          background: "rgba(255,255,255,0.04)",
-          padding: "6px",
-          borderRadius: "10px",
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr",
+          gap: "12px",
+          marginBottom: "20px",
         }}
       >
-        <button
-          type="button"
-          style={{
-            flex: 1,
-            padding: "10px 16px",
-            borderRadius: "8px",
-            border:
-              studioMode === "generate"
-                ? "1px solid var(--ed-accent, #8b5cf6)"
-                : "1px solid transparent",
-            background:
-              studioMode === "generate"
-                ? "rgba(139, 92, 246, 0.22)"
-                : "transparent",
-            color: studioMode === "generate" ? "#ffffff" : "#94a3b8",
-            fontWeight: 600,
-            fontSize: "13px",
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: "8px",
-          }}
+        <div
           onClick={() => setStudioMode("generate")}
-        >
-          <SparklesIcon size={15} />
-          <span>AI Idea Sparks & Story Builder</span>
-        </button>
-        <button
-          type="button"
           style={{
-            flex: 1,
-            padding: "10px 16px",
-            borderRadius: "8px",
+            padding: "16px 20px",
+            borderRadius: "12px",
+            border:
+              studioMode === "generate"
+                ? "2px solid var(--ed-accent, #8b5cf6)"
+                : "1px solid var(--ed-border, rgba(255,255,255,0.08))",
+            background:
+              studioMode === "generate"
+                ? "rgba(139, 92, 246, 0.16)"
+                : "var(--ed-surface, #111827)",
+            cursor: "pointer",
+            transition: "all 0.15s ease",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
+            <span style={{ fontSize: "16px" }}>✨</span>
+            <strong style={{ fontSize: "15px", color: studioMode === "generate" ? "#c084fc" : "#f8fafc" }}>
+              A. Create Story with AI
+            </strong>
+          </div>
+          <p style={{ margin: 0, fontSize: "12px", color: "#94a3b8" }}>
+            Enter a prompt or choose story sparks. AI will generate a complete, structured story script with scenes for review.
+          </p>
+        </div>
+
+        <div
+          onClick={() => setStudioMode("import")}
+          style={{
+            padding: "16px 20px",
+            borderRadius: "12px",
             border:
               studioMode === "import"
-                ? "1px solid #38bdf8"
-                : "1px solid transparent",
+                ? "2px solid #38bdf8"
+                : "1px solid var(--ed-border, rgba(255,255,255,0.08))",
             background:
               studioMode === "import"
-                ? "rgba(56, 189, 248, 0.22)"
-                : "transparent",
-            color: studioMode === "import" ? "#ffffff" : "#94a3b8",
-            fontWeight: 600,
-            fontSize: "13px",
+                ? "rgba(56, 189, 248, 0.16)"
+                : "var(--ed-surface, #111827)",
             cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: "8px",
+            transition: "all 0.15s ease",
           }}
-          onClick={() => setStudioMode("import")}
         >
-          <span>📝</span>
-          <span>Import or Write Story (Fast • Local • Zero AI Cost)</span>
-        </button>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
+            <span style={{ fontSize: "16px" }}>📄</span>
+            <strong style={{ fontSize: "15px", color: studioMode === "import" ? "#38bdf8" : "#f8fafc" }}>
+              B. Import Existing Script
+            </strong>
+          </div>
+          <p style={{ margin: 0, fontSize: "12px", color: "#94a3b8" }}>
+            Paste a complete screenplay or Markdown script from Claude, Gemini, ChatGPT or another AI to convert into editable scenes.
+          </p>
+        </div>
       </div>
 
       {studioMode === "import" ? (
@@ -426,6 +435,20 @@ Earth: पतझड़ के बाद नया बसंत आता है!
                 <option value="9:16">
                   9:16 Vertical Reel / Short (Instagram / Shorts / TikTok)
                 </option>
+              </select>
+            </div>
+
+            <div className="studio-field">
+              <label className="studio-label">Target Duration</label>
+              <select
+                className="studio-input"
+                value={importDuration}
+                onChange={(e) => setImportDuration(Number(e.target.value))}
+              >
+                <option value={30}>30s (~2 scenes)</option>
+                <option value={60}>60s (~4 scenes)</option>
+                <option value={90}>90s (~5 scenes)</option>
+                <option value={120}>2 min (~6 scenes)</option>
               </select>
             </div>
 
