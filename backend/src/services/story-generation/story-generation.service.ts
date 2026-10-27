@@ -13,6 +13,14 @@ import { prisma } from '../database/database.service.js';
 import { estimateSpeechDurationMs } from '../timing/timing.service.js';
 import { VectorSceneData } from '../animation/vector-animation.engine.js';
 import { AudioGenerationService } from '../audio-generation/audio-generation.service.js';
+import {
+  DraftStoryboardResult,
+  DraftStoryboardScene,
+  DraftDialogueLine,
+  DraftOverlayItem,
+  resolveDefaultVoiceForCharacter,
+} from './story-importer.service.js';
+import { randomUUID } from 'crypto';
 
 export class StoryGenerationService {
   /**
@@ -64,6 +72,104 @@ export class StoryGenerationService {
     }
 
     return persistedResult;
+  }
+
+  /**
+   * Generates a draft storyboard without persisting to the database,
+   * returning an editable DraftStoryboardResult for the review screen.
+   */
+  public static async generateDraftStory(
+    input: StoryGenerationInput
+  ): Promise<DraftStoryboardResult> {
+    const isHindi = (input.language || 'Hindi').toLowerCase().includes('hindi');
+    const structuredStory = await this.generateStructuredStory(input);
+
+    const { resolvedCharacters, characterMapByName } =
+      await CharacterResolutionService.resolveStoryCharacters(
+        structuredStory.characters,
+        input.characterIds
+      );
+
+    CharacterResolutionService.reconcileSceneCharacters(
+      structuredStory.scenes,
+      characterMapByName,
+      resolvedCharacters[0]
+    );
+
+    const draftScenes: DraftStoryboardScene[] = structuredStory.scenes.map((sc, idx) => {
+      const dialogueLines: DraftDialogueLine[] = (sc.dialogue || []).map((d) => {
+        const charName = d.characterName || resolvedCharacters[0]?.name || 'Character';
+        const charRec = characterMapByName.get(charName.toLowerCase());
+        const voice = resolveDefaultVoiceForCharacter(charName, isHindi);
+
+        return {
+          id: randomUUID(),
+          characterName: charName,
+          characterId: charRec?.id,
+          text: d.text,
+          emotion: d.emotion || 'cheerful',
+          voice,
+        };
+      });
+
+      // Suggest overlays based on visualDescription and narration
+      const combinedText = `${sc.visualDescription || ''} ${sc.narration || ''} ${sc.title || ''}`.toLowerCase();
+      const overlays: DraftOverlayItem[] = [];
+
+      if (combinedText.includes('sun') || combinedText.includes('summer') || combinedText.includes('धूप') || combinedText.includes('ग्रीष्म')) {
+        overlays.push({ id: randomUUID(), type: 'sunshine_rays', label: 'Sunshine Rays', color: '#fef08a' });
+        overlays.push({ id: randomUUID(), type: 'heat_shimmer', label: 'Heat Shimmer', color: '#fde047' });
+      }
+      if (combinedText.includes('rain') || combinedText.includes('monsoon') || combinedText.includes('बारिश') || combinedText.includes('वर्षा') || combinedText.includes('cloud')) {
+        overlays.push({ id: randomUUID(), type: 'rain', label: 'Rain', color: '#38bdf8' });
+        overlays.push({ id: randomUUID(), type: 'moving_clouds', label: 'Moving Clouds', color: '#e2e8f0' });
+        overlays.push({ id: randomUUID(), type: 'water_splashes', label: 'Water Splashes', color: '#7dd3fc' });
+      }
+      if (combinedText.includes('snow') || combinedText.includes('winter') || combinedText.includes('सर्दी') || combinedText.includes('बर्फ') || combinedText.includes('fog')) {
+        overlays.push({ id: randomUUID(), type: 'snowfall', label: 'Snowfall', color: '#f8fafc' });
+        overlays.push({ id: randomUUID(), type: 'fog_mist', label: 'Fog & Mist', color: '#f1f5f9' });
+      }
+      if (combinedText.includes('leaf') || combinedText.includes('leaves') || combinedText.includes('autumn') || combinedText.includes('पतझड़') || combinedText.includes('शरद')) {
+        overlays.push({ id: randomUUID(), type: 'falling_leaves', label: 'Falling Leaves', color: '#f97316' });
+      }
+      if (combinedText.includes('bird') || combinedText.includes('पक्षी') || combinedText.includes('चिड़िया')) {
+        overlays.push({ id: randomUUID(), type: 'flying_birds', label: 'Flying Birds', color: '#334155' });
+      }
+      if (combinedText.includes('butterfly') || combinedText.includes('तितली')) {
+        overlays.push({ id: randomUUID(), type: 'butterflies', label: 'Butterflies', color: '#f43f5e' });
+      }
+
+      return {
+        sceneNumber: sc.sceneNumber || idx + 1,
+        title: sc.title || `Scene ${idx + 1}`,
+        durationSeconds: sc.durationSeconds || Math.max(5, Math.round((structuredStory.estimatedDurationSeconds || 60) / structuredStory.scenes.length)),
+        visualPrompt: sc.visualDescription || '',
+        narration: sc.narration || '',
+        dialogue: dialogueLines,
+        characterActions: (sc.characterActions || []).map((a) => ({
+          characterName: a.characterName,
+          action: a.action || 'idle',
+        })),
+        suggestedOverlays: overlays,
+      };
+    });
+
+    return {
+      title: structuredStory.title,
+      targetDurationSeconds: structuredStory.estimatedDurationSeconds || input.desiredDurationSeconds || 60,
+      language: input.language || 'Hindi',
+      logline: structuredStory.logline,
+      lesson: structuredStory.lesson,
+      characters: resolvedCharacters.map((c) => ({
+        id: c.id,
+        name: c.name?.toLowerCase() === 'earth' ? 'Earth' : c.name,
+        species: c.species,
+        role: (c as any).role || 'protagonist',
+        voice: resolveDefaultVoiceForCharacter(c.name, isHindi),
+        description: (c as any).description || c.visualDescription,
+      })),
+      scenes: draftScenes,
+    };
   }
 
   /**
