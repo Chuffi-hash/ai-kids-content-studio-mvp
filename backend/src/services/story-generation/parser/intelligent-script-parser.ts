@@ -19,9 +19,14 @@ import {
   ProjectLookDNA,
   ProjectBibles,
 } from './types.js';
+import { randomUUID } from 'crypto';
 import { FountainParser } from './fountain-parser.js';
 import { ProductionBreakdownExtractor } from './production-breakdown.js';
 import { PromptSynthesizer, DEFAULT_PROJECT_LOOK } from './prompt-synthesizer.js';
+import {
+  resolveEffectiveLanguage,
+  resolveCanonicalVoiceForCharacter,
+} from '../../audio-generation/language-resolver.service.js';
 
 export interface ParseScriptOptions {
   language?: string;
@@ -33,6 +38,11 @@ export interface ParseScriptOptions {
 }
 
 export class IntelligentScriptParser {
+  /**
+   * Alias for parse()
+   */
+  public static parseScript = IntelligentScriptParser.parse;
+
   /**
    * Parses arbitrary scripts (Fountain, Markdown, Plain Text) into a validated
    * Storyboard Intermediate Representation.
@@ -194,14 +204,25 @@ export class IntelligentScriptParser {
               action: actionType,
               description: pi.value,
             });
+          } else if (pi.key === 'speaking_emotion') {
+            const emo = pi.value.trim();
+            if (dialogueLines.length > 0) {
+              dialogueLines[dialogueLines.length - 1].emotion = emo;
+            }
+          } else if (pi.key === 'facial_expression') {
+            const expr = pi.value.trim();
+            if (dialogueLines.length > 0) {
+              dialogueLines[dialogueLines.length - 1].expression = expr;
+            }
           } else if (pi.key === 'dialogue_inline') {
             const meta = pi.metadata || {};
             const speaker = meta.speaker || 'Earth';
             allDetectedCharacters.add(speaker);
             dialogueLines.push({
+              id: randomUUID(),
               characterName: speaker,
               text: meta.speech || pi.value,
-              emotion: meta.emotion,
+              emotion: meta.emotion || 'cheerful',
               voice: IntelligentScriptParser.resolveDefaultVoice(speaker, language),
               sourceRange: node.range,
             });
@@ -211,15 +232,16 @@ export class IntelligentScriptParser {
           const speaker = dNode.characterName || 'Earth';
           allDetectedCharacters.add(speaker);
           dialogueLines.push({
+            id: randomUUID(),
             characterName: speaker,
             text: dNode.speech,
-            emotion: dNode.emotion,
+            emotion: dNode.emotion || 'cheerful',
             voice: IntelligentScriptParser.resolveDefaultVoice(speaker, language),
             sourceRange: node.range,
           });
         } else if (node.type === 'action') {
           // If no narration yet, and this looks like a narration line
-          if (!narration && !node.raw.startsWith('Effects:') && !node.raw.startsWith('Visual:')) {
+          if (!narration && !node.raw.startsWith('Effects:') && !node.raw.startsWith('Visual:') && !node.raw.startsWith('Action:') && !node.raw.startsWith('Character Action:')) {
             narration = node.text;
           }
         }
@@ -298,6 +320,7 @@ export class IntelligentScriptParser {
       genre,
       look: { ...DEFAULT_PROJECT_LOOK, ...(options.look || {}) },
       bibles,
+      characters: declaredCharacters,
       scenes: parsedScenes,
       warnings,
       originalText: text,
@@ -309,22 +332,8 @@ export class IntelligentScriptParser {
    * Earth strictly receives female Hindi voice 'hf_alpha' when language is Hindi.
    */
   public static resolveDefaultVoice(characterName: string, language: string = 'Hindi'): string {
-    const clean = (characterName || '').trim().toLowerCase();
-    const isHindi = language.toLowerCase().includes('hi');
-
-    if (clean.includes('earth') || clean.includes('पृथ्वी') || clean.includes('terra')) {
-      return isHindi ? 'hf_alpha' : 'af_heart';
-    }
-    if (clean.includes('pip') || clean.includes('bear')) {
-      return isHindi ? 'hm_omega' : 'bm_george';
-    }
-    if (clean.includes('sammy') || clean.includes('squirrel')) {
-      return isHindi ? 'hm_psi' : 'bm_daniel';
-    }
-    if (clean.includes('maya') || clean.includes('bird')) {
-      return isHindi ? 'hf_beta' : 'af_sky';
-    }
-    return isHindi ? 'hf_alpha' : 'af_heart';
+    const effLang = resolveEffectiveLanguage({ lang: language });
+    return resolveCanonicalVoiceForCharacter(characterName, effLang);
   }
 
   /**

@@ -11,6 +11,14 @@ import { AudioEffectType, SupportedVoice } from './tts-provider.interface.js';
 import { generateVisemeCues } from './viseme-generator.js';
 import { SceneDialogue, SpeakingDirection, FacialExpression } from '../animation/vector-animation.engine.js';
 import { EMOTION_DELIVERY_MAP, SpeakingEmotion, calculateEmotionDelivery, normalizeEmotionIntensity } from './emotion-suggester.service.js';
+import {
+  resolveEffectiveLanguage,
+  resolveEffectiveVoice,
+  resolveCanonicalVoiceForCharacter,
+  toTTSLanguageCode,
+  isVoiceCompatibleWithLanguage,
+  containsDevanagari,
+} from './language-resolver.service.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -61,8 +69,13 @@ export class AudioGenerationService {
     emotionIntensity: number;
   }> {
     const providerInstance = await TTSProviderFactory.getProvider(options.provider);
-    const lang = options.lang || (options.voice?.startsWith('h') ? 'hi' : (options.voice?.startsWith('b') ? 'en-gb' : (options.voice ? 'en-us' : 'hi')));
-    const voice = options.voice || (lang === 'hi' ? 'hf_alpha' : 'af_heart');
+    const effectiveLang = resolveEffectiveLanguage({ lang: options.lang, text: options.sampleText });
+    const voice = resolveEffectiveVoice({
+      requestedVoice: options.voice,
+      lang: effectiveLang,
+      provider: options.provider,
+    });
+    const lang = toTTSLanguageCode(effectiveLang, providerInstance.name === 'google' ? 'google' : 'kokoro');
     const effect = options.effect || 'normal';
     const speed = options.speed || 1.0;
     const emotion = (options.emotion || 'neutral') as SpeakingEmotion;
@@ -183,8 +196,16 @@ export class AudioGenerationService {
 
     const scene = await getSceneBySceneId(sceneId);
     const story = scene?.storyId ? await getStoryByStoryId(scene.storyId) : null;
-    const projectLang = ((story as any)?.language && (story as any).language.toLowerCase().includes('english')) ? 'en-us' : 'hi';
-    const effectiveLang = lang || (voice?.startsWith('h') ? 'hi' : (voice?.startsWith('b') ? 'en-gb' : (voice ? 'en-us' : projectLang)));
+    const effectiveLang = resolveEffectiveLanguage({
+      lang,
+      text: narration,
+      projectLang: (story as any)?.language,
+    });
+    const selectedVoice = resolveEffectiveVoice({
+      requestedVoice: voice,
+      lang: effectiveLang,
+      provider,
+    });
 
     const delivery = calculateEmotionDelivery({
       emotion,
@@ -193,7 +214,7 @@ export class AudioGenerationService {
       baseEffect: effect,
     });
 
-    console.log(`[AudioGeneration] Generating narration for scene ${sceneId}: "${narration.substring(0, 60)}..." (provider: ${provider || 'default'}, voice: ${voice || 'default'}, lang: ${effectiveLang}, emotion: ${emotion}, intensity: ${delivery.intensity}%)`);
+    console.log(`[AudioGeneration] Generating narration for scene ${sceneId}: "${narration.substring(0, 60)}..." (provider: ${provider || 'default'}, voice: ${selectedVoice}, lang: ${effectiveLang}, emotion: ${emotion}, intensity: ${delivery.intensity}%)`);
 
     // Clean narration text: remove markdown formatting, stage directions, or extra symbols
     const cleanText = narration
@@ -206,7 +227,6 @@ export class AudioGenerationService {
 
     // Select TTS provider (Kokoro-82M by default or fallback)
     const providerInstance = await TTSProviderFactory.getProvider(provider);
-    const selectedVoice = voice || (effectiveLang === 'hi' ? 'hf_alpha' : (providerInstance.name === 'kokoro' ? 'af_heart' : 'en-US-Standard'));
 
     let ttsResult;
     try {
@@ -226,14 +246,19 @@ export class AudioGenerationService {
       if (providerInstance.name !== 'google') {
         console.log('[AudioGeneration] Attempting fallback to Google TTS...');
         const fallbackProvider = await TTSProviderFactory.getProvider('google');
-        ttsResult = await fallbackProvider.generateSpeech(textToSpeak, {
-          voice: 'en-US-Standard',
-          speed: delivery.calibratedSpeed,
-          effect: delivery.effectiveEffect,
-          lang: lang || 'en',
-        });
+        const fallbackVoice = effectiveLang === 'hi' ? 'hi-IN-Standard' : 'en-US-Standard';
+        try {
+          ttsResult = await fallbackProvider.generateSpeech(textToSpeak, {
+            voice: fallbackVoice,
+            speed: delivery.calibratedSpeed,
+            effect: delivery.effectiveEffect,
+            lang: toTTSLanguageCode(effectiveLang, 'google'),
+          });
+        } catch (fallbackErr: any) {
+          throw new Error(`Narration speech generation failed for language "${effectiveLang}": ${err.message || String(err)} (fallback: ${fallbackErr.message || String(fallbackErr)})`);
+        }
       } else {
-        throw new Error(`TTS generation failed: ${err.message || String(err)}`);
+        throw new Error(`Narration speech generation failed for language "${effectiveLang}": ${err.message || String(err)}`);
       }
     }
 
@@ -382,29 +407,32 @@ export class AudioGenerationService {
     }
 
     // Character default voice heuristics based on species/name if no explicit voiceConfig
+    const textHasDevanagari = /[\u0900-\u097F]/.test(textToSpeak);
     if (!charVoiceId || charVoiceId === 'default') {
       const lowerName = (characterName || '').toLowerCase();
       const lowerId = (characterId || '').toLowerCase();
+      const isHindiContext = (options.lang === 'hi') || (charLang === 'hi') || (projectLang === 'hi') || textHasDevanagari;
       if (
         lowerId.includes('earth') ||
         lowerName.includes('earth') ||
         lowerName.includes('terra') ||
-        lowerName.includes('planet')
+        lowerName.includes('planet') ||
+        characterName.includes('पृथ्वी')
       ) {
-        charVoiceId = 'bm_daniel';
-        charLang = charLang || 'en';
+        charVoiceId = isHindiContext ? 'hf_alpha' : 'bm_daniel';
+        charLang = isHindiContext ? 'hi' : (charLang || 'en');
       } else if (lowerId.includes('pip') || lowerName.includes('bear')) {
-        charVoiceId = 'bm_george';
-        charLang = charLang || 'en';
+        charVoiceId = isHindiContext ? 'hm_omega' : 'bm_george';
+        charLang = isHindiContext ? 'hi' : (charLang || 'en');
       } else if (lowerId.includes('sammy') || lowerName.includes('kid') || lowerName.includes('boy')) {
-        charVoiceId = 'am_adam';
-        charLang = charLang || 'en';
+        charVoiceId = isHindiContext ? 'hm_omega' : 'am_adam';
+        charLang = isHindiContext ? 'hi' : (charLang || 'en');
       } else if (lowerName.includes('robot')) {
         charVoiceId = 'bm_lewis';
         charLang = charLang || 'en';
       } else if (lowerName.includes('girl')) {
-        charVoiceId = 'af_bella';
-        charLang = charLang || 'en';
+        charVoiceId = isHindiContext ? 'hf_beta' : 'af_bella';
+        charLang = isHindiContext ? 'hi' : (charLang || 'en');
       }
     }
 
@@ -429,32 +457,22 @@ export class AudioGenerationService {
     const lineIntensity = emotionIntensity;
     const lineEffect = (effect && effect !== 'normal') ? effect : undefined;
 
-    // Effective values according to strict precedence:
-    // Project defaults -> Character defaults -> Scene overrides -> Dialogue-line overrides
-    let effectiveVoice = lineVoiceId || sceneVoiceId || charVoiceId || projectVoice;
-    let effectiveLang = lineLang || sceneLang || charLang;
-    if (!effectiveLang) {
-      if (effectiveVoice.startsWith('h')) {
-        effectiveLang = 'hi';
-      } else if (effectiveVoice && effectiveVoice !== 'default') {
-        effectiveLang = 'en';
-      } else {
-        effectiveLang = projectLang;
-      }
-    }
+    // Effective language resolution: Line override -> Scene override -> Character setting -> Text content -> Story project -> Default Hindi
+    const effectiveLang = resolveEffectiveLanguage({
+      lang: lineLang || sceneLang || charLang,
+      text: textToSpeak,
+      projectLang: (story as any)?.language,
+      characterLang: charLang,
+    });
 
-    // If language is explicitly set to Hindi but the selected voice is non-Hindi, adapt to Hindi default
-    if ((lineLang === 'hi' || sceneLang === 'hi') && !effectiveVoice.startsWith('h')) {
-      effectiveVoice = 'hf_alpha';
-    }
-    // If language is explicitly set to English but the selected voice is Hindi, adapt to English default
-    if ((lineLang === 'en' || sceneLang === 'en') && effectiveVoice.startsWith('h')) {
-      effectiveVoice = 'af_heart';
-    }
-
-    if (!effectiveVoice || effectiveVoice === 'default') {
-      effectiveVoice = effectiveLang === 'hi' ? 'hf_alpha' : 'af_heart';
-    }
+    // Effective voice resolution with strict language compatibility (never allows English voice for Hindi)
+    const effectiveVoice = resolveEffectiveVoice({
+      requestedVoice: lineVoiceId || sceneVoiceId || charVoiceId,
+      characterName: characterName || (char as any)?.name,
+      species: (char as any)?.species,
+      lang: effectiveLang,
+      provider,
+    });
 
     const effectiveEmotion = ((lineEmotion || sceneEmotion || charEmotion || 'neutral') as string).toLowerCase() as SpeakingEmotion;
     const baseSpeed = lineSpeed ?? sceneSpeed ?? charSpeed ?? 1.0;
@@ -498,14 +516,19 @@ export class AudioGenerationService {
       if (providerInstance.name !== 'google') {
         console.log('[AudioGeneration] Falling back to Google TTS for dialogue...');
         const fallback = await TTSProviderFactory.getProvider('google');
-        ttsResult = await fallback.generateSpeech(textToSpeak, {
-          voice: 'en-US-Standard',
-          speed: delivery.calibratedSpeed,
-          effect: delivery.effectiveEffect,
-          lang: effectiveLang || 'en',
-        });
+        const fallbackVoice = effectiveLang === 'hi' ? 'hi-IN-Standard' : 'en-US-Standard';
+        try {
+          ttsResult = await fallback.generateSpeech(textToSpeak, {
+            voice: fallbackVoice,
+            speed: delivery.calibratedSpeed,
+            effect: delivery.effectiveEffect,
+            lang: toTTSLanguageCode(effectiveLang, 'google'),
+          });
+        } catch (fallbackErr: any) {
+          throw new Error(`Dialogue speech generation failed for language "${effectiveLang}": ${err.message || String(err)} (fallback: ${fallbackErr.message || String(fallbackErr)})`);
+        }
       } else {
-        throw new Error(`Dialogue speech generation failed: ${err.message || String(err)}`);
+        throw new Error(`Dialogue speech generation failed for language "${effectiveLang}": ${err.message || String(err)}`);
       }
     }
 
@@ -579,6 +602,9 @@ export class AudioGenerationService {
       throw new Error(`Scene not found: ${sceneId}`);
     }
 
+    const story = scene.storyId ? await getStoryByStoryId(scene.storyId) : null;
+    const projectLang = resolveEffectiveLanguage({ projectLang: (story as any)?.language });
+
     const animData = (scene as any).animationData;
     if (!animData || !Array.isArray(animData.dialogueLines) || animData.dialogueLines.length === 0) {
       return [];
@@ -612,12 +638,35 @@ export class AudioGenerationService {
         const absPath = path.join(process.cwd(), localRel);
         const meta = (line as any).audioMeta;
         const targetIntensity = normalizeEmotionIntensity(line.emotionIntensity, line.emotion);
-        const isCompatible = !meta || (
+        const targetLang = resolveEffectiveLanguage({
+          lang: line.lang,
+          text: line.text,
+          projectLang,
+        });
+        const targetVoice = resolveEffectiveVoice({
+          requestedVoice: line.voice || lineVoice,
+          characterName: line.characterName,
+          lang: targetLang,
+          provider: options.provider,
+        });
+        const targetSpeed = line.speed || 1.0;
+        const targetEffect = line.effect || options.effect || 'normal';
+        const targetEmotion = line.emotion || line.speakingDirection || 'neutral';
+
+        // Audio is ONLY compatible if:
+        // 1. Valid metadata exists (audio without metadata cannot be trusted and must be regenerated)
+        // 2. The spoken text matches
+        // 3. The language matches (crucial: avoids English audio serving Hindi lines)
+        // 4. The voice matches (crucial: avoids bm_daniel serving hf_alpha)
+        // 5. Emotion, intensity, speed, and audio effect match
+        const isCompatible = Boolean(meta) && (
           meta.text === line.text.trim() &&
-          meta.voice === (line.voice || lineVoice) &&
-          meta.emotion === (line.emotion || line.speakingDirection || 'neutral') &&
+          meta.lang === targetLang &&
+          meta.voice === targetVoice &&
+          meta.emotion === targetEmotion &&
           meta.emotionIntensity === targetIntensity &&
-          meta.speed === (line.speed || 1.0)
+          meta.speed === targetSpeed &&
+          (meta.effect || 'normal') === targetEffect
         );
 
         if (fs.existsSync(absPath) && isCompatible) {

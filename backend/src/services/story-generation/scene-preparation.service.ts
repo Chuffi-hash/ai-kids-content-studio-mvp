@@ -18,6 +18,10 @@ import {
 } from '../animation/templates/custom-character-rig.js';
 import { estimateSpeechDurationMs } from '../timing/timing.service.js';
 import { generateVisemeCues } from '../audio-generation/viseme-generator.js';
+import {
+  resolveEffectiveLanguage,
+  resolveEffectiveVoice,
+} from '../audio-generation/language-resolver.service.js';
 
 export type SupportedActionType = 'idle' | 'walk' | 'wave' | 'jump' | 'point';
 
@@ -42,8 +46,8 @@ export class ScenePreparationService {
    */
   public static prepareScenes(
     rawScenes: StructuredScene[],
-    characterMapByName: Map<string, ResolvedCharacterInfo>,
-    allResolvedCharacters: ResolvedCharacterInfo[],
+    characterMapByName: Map<string, ResolvedCharacterInfo> = new Map(),
+    allResolvedCharacters: ResolvedCharacterInfo[] = [],
     targetDurationSeconds?: number
   ): PreparedSceneRecord[] {
     let runningTimeMs = 0;
@@ -159,29 +163,22 @@ export class ScenePreparationService {
             (matchedChar && ci.characterId === matchedChar.id)
         );
 
-        // Resolve voice configuration
-        let charVoice = 'af_heart';
+        // Resolve language and voice configuration (Hindi by default)
+        const effectiveLang = resolveEffectiveLanguage({
+          lang: (sc as any).language || d.lang,
+          text: d.text || sc.narration,
+        });
+
         const voiceConfig =
           (matchedInst?.appearance as any)?.voiceConfig ||
           (matchedChar?.canonicalAppearance as any)?.voiceConfig;
-        if (voiceConfig?.voiceId) {
-          charVoice = voiceConfig.voiceId;
-        } else if (
-          matchedChar?.species?.toLowerCase().includes('planet') ||
-          matchedChar?.species?.toLowerCase().includes('earth') ||
-          charNameLower.includes('earth') ||
-          charNameLower.includes('terra')
-        ) {
-          charVoice = 'bm_daniel';
-        } else if (matchedChar?.species?.toLowerCase().includes('bear')) {
-          charVoice = 'bm_george';
-        } else if (matchedChar?.species?.toLowerCase().includes('robot')) {
-          charVoice = 'bm_lewis';
-        } else if (matchedChar?.species?.toLowerCase().includes('boy')) {
-          charVoice = 'am_adam';
-        } else if (matchedChar?.species?.toLowerCase().includes('girl')) {
-          charVoice = 'af_bella';
-        }
+
+        const charVoice = resolveEffectiveVoice({
+          requestedVoice: d.voice || voiceConfig?.voiceId,
+          characterName: d.characterName || matchedChar?.name,
+          species: matchedChar?.species,
+          lang: effectiveLang,
+        });
 
         // Map emotion to speaking direction and facial expression
         const emotionLower = (d.emotion || 'cheerful').toLowerCase();
@@ -222,13 +219,16 @@ export class ScenePreparationService {
         const visemeCues = generateVisemeCues(d.text, lineDurationMs);
 
         const dialogueItem: SceneDialogue = {
-          id: randomUUID(),
+          id: d.id || randomUUID(),
           characterId: matchedChar?.id,
           characterInstanceId: matchedInst?.instanceId,
-          characterName: d.characterName || 'Character',
+          characterName: d.characterName || 'Earth',
           text: d.text,
+          lang: effectiveLang,
           voice: charVoice,
           speakingDirection,
+          emotion: (d.emotion || 'cheerful') as any,
+          facialExpression,
           speed: 1.0,
           startMs: currentDialogueStartMs,
           durationMs: lineDurationMs,

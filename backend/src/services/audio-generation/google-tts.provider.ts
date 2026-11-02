@@ -9,6 +9,12 @@ import {
   TTSGenerationResult,
 } from './tts-provider.interface.js';
 import { AudioEffectsService } from './audio-effects.service.js';
+import {
+  resolveEffectiveLanguage,
+  resolveEffectiveVoice,
+  toTTSLanguageCode,
+  isVoiceCompatibleWithLanguage,
+} from './language-resolver.service.js';
 
 export class GoogleTTSProvider implements TTSProvider {
   name = 'google';
@@ -26,6 +32,7 @@ export class GoogleTTSProvider implements TTSProvider {
     return [
       { id: 'en-US-Standard', name: 'Google English (Standard)', gender: 'neutral', lang: 'en', accent: 'American' },
       { id: 'en-GB-Standard', name: 'Google British (Standard)', gender: 'neutral', lang: 'en-gb', accent: 'British' },
+      { id: 'hi-IN-Standard', name: 'Google Hindi (Standard)', gender: 'neutral', lang: 'hi', accent: 'Indian' },
       { id: 'es-ES-Standard', name: 'Google Spanish (Standard)', gender: 'neutral', lang: 'es', accent: 'Spanish' },
       { id: 'fr-FR-Standard', name: 'Google French (Standard)', gender: 'neutral', lang: 'fr', accent: 'French' },
     ];
@@ -39,7 +46,19 @@ export class GoogleTTSProvider implements TTSProvider {
       throw new Error('Text is required for Google TTS speech synthesis');
     }
 
-    const lang = options?.lang || 'en';
+    const effectiveLang = resolveEffectiveLanguage({ lang: options?.lang, text });
+
+    if (options?.voice && options.voice !== 'default' && !isVoiceCompatibleWithLanguage(options.voice, effectiveLang)) {
+      throw new Error(`Google voice "${options.voice}" does not support target language "${effectiveLang}"`);
+    }
+
+    const voice = resolveEffectiveVoice({
+      requestedVoice: options?.voice,
+      lang: effectiveLang,
+      provider: 'google',
+    });
+
+    const lang = toTTSLanguageCode(effectiveLang, 'google');
     const effect = options?.effect || 'normal';
 
     const tempDir = path.join(process.cwd(), 'storage', 'temp');
@@ -76,7 +95,7 @@ export class GoogleTTSProvider implements TTSProvider {
         durationMs,
         sampleRate: 24000,
         provider: this.name,
-        voice: options?.voice || 'en-US-Standard',
+        voice,
         effect,
       };
     } finally {

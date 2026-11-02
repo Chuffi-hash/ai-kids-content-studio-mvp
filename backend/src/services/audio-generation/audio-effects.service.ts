@@ -63,24 +63,31 @@ export class AudioEffectsService {
 
     // 1. Base Effect Filters
     if (effect === 'robot') {
-      filters.push('aecho=0.8:0.8:14:0.7,flanger=delay=7:depth=4:regen=60:width=80:speed=10,highpass=f=200,lowpass=f=4200,volume=1.2');
+      filters.push('aecho=0.8:0.8:14:0.7,flanger=delay=7:depth=4:regen=60:width=80:speed=10,highpass=f=200,lowpass=f=4200,volume=1.05');
     } else if (effect === 'cartoon') {
-      filters.push('asetrate=24000*1.32,atempo=1/1.32,volume=1.1');
+      filters.push('asetrate=24000*1.32,atempo=1/1.32,volume=1.05');
     } else if (effect === 'whisper') {
-      filters.push('highpass=f=350,lowpass=f=7500,volume=0.9');
+      filters.push('highpass=f=350,lowpass=f=7500,volume=0.95');
     } else if (effect === 'shout') {
-      filters.push('equalizer=f=2400:width_type=o:width=1.2:g=3.5,acompressor=threshold=-14dB:ratio=3:attack=5:release=50,volume=1.25');
+      filters.push('equalizer=f=2200:width_type=o:width=1.0:g=2.0,acompressor=threshold=-12dB:ratio=2.5:attack=10:release=80');
     }
 
-    // 2. Emotion Prosody & Pitch Calibration Filters (applied without altering master volume)
+    // 2. Emotion Prosody & Pitch Calibration Filters (strictly bounded to protect natural speech formants)
     if (hasPitchProsody && effect !== 'cartoon') {
       const sr = prosody?.sampleRate || 24000;
-      const factor = Math.pow(2, pitchShift / 12);
+      const clampedShift = Math.max(-1.5, Math.min(1.5, pitchShift));
+      const factor = Math.pow(2, clampedShift / 12);
       filters.push(`asetrate=${Math.round(sr * factor)},atempo=${(1 / factor).toFixed(5)},aresample=${sr}`);
     }
 
     if (hasPresenceProsody) {
-      filters.push(`equalizer=f=3200:width_type=q:width=1.0:g=${presenceGain.toFixed(1)}`);
+      const clampedPresence = Math.max(-2.0, Math.min(2.0, presenceGain));
+      filters.push(`equalizer=f=3200:width_type=q:width=1.0:g=${clampedPresence.toFixed(1)}`);
+    }
+
+    // 3. Peak Limiter: Guarantees that boost filters and resampled harmonics never clip (> 0 dBFS)
+    if (filters.length > 0) {
+      filters.push('alimiter=limit=0.98');
     }
 
     const filterString = filters.length > 0 ? filters.join(',') : 'anull';

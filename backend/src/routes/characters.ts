@@ -13,6 +13,7 @@ import { getImageGenerationProvider } from "../services/image-generation/provide
 import { LocalStorageService } from "../services/storage/local-storage.service.js";
 import { randomUUID } from "crypto";
 import { normalizeEmotionIntensity } from "../services/audio-generation/emotion-suggester.service.js";
+import { resolveCanonicalVoiceForCharacter } from "../services/audio-generation/language-resolver.service.js";
 
 export const characterRouter = Router();
 
@@ -210,9 +211,10 @@ characterRouter.get("/:id/voice", async (req, res) => {
       characterId: character.id,
       name: character.name,
       voiceConfig: voiceConfig || {
-        voiceId: character.id === 'pip_the_bear' ? 'bm_george' : 'af_heart',
+        voiceId: resolveCanonicalVoiceForCharacter(character.id || character.name, 'hi'),
+        lang: 'hi',
         speed: 1.0,
-        style: 'calm',
+        style: 'cheerful',
         effect: 'normal',
       },
     });

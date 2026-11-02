@@ -609,12 +609,7 @@ export const CharacterBuilderModal: React.FC<CharacterBuilderModalProps> = ({
               placeholder="Character Name..."
             />
             <span
-              className="char-builder-badge"
-              style={{
-                background: 'rgba(139, 92, 246, 0.2)',
-                border: '1px solid rgba(139, 92, 246, 0.4)',
-                color: '#c4b5fd',
-              }}
+              className="char-species-badge"
               title="Species Archetype"
             >
               {species || 'Human'}
@@ -913,7 +908,7 @@ export const CharacterBuilderModal: React.FC<CharacterBuilderModalProps> = ({
 
                   <div className="char-control-group">
                     <label>Characteristics & Personality Traits</label>
-                    <div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '6px' }}>
+                    <div className="char-builder-section-desc" style={{ marginBottom: '6px' }}>
                       Click quick traits to toggle or type custom characteristics below:
                     </div>
                     <div className="char-trait-chip-row">
@@ -948,10 +943,10 @@ export const CharacterBuilderModal: React.FC<CharacterBuilderModalProps> = ({
                 <div className="char-builder-section">
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
                     <div>
-                      <div style={{ fontSize: '13px', fontWeight: 600, color: '#f8fafc' }}>
+                      <div className="char-builder-section-title">
                         🎙️ Voice Configuration for "{name || 'Character'}"
                       </div>
-                      <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>
+                      <div className="char-builder-section-desc">
                         Independent Kokoro-82M neural voice for character dialogue
                       </div>
                     </div>
@@ -967,18 +962,7 @@ export const CharacterBuilderModal: React.FC<CharacterBuilderModalProps> = ({
                   </div>
 
                   {previewAudioUrl && (
-                    <div
-                      style={{
-                        marginBottom: '10px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                        background: 'rgba(139, 92, 246, 0.15)',
-                        padding: '6px 10px',
-                        borderRadius: '6px',
-                        border: '1px solid rgba(139, 92, 246, 0.35)',
-                      }}
-                    >
+                    <div className="char-audition-card">
                       <button
                         type="button"
                         className="char-builder-icon-btn"
@@ -993,18 +977,13 @@ export const CharacterBuilderModal: React.FC<CharacterBuilderModalProps> = ({
                       >
                         ▶
                       </button>
-                      <span style={{ fontSize: '11px', color: '#e2e8f0', flex: 1 }}>
+                      <span className="char-audition-text">
                         Auditioning voice for <strong>{name || 'Character'}</strong>
                       </span>
                       <button
                         type="button"
-                        style={{
-                          background: 'transparent',
-                          border: 'none',
-                          color: '#94a3b8',
-                          cursor: 'pointer',
-                          fontSize: '12px',
-                        }}
+                        className="char-builder-close-btn"
+                        style={{ padding: '2px 6px', fontSize: '12px' }}
                         onClick={() => setPreviewAudioUrl(null)}
                         title="Dismiss"
                       >
@@ -1015,7 +994,7 @@ export const CharacterBuilderModal: React.FC<CharacterBuilderModalProps> = ({
 
                   <div className="char-control-group">
                     <label>Speech Language</label>
-                    <div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '8px' }}>
+                    <div className="char-builder-section-desc" style={{ marginBottom: '8px' }}>
                       Choose Hindi (default) or English for this character's spoken dialogue:
                     </div>
                     <div className="char-pill-row">
@@ -1095,7 +1074,7 @@ export const CharacterBuilderModal: React.FC<CharacterBuilderModalProps> = ({
                       </div>
                     ) : (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        <div style={{ fontSize: '11px', fontWeight: 600, color: '#cbd5e1' }}>American Voices</div>
+                        <div className="char-subgroup-title">American Voices</div>
                         <div className="char-pill-row">
                           {KOKORO_VOICES_CATALOG.english.filter((v) => v.group.startsWith('US')).map((v) => {
                             const currentVoice = appearance.voiceConfig?.voiceId || 'af_heart';
@@ -1123,7 +1102,7 @@ export const CharacterBuilderModal: React.FC<CharacterBuilderModalProps> = ({
                             );
                           })}
                         </div>
-                        <div style={{ fontSize: '11px', fontWeight: 600, color: '#cbd5e1', marginTop: '4px' }}>British Voices</div>
+                        <div className="char-subgroup-title" style={{ marginTop: '4px' }}>British Voices</div>
                         <div className="char-pill-row">
                           {KOKORO_VOICES_CATALOG.english.filter((v) => v.group.startsWith('UK')).map((v) => {
                             const currentVoice = appearance.voiceConfig?.voiceId || 'af_heart';
@@ -1225,7 +1204,7 @@ export const CharacterBuilderModal: React.FC<CharacterBuilderModalProps> = ({
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                       <label style={{ margin: 0 }}>Emotion Intensity</label>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <span style={{ fontSize: '11px', color: '#c4b5fd' }}>
+                        <span className="char-builder-section-desc" style={{ marginTop: 0 }}>
                           {(appearance.voiceConfig?.emotionIntensity ?? (appearance.voiceConfig?.emotion === 'happy' ? 60 : (appearance.voiceConfig?.emotion === 'neutral' ? 0 : 50))) <= 0
                             ? '0% Neutral'
                             : (appearance.voiceConfig?.emotionIntensity ?? 50) <= 25
@@ -1238,7 +1217,7 @@ export const CharacterBuilderModal: React.FC<CharacterBuilderModalProps> = ({
                             ? '75% Strong'
                             : '100% Max'}
                         </span>
-                        <span style={{ fontWeight: 700, color: '#f8fafc', minWidth: '38px', textAlign: 'right' }}>
+                        <span className="char-intensity-label">
                           {appearance.voiceConfig?.emotionIntensity ?? (appearance.voiceConfig?.emotion === 'happy' ? 60 : (appearance.voiceConfig?.emotion === 'neutral' ? 0 : 50))}%
                         </span>
                       </div>
@@ -1278,6 +1257,7 @@ export const CharacterBuilderModal: React.FC<CharacterBuilderModalProps> = ({
                         <button
                           key={p.val}
                           type="button"
+                          className={`char-subtab-btn ${(appearance.voiceConfig?.emotionIntensity ?? (appearance.voiceConfig?.emotion === 'happy' ? 60 : (appearance.voiceConfig?.emotion === 'neutral' ? 0 : 50))) === p.val ? 'active' : ''}`}
                           onClick={() => {
                             updateAppearance((a) => ({
                               ...a,
@@ -1292,15 +1272,7 @@ export const CharacterBuilderModal: React.FC<CharacterBuilderModalProps> = ({
                               },
                             }));
                           }}
-                          style={{
-                            fontSize: '10px',
-                            padding: '3px 8px',
-                            borderRadius: '4px',
-                            border: (appearance.voiceConfig?.emotionIntensity ?? (appearance.voiceConfig?.emotion === 'happy' ? 60 : (appearance.voiceConfig?.emotion === 'neutral' ? 0 : 50))) === p.val ? '1px solid #8b5cf6' : '1px solid #334155',
-                            background: (appearance.voiceConfig?.emotionIntensity ?? (appearance.voiceConfig?.emotion === 'happy' ? 60 : (appearance.voiceConfig?.emotion === 'neutral' ? 0 : 50))) === p.val ? 'rgba(139, 92, 246, 0.3)' : '#1e293b',
-                            color: (appearance.voiceConfig?.emotionIntensity ?? (appearance.voiceConfig?.emotion === 'happy' ? 60 : (appearance.voiceConfig?.emotion === 'neutral' ? 0 : 50))) === p.val ? '#c4b5fd' : '#94a3b8',
-                            cursor: 'pointer',
-                          }}
+                          style={{ fontSize: '10px', padding: '3px 8px' }}
                         >
                           {p.label}
                         </button>
@@ -2136,7 +2108,7 @@ export const CharacterBuilderModal: React.FC<CharacterBuilderModalProps> = ({
                   {appearance.species === 'planet' ? (
                     <div className="char-control-group">
                       <label>🧤 Floating Cartoon Hands</label>
-                      <div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '8px' }}>
+                      <div className="char-builder-section-desc" style={{ marginBottom: '8px' }}>
                         Toggle floating white cartoon gloves for the talking Earth character:
                       </div>
                       <div className="char-pill-row">

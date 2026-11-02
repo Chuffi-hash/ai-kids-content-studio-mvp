@@ -347,6 +347,265 @@ body:not(.theme-light) .spark-category {
   gap: 12px;
 }
 
+/* ---------------------- Studio Mode Selector (AI Generator vs Script Import) ---------------------- */
+.studio-mode-selector {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-bottom: 22px;
+}
+
+.studio-mode-card {
+  padding: 18px 22px;
+  border-radius: 12px;
+  border: 1.5px solid #cbd5e1;
+  background: #ffffff;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  user-select: none;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.studio-mode-card:hover {
+  border-color: #94a3b8;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.07);
+}
+
+.studio-mode-card.mode-generate.active {
+  border: 2px solid #7c3aed;
+  background: #f5f3ff;
+  box-shadow: 0 0 0 1px #7c3aed, 0 4px 14px rgba(124, 58, 237, 0.12);
+}
+
+.studio-mode-card.mode-import.active {
+  border: 2px solid #0284c7;
+  background: #f0f9ff;
+  box-shadow: 0 0 0 1px #0284c7, 0 4px 14px rgba(2, 132, 199, 0.12);
+}
+
+.studio-mode-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.studio-mode-icon {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.studio-mode-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #1e293b;
+  letter-spacing: -0.01em;
+}
+
+.studio-mode-card.mode-generate.active .studio-mode-title {
+  color: #6d28d9;
+}
+
+.studio-mode-card.mode-import.active .studio-mode-title {
+  color: #0369a1;
+}
+
+.studio-mode-desc {
+  margin: 0;
+  font-size: 12.5px;
+  color: #475569;
+  line-height: 1.5;
+}
+
+.studio-mode-card.mode-generate.active .studio-mode-desc {
+  color: #5b21b6;
+}
+
+.studio-mode-card.mode-import.active .studio-mode-desc {
+  color: #075985;
+}
+
+/* Dark Theme Overrides for Mode Selector */
+[data-theme="dark"] .studio-mode-card,
+body:not(.theme-light) .studio-mode-card {
+  background: #111827;
+  border-color: #273549;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+
+[data-theme="dark"] .studio-mode-card:hover,
+body:not(.theme-light) .studio-mode-card:hover {
+  border-color: #3e4f68;
+}
+
+[data-theme="dark"] .studio-mode-title,
+body:not(.theme-light) .studio-mode-title {
+  color: #f8fafc;
+}
+
+[data-theme="dark"] .studio-mode-desc,
+body:not(.theme-light) .studio-mode-desc {
+  color: #94a3b8;
+}
+
+[data-theme="dark"] .studio-mode-card.mode-generate.active,
+body:not(.theme-light) .studio-mode-card.mode-generate.active {
+  border-color: #8b5cf6;
+  background: rgba(139, 92, 246, 0.16);
+  box-shadow: 0 0 0 1px #8b5cf6, 0 4px 14px rgba(139, 92, 246, 0.25);
+}
+
+[data-theme="dark"] .studio-mode-card.mode-generate.active .studio-mode-title,
+body:not(.theme-light) .studio-mode-card.mode-generate.active .studio-mode-title {
+  color: #c084fc;
+}
+
+[data-theme="dark"] .studio-mode-card.mode-generate.active .studio-mode-desc,
+body:not(.theme-light) .studio-mode-card.mode-generate.active .studio-mode-desc {
+  color: #cbd5e1;
+}
+
+[data-theme="dark"] .studio-mode-card.mode-import.active,
+body:not(.theme-light) .studio-mode-card.mode-import.active {
+  border-color: #38bdf8;
+  background: rgba(56, 189, 248, 0.16);
+  box-shadow: 0 0 0 1px #38bdf8, 0 4px 14px rgba(56, 189, 248, 0.25);
+}
+
+[data-theme="dark"] .studio-mode-card.mode-import.active .studio-mode-title,
+body:not(.theme-light) .studio-mode-card.mode-import.active .studio-mode-title {
+  color: #38bdf8;
+}
+
+[data-theme="dark"] .studio-mode-card.mode-import.active .studio-mode-desc,
+body:not(.theme-light) .studio-mode-card.mode-import.active .studio-mode-desc {
+  color: #cbd5e1;
+}
+
+/* Import Script Card & Controls */
+.studio-import-card {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.studio-import-topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+.studio-import-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.studio-import-desc {
+  margin: 5px 0 0 0;
+  font-size: 13px;
+  color: #475569;
+  line-height: 1.5;
+}
+
+[data-theme="dark"] .studio-import-title,
+body:not(.theme-light) .studio-import-title {
+  color: #f8fafc;
+}
+
+[data-theme="dark"] .studio-import-desc,
+body:not(.theme-light) .studio-import-desc {
+  color: #94a3b8;
+}
+
+.studio-import-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.studio-btn-sample {
+  background: #ede9fe;
+  border: 1.5px solid #8b5cf6;
+  color: #5b21b6;
+  font-weight: 600;
+  font-size: 12.5px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.studio-btn-sample:hover {
+  background: #ddd6fe;
+  border-color: #7c3aed;
+  color: #4c1d95;
+  transform: translateY(-1px);
+}
+
+[data-theme="dark"] .studio-btn-sample,
+body:not(.theme-light) .studio-btn-sample {
+  background: rgba(139, 92, 246, 0.2);
+  border-color: #8b5cf6;
+  color: #c4b5fd;
+}
+
+[data-theme="dark"] .studio-btn-sample:hover,
+body:not(.theme-light) .studio-btn-sample:hover {
+  background: rgba(139, 92, 246, 0.3);
+  color: #ffffff;
+}
+
+.studio-btn-clear {
+  background: #f8fafc;
+  border: 1.5px solid #cbd5e1;
+  color: #475569;
+  font-weight: 600;
+  font-size: 12.5px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.studio-btn-clear:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+  color: #0f172a;
+}
+
+[data-theme="dark"] .studio-btn-clear,
+body:not(.theme-light) .studio-btn-clear {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: #334155;
+  color: #cbd5e1;
+}
+
+[data-theme="dark"] .studio-btn-clear:hover,
+body:not(.theme-light) .studio-btn-clear:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+}
+
+.studio-char-counter {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+}
+
+[data-theme="dark"] .studio-char-counter,
+body:not(.theme-light) .studio-char-counter {
+  color: #94a3b8;
+}
+
 /* ---------------------- Studio Cards ---------------------- */
 .studio-card {
   background: #ffffff;
@@ -467,8 +726,9 @@ body:not(.theme-light) .char-badge {
 }
 
 .studio-textarea::placeholder {
-  color: #94a3b8;
+  color: #64748b;
   font-size: 12.5px;
+  opacity: 0.9;
 }
 
 [data-theme="dark"] .studio-textarea,

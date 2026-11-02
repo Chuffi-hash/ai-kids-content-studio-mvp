@@ -244,11 +244,11 @@ export default function StoriesPage() {
                   e.currentTarget.style.transform = 'translateY(0)';
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px', color: '#c084fc', fontWeight: 600, fontSize: '15px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px', color: 'var(--color-accent-strong, #7c3aed)', fontWeight: 700, fontSize: '15px' }}>
                   <SparklesIcon size={18} />
                   <span>Create Story with AI</span>
                 </div>
-                <p style={{ fontSize: '13px', color: 'var(--ed-text-muted, #94a3b8)', margin: 0, lineHeight: 1.5 }}>
+                <p style={{ fontSize: '13px', color: 'var(--color-text-secondary, #475569)', margin: 0, lineHeight: 1.5 }}>
                   Enter a concept, select characters, and let AI generate a structured storyboard script ready for review.
                 </p>
               </div>
@@ -265,7 +265,7 @@ export default function StoriesPage() {
                   transition: 'transform 0.15s ease, border-color 0.15s ease',
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = 'var(--ed-accent, #8b5cf6)';
+                  e.currentTarget.style.borderColor = '#0284c7';
                   e.currentTarget.style.transform = 'translateY(-2px)';
                 }}
                 onMouseLeave={(e) => {
@@ -273,11 +273,11 @@ export default function StoriesPage() {
                   e.currentTarget.style.transform = 'translateY(0)';
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px', color: '#38bdf8', fontWeight: 600, fontSize: '15px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px', color: 'var(--color-primary-text, #0284c7)', fontWeight: 700, fontSize: '15px' }}>
                   <BookOpenIcon size={18} />
                   <span>Import Existing Script</span>
                 </div>
-                <p style={{ fontSize: '13px', color: 'var(--ed-text-muted, #94a3b8)', margin: 0, lineHeight: 1.5 }}>
+                <p style={{ fontSize: '13px', color: 'var(--color-text-secondary, #475569)', margin: 0, lineHeight: 1.5 }}>
                   Paste a full screenplay or Markdown script to automatically convert it into editable scenes.
                 </p>
               </div>
