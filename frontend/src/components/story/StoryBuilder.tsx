@@ -261,126 +261,68 @@ Earth: पतझड़ के बाद नया बसंत आता है!
   return (
     <div className="story-studio-workbench">
       {/* Studio Mode Selector (AI Generator vs Import Script) */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gap: "12px",
-          marginBottom: "20px",
-        }}
-      >
+      <div className="studio-mode-selector">
         <div
+          className={`studio-mode-card mode-generate ${studioMode === "generate" ? "active" : ""}`}
           onClick={() => setStudioMode("generate")}
-          style={{
-            padding: "16px 20px",
-            borderRadius: "12px",
-            border:
-              studioMode === "generate"
-                ? "2px solid var(--ed-accent, #8b5cf6)"
-                : "1px solid var(--ed-border, rgba(255,255,255,0.08))",
-            background:
-              studioMode === "generate"
-                ? "rgba(139, 92, 246, 0.16)"
-                : "var(--ed-surface, #111827)",
-            cursor: "pointer",
-            transition: "all 0.15s ease",
-          }}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && setStudioMode("generate")}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
-            <span style={{ fontSize: "16px" }}>✨</span>
-            <strong style={{ fontSize: "15px", color: studioMode === "generate" ? "#c084fc" : "#f8fafc" }}>
+          <div className="studio-mode-header">
+            <span className="studio-mode-icon">✨</span>
+            <strong className="studio-mode-title">
               A. Create Story with AI
             </strong>
           </div>
-          <p style={{ margin: 0, fontSize: "12px", color: "#94a3b8" }}>
+          <p className="studio-mode-desc">
             Enter a prompt or choose story sparks. AI will generate a complete, structured story script with scenes for review.
           </p>
         </div>
 
         <div
+          className={`studio-mode-card mode-import ${studioMode === "import" ? "active" : ""}`}
           onClick={() => setStudioMode("import")}
-          style={{
-            padding: "16px 20px",
-            borderRadius: "12px",
-            border:
-              studioMode === "import"
-                ? "2px solid #38bdf8"
-                : "1px solid var(--ed-border, rgba(255,255,255,0.08))",
-            background:
-              studioMode === "import"
-                ? "rgba(56, 189, 248, 0.16)"
-                : "var(--ed-surface, #111827)",
-            cursor: "pointer",
-            transition: "all 0.15s ease",
-          }}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && setStudioMode("import")}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
-            <span style={{ fontSize: "16px" }}>📄</span>
-            <strong style={{ fontSize: "15px", color: studioMode === "import" ? "#38bdf8" : "#f8fafc" }}>
+          <div className="studio-mode-header">
+            <span className="studio-mode-icon">📄</span>
+            <strong className="studio-mode-title">
               B. Import Existing Script
             </strong>
           </div>
-          <p style={{ margin: 0, fontSize: "12px", color: "#94a3b8" }}>
+          <p className="studio-mode-desc">
             Paste a complete screenplay or Markdown script from Claude, Gemini, ChatGPT or another AI to convert into editable scenes.
           </p>
         </div>
       </div>
 
       {studioMode === "import" ? (
-        <div
-          className="studio-card"
-          style={{
-            padding: "24px",
-            display: "flex",
-            flexDirection: "column",
-            gap: "20px",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              flexWrap: "wrap",
-              gap: "12px",
-            }}
-          >
+        <div className="studio-card studio-import-card">
+          <div className="studio-import-topbar">
             <div>
-              <h3 style={{ margin: 0, fontSize: "18px", color: "#f8fafc" }}>
+              <h3 className="studio-import-title">
                 Import or Write Story Script
               </h3>
-              <p
-                style={{
-                  margin: "4px 0 0 0",
-                  fontSize: "13px",
-                  color: "#94a3b8",
-                }}
-              >
+              <p className="studio-import-desc">
                 Paste from Claude, ChatGPT, Gemini, or type your own scenes.
                 Automatically detects character dialogue, emotions, narration,
                 and seasonal weather overlays.
               </p>
             </div>
-            <div style={{ display: "flex", gap: "8px" }}>
+            <div className="studio-import-actions">
               <button
                 type="button"
-                className="ed-btn-action"
-                style={{
-                  background: "rgba(139, 92, 246, 0.2)",
-                  border: "1px solid #8b5cf6",
-                  color: "#c4b5fd",
-                }}
+                className="studio-btn-sample"
                 onClick={handleLoadSample}
               >
                 🌍 Load "Earth's Four Seasons" Sample
               </button>
               <button
                 type="button"
-                className="ed-btn-action"
-                style={{
-                  background: "rgba(255, 255, 255, 0.05)",
-                  color: "#94a3b8",
-                }}
+                className="studio-btn-clear"
                 onClick={() => {
                   setImportText("");
                   setImportTitle("");
@@ -478,7 +420,7 @@ Earth: पतझड़ के बाद नया बसंत आता है!
               <label className="studio-label" style={{ margin: 0 }}>
                 Story Script (Markdown, Screenplay, or JSON) *
               </label>
-              <span style={{ fontSize: "11px", color: "#94a3b8" }}>
+              <span className="studio-char-counter">
                 {importText.length} characters
               </span>
             </div>

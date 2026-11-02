@@ -39,6 +39,10 @@ import {
 } from '../animation/templates/custom-character-rig.js';
 import { estimateSpeechDurationMs } from '../timing/timing.service.js';
 import { generateVisemeCues } from '../audio-generation/viseme-generator.js';
+import {
+  resolveEffectiveLanguage,
+  resolveCanonicalVoiceForCharacter,
+} from '../audio-generation/language-resolver.service.js';
 import { randomUUID } from 'crypto';
 import {
   IntelligentScriptParser,
@@ -707,13 +711,50 @@ export class StoryImporterService {
       let pendingEmotion = '';
       let pendingExpression = '';
 
-      for (const rawLine of block.lines) {
+      type ActiveBlockField = 'visual' | 'narration' | 'dialogue' | null;
+      let activeField: ActiveBlockField = null;
+      let activeDialogue: {
+        speaker: string;
+        emotion: string;
+        expression: string;
+        textLines: string[];
+      } | null = null;
+
+      const flushActiveDialogue = () => {
+        if (activeDialogue && activeDialogue.textLines.length > 0) {
+          const combinedSpeech = activeDialogue.textLines.join(' ').replace(/^["“]|["”]$/g, '').trim();
+          if (combinedSpeech.length > 0) {
+            const cleanSpeaker = cleanSpeakerName(activeDialogue.speaker);
+            if (!isReservedMetadataKey(cleanSpeaker)) {
+              const assignedVoice = resolveDefaultVoiceForCharacter(cleanSpeaker, isHindi);
+              dialogue.push({
+                id: randomUUID(),
+                characterName: cleanSpeaker,
+                text: combinedSpeech,
+                emotion: activeDialogue.emotion || pendingEmotion || 'cheerful',
+                expression: activeDialogue.expression || pendingExpression,
+                voice: assignedVoice,
+              });
+              detectedCharacterNames.add(cleanSpeaker);
+            }
+          }
+        }
+        activeDialogue = null;
+        if (activeField === 'dialogue') {
+          activeField = null;
+        }
+      };
+
+      for (let i = 0; i < block.lines.length; i++) {
+        const rawLine = block.lines[i];
         const line = rawLine.trim();
         if (!line) continue;
 
         // 1. Duration
         const durMatch = line.match(/^(?:\*{1,2})?(?:Duration|Length|Time|Estimated\s+Duration|Scene\s+Duration|अवधि|समय)(?::\*{1,2}|\*{1,2}:|:)\s*(\d+)\s*(?:s|sec|seconds|सेकंड)?/i);
         if (durMatch) {
+          flushActiveDialogue();
+          activeField = null;
           sceneDurationSeconds = parseInt(durMatch[1], 10);
           continue;
         }
@@ -721,22 +762,32 @@ export class StoryImporterService {
         // 2. Visual / Background description
         const visualMatch = line.match(/^(?:\*{1,2})?(?:Visual(?:\s*Prompt|\s*Description)?|Background(?:\s*Prompt|\s*Description)?|Image(?:\s*Prompt)?|Setting|Location|दृश्य|पृष्ठभूमि)(?::\*{1,2}|\*{1,2}:|:)\s*(.*)$/i);
         if (visualMatch) {
+          flushActiveDialogue();
           const content = visualMatch[1].replace(/^\*{1,2}|\*{1,2}$/g, '').trim();
-          visualPrompt = visualPrompt ? `${visualPrompt} ${content}` : content;
+          if (content) {
+            visualPrompt = visualPrompt ? `${visualPrompt} ${content}` : content;
+          }
+          activeField = 'visual';
           continue;
         }
 
         // 3. Explicit narration line
         const narrationMatch = line.match(/^(?:\*{1,2})?(?:Narration(?:\s*Script|\s*Text)?|Narrator|Voiceover|VO|V\.O\.|सूत्रधार|कथावाचक|वॉइसओवर)(?::\*{1,2}|\*{1,2}:|:)\s*(.*)$/i);
         if (narrationMatch) {
+          flushActiveDialogue();
           const content = narrationMatch[1].replace(/^["“]|["”]$/g, '').replace(/^\*{1,2}|\*{1,2}$/g, '').trim();
-          narration = narration ? `${narration} ${content}` : content;
+          if (content) {
+            narration = narration ? `${narration} ${content}` : content;
+          }
+          activeField = 'narration';
           continue;
         }
 
         // 4. Explicit effects / overlays line
         const effectsMatch = line.match(/^(?:\*{1,2})?(?:Effects?|Overlays?|Suggested\s+Overlays?|Atmosphere|Visual\s+Effects?|प्रभाव|मौसम\s*प्रभाव)(?::\*{1,2}|\*{1,2}:|:)\s*(.*)$/i);
         if (effectsMatch) {
+          flushActiveDialogue();
+          activeField = null;
           const rawList = effectsMatch[1].replace(/^\*{1,2}|\*{1,2}$/g, '').trim();
           const tokens = rawList.split(/[,;]+/).map((s) => s.trim()).filter(Boolean);
           for (const tok of tokens) {
@@ -751,6 +802,8 @@ export class StoryImporterService {
         // 5. Character Action line
         const actionMatch = line.match(/^(?:\*{1,2})?(?:Character\s+Action|Action|Pose|क्रिया|अभिनय|(?:([A-Za-z0-9\u0900-\u097F]+)\s+(?:Action|Pose|क्रिया|अभिनय)))(?::\*{1,2}|\*{1,2}:|:)\s*(.*)$/i);
         if (actionMatch) {
+          flushActiveDialogue();
+          activeField = null;
           let actorName = actionMatch[1] ? cleanSpeakerName(actionMatch[1]) : 'Earth';
           const actionText = (actionMatch[2] || '').replace(/^\*{1,2}|\*{1,2}$/g, '').trim();
           if (actorName === 'Character' || isReservedMetadataKey(actorName)) {
@@ -768,6 +821,8 @@ export class StoryImporterService {
         // 6. Character Expression line
         const exprMatch = line.match(/^(?:\*{1,2})?(?:([A-Za-z0-9\s\u0900-\u097F]+?)\s+)?(?:Facial\s+Expression|Expression|Face|चेहरे\s*के\s*भाव|भाव-भंगिमा)(?::\*{1,2}|\*{1,2}:|:)\s*(.*)$/i);
         if (exprMatch) {
+          flushActiveDialogue();
+          activeField = null;
           const exprVal = exprMatch[2].replace(/^\*{1,2}|\*{1,2}$/g, '').trim();
           pendingExpression = exprVal;
           if (dialogue.length > 0) {
@@ -779,6 +834,8 @@ export class StoryImporterService {
         // 7. Speaking Emotion line
         const emoMatch = line.match(/^(?:\*{1,2})?(?:([A-Za-z0-9\s\u0900-\u097F]+?)\s+)?(?:Speaking\s+Emotion|Emotion|Speaking\s+Style|Tone|बोलने\s*का\s*भाव|ध्वनि\s*का\s*भाव)(?::\*{1,2}|\*{1,2}:|:)\s*(.*)$/i);
         if (emoMatch) {
+          flushActiveDialogue();
+          activeField = null;
           const emoVal = emoMatch[2].replace(/^\*{1,2}|\*{1,2}$/g, '').trim();
           pendingEmotion = emoVal;
           if (dialogue.length > 0) {
@@ -790,12 +847,15 @@ export class StoryImporterService {
         // 8. Captions / Subtitles
         const capMatch = line.match(/^(?:\*{1,2})?(?:Opening\s+Caption|Closing\s+Caption|Caption|Title\s+Overlay|Subtitles?|शीर्षक|कैप्शन)(?::\*{1,2}|\*{1,2}:|:)\s*(.*)$/i);
         if (capMatch) {
+          flushActiveDialogue();
+          activeField = null;
           continue;
         }
 
         // 9. Dialogue Pattern A (Dash: "**Earth dialogue — surprised, playful:** ...")
         const dashMatch = line.match(/^(?:\*{1,2})?([A-Za-z0-9\s\u0900-\u097F]+?)(?:\s+dialogue|\s+speech|\s+संवाद|\s+बोली)?\s*[-—–]\s*(.*?)(?::\*{1,2}|\*{1,2}:|:)\s*(.*)$/i);
         if (dashMatch) {
+          flushActiveDialogue();
           const rawSpeaker = dashMatch[1].replace(/^\*{1,2}|\*{1,2}$/g, '').trim();
           const emotion = dashMatch[2].replace(/^\*{1,2}|\*{1,2}$/g, '').trim();
           let speechText = (dashMatch[3] || '').trim();
@@ -803,17 +863,28 @@ export class StoryImporterService {
           speechText = speechText.replace(/^["“]|["”]$/g, '').trim();
 
           const cleanSpeaker = cleanSpeakerName(rawSpeaker);
-          if (!isReservedMetadataKey(cleanSpeaker) && speechText.length > 0) {
-            const assignedVoice = resolveDefaultVoiceForCharacter(cleanSpeaker, isHindi);
-            dialogue.push({
-              id: randomUUID(),
-              characterName: cleanSpeaker,
-              text: speechText,
-              emotion: emotion || pendingEmotion || 'cheerful',
-              expression: pendingExpression,
-              voice: assignedVoice,
-            });
-            detectedCharacterNames.add(cleanSpeaker);
+          if (!isReservedMetadataKey(cleanSpeaker)) {
+            if (speechText.length > 0) {
+              const assignedVoice = resolveDefaultVoiceForCharacter(cleanSpeaker, isHindi);
+              dialogue.push({
+                id: randomUUID(),
+                characterName: cleanSpeaker,
+                text: speechText,
+                emotion: emotion || pendingEmotion || 'cheerful',
+                expression: pendingExpression,
+                voice: assignedVoice,
+              });
+              detectedCharacterNames.add(cleanSpeaker);
+              activeField = null;
+            } else {
+              activeField = 'dialogue';
+              activeDialogue = {
+                speaker: cleanSpeaker,
+                emotion: emotion || pendingEmotion || 'cheerful',
+                expression: pendingExpression,
+                textLines: [],
+              };
+            }
             continue;
           }
         }
@@ -834,17 +905,29 @@ export class StoryImporterService {
             cleanSpeaker = 'Earth';
           }
 
-          if (!isReservedMetadataKey(cleanSpeaker) && speechText.length > 0) {
-            const assignedVoice = resolveDefaultVoiceForCharacter(cleanSpeaker, isHindi);
-            dialogue.push({
-              id: randomUUID(),
-              characterName: cleanSpeaker,
-              text: speechText,
-              emotion,
-              expression: pendingExpression,
-              voice: assignedVoice,
-            });
-            detectedCharacterNames.add(cleanSpeaker);
+          if (!isReservedMetadataKey(cleanSpeaker)) {
+            flushActiveDialogue();
+            if (speechText.length > 0) {
+              const assignedVoice = resolveDefaultVoiceForCharacter(cleanSpeaker, isHindi);
+              dialogue.push({
+                id: randomUUID(),
+                characterName: cleanSpeaker,
+                text: speechText,
+                emotion,
+                expression: pendingExpression,
+                voice: assignedVoice,
+              });
+              detectedCharacterNames.add(cleanSpeaker);
+              activeField = null;
+            } else {
+              activeField = 'dialogue';
+              activeDialogue = {
+                speaker: cleanSpeaker,
+                emotion,
+                expression: pendingExpression,
+                textLines: [],
+              };
+            }
             continue;
           }
         }
@@ -860,44 +943,42 @@ export class StoryImporterService {
             ) &&
             !isReservedMetadataKey(candName)
           ) {
-            const nextIdx = block.lines.indexOf(rawLine) + 1;
-            if (nextIdx < block.lines.length) {
-              const nextLine = block.lines[nextIdx].trim();
-              let speechText = '';
-              let charEmotion = paren || pendingEmotion || 'cheerful';
-              if (nextLine.startsWith('(') && nextLine.endsWith(')')) {
-                charEmotion = nextLine.slice(1, -1).trim();
-                const afterNextIdx = nextIdx + 1;
-                if (afterNextIdx < block.lines.length) {
-                  speechText = block.lines[afterNextIdx].trim();
-                }
-              } else if (!nextLine.includes(':') && nextLine.length > 0) {
-                speechText = nextLine;
-              }
-
-              if (speechText && speechText.length > 0) {
-                const cleanSpeaker = cleanSpeakerName(candName);
-                const assignedVoice = resolveDefaultVoiceForCharacter(cleanSpeaker, isHindi);
-                dialogue.push({
-                  id: randomUUID(),
-                  characterName: cleanSpeaker,
-                  text: speechText.replace(/^["“]|["”]$/g, '').trim(),
-                  emotion: charEmotion,
-                  expression: pendingExpression,
-                  voice: assignedVoice,
-                });
-                detectedCharacterNames.add(cleanSpeaker);
-                continue;
-              }
-            }
+            flushActiveDialogue();
+            activeField = 'dialogue';
+            activeDialogue = {
+              speaker: candName,
+              emotion: paren || pendingEmotion || 'cheerful',
+              expression: pendingExpression,
+              textLines: [],
+            };
+            continue;
           }
         }
 
-        // 11. Fallback for unmarked line: if no narration yet, and not a header or metadata line
+        // 11. Multiline / Block content routing
+        if (activeField === 'dialogue' && activeDialogue) {
+          activeDialogue.textLines.push(line);
+          continue;
+        }
+
+        if (activeField === 'narration') {
+          narration = narration ? `${narration} ${line}` : line;
+          continue;
+        }
+
+        if (activeField === 'visual') {
+          visualPrompt = visualPrompt ? `${visualPrompt} ${line}` : line;
+          continue;
+        }
+
+        // 12. Fallback for unmarked line: if no narration yet, and not a header or metadata line
         if (!narration && !line.startsWith('#') && !line.startsWith('**') && line.length > 5 && !isReservedMetadataKey(line.split(':')[0])) {
           narration = line;
+          activeField = 'narration';
         }
       }
+
+      flushActiveDialogue();
 
       // Default duration if not specified
       if (!sceneDurationSeconds || sceneDurationSeconds <= 0) {
@@ -1002,7 +1083,7 @@ export class StoryImporterService {
         role: 'protagonist',
         species: 'earth',
         description: 'Earth the wise, smiling living planet',
-        voice: isHindi ? 'hf_alpha' : 'bm_daniel',
+        voice: resolveCanonicalVoiceForCharacter('Earth', isHindi ? 'hi' : 'en'),
       });
     }
 
@@ -1108,33 +1189,41 @@ export class StoryImporterService {
         const isRobot = lower.includes('robot');
         const isGirl = lower.includes('maya') || lower.includes('girl');
 
+        const charVoiceId = resolveCanonicalVoiceForCharacter(name, isHindi ? 'hi' : 'en');
+        const voiceConfig = {
+          voiceId: charVoiceId,
+          lang: isHindi ? 'hi' : 'en',
+          speed: 1.0,
+          style: 'cheerful',
+          effect: 'normal',
+        };
+
         let app: any;
         if (isEarth) {
           app = {
             ...CHARACTER_PRESETS.earth.appearance,
-            voiceConfig: {
-              voiceId: isHindi ? 'hf_alpha' : 'bm_daniel',
-              speed: 1.0,
-              style: 'cheerful',
-              effect: 'normal',
-            },
+            voiceConfig,
           };
         } else if (isBear) {
-          app = CHARACTER_PRESETS.bear_cub.appearance;
+          app = {
+            ...CHARACTER_PRESETS.bear_cub.appearance,
+            voiceConfig,
+          };
         } else if (isRobot) {
-          app = CHARACTER_PRESETS.robot.appearance;
+          app = {
+            ...CHARACTER_PRESETS.robot.appearance,
+            voiceConfig,
+          };
         } else if (isGirl) {
-          app = CHARACTER_PRESETS.kid_girl.appearance;
+          app = {
+            ...CHARACTER_PRESETS.kid_girl.appearance,
+            voiceConfig,
+          };
         } else {
           app = {
             ...DEFAULT_APPEARANCE,
             species: 'human',
-            voiceConfig: {
-              voiceId: isHindi ? 'hf_beta' : 'af_heart',
-              speed: 1.0,
-              style: 'cheerful',
-              effect: 'normal',
-            },
+            voiceConfig,
           };
         }
 
@@ -1301,8 +1390,11 @@ export class StoryImporterService {
           characterInstanceId: matchedInst?.instanceId,
           characterName: cleanedName || matchedChar?.name || 'Earth',
           text: d.text,
+          lang: isHindi ? 'hi' : 'en',
           voice: charVoice,
           speakingDirection,
+          emotion: (d.emotion || 'cheerful') as any,
+          facialExpression,
           speed: 1.0,
           startMs: curDiagStartMs,
           durationMs: lineDurationMs,
@@ -1486,26 +1578,24 @@ export class StoryImporterService {
       let charRec = await getCharacterByName(cleanName);
       let charId = charRec?.id;
       if (!charRec) {
+        const charVoiceId = resolveCanonicalVoiceForCharacter(cleanName, isHindi ? 'hi' : 'en');
+        const voiceConfig = {
+          voiceId: charVoiceId,
+          lang: isHindi ? 'hi' : 'en',
+          speed: 1.0,
+          style: 'cheerful',
+          effect: 'normal',
+        };
         const isEarth = cleanName.toLowerCase() === 'earth' || cleanName.toLowerCase().includes('earth');
         const app = isEarth
           ? {
               ...CHARACTER_PRESETS.earth.appearance,
-              voiceConfig: {
-                voiceId: isHindi ? 'hf_alpha' : 'bm_daniel',
-                speed: 1.0,
-                style: 'cheerful',
-                effect: 'normal',
-              },
+              voiceConfig,
             }
           : {
               ...DEFAULT_APPEARANCE,
               species: char.species || 'human',
-              voiceConfig: {
-                voiceId: isHindi ? 'hf_beta' : 'af_heart',
-                speed: 1.0,
-                style: 'cheerful',
-                effect: 'normal',
-              },
+              voiceConfig,
             };
 
         const created = await createCharacter({
@@ -1869,30 +1959,7 @@ export function resolveDefaultVoiceForCharacter(
   characterName: string,
   isHindi: boolean
 ): string {
-  const lower = characterName.toLowerCase();
-  if (isHindi) {
-    if (lower.includes('earth') || lower.includes('terra') || characterName.includes('धरती') || characterName.includes('पृथ्वी')) {
-      return 'hf_alpha';
-    }
-    if (lower.includes('maya') || lower.includes('girl') || lower.includes('aurat') || lower.includes('woman') || lower.includes('female')) {
-      return 'hf_alpha';
-    }
-    return 'hf_beta';
-  } else {
-    if (lower.includes('earth') || lower.includes('terra')) {
-      return 'bm_daniel';
-    }
-    if (lower.includes('bear') || lower.includes('pip')) {
-      return 'bm_george';
-    }
-    if (lower.includes('robot')) {
-      return 'bm_lewis';
-    }
-    if (lower.includes('girl') || lower.includes('maya')) {
-      return 'af_bella';
-    }
-    return 'af_heart';
-  }
+  return resolveCanonicalVoiceForCharacter(characterName, isHindi ? 'hi' : 'en');
 }
 
 export function getOverlayLabel(type: string): string {

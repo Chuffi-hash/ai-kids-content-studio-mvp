@@ -189,6 +189,7 @@ export interface StoryboardIntermediateRepresentation {
   genre: string;
   look: ProjectLookDNA;
   bibles: ProjectBibles;
+  characters: Array<{ name: string; role?: string; description?: string; voice?: string; species?: string; appearance?: any }>;
   scenes: ParsedScene[];
   warnings: ScriptWarning[];
   originalText: string;

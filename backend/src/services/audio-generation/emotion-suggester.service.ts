@@ -255,11 +255,12 @@ export function calculateEmotionDelivery(options: {
   const pitchShiftSemitones = Number(((targetConfig.pitchShiftSemitones || 0) * t).toFixed(2));
   const presenceGainDb = Number(((targetConfig.presenceGainDb || 0) * t).toFixed(2));
 
-  // If user selected a custom effect (e.g. robot or cartoon), that takes precedence.
-  // Otherwise, if emotion specifies an effect (e.g. whisper, shout), apply it if intensity >= 25%.
+  // 3. Audio Effect: User explicit effect takes precedence.
+  // For normal speech, never auto-inject harsh acoustic distortion filters at low/medium intensity.
+  // Only high intensity (>= 80%) on explicit shouting/whispering activates acoustic filter.
   let effectiveEffect: 'normal' | 'robot' | 'cartoon' | 'whisper' | 'shout' = baseEffect;
   if (baseEffect === 'normal' && targetConfig.audioEffect && targetConfig.audioEffect !== 'normal') {
-    if (intensity >= 25) {
+    if (intensity >= 80) {
       effectiveEffect = targetConfig.audioEffect;
     }
   }

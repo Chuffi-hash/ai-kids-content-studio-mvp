@@ -9,6 +9,12 @@ import {
   TTSGenerationResult,
 } from './tts-provider.interface.js';
 import { AudioEffectsService } from './audio-effects.service.js';
+import {
+  resolveEffectiveLanguage,
+  resolveEffectiveVoice,
+  toTTSLanguageCode,
+  isVoiceCompatibleWithLanguage,
+} from './language-resolver.service.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -97,8 +103,19 @@ export class KokoroTTSProvider implements TTSProvider {
       throw new Error('Text is required for TTS speech synthesis');
     }
 
-    const voice = options?.voice || ((options?.lang && options.lang.toLowerCase().includes('hi')) ? 'hf_alpha' : 'af_heart');
-    const lang = options?.lang || (voice.startsWith('h') ? 'hi' : (voice.startsWith('b') ? 'en-gb' : 'en-us'));
+    const effectiveLang = resolveEffectiveLanguage({ lang: options?.lang, text });
+
+    if (options?.voice && options.voice !== 'default' && !isVoiceCompatibleWithLanguage(options.voice, effectiveLang)) {
+      throw new Error(`Kokoro voice "${options.voice}" does not support target language "${effectiveLang}"`);
+    }
+
+    const voice = resolveEffectiveVoice({
+      requestedVoice: options?.voice,
+      lang: effectiveLang,
+      provider: 'kokoro',
+    });
+
+    const lang = toTTSLanguageCode(effectiveLang, 'kokoro');
     const speed = Math.max(0.5, Math.min(2.0, options?.speed || 1.0));
     const effect = options?.effect || 'normal';
     const sentencePause = options?.sentencePause !== undefined ? options.sentencePause : 0.25;

@@ -461,7 +461,8 @@ export const CHARACTER_PRESETS: Record<string, { label: string; appearance: Cust
         showHands: false,
       },
       voiceConfig: {
-        voiceId: 'bm_daniel',
+        voiceId: 'hf_alpha',
+        lang: 'hi',
         speed: 1.0,
         style: 'cheerful',
         effect: 'normal',
