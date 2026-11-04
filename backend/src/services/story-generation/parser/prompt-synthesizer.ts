@@ -40,11 +40,63 @@ export class PromptSynthesizer {
     const { explicitPrompt, sceneTitle, locationName, timeOfDay = 'DAY', look, bibles } = options;
     const activeLook: ProjectLookDNA = { ...DEFAULT_PROJECT_LOOK, ...(look || {}) };
 
-    // 1. If explicit prompt is present, preserve it!
+    // 1. If explicit prompt is present, combine user prompt with Project Look DNA
     if (explicitPrompt && explicitPrompt.trim().length > 15) {
       let prompt = explicitPrompt.trim();
       const lower = prompt.toLowerCase();
-      // Ensure negative constraint is appended only if not already specified
+
+      const additions: string[] = [];
+
+      // Art style / format
+      if (
+        activeLook.format &&
+        !lower.includes('pixar') &&
+        !lower.includes('disney') &&
+        !lower.includes('storybook animation') &&
+        !lower.includes('3d animation')
+      ) {
+        additions.push(activeLook.format);
+      }
+
+      // Lighting
+      if (
+        activeLook.lighting &&
+        !lower.includes('lighting') &&
+        !lower.includes('highlights') &&
+        !lower.includes('sunlight') &&
+        !lower.includes('moonlight')
+      ) {
+        additions.push(activeLook.lighting);
+      }
+
+      // Color Palette
+      if (
+        activeLook.palette &&
+        !lower.includes('palette') &&
+        !lower.includes('colors') &&
+        !lower.includes('hues')
+      ) {
+        additions.push(activeLook.palette);
+      }
+
+      // Framing & Composition
+      if (
+        activeLook.framing &&
+        !lower.includes('composition') &&
+        !lower.includes('foreground')
+      ) {
+        additions.push(activeLook.framing);
+      }
+
+      // Append Look DNA additions to user's explicit prompt
+      if (additions.length > 0) {
+        if (!/[.!?]$/.test(prompt)) {
+          prompt += '.';
+        }
+        prompt += ' ' + additions.map((s) => (s.endsWith('.') ? s : s + '.')).join(' ');
+      }
+
+      // Enforce environment-only negative constraints
       const hasNegativeConstraint =
         lower.includes('no characters') ||
         lower.includes('no people') ||
@@ -53,8 +105,13 @@ export class PromptSynthesizer {
         lower.includes('backdrop only');
 
       if (!hasNegativeConstraint) {
-        prompt += ' Environment only. Keep central foreground open for a separately animated character. No characters, text, captions, logos or watermarks.';
+        if (!/[.!?]$/.test(prompt)) {
+          prompt += '.';
+        }
+        prompt += ' Environment only. Keep central foreground open for a separately animated character. ' +
+          (activeLook.avoid || 'No characters, people, figures, text, captions, subtitles, logos or watermarks. Backdrop only.');
       }
+
       return prompt;
     }
 

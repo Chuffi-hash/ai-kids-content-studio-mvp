@@ -111,7 +111,9 @@ export const ImportScriptModal: React.FC<ImportScriptModalProps> = ({
         language: selectedLanguage,
         title: storyTitle,
         targetDuration: targetDurationSeconds,
+        targetDurationSeconds,
         storyId,
+        existingCharacters,
       });
 
       setDraftResult(parsed);

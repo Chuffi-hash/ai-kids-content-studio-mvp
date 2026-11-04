@@ -2,7 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert';
 import {
   IntelligentScriptParser,
+  normalizeAnimationAction,
 } from '../src/services/story-generation/parser/intelligent-script-parser.js';
+import { PromptSynthesizer } from '../src/services/story-generation/parser/prompt-synthesizer.js';
 import { StoryImporterService } from '../src/services/story-generation/story-importer.service.js';
 
 test('1. Multi-Character Script - Krishna and Radha (Zero Earth Fabrication)', async () => {
@@ -231,4 +233,143 @@ Sparky Character Action: somersaults backflip into the air
   assert.ok(actionWarning, 'Must emit UNSUPPORTED_ACTION warning');
   assert.ok(actionWarning?.message.includes('somersaults backflip'));
 });
+
+test('6. PromptSynthesizer - Blends Look DNA into Explicit User Prompt without Duplicates', () => {
+  // Case A: User provides explicit scene prompt without style
+  const explicit = 'A vibrant Indian village fair with wooden toy stalls, cotton candy carts, and spinning Ferris wheel under evening skies';
+  const synthesized = PromptSynthesizer.synthesizeBackgroundPrompt({
+    explicitPrompt: explicit,
+    sceneTitle: 'Village Fair',
+    locationName: 'Village Ground',
+    timeOfDay: 'GOLDEN_HOUR',
+  });
+
+  assert.ok(synthesized.startsWith(explicit), 'Must preserve user explicit description');
+  assert.ok(synthesized.includes('Cinematic 3D storybook animation'), 'Must weave in 3D storybook art style');
+  assert.ok(synthesized.includes('Vertical 9:16 composition'), 'Must include 9:16 framing');
+  assert.ok(synthesized.includes('Environment only'), 'Must enforce environment only negative constraint');
+  assert.ok(synthesized.includes('No characters, people, figures'), 'Must enforce no characters negative constraint');
+
+  // Case B: User prompt already specifies Pixar style and environment only
+  const explicitWithStyle = 'Pixar style 3D animation of a quiet river bank with lotus flowers. Environment only. No characters.';
+  const synthesized2 = PromptSynthesizer.synthesizeBackgroundPrompt({
+    explicitPrompt: explicitWithStyle,
+    sceneTitle: 'Lotus Pond',
+  });
+
+  // Verify no duplicate "Pixar" or double negative constraints
+  const pixarMatches = (synthesized2.match(/Pixar/gi) || []).length;
+  assert.strictEqual(pixarMatches, 1, 'Must not duplicate Pixar style instruction');
+  const envMatches = (synthesized2.match(/Environment only/gi) || []).length;
+  assert.strictEqual(envMatches, 1, 'Must not duplicate Environment only constraint');
+});
+
+test('7. Unicode-Aware Devanagari Hindi Action Matching & Normalization', () => {
+  // Walk & Run synonyms
+  assert.strictEqual(normalizeAnimationAction('चलता है').action, 'walk');
+  assert.strictEqual(normalizeAnimationAction('चलती है').action, 'walk');
+  assert.strictEqual(normalizeAnimationAction('चलते हैं').action, 'walk');
+  assert.strictEqual(normalizeAnimationAction('दौड़ता है').action, 'walk');
+  assert.strictEqual(normalizeAnimationAction('भागता है').action, 'walk');
+
+  // Wave synonyms
+  assert.strictEqual(normalizeAnimationAction('हाथ हिलाता है').action, 'wave');
+  assert.strictEqual(normalizeAnimationAction('हाथ हिलाती है').action, 'wave');
+  assert.strictEqual(normalizeAnimationAction('हाथ हिला').action, 'wave');
+
+  // Jump synonyms
+  assert.strictEqual(normalizeAnimationAction('कूदता है').action, 'jump');
+  assert.strictEqual(normalizeAnimationAction('कूदती है').action, 'jump');
+  assert.strictEqual(normalizeAnimationAction('उछलता है').action, 'jump');
+
+  // Point synonyms
+  assert.strictEqual(normalizeAnimationAction('इशारा करता है').action, 'point');
+  assert.strictEqual(normalizeAnimationAction('इशारा करती है').action, 'point');
+  assert.strictEqual(normalizeAnimationAction('दिखाता है').action, 'point');
+
+  // Idle synonyms
+  assert.strictEqual(normalizeAnimationAction('खड़ा है').action, 'idle');
+  assert.strictEqual(normalizeAnimationAction('बैठा है').action, 'idle');
+  assert.strictEqual(normalizeAnimationAction('मुस्कुराता है').action, 'idle');
+  assert.strictEqual(normalizeAnimationAction('चारों ओर देखता है').action, 'idle');
+
+  // Unsupported action fallback to idle + warning
+  const unsupported = normalizeAnimationAction('कांपता है');
+  assert.strictEqual(unsupported.action, 'idle');
+  assert.ok(unsupported.warning);
+  assert.strictEqual(unsupported.warning?.code, 'UNSUPPORTED_ACTION');
+});
+
+test('8. Duration Standardization (targetDurationSeconds, desiredDurationSeconds, targetDuration)', async () => {
+  const script = `# Title: Quick Test
+Language: English
+
+**Scene 1: Forest Path (25s)**
+Visual Prompt: Beautiful sunny woodland path.
+Narration: Walking along the path.
+`;
+
+  // Explicit scene duration (25s) overrides story target
+  const ir = await IntelligentScriptParser.parse(script, {
+    targetDurationSeconds: 45,
+  });
+  assert.strictEqual(ir.targetDurationSeconds, 45, 'Story target duration should be 45');
+  assert.strictEqual(ir.scenes[0].durationSeconds, 25, 'Explicit scene duration (25s) must be respected');
+  assert.strictEqual(ir.scenes[0].durationConfidence, 'explicit');
+
+  // Test desiredDurationSeconds alias in parseScriptForDraft
+  const draftResult = StoryImporterService.parseScriptForDraft(script, {
+    desiredDurationSeconds: 90,
+  });
+  assert.strictEqual(draftResult.targetDurationSeconds, 90, 'Draft should recognize desiredDurationSeconds');
+});
+
+test('9. Existing Characters Pass-Through - Preserves Canonical IDs & Species', async () => {
+  const script = `# Title: Krishna in Gokul
+Language: Hindi
+
+**Scene 1: Gokul Meadow**
+Visual: Sunny pasture with cows.
+Krishna (cheerful): मैया मोरी मैं नहीं माखन खायो।
+Krishna Character Action: खड़ा है
+`;
+
+  const existingCharacters = [
+    { id: 'char_krishna_canonical_123', name: 'Krishna', species: 'human' },
+  ];
+
+  const ir = await IntelligentScriptParser.parse(script, {
+    existingCharacters,
+  });
+
+  assert.strictEqual(ir.characters.length, 1);
+  const krishna = ir.characters[0];
+  assert.strictEqual(krishna.name, 'Krishna');
+  assert.strictEqual(krishna.id, 'char_krishna_canonical_123', 'Must preserve canonical character id');
+  assert.strictEqual(krishna.species, 'human', 'Must preserve canonical character species');
+});
+
+test('10. Multi-Character Dialogue Speaker Resolution - No Earth Fallback', async () => {
+  const script = `# Title: Two Friends
+Language: Hindi
+
+**Scene 1: Courtyard**
+Visual: Ancient courtyard.
+Aman: नमस्ते दोस्तों!
+Rohan: नमस्ते अमन!
+`;
+
+  const draft = StoryImporterService.parseScriptForDraft(script);
+  assert.strictEqual(draft.characters.length, 2);
+  const charNames = draft.characters.map((c) => c.name);
+  assert.ok(charNames.includes('Aman'));
+  assert.ok(charNames.includes('Rohan'));
+  assert.ok(!charNames.includes('Earth'));
+
+  const s1 = draft.scenes[0];
+  assert.strictEqual(s1.dialogue.length, 2);
+  assert.strictEqual(s1.dialogue[0].characterName, 'Aman');
+  assert.strictEqual(s1.dialogue[1].characterName, 'Rohan');
+});
+
 

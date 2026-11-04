@@ -222,7 +222,7 @@ export class ScenePreparationService {
           id: d.id || randomUUID(),
           characterId: matchedChar?.id,
           characterInstanceId: matchedInst?.instanceId,
-          characterName: d.characterName || 'Earth',
+          characterName: d.characterName || matchedChar?.name || 'Narrator',
           text: d.text,
           lang: effectiveLang,
           voice: charVoice,

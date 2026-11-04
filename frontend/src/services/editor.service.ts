@@ -711,7 +711,10 @@ export async function parseScriptForDraft(payload: {
   language?: string;
   title?: string;
   targetDuration?: number;
+  targetDurationSeconds?: number;
+  desiredDurationSeconds?: number;
   storyId?: string;
+  existingCharacters?: Array<{ id: string; name: string; species?: string }>;
 }): Promise<DraftStoryboardResult> {
   const res = await fetch(`${API_URL}/api/content/story/parse-script`, {
     method: 'POST',

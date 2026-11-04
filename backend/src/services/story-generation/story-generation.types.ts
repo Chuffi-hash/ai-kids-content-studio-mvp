@@ -28,9 +28,12 @@ export interface StoryGenerationInput {
 }
 
 export interface StructuredDialogue {
+  id?: string;
   characterName: string;
   text: string;
   emotion?: string;
+  voice?: string;
+  lang?: string;
 }
 
 export interface StructuredCharacterAction {
