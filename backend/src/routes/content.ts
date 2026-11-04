@@ -36,6 +36,7 @@ import { ImageGenerationService } from "../services/image-generation/image-gener
 import { getImageGenerationProvider } from "../services/image-generation/provider.factory.js";
 import { LocalStorageService } from "../services/storage/local-storage.service.js";
 import { buildSceneImagePrompt } from "../services/image-generation/prompt-builder.js";
+import { PromptSynthesizer } from "../services/story-generation/parser/prompt-synthesizer.js";
 import { AudioGenerationService } from "../services/audio-generation/audio-generation.service.js";
 import { suggestEmotionForText } from "../services/audio-generation/emotion-suggester.service.js";
 import { estimateSpeechDurationMs, formatTimeMs } from "../services/timing/timing.service.js";
@@ -1516,9 +1517,22 @@ contentRouter.get("/scenes/:sceneId/image", async (req, res) => {
 
 contentRouter.post("/scenes/:sceneId/image", async (req, res) => {
   const { sceneId } = req.params;
-  const { description, title, characters = [], storyId } = req.body;
+  const {
+    description,
+    title,
+    storyId,
+    prompt: customPrompt,
+    visualPrompt,
+    cameraDirection: reqCameraDirection,
+    cameraMovement: reqCameraMovement,
+    aspectRatio: reqAspectRatio,
+    visualStyle: reqVisualStyle,
+    projectLook: reqProjectLook,
+    fit: reqFit,
+    previewOnly,
+  } = req.body;
 
-  console.log(`[Content] Starting image generation for scene ${sceneId}`);
+  console.log(`[Content] Starting background image generation for scene ${sceneId}`);
   console.log(`[Content] Using image provider: ${providerType}`);
 
   try {
@@ -1536,69 +1550,77 @@ contentRouter.post("/scenes/:sceneId/image", async (req, res) => {
 
     // Find the scene; fall back to request body if not persisted yet
     const scene = await getSceneBySceneId(sceneId);
-    const sceneDescription = scene
-      ? scene.narration || scene.title
-      : description;
-    const sceneTitle = scene ? scene.title : title || `Scene ${sceneId}`;
+    if (!scene && !description && !title) {
+      return res.status(404).json({
+        success: false,
+        message: `Scene not found: ${sceneId}`,
+      });
+    }
 
-    if (!sceneDescription) {
+    const sceneTitle = scene ? scene.title : title || `Scene ${sceneId}`;
+    const rawScenePrompt = (
+      (customPrompt && typeof customPrompt === 'string' && customPrompt.trim().length > 0)
+        ? customPrompt
+        : (visualPrompt && typeof visualPrompt === 'string' && visualPrompt.trim().length > 0)
+          ? visualPrompt
+          : scene?.visualPrompt || scene?.narration || description || sceneTitle
+    ).trim();
+
+    if (!rawScenePrompt) {
       return res.status(400).json({
         success: false,
-        message: "description is required",
+        message: "Visual scene description or prompt is required",
       });
     }
 
-    // Fetch characters with full details including canonical appearance and reference image
-    let enhancedCharacters = characters;
-    if (storyId && characters.length > 0) {
-      const linkedCharacters = await getCharactersByStoryId(storyId);
-      enhancedCharacters = characters.map((char: any) => {
-        const fullCharacter = linkedCharacters.find((c: any) => c.id === char.id);
-        if (fullCharacter) {
-          return {
-            name: fullCharacter.name,
-            species: fullCharacter.species,
-            personality: fullCharacter.personality,
-            description: fullCharacter.visualDescription,
-            canonicalAppearance: fullCharacter.canonicalAppearance,
-            referenceImageUrl: fullCharacter.referenceImageUrl,
-          };
-        }
-        return char;
-      });
-    }
+    // Resolve camera direction & aspect ratio
+    const effectiveCameraDirection =
+      (reqCameraDirection && typeof reqCameraDirection === 'string' && reqCameraDirection.trim().length > 0)
+        ? reqCameraDirection.trim()
+        : (scene?.cameraDirection || 'Eye-level wide shot');
 
-    console.log(`[Content] Using ${enhancedCharacters.length} characters for scene generation`);
-    enhancedCharacters.forEach((char: any) => {
-      console.log(`[Content] Character: ${char.name}, hasReferenceImage: ${!!char.referenceImageUrl}, hasCanonicalAppearance: ${!!char.canonicalAppearance}`);
+    const effectiveAspectRatio = reqAspectRatio || '16:9';
+
+    // Compose dedicated environment-only background prompt:
+    // User visual description + Camera Perspective + Aspect Ratio + Look DNA + Open Central Foreground + Environment Negatives.
+    // Notice: Characters are NEVER rendered into the static background image!
+    const prompt = PromptSynthesizer.synthesizeBackgroundPrompt({
+      explicitPrompt: rawScenePrompt,
+      sceneTitle,
+      cameraDirection: effectiveCameraDirection,
+      aspectRatio: effectiveAspectRatio,
+      visualStyle: reqVisualStyle,
+      look: reqProjectLook,
     });
 
-    // Build image prompt from custom prompt or scene's existing data
-    const customPrompt = req.body.prompt;
-    const prompt = (customPrompt && typeof customPrompt === "string" && customPrompt.trim().length > 0)
-      ? customPrompt.trim()
-      : buildSceneImagePrompt(
-          {
-            description: sceneDescription,
-            title: sceneTitle,
-            narration: scene ? scene.narration : description,
-          },
-          enhancedCharacters,
-        );
-
-    console.log(`[Content] Generated prompt for scene ${sceneId}:`);
+    console.log(`[Content] Composed background prompt for scene ${sceneId}:`);
     console.log(prompt);
 
-    // Generate image (16:9 aspect ratio - 1024x576)
+    // Calculate dimensions based on aspect ratio
+    let width = 1024;
+    let height = 576; // 16:9 default
+    const lowerAspect = effectiveAspectRatio.toLowerCase();
+    if (lowerAspect.includes('9:16') || lowerAspect.includes('portrait') || lowerAspect.includes('vertical')) {
+      width = 576;
+      height = 1024;
+    } else if (lowerAspect.includes('1:1') || lowerAspect.includes('square')) {
+      width = 1024;
+      height = 1024;
+    } else if (lowerAspect.includes('4:5')) {
+      width = 819;
+      height = 1024;
+    }
+
+    // Generate image using configured provider
     const { imageBuffer, mimeType } =
       await imageGenerationService.generateSceneImage({
         prompt,
-        width: 1024,
-        height: 576,
+        width,
+        height,
       });
 
     console.log(
-      `[Content] Image generated for scene ${sceneId}, size: ${imageBuffer.length} bytes, mimeType: ${mimeType}`,
+      `[Content] Background image generated for scene ${sceneId}, size: ${imageBuffer.length} bytes, mimeType: ${mimeType}`,
     );
 
     // Save image to local storage with extension matching the actual MIME type
@@ -1625,16 +1647,54 @@ contentRouter.post("/scenes/:sceneId/image", async (req, res) => {
       prompt,
       storageKey: filename,
       imageUrl: url,
-      width: 1024,
-      height: 576,
+      width,
+      height,
       status: "completed",
     });
 
-    // Update scene record with latest imageUrl and visualPrompt
-    await updateScene(sceneId, {
+    if (previewOnly) {
+      console.log(`[Content] Background generated in previewOnly mode, not modifying scene ${sceneId}`);
+      return res.json({
+        success: true,
+        imageUrl: url,
+        prompt,
+        image: {
+          id: imageId,
+          sceneId,
+          provider: providerType,
+          filePath: url,
+          url,
+          mimeType,
+          prompt,
+          width,
+          height,
+        },
+      });
+    }
+
+    // Update scene record with latest imageUrl, cameraDirection, and animationData background metadata
+    const currentAnim = (scene?.animationData || {}) as any;
+    const fit = reqFit === 'contain' ? 'contain' : (currentAnim.background?.fit || 'cover');
+    const updatedAnimData = {
+      ...currentAnim,
+      background: {
+        imageUrl: url,
+        fit,
+        source: 'ai_generated',
+        prompt,
+        cameraDirection: effectiveCameraDirection,
+        aspectRatio: effectiveAspectRatio,
+        dimensions: { width, height },
+      },
+      ...(reqCameraMovement ? { cameraMovement: reqCameraMovement } : {}),
+    };
+
+    const updatedScene = await updateScene(sceneId, {
       imageUrl: url,
-      visualPrompt: prompt,
+      visualPrompt: rawScenePrompt, // preserve user's clean prompt in scene record
+      cameraDirection: effectiveCameraDirection,
       generationStatus: "completed",
+      animationData: updatedAnimData,
     });
 
     // Record scene version
@@ -1643,17 +1703,20 @@ contentRouter.post("/scenes/:sceneId/image", async (req, res) => {
       sceneId,
       prompt,
       imageUrl: url,
-      cameraDirection: scene?.cameraDirection,
+      cameraDirection: effectiveCameraDirection,
       narration: scene?.narration,
       durationMs: scene && scene.endMs > scene.startMs ? scene.endMs - scene.startMs : undefined,
     });
 
     console.log(
-      `[Content] Image metadata saved to database with ID: ${imageId}`,
+      `[Content] Background image saved to database with ID: ${imageId}`,
     );
 
     return res.json({
       success: true,
+      imageUrl: url,
+      prompt,
+      scene: updatedScene,
       image: {
         id: imageId,
         sceneId,
@@ -1661,8 +1724,10 @@ contentRouter.post("/scenes/:sceneId/image", async (req, res) => {
         filePath: url,
         url,
         mimeType,
-        width: 1024,
-        height: 576,
+        width,
+        height,
+        prompt,
+        source: 'ai_generated',
       },
     });
   } catch (error) {
@@ -1709,14 +1774,29 @@ function validateImageBuffer(buffer: Buffer): { valid: boolean; mimeType?: strin
     buffer[1] === 0xd8 &&
     buffer[2] === 0xff;
 
+  // WebP magic bytes: RIFF at 0..3 and WEBP at 8..11
+  const isWebp =
+    buffer.length >= 12 &&
+    buffer[0] === 0x52 &&
+    buffer[1] === 0x49 &&
+    buffer[2] === 0x46 &&
+    buffer[3] === 0x46 &&
+    buffer[8] === 0x57 &&
+    buffer[9] === 0x45 &&
+    buffer[10] === 0x42 &&
+    buffer[11] === 0x50;
+
   if (isPng) {
     return { valid: true, mimeType: 'image/png', ext: 'png' };
   }
   if (isJpeg) {
     return { valid: true, mimeType: 'image/jpeg', ext: 'jpg' };
   }
+  if (isWebp) {
+    return { valid: true, mimeType: 'image/webp', ext: 'webp' };
+  }
 
-  return { valid: false, error: 'Only valid PNG and JPEG image formats are supported' };
+  return { valid: false, error: 'Only valid PNG and JPEG, or WebP image formats are supported' };
 }
 
 // 1. Upload a scene background image
@@ -1750,13 +1830,16 @@ contentRouter.post("/scenes/:sceneId/background/upload", async (req, res) => {
 
     const { url } = await storageService.saveFile(buffer, storageFilename, validation.mimeType);
 
-    // Synchronize scene.imageUrl and scene.animationData.background
+    // Synchronize scene.imageUrl and scene.animationData.background with source metadata
     const currentAnim = (scene.animationData || {}) as any;
     const updatedAnimData = {
       ...currentAnim,
       background: {
         imageUrl: url,
         fit,
+        source: 'imported',
+        filename: clientFilename || storageFilename,
+        sizeBytes: buffer.length,
       },
     };
 
@@ -1796,6 +1879,9 @@ contentRouter.post("/scenes/:sceneId/background/upload", async (req, res) => {
       background: {
         imageUrl: url,
         fit,
+        source: 'imported',
+        filename: clientFilename || storageFilename,
+        sizeBytes: buffer.length,
       },
       scene: updatedScene,
     });
@@ -1809,7 +1895,15 @@ contentRouter.post("/scenes/:sceneId/background/upload", async (req, res) => {
 contentRouter.put("/scenes/:sceneId/background", async (req, res) => {
   try {
     const { sceneId } = req.params;
-    const { imageUrl, fit: rawFit } = req.body;
+    const {
+      imageUrl,
+      fit: rawFit,
+      source,
+      prompt,
+      cameraDirection,
+      aspectRatio,
+      dimensions,
+    } = req.body;
 
     const scene = await getSceneBySceneId(sceneId);
     if (!scene) {
@@ -1844,13 +1938,31 @@ contentRouter.put("/scenes/:sceneId/background", async (req, res) => {
       background: {
         imageUrl: targetUrl,
         fit,
+        source: source || currentAnim.background?.source || (imageUrl ? 'imported' : 'ai_generated'),
+        ...(prompt ? { prompt } : (currentAnim.background?.prompt ? { prompt: currentAnim.background.prompt } : {})),
+        ...(cameraDirection ? { cameraDirection } : (currentAnim.background?.cameraDirection ? { cameraDirection: currentAnim.background.cameraDirection } : {})),
+        ...(aspectRatio ? { aspectRatio } : (currentAnim.background?.aspectRatio ? { aspectRatio: currentAnim.background.aspectRatio } : {})),
+        ...(dimensions ? { dimensions } : (currentAnim.background?.dimensions ? { dimensions: currentAnim.background.dimensions } : {})),
       },
     };
 
     const updatedScene = await updateScene(scene.sceneId, {
       imageUrl: targetUrl,
       animationData: updatedAnimData,
+      ...(cameraDirection ? { cameraDirection } : {}),
     });
+
+    if (imageUrl && imageUrl !== currentBgUrl) {
+      await createSceneVersion({
+        id: randomUUID(),
+        sceneId: scene.sceneId,
+        prompt: prompt || scene.visualPrompt || scene.narration,
+        imageUrl: targetUrl,
+        cameraDirection: cameraDirection || scene.cameraDirection,
+        narration: scene.narration,
+        durationMs: scene.endMs > scene.startMs ? scene.endMs - scene.startMs : undefined,
+      });
+    }
 
     return res.json({
       success: true,

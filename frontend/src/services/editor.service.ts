@@ -225,12 +225,23 @@ export async function deleteScene(sceneId: string): Promise<void> {
   if (!res.ok) throw new Error('Failed to delete scene');
 }
 
+export interface GenerateSceneImageOptions {
+  cameraDirection?: string;
+  cameraMovement?: string;
+  aspectRatio?: string;
+  visualStyle?: string;
+  projectLook?: any;
+  fit?: 'cover' | 'contain';
+  previewOnly?: boolean;
+}
+
 export async function generateSceneImage(
   sceneId: string,
   storyId: string,
   characters: any[],
-  promptOverride?: string
-): Promise<{ url: string; imageId: string }> {
+  promptOverride?: string,
+  options?: GenerateSceneImageOptions
+): Promise<{ url: string; imageId: string; prompt?: string; image?: any; scene?: any }> {
   const res = await fetch(`${API_URL}/api/content/scenes/${sceneId}/image`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -238,6 +249,13 @@ export async function generateSceneImage(
       storyId,
       characters,
       prompt: promptOverride,
+      cameraDirection: options?.cameraDirection,
+      cameraMovement: options?.cameraMovement,
+      aspectRatio: options?.aspectRatio,
+      visualStyle: options?.visualStyle,
+      projectLook: options?.projectLook,
+      fit: options?.fit,
+      previewOnly: options?.previewOnly,
     }),
   });
   if (!res.ok) {
@@ -246,8 +264,11 @@ export async function generateSceneImage(
   }
   const data = await res.json();
   return {
-    url: data.image?.url || data.image?.filePath,
+    url: data.imageUrl || data.image?.url || data.image?.filePath,
     imageId: data.image?.id,
+    prompt: data.prompt || data.image?.prompt,
+    image: data.image,
+    scene: data.scene,
   };
 }
 
@@ -518,13 +539,22 @@ export interface StoryBackgroundImage {
 }
 
 /**
- * Uploads a local PNG/JPEG file to serve as a scene background.
+ * Uploads a local PNG/JPEG/WebP file to serve as a scene background.
  */
 export async function uploadSceneBackground(
   sceneId: string,
   file: File,
   fit: 'cover' | 'contain' = 'cover'
 ): Promise<SceneBackgroundResult> {
+  const validTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
+  if (!validTypes.includes(file.type.toLowerCase())) {
+    throw new Error('Only PNG, JPEG, and WebP image formats are supported');
+  }
+  const MAX_SIZE = 15 * 1024 * 1024; // 15MB limit
+  if (file.size > MAX_SIZE) {
+    throw new Error(`File size exceeds 15MB limit (${(file.size / (1024 * 1024)).toFixed(1)}MB)`);
+  }
+
   const base64Data = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => {
@@ -560,7 +590,14 @@ export async function uploadSceneBackground(
 export async function setSceneBackground(
   sceneId: string,
   imageUrl: string,
-  fit: 'cover' | 'contain' = 'cover'
+  fit: 'cover' | 'contain' = 'cover',
+  meta?: {
+    source?: 'ai_generated' | 'imported';
+    prompt?: string;
+    cameraDirection?: string;
+    aspectRatio?: string;
+    dimensions?: { width: number; height: number };
+  }
 ): Promise<SceneBackgroundResult> {
   const res = await fetch(`${API_URL}/api/content/scenes/${sceneId}/background`, {
     method: 'PUT',
@@ -568,6 +605,7 @@ export async function setSceneBackground(
     body: JSON.stringify({
       imageUrl,
       fit,
+      ...meta,
     }),
   });
 
