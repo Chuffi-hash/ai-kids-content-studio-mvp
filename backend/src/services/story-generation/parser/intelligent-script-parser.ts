@@ -19,6 +19,7 @@ import {
   ProjectLookDNA,
   ProjectBibles,
 } from './types.js';
+import type { DraftStoryboardResult } from '../story-importer.service.js';
 import { randomUUID } from 'crypto';
 import { FountainParser } from './fountain-parser.js';
 import { ProductionBreakdownExtractor } from './production-breakdown.js';
@@ -28,6 +29,77 @@ import {
   resolveCanonicalVoiceForCharacter,
 } from '../../audio-generation/language-resolver.service.js';
 
+export const SUPPORTED_ANIMATION_ACTIONS = ['idle', 'walk', 'wave', 'jump', 'point'] as const;
+export type SupportedAnimationAction = (typeof SUPPORTED_ANIMATION_ACTIONS)[number];
+
+/**
+ * Normalizes an arbitrary character action line into one of the supported 2D vector
+ * animation kinematic states ('idle' | 'walk' | 'wave' | 'jump' | 'point').
+ * If unmapped, defaults to 'idle', preserves the original action description,
+ * and emits an actionable ScriptWarning.
+ */
+export function normalizeAnimationAction(
+  rawAction: string,
+  line?: number
+): { action: SupportedAnimationAction; warning?: ScriptWarning } {
+  const clean = (rawAction || '').toLowerCase().trim();
+
+  // 1. Point / Directional gestures
+  if (/\b(point|points|pointing|indicate|indicates|indicating|direct|directs|directing|show|shows|showing|aim|aims|aiming|gesture[s]?\s+toward|gesturing\s+toward|इशारा|दिखा)\b/i.test(clean)) {
+    return { action: 'point' };
+  }
+  // 2. Walk synonyms
+  if (/\b(walk|walks|walking|move|moves|moving|run|runs|running|approach|approaches|approaching|march|marches|marching|stroll|strolls|strolling|step|steps|stepping|enter|enters|entering|चलता|चलती|दौड़)\b/i.test(clean)) {
+    return { action: 'walk' };
+  }
+  // 3. Wave synonyms
+  if (/\b(wave|waves|waving|greet|greets|greeting|hello|gesture|gestures|gesturing|salute|salutes|saluting|beckon|beckons|beckoning|bye|लहरा|हाथ हिला)\b/i.test(clean)) {
+    return { action: 'wave' };
+  }
+  // 4. Jump synonyms
+  if (/\b(jump|jumps|jumping|hop|hops|hopping|bounce|bounces|bouncing|leap|leaps|leaping|skip|skips|skipping|कूद|उछल)\b/i.test(clean)) {
+    return { action: 'jump' };
+  }
+  // 5. Idle / Neutral synonyms
+  if (/\b(idle|idles|neutral|wait|waits|waiting|stand|stands|standing|listen|listens|listening|speak|speaks|speaking|talk|talks|talking|sit|sits|sitting|look|looks|looking|observe|observes|observing|rest|rests|resting|smile|smiles|smiling|float|floats|floating|शांत|खड़ा|बैठ|देख)\b/i.test(clean)) {
+    return { action: 'idle' };
+  }
+
+  // Unsupported action: fallback to 'idle', preserve original in description, emit actionable warning
+  const warning: ScriptWarning = {
+    code: 'UNSUPPORTED_ACTION',
+    message: `Action "${rawAction.trim()}" is not in the supported animation vocabulary (idle, walk, wave, jump, point). Defaulted to "idle".`,
+    severity: 'warning',
+    line: line || 1,
+    suggestion: `Supported animation actions are: idle, walk, wave, jump, point. The original action text is preserved in the description.`,
+  };
+  return { action: 'idle', warning };
+}
+
+/**
+ * Estimates scene duration based on language speech cadence, narration vs dialogue,
+ * turn-taking pauses, and character action requirements.
+ */
+export function estimateSceneDuration(options: {
+  narration: string;
+  dialogueLines: Array<{ text: string }>;
+  characterActions: Array<{ action: string }>;
+  language: string;
+}): number {
+  const isHindi = (options.language || '').toLowerCase().includes('hi');
+  const wordsPerSec = isHindi ? 1.9 : 2.2;
+
+  const narrationWords = options.narration ? options.narration.trim().split(/\s+/).filter(Boolean).length : 0;
+  const dialogueWords = options.dialogueLines.reduce((sum, d) => sum + d.text.trim().split(/\s+/).filter(Boolean).length, 0);
+
+  const speechSecs = Math.ceil(narrationWords / wordsPerSec) + Math.ceil(dialogueWords / wordsPerSec);
+  const dialoguePauseSecs = options.dialogueLines.length * 1.5;
+  const actionBufferSecs = options.characterActions.length * 2.5;
+
+  const calculated = Math.ceil(Math.max(speechSecs + dialoguePauseSecs, actionBufferSecs) + 3);
+  return Math.max(12, Math.min(90, calculated));
+}
+
 export interface ParseScriptOptions {
   language?: string;
   defaultTitle?: string;
@@ -35,6 +107,7 @@ export interface ParseScriptOptions {
   visualStyle?: string;
   genre?: string;
   look?: Partial<ProjectLookDNA>;
+  existingCharacters?: Array<{ id: string; name: string; species?: string }>;
 }
 
 export class IntelligentScriptParser {
@@ -52,7 +125,10 @@ export class IntelligentScriptParser {
     const warnings: ScriptWarning[] = [];
 
     const fountainParser = new FountainParser();
-    const { nodes, titlePage } = fountainParser.parse(text);
+    const { nodes, titlePage, warnings: astWarnings } = fountainParser.parse(text);
+    if (Array.isArray(astWarnings)) {
+      warnings.push(...astWarnings);
+    }
 
     // 1. Extract Global Metadata (Title, Target Duration, Language, Logline, Lesson)
     let title = options.defaultTitle || titlePage['title'] || '';
@@ -74,7 +150,7 @@ export class IntelligentScriptParser {
     }
 
     // 2. Identify Character Declarations if present in script
-    const declaredCharacters: Array<{ name: string; description?: string; role?: string; voice?: string }> = [];
+    const declaredCharacters: Array<{ id?: string; name: string; description?: string; role?: string; voice?: string; species?: string }> = [];
     const lines = text.split(/\r?\n/);
     let inCharBlock = false;
 
@@ -85,7 +161,7 @@ export class IntelligentScriptParser {
         continue;
       }
       if (inCharBlock) {
-        if (line.startsWith('#') || line.match(/^Scene\s+\d+/i)) {
+        if (line.startsWith('#') || line.match(/^Scene\s+\d+/i) || line.match(/^दृश्य\s+\d+/i)) {
           inCharBlock = false;
         } else if (line.startsWith('-') || line.startsWith('*')) {
           const charLine = line.replace(/^[-*]\s*/, '');
@@ -153,6 +229,23 @@ export class IntelligentScriptParser {
       });
     }
 
+    // Check for scene numbering gaps
+    let prevSceneNum = 0;
+    for (const g of sceneGroups) {
+      if (g.sceneNumber !== undefined) {
+        if (prevSceneNum > 0 && g.sceneNumber > prevSceneNum + 1) {
+          warnings.push({
+            code: 'SCENE_NUMBERING_GAP',
+            message: `Scene numbering gap detected: jumped from Scene ${prevSceneNum} to Scene ${g.sceneNumber}.`,
+            line: g.startLine,
+            severity: 'warning',
+            suggestion: 'Verify script scenes to ensure no scene was accidentally omitted.',
+          });
+        }
+        prevSceneNum = g.sceneNumber;
+      }
+    }
+
     // 4. Build Structured Parsed Scenes
     const parsedScenes: ParsedScene[] = [];
     const allDetectedCharacters = new Set<string>();
@@ -160,10 +253,14 @@ export class IntelligentScriptParser {
     sceneGroups.forEach((group, index) => {
       const sceneNumber = group.sceneNumber || index + 1;
       let titleClean = group.headingText
-        .replace(/^Scene\s+\d+[:\s—–-]*/i, '')
-        .replace(/^दृश्य\s+\d+[:\s—–-]*/i, '')
+        .replace(/^Scene\s*(?:\d+|[०-९]+)[:\s—–-]*/i, '')
+        .replace(/^दृश्य\s*(?:\d+|[०-९]+)[:\s—–-]*/i, '')
         .trim();
       if (!titleClean) titleClean = `Scene ${sceneNumber}`;
+
+      const canonicalLocName = PromptSynthesizer.normalizeLocationName(group.headingText) || titleClean;
+      const locSlug = canonicalLocName.toLowerCase().replace(/[^a-z0-9]+/g, '_').slice(0, 30);
+      const locationId = `loc_${locSlug}`;
 
       let sceneDuration = group.durationHint || 15;
       let durationConfidence: 'explicit' | 'estimated' = group.durationHint ? 'explicit' : 'estimated';
@@ -172,6 +269,9 @@ export class IntelligentScriptParser {
       const dialogueLines: ParsedDialogueLine[] = [];
       const characterActions: Array<{ characterName: string; action: string; description?: string }> = [];
       const explicitEffects: string[] = [];
+
+      let pendingEmotion: string | undefined;
+      let pendingExpression: string | undefined;
 
       // Process nodes in this scene
       for (const node of group.nodes) {
@@ -191,51 +291,129 @@ export class IntelligentScriptParser {
             const tokens = pi.value.split(/[,;]+/).map((s: string) => s.trim()).filter(Boolean);
             explicitEffects.push(...tokens);
           } else if (pi.key === 'character_action') {
-            const cleanAction = pi.value.toLowerCase();
-            let actionType = 'idle';
-            if (cleanAction.includes('walk') || cleanAction.includes('move')) actionType = 'walk';
-            else if (cleanAction.includes('wave') || cleanAction.includes('gesture')) actionType = 'wave';
-            else if (cleanAction.includes('jump')) actionType = 'jump';
-            else if (cleanAction.includes('point')) actionType = 'point';
-            else if (cleanAction.includes('shiver')) actionType = 'shiver';
+            let actor = (pi.actor || pi.metadata?.characterName || pi.metadata?.actor || '').trim();
+            let actionText = pi.value.trim();
+
+            // If actor was not parsed in label, check if value starts with a known character name:
+            // e.g. "Krishna plays the flute", "Radha dances gracefully"
+            if (!actor) {
+              const knownNames = [
+                ...declaredCharacters.map((c) => c.name),
+                ...Array.from(allDetectedCharacters),
+              ];
+              for (const kn of knownNames) {
+                const prefixRegex = new RegExp(`^${kn}\\s+(.*)$`, 'i');
+                const m = actionText.match(prefixRegex);
+                if (m) {
+                  actor = kn;
+                  actionText = m[1].trim();
+                  break;
+                }
+              }
+            }
+
+            // If still no actor, check if dialogue lines exist in this scene
+            if (!actor && dialogueLines.length > 0) {
+              actor = dialogueLines[dialogueLines.length - 1].characterName;
+            } else if (!actor && declaredCharacters.length > 0) {
+              actor = declaredCharacters[0].name;
+            }
+
+            if (actor) {
+              allDetectedCharacters.add(actor);
+            }
+
+            // Normalize action to animation engine vocabulary
+            const norm = normalizeAnimationAction(actionText, node.range.start.line);
+            if (norm.warning) {
+              warnings.push(norm.warning);
+            }
 
             characterActions.push({
-              characterName: 'Earth',
-              action: actionType,
+              characterName: actor,
+              action: norm.action,
               description: pi.value,
             });
           } else if (pi.key === 'speaking_emotion') {
             const emo = pi.value.trim();
             if (dialogueLines.length > 0) {
               dialogueLines[dialogueLines.length - 1].emotion = emo;
+            } else {
+              pendingEmotion = emo;
             }
           } else if (pi.key === 'facial_expression') {
             const expr = pi.value.trim();
             if (dialogueLines.length > 0) {
               dialogueLines[dialogueLines.length - 1].expression = expr;
+            } else {
+              pendingExpression = expr;
             }
           } else if (pi.key === 'dialogue_inline') {
             const meta = pi.metadata || {};
-            const speaker = meta.speaker || 'Earth';
+            let speaker = (meta.speaker || pi.actor || '').trim();
+            if (!speaker) {
+              if (dialogueLines.length > 0) {
+                speaker = dialogueLines[dialogueLines.length - 1].characterName;
+              } else if (declaredCharacters.length > 0) {
+                speaker = declaredCharacters[0].name;
+                warnings.push({
+                  code: 'UNRESOLVED_SPEAKER',
+                  message: `Dialogue line has no character name specified. Attributed to "${speaker}".`,
+                  line: node.range.start.line,
+                  severity: 'warning',
+                });
+              } else {
+                speaker = 'Narrator';
+              }
+            }
             allDetectedCharacters.add(speaker);
+
+            const emo = meta.emotion || pendingEmotion || 'cheerful';
+            const expr = pendingExpression;
+            pendingEmotion = undefined;
+            pendingExpression = undefined;
+
             dialogueLines.push({
               id: randomUUID(),
               characterName: speaker,
               text: meta.speech || pi.value,
-              emotion: meta.emotion || 'cheerful',
+              emotion: emo,
+              expression: expr,
               voice: IntelligentScriptParser.resolveDefaultVoice(speaker, language),
               sourceRange: node.range,
             });
           }
         } else if (node.type === 'dialogue') {
           const dNode = node as any;
-          const speaker = dNode.characterName || 'Earth';
+          let speaker = (dNode.characterName || '').trim();
+          if (!speaker) {
+            if (dialogueLines.length > 0) {
+              speaker = dialogueLines[dialogueLines.length - 1].characterName;
+            } else if (declaredCharacters.length > 0) {
+              speaker = declaredCharacters[0].name;
+              warnings.push({
+                code: 'UNRESOLVED_SPEAKER',
+                message: `Dialogue line has no character name specified. Attributed to "${speaker}".`,
+                line: node.range.start.line,
+                severity: 'warning',
+              });
+            } else {
+              speaker = 'Narrator';
+            }
+          }
           allDetectedCharacters.add(speaker);
+
+          const emo = dNode.emotion || pendingEmotion || 'cheerful';
+          const expr = pendingExpression;
+          pendingEmotion = undefined;
+          pendingExpression = undefined;
+
           dialogueLines.push({
             id: randomUUID(),
             characterName: speaker,
             text: dNode.speech,
-            emotion: dNode.emotion || 'cheerful',
+            emotion: emo,
+            expression: expr,
             voice: IntelligentScriptParser.resolveDefaultVoice(speaker, language),
             sourceRange: node.range,
           });
@@ -247,15 +425,45 @@ export class IntelligentScriptParser {
         }
       }
 
-      // If duration was not explicitly specified, calculate based on narration + dialogue word count
+      // If duration was not explicitly specified, calculate based on speech and action pacing
       if (durationConfidence === 'estimated') {
-        const totalWords = (narration + ' ' + dialogueLines.map((d) => d.text).join(' ')).trim().split(/\s+/).length;
-        sceneDuration = Math.max(12, Math.min(60, Math.ceil(totalWords / 2.5) + 4));
+        sceneDuration = estimateSceneDuration({
+          narration,
+          dialogueLines,
+          characterActions,
+          language,
+        });
+        warnings.push({
+          code: 'DURATION_ESTIMATED',
+          message: `Scene ${sceneNumber} duration was not specified. Estimated at ${sceneDuration}s based on speech and action pacing.`,
+          line: group.startLine,
+          severity: 'info',
+        });
+      }
+
+      // Fallback character action if none specified for this scene
+      if (characterActions.length === 0) {
+        const sceneChars = Array.from(new Set(dialogueLines.map((d) => d.characterName))).filter(Boolean);
+        if (sceneChars.length > 0) {
+          characterActions.push({
+            characterName: sceneChars[0],
+            action: 'idle',
+            description: 'Default scene idle pose',
+          });
+        } else if (declaredCharacters.length > 0) {
+          characterActions.push({
+            characterName: declaredCharacters[0].name,
+            action: 'idle',
+            description: 'Default scene idle pose',
+          });
+        }
+        // If pure narrator scene with no characters declared, characterActions remains empty []
       }
 
       // 5. Run Production Breakdown Extractor (ScriptBreak-style)
       const breakdown = ProductionBreakdownExtractor.extractSceneBreakdown({
         title: titleClean,
+        locationText: canonicalLocName,
         visualPrompt,
         narration,
         dialogueTexts: dialogueLines.map((d) => d.text),
@@ -270,6 +478,7 @@ export class IntelligentScriptParser {
       const finalPrompt = PromptSynthesizer.synthesizeBackgroundPrompt({
         explicitPrompt: visualPrompt,
         sceneTitle: titleClean,
+        locationName: canonicalLocName,
         timeOfDay: breakdown.lighting.timeOfDay,
         look: options.look,
       });
@@ -277,14 +486,15 @@ export class IntelligentScriptParser {
       parsedScenes.push({
         sceneNumber,
         title: titleClean,
-        location: titleClean,
+        location: canonicalLocName,
+        locationId,
         timeOfDay: breakdown.lighting.timeOfDay,
         durationSeconds: sceneDuration,
         durationConfidence,
         visualPrompt: finalPrompt,
         narration,
         dialogue: dialogueLines,
-        characterActions: characterActions.length > 0 ? characterActions : [{ characterName: 'Earth', action: 'wave' }],
+        characterActions,
         breakdown,
         suggestedOverlays,
         shots: breakdown.shots.map((s) => ({ num: s.num, size: s.size, move: s.move, desc: s.desc || '' })),
@@ -294,19 +504,31 @@ export class IntelligentScriptParser {
 
     // Merge declared characters and detected characters
     for (const charName of allDetectedCharacters) {
+      if (charName.toLowerCase() === 'narrator' || charName === 'सूत्रधार' || charName === 'कथावाचक') {
+        continue;
+      }
+      const existing = options.existingCharacters?.find((c) => c.name.toLowerCase() === charName.toLowerCase());
       if (!declaredCharacters.some((c) => c.name.toLowerCase() === charName.toLowerCase())) {
         declaredCharacters.push({
+          id: existing?.id,
           name: charName,
+          species: existing?.species,
           role: 'protagonist',
           description: `Character ${charName}`,
           voice: IntelligentScriptParser.resolveDefaultVoice(charName, language),
         });
+      } else {
+        const declared = declaredCharacters.find((c) => c.name.toLowerCase() === charName.toLowerCase());
+        if (declared && existing) {
+          declared.id = existing.id;
+          declared.species = existing.species;
+        }
       }
     }
 
     const bibles = PromptSynthesizer.buildInitialBibles({
       characters: declaredCharacters,
-      locations: parsedScenes.map((s) => ({ name: s.title, desc: s.visualPrompt })),
+      locations: parsedScenes.map((s) => ({ name: s.location, id: s.locationId, desc: s.visualPrompt })),
     });
 
     const calculatedTotalDuration = parsedScenes.reduce((acc, s) => acc + s.durationSeconds, 0);
@@ -328,6 +550,48 @@ export class IntelligentScriptParser {
   }
 
   /**
+   * Adapts a validated StoryboardIntermediateRepresentation to a backward-compatible DraftStoryboardResult.
+   */
+  public static adaptIRToDraftStoryboardResult(ir: StoryboardIntermediateRepresentation): DraftStoryboardResult {
+    return {
+      title: ir.title,
+      targetDurationSeconds: ir.targetDurationSeconds,
+      language: ir.language,
+      logline: ir.logline,
+      lesson: ir.lesson,
+      characters: ir.characters.map((c: any) => ({
+        id: c.id,
+        name: c.name,
+        species: c.species,
+        role: c.role,
+        voice: c.voice,
+        description: c.description,
+      })),
+      scenes: ir.scenes.map((s) => ({
+        sceneNumber: s.sceneNumber,
+        title: s.title,
+        durationSeconds: s.durationSeconds,
+        visualPrompt: s.visualPrompt,
+        narration: s.narration,
+        dialogue: s.dialogue.map((d) => ({
+          id: d.id,
+          characterName: d.characterName,
+          text: d.text,
+          emotion: d.emotion,
+          expression: d.expression,
+          voice: d.voice,
+        })),
+        characterActions: s.characterActions,
+        suggestedOverlays: s.suggestedOverlays,
+        breakdown: s.breakdown,
+        shots: s.shots,
+      })),
+      look: ir.look,
+      warnings: ir.warnings,
+    };
+  }
+
+  /**
    * Resolves the default Kokoro-82M TTS voice for any character according to language.
    * Earth strictly receives female Hindi voice 'hf_alpha' when language is Hindi.
    */
@@ -339,7 +603,7 @@ export class IntelligentScriptParser {
   /**
    * Serializes a Storyboard Intermediate Representation to Fountain screenplay format.
    */
-  public static serializeToFountain(ir: StoryboardIntermediateRepresentation): string {
+  public static serializeToFountain(ir: StoryboardIntermediateRepresentation | any): string {
     const lines: string[] = [];
     lines.push(`Title: ${ir.title}`);
     lines.push(`Language: ${ir.language}`);
@@ -360,9 +624,9 @@ export class IntelligentScriptParser {
         lines.push(d.text);
       }
 
-      if (scene.suggestedOverlays.length > 0) {
+      if (scene.suggestedOverlays && scene.suggestedOverlays.length > 0) {
         lines.push('');
-        lines.push(`[[ Effects: ${scene.suggestedOverlays.map((o) => o.type).join(', ')} ]]`);
+        lines.push(`[[ Effects: ${scene.suggestedOverlays.map((o: any) => o.type).join(', ')} ]]`);
       }
       lines.push('');
     }
@@ -373,7 +637,7 @@ export class IntelligentScriptParser {
   /**
    * Serializes a Storyboard Intermediate Representation to clean production Markdown.
    */
-  public static serializeToMarkdown(ir: StoryboardIntermediateRepresentation): string {
+  public static serializeToMarkdown(ir: StoryboardIntermediateRepresentation | any): string {
     const lines: string[] = [];
     lines.push(`# ${ir.title}`);
     lines.push(`Language: ${ir.language}`);
@@ -392,8 +656,8 @@ export class IntelligentScriptParser {
         lines.push(`${d.characterName}${emo}: "${d.text}"`);
       }
 
-      if (scene.suggestedOverlays.length > 0) {
-        lines.push(`Effects: ${scene.suggestedOverlays.map((o) => o.type).join(', ')}`);
+      if (scene.suggestedOverlays && scene.suggestedOverlays.length > 0) {
+        lines.push(`Effects: ${scene.suggestedOverlays.map((o: any) => o.type).join(', ')}`);
       }
       lines.push('');
     }

@@ -22,21 +22,29 @@ import {
   ProductionInstructionNode,
 } from './types.js';
 
+export function parseDevanagariOrLatinNumber(str?: string): number | undefined {
+  if (!str) return undefined;
+  const devanagariDigits = '०१२३४५६७८९';
+  const normalized = str.replace(/[०-९]/g, (d) => devanagariDigits.indexOf(d).toString());
+  const num = parseInt(normalized, 10);
+  return isNaN(num) ? undefined : num;
+}
+
 // Regex Constants (adapted from screenplay-tools with Unicode and Production Script extensions)
 const REGEX_SCENE_HEADING_FOUNTAIN = /^\s*(?:(INT|EXT|EST|INT\.\/EXT|INT\/EXT|I\/E)(\.|\s)|(FADE IN:\s*))/i;
 const REGEX_FORCED_SCENE_HEADING = /^\.([A-Za-z0-9\u0900-\u097F].*)$/;
-const REGEX_MARKDOWN_SCENE_HEADING = /^#{1,4}\s*(?:Scene\s+(\d+)[:\s—–-]*|दृश्य\s+(\d+)[:\s—–-]*)(.*)$/i;
-const REGEX_TEXT_SCENE_HEADING = /^(?:Scene\s+(\d+)[:\s—–-]*|दृश्य\s+(\d+)[:\s—–-]*)(.*)$/i;
+const REGEX_MARKDOWN_SCENE_HEADING = /^#{1,4}\s*(?:\*{1,2})?(?:(?:(\d+|[०-९]+)\.\s*)?(?:Scene|दृश्य)\s*(\d+|[०-९]+)?[:\s—–-]*)(.*?)(?:\*{1,2})?$/i;
+const REGEX_TEXT_SCENE_HEADING = /^(?:\*{1,2})?(?:(?:(\d+|[०-९]+)\.\s*)?(?:Scene|दृश्य)\s*(\d+|[०-९]+)?[:\s—–-]*)(.*?)(?:\*{1,2})?$/i;
 const REGEX_HEADING_NUMBER_HASH = /#([a-zA-Z0-9\-.]+)#\s*$/;
 const REGEX_DURATION_IN_HEADING = /\((\d+)\s*(?:s|sec|secs|seconds|सेकंड)\)/i;
 
-const REGEX_TITLE_ENTRY = /^\s*([A-Za-z0-9 \-_]+?)\s*:\s*(.*?)\s*$/;
+const REGEX_TITLE_ENTRY = /^\s*(?:\*{1,2})?([A-Za-z0-9 \-_]+?)(?:\*{1,2})?\s*:\s*(.*?)\s*$/;
 const REGEX_PARENTHETICAL = /^\s*\((.*)\)\s*$/;
 const REGEX_FORCED_CHARACTER = /^\s*@([A-Za-z0-9\u0900-\u097F\s\-_]+?)(?:\s*\((.*?)\))?\s*$/;
 const REGEX_ALL_CAPS_CHARACTER = /^([A-Z0-9\u0900-\u097F][A-Z0-9\u0900-\u097F\s\-_\.']{1,40})(?:\s*\((.*?)\))?(?:\s*\^\s*)?$/;
 const REGEX_PRODUCTION_DIALOGUE_LINE = /^(\*{0,2})([A-Za-z0-9\u0900-\u097F\s\-_]+?)(?:\s+(?:dialogue|speech|लाइन))?(?:\s*[\(—–-]\s*(.*?)\s*[\)]|\s*—\s*(.*?))?\1\s*:\s*["“']?(.*?)["”']?\s*$/i;
 
-const REGEX_PRODUCTION_INSTRUCTION = /^\s*(\*{0,2})([A-Za-z0-9\u0900-\u097F\s\-_]+?)\1\s*:\s*(.*)$/;
+const REGEX_PRODUCTION_INSTRUCTION = /^\s*(?:\*{1,2})?([A-Za-z0-9\u0900-\u097F\s\-_]+?)(?:\*{1,2})?\s*:\s*(?:\*{1,2})?(.*?)(?:\*{1,2})?$/;
 const REGEX_TRANSITION = /^\s*(?:([A-Z\s]+TO:)|(>\s*[^<]+))\s*$/;
 
 export interface FountainParserResult {
@@ -127,17 +135,26 @@ export class FountainParser {
 
       // 1. Title Page Parsing (At start of document)
       if (inTitlePage) {
+        const sceneHeading = this.matchSceneHeading(trimmed, lineNum, range, rawLine);
+        if (sceneHeading) {
+          inTitlePage = false;
+          flushPendingDialogue(lineNum);
+          flushPendingInstruction();
+          this.nodes.push(sceneHeading);
+          continue;
+        }
+
         const titleMatch = trimmed.match(REGEX_TITLE_ENTRY);
-        if (titleMatch && !trimmed.startsWith('#')) {
-          const key = titleMatch[1].trim().toLowerCase();
-          const val = titleMatch[2].trim();
-          this.titlePage[key] = val;
+        if (titleMatch) {
+          const rawKey = titleMatch[1].replace(/^#+\s*/, '').trim().toLowerCase();
+          const val = titleMatch[2].replace(/^\*{1,2}|\*{1,2}$/g, '').trim();
+          this.titlePage[rawKey] = val;
           this.nodes.push({
             type: 'title_entry',
-            text: `${key}: ${val}`,
+            text: `${rawKey}: ${val}`,
             raw: rawLine,
             range,
-            metadata: { key, value: val },
+            metadata: { key: rawKey, value: val },
           });
           continue;
         } else {
@@ -170,7 +187,13 @@ export class FountainParser {
           this.nodes.push(prodOrCue);
         } else {
           this.nodes.push(prodOrCue);
-          if (!prodOrCue.value && (prodOrCue.key === 'narration' || prodOrCue.key === 'background_prompt')) {
+          if (!prodOrCue.value && (
+            prodOrCue.key === 'narration' ||
+            prodOrCue.key === 'background_prompt' ||
+            prodOrCue.key === 'character_action' ||
+            prodOrCue.key === 'speaking_emotion' ||
+            prodOrCue.key === 'facial_expression'
+          )) {
             pendingInstruction = prodOrCue;
           }
         }
@@ -262,38 +285,40 @@ export class FountainParser {
     range: SourceRange,
     rawLine: string
   ): SceneHeadingNode | null {
-    // A. Markdown Scene Heading (e.g. "## Scene 1: Summer", "### Scene 2 — Monsoon (15s)")
+    // A. Markdown Scene Heading (e.g. "## Scene 1: Summer", "### Scene 2 — Monsoon (15s)", "# दृश्य १: गर्मी")
     const mdMatch = trimmed.match(REGEX_MARKDOWN_SCENE_HEADING);
     if (mdMatch) {
-      const sceneNum = parseInt(mdMatch[1] || mdMatch[2], 10);
+      const sceneNumRaw = mdMatch[2] || mdMatch[1];
+      const sceneNum = parseDevanagariOrLatinNumber(sceneNumRaw);
       const titleRest = (mdMatch[3] || '').trim();
       const durMatch = titleRest.match(REGEX_DURATION_IN_HEADING);
       const cleanTitle = titleRest.replace(REGEX_DURATION_IN_HEADING, '').trim();
 
       return {
         type: 'scene_heading',
-        sceneNumber: isNaN(sceneNum) ? undefined : sceneNum,
-        location: cleanTitle || `Scene ${sceneNum}`,
-        text: cleanTitle || `Scene ${sceneNum}`,
+        sceneNumber: sceneNum,
+        location: cleanTitle || `Scene ${sceneNum || lineNum}`,
+        text: cleanTitle || `Scene ${sceneNum || lineNum}`,
         raw: rawLine,
         range,
         durationHintSeconds: durMatch ? parseInt(durMatch[1], 10) : undefined,
       };
     }
 
-    // B. Plain Text Scene Heading (e.g. "Scene 1: Summer", "Scene 2 (15s)")
+    // B. Plain Text Scene Heading (e.g. "Scene 1: Summer", "1. Scene 1: Summer", "Scene 2 (15s)")
     const txtMatch = trimmed.match(REGEX_TEXT_SCENE_HEADING);
     if (txtMatch && !trimmed.toLowerCase().includes('dialogue') && !trimmed.toLowerCase().includes('action')) {
-      const sceneNum = parseInt(txtMatch[1] || txtMatch[2], 10);
+      const sceneNumRaw = txtMatch[2] || txtMatch[1];
+      const sceneNum = parseDevanagariOrLatinNumber(sceneNumRaw);
       const titleRest = (txtMatch[3] || '').trim();
       const durMatch = titleRest.match(REGEX_DURATION_IN_HEADING);
       const cleanTitle = titleRest.replace(REGEX_DURATION_IN_HEADING, '').trim();
 
       return {
         type: 'scene_heading',
-        sceneNumber: isNaN(sceneNum) ? undefined : sceneNum,
-        location: cleanTitle || `Scene ${sceneNum}`,
-        text: cleanTitle || `Scene ${sceneNum}`,
+        sceneNumber: sceneNum,
+        location: cleanTitle || `Scene ${sceneNum || lineNum}`,
+        text: cleanTitle || `Scene ${sceneNum || lineNum}`,
         raw: rawLine,
         range,
         durationHintSeconds: durMatch ? parseInt(durMatch[1], 10) : undefined,
@@ -346,16 +371,134 @@ export class FountainParser {
     range: SourceRange,
     rawLine: string
   ): ProductionInstructionNode | CharacterCueNode | null {
-    // 1. Check if this line is a production dialogue (either inline speech or block-style header):
+    // 1. Character Action with actor prefix or parenthetical
+    // Matches:
+    // - "Krishna Character Action: Plays the flute."
+    // - "Earth Character Action: waves happily"
+    // - "Action (Radha): dances gracefully"
+    // - "Character Action (Krishna): Plays the flute."
+    // - "Radha Action: dances gracefully"
+    // - "Character Action: jumps with joy"
+    // - "Action: waves happily"
+    // - "**Earth Character Action:** waves happily"
+    // - "कृष्ण क्रिया: बांसुरी बजाते हैं"
+    // - "क्रिया (राधा): नृत्य करती है"
+    const actionPattern = /^(?:\*{1,2})?(?:([A-Za-z0-9\u0900-\u097F\s\-_]+?)\s+)?(?:character\s+)?(?:action|क्रिया|अभिनय)(?:\s*[\(—–-]\s*([A-Za-z0-9\u0900-\u097F\s\-_]+?)\s*[\)])?(?::\*{1,2}|\*{1,2}:|:)\s*(.*)$/i;
+    const actionMatch = trimmed.match(actionPattern);
+    if (actionMatch) {
+      let actor = (actionMatch[1] || actionMatch[2] || '').replace(/^\*{1,2}|\*{1,2}$/g, '').trim();
+      let actionValue = (actionMatch[3] || '').trim();
+
+      return {
+        type: 'production_instruction',
+        key: 'character_action',
+        value: actionValue,
+        text: `character_action: ${actionValue}`,
+        raw: rawLine,
+        range,
+        actor: actor || undefined,
+        metadata: {
+          originalKey: trimmed.split(':')[0],
+          characterName: actor || undefined,
+          actor: actor || undefined,
+        },
+      };
+    }
+
+    // 2. Speaking Emotion
+    const emotionPattern = /^(?:\*{1,2})?(?:([A-Za-z0-9\u0900-\u097F\s\-_]+?)\s+)?(?:speaking\s+)?(?:emotion|भाव|बोलने का भाव)(?:\s*[\(—–-]\s*([A-Za-z0-9\u0900-\u097F\s\-_]+?)\s*[\)])?(?::\*{1,2}|\*{1,2}:|:)\s*(.*)$/i;
+    const emotionMatch = trimmed.match(emotionPattern);
+    if (emotionMatch) {
+      const actor = (emotionMatch[1] || emotionMatch[2] || '').replace(/^\*{1,2}|\*{1,2}$/g, '').trim();
+      const val = (emotionMatch[3] || '').trim();
+      return {
+        type: 'production_instruction',
+        key: 'speaking_emotion',
+        value: val,
+        text: `speaking_emotion: ${val}`,
+        raw: rawLine,
+        range,
+        actor: actor || undefined,
+        metadata: {
+          originalKey: trimmed.split(':')[0],
+          characterName: actor || undefined,
+          actor: actor || undefined,
+        },
+      };
+    }
+
+    // 3. Facial Expression
+    const expressionPattern = /^(?:\*{1,2})?(?:([A-Za-z0-9\u0900-\u097F\s\-_]+?)\s+)?(?:facial\s+)?(?:expression|चेहरे के भाव|अभिव्यक्ति)(?:\s*[\(—–-]\s*([A-Za-z0-9\u0900-\u097F\s\-_]+?)\s*[\)])?(?::\*{1,2}|\*{1,2}:|:)\s*(.*)$/i;
+    const exprMatch = trimmed.match(expressionPattern);
+    if (exprMatch) {
+      const actor = (exprMatch[1] || exprMatch[2] || '').replace(/^\*{1,2}|\*{1,2}$/g, '').trim();
+      const val = (exprMatch[3] || '').trim();
+      return {
+        type: 'production_instruction',
+        key: 'facial_expression',
+        value: val,
+        text: `facial_expression: ${val}`,
+        raw: rawLine,
+        range,
+        actor: actor || undefined,
+        metadata: {
+          originalKey: trimmed.split(':')[0],
+          characterName: actor || undefined,
+          actor: actor || undefined,
+        },
+      };
+    }
+
+    // 4. Standard Production Instructions (Background Prompt, Narration, Effects, Caption, Duration, Camera)
+    const match = trimmed.match(REGEX_PRODUCTION_INSTRUCTION);
+    if (match) {
+      const rawKey = (match[1] || '').trim().toLowerCase();
+      const value = (match[2] || '').trim();
+
+      let standardKey = '';
+      if (rawKey.includes('background') || rawKey.includes('visual prompt') || rawKey === 'visual' || rawKey === 'दृश्य' || rawKey === 'पृष्ठभूमि') {
+        standardKey = 'background_prompt';
+      } else if (rawKey.includes('narration') || rawKey === 'narrator' || rawKey.includes('voiceover') || rawKey.includes('सूत्रधार') || rawKey.includes('कथावाचक')) {
+        standardKey = 'narration';
+      } else if (rawKey.includes('effect') || rawKey.includes('overlay') || rawKey.includes('प्रभाव')) {
+        standardKey = 'effects';
+      } else if (rawKey.includes('caption') || rawKey.includes('opening caption') || rawKey.includes('closing caption') || rawKey.includes('कैप्शन')) {
+        standardKey = 'caption';
+      } else if (rawKey.includes('duration') || rawKey.includes('अवधि') || rawKey.includes('समय')) {
+        standardKey = 'duration';
+      } else if (rawKey.includes('shot') || rawKey.includes('camera')) {
+        standardKey = 'shot_instruction';
+      }
+
+      if (standardKey) {
+        return {
+          type: 'production_instruction',
+          key: standardKey,
+          value,
+          text: `${standardKey}: ${value}`,
+          raw: rawLine,
+          range,
+          metadata: { originalKey: match[2].trim() },
+        };
+      }
+    }
+
+    // 5. Production Dialogue Line (inline speech or block-style header):
     // e.g. "Earth dialogue — surprised, playful: नमस्ते नन्हे दोस्तों!" or "**Earth Dialogue — surprised, playful:**" or "Earth: नमस्ते!" or "**Earth (happy):**"
     const dlgMatch = trimmed.match(
       /^(?:\*{1,2})?([A-Za-z0-9\u0900-\u097F\s\-_]+?)(?:\s+(?:dialogue|speech|लाइन|संवाद))?(?:\s*[\(—–-]\s*(.*?)\s*[\)]|\s*[-—–]\s*(.*?))?(?::\*{1,2}|\*{1,2}:|:)\s*["“']?(.*?)["”']?\s*$/i
     );
     if (dlgMatch) {
       const rawSpeaker = dlgMatch[1].replace(/^\*{1,2}|\*{1,2}$/g, '').trim();
-      const emotion = (dlgMatch[2] || dlgMatch[3] || '').replace(/^\*{1,2}|\*{1,2}$/g, '').trim();
+      let emotion = (dlgMatch[2] || dlgMatch[3] || '').replace(/^\*{1,2}|\*{1,2}$/g, '').trim();
       let speech = (dlgMatch[4] || '').trim();
       speech = speech.replace(/^["“]|["”]$/g, '').trim();
+
+      const trailingEmoMatch = speech.match(/\s*\((?:Emotion|Tone|भाव|बोलने का भाव):\s*(.*?)\)\s*$/i);
+      if (trailingEmoMatch) {
+        emotion = trailingEmoMatch[1].trim();
+        speech = speech.replace(/\s*\((?:Emotion|Tone|भाव|बोलने का भाव):\s*(.*?)\)\s*$/i, '').trim();
+      }
 
       const lowerSpeaker = rawSpeaker.toLowerCase();
       // Ensure it is not a reserved instruction like "Narration", "Background Prompt", "Effects", "Character Action", "Opening Caption"
@@ -405,9 +548,15 @@ export class FountainParser {
         'भाव',
         'चेहरे के भाव',
         'बोलने का भाव',
-      ].some((k) => lowerSpeaker.startsWith(k));
+      ].some((k) => lowerSpeaker === k || lowerSpeaker.startsWith(k + ' ') || lowerSpeaker.endsWith(' ' + k));
 
-      if (!isReserved && rawSpeaker.length > 0) {
+      let cleanSpeaker = rawSpeaker;
+      const genericModifiers = ['closing', 'opening', 'final', 'intro', 'outro', 'अंतिम', 'प्रारंभिक'];
+      if (genericModifiers.includes(lowerSpeaker)) {
+        cleanSpeaker = ''; // speaker unspecified, let scene character resolution attribute it
+      }
+
+      if (!isReserved) {
         if (speech.length > 0) {
           return {
             type: 'production_instruction',
@@ -416,60 +565,21 @@ export class FountainParser {
             text: speech,
             raw: rawLine,
             range,
-            metadata: { speaker: rawSpeaker, emotion, speech },
+            actor: cleanSpeaker || undefined,
+            metadata: { speaker: cleanSpeaker, emotion, speech },
           };
-        } else {
+        } else if (cleanSpeaker.length > 0) {
           // Block-style dialogue header: treat as a character cue so following line(s) become dialogue
           return {
             type: 'character',
-            characterName: rawSpeaker,
+            characterName: cleanSpeaker,
             parenthetical: emotion || undefined,
-            text: rawSpeaker,
+            text: cleanSpeaker,
             raw: rawLine,
             range,
           };
         }
       }
-    }
-
-    const match = trimmed.match(REGEX_PRODUCTION_INSTRUCTION);
-    if (!match) return null;
-
-    const rawKey = match[2].trim().toLowerCase();
-    const value = (match[3] || '').trim();
-
-    // Map known production instruction keys
-    let standardKey = '';
-    if (rawKey.includes('background') || rawKey.includes('visual prompt') || rawKey === 'visual' || rawKey === 'दृश्य' || rawKey === 'पृष्ठभूमि') {
-      standardKey = 'background_prompt';
-    } else if (rawKey.includes('narration') || rawKey === 'narrator' || rawKey.includes('voiceover') || rawKey.includes('सूत्रधार') || rawKey.includes('कथावाचक')) {
-      standardKey = 'narration';
-    } else if (rawKey.includes('effect') || rawKey.includes('overlay') || rawKey.includes('प्रभाव')) {
-      standardKey = 'effects';
-    } else if (rawKey.includes('action') || rawKey.includes('character action') || rawKey.includes('क्रिया')) {
-      standardKey = 'character_action';
-    } else if (rawKey.includes('speaking emotion') || rawKey.includes('emotion') || rawKey.includes('बोलने का भाव')) {
-      standardKey = 'speaking_emotion';
-    } else if (rawKey.includes('facial expression') || rawKey.includes('expression') || rawKey.includes('चेहरे के भाव')) {
-      standardKey = 'facial_expression';
-    } else if (rawKey.includes('caption') || rawKey.includes('opening caption') || rawKey.includes('कैप्शन')) {
-      standardKey = 'caption';
-    } else if (rawKey.includes('duration') || rawKey.includes('अवधि') || rawKey.includes('समय')) {
-      standardKey = 'duration';
-    } else if (rawKey.includes('shot') || rawKey.includes('camera')) {
-      standardKey = 'shot_instruction';
-    }
-
-    if (standardKey) {
-      return {
-        type: 'production_instruction',
-        key: standardKey,
-        value,
-        text: `${standardKey}: ${value}`,
-        raw: rawLine,
-        range,
-        metadata: { originalKey: match[2].trim() },
-      };
     }
 
     return null;

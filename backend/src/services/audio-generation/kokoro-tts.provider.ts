@@ -144,7 +144,7 @@ export class KokoroTTSProvider implements TTSProvider {
           '--output', rawFile,
           '--model-dir', this.modelDir,
         ],
-        { timeout: 35000 }
+        { timeout: 60000 }
       );
 
       let inferenceRes: any;

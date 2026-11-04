@@ -388,12 +388,13 @@ export class AudioGenerationService {
     let charIntensity: number | undefined;
     let charEffect: AudioEffectType | undefined;
 
+    let fetchedChar: any = null;
     try {
-      let char = characterId ? await getCharacterById(characterId) : null;
-      if (!char && characterName) {
-        char = await getCharacterByName(characterName);
+      fetchedChar = characterId ? await getCharacterById(characterId) : null;
+      if (!fetchedChar && characterName) {
+        fetchedChar = await getCharacterByName(characterName);
       }
-      const voiceConfig = (char?.canonicalAppearance as any)?.voiceConfig || (char as any)?.voiceConfig;
+      const voiceConfig = (fetchedChar?.canonicalAppearance as any)?.voiceConfig || (fetchedChar as any)?.voiceConfig;
       if (voiceConfig) {
         charLang = voiceConfig.lang;
         charVoiceId = voiceConfig.voiceId;
@@ -468,8 +469,8 @@ export class AudioGenerationService {
     // Effective voice resolution with strict language compatibility (never allows English voice for Hindi)
     const effectiveVoice = resolveEffectiveVoice({
       requestedVoice: lineVoiceId || sceneVoiceId || charVoiceId,
-      characterName: characterName || (char as any)?.name,
-      species: (char as any)?.species,
+      characterName: characterName || (fetchedChar as any)?.name,
+      species: (fetchedChar as any)?.species,
       lang: effectiveLang,
       provider,
     });

@@ -201,9 +201,13 @@ export const ImportScriptModal: React.FC<ImportScriptModalProps> = ({
   const handleAddDialogueLine = (sceneIdx: number) => {
     if (!draftResult) return;
     const newScenes = [...draftResult.scenes];
+    const defaultSpeaker =
+      draftResult?.characters?.[0]?.name ||
+      existingCharacters?.[0]?.name ||
+      'Character';
     const newLine: DraftDialogueLine = {
       id: `diag-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-      characterName: 'Earth',
+      characterName: defaultSpeaker,
       text: selectedLanguage === 'Hindi' ? 'नमस्ते दोस्तों!' : 'Hello friends!',
       emotion: 'happy',
       voice: selectedLanguage === 'Hindi' ? 'hf_alpha' : 'bm_daniel',
@@ -220,6 +224,50 @@ export const ImportScriptModal: React.FC<ImportScriptModalProps> = ({
     const newScenes = [...draftResult.scenes];
     const newDialogue = newScenes[sceneIdx].dialogue.filter((_, i) => i !== diagIdx);
     newScenes[sceneIdx] = { ...newScenes[sceneIdx], dialogue: newDialogue };
+    setDraftResult({ ...draftResult, scenes: newScenes });
+  };
+
+  // Character action editing
+  const handleAddCharacterAction = (sceneIdx: number) => {
+    if (!draftResult) return;
+    const newScenes = [...draftResult.scenes];
+    const defaultActor =
+      draftResult?.characters?.[0]?.name ||
+      existingCharacters?.[0]?.name ||
+      newScenes[sceneIdx].dialogue?.[0]?.characterName ||
+      'Character';
+    const newAction = {
+      characterName: defaultActor,
+      action: 'idle',
+      description: '',
+    };
+    const currentActions = newScenes[sceneIdx].characterActions || [];
+    newScenes[sceneIdx] = {
+      ...newScenes[sceneIdx],
+      characterActions: [...currentActions, newAction],
+    };
+    setDraftResult({ ...draftResult, scenes: newScenes });
+  };
+
+  const handleUpdateCharacterAction = (
+    sceneIdx: number,
+    actIdx: number,
+    updates: Partial<{ characterName: string; action: string; description?: string }>
+  ) => {
+    if (!draftResult) return;
+    const newScenes = [...draftResult.scenes];
+    const currentActions = [...(newScenes[sceneIdx].characterActions || [])];
+    if (!currentActions[actIdx]) return;
+    currentActions[actIdx] = { ...currentActions[actIdx], ...updates };
+    newScenes[sceneIdx] = { ...newScenes[sceneIdx], characterActions: currentActions };
+    setDraftResult({ ...draftResult, scenes: newScenes });
+  };
+
+  const handleDeleteCharacterAction = (sceneIdx: number, actIdx: number) => {
+    if (!draftResult) return;
+    const newScenes = [...draftResult.scenes];
+    const currentActions = (newScenes[sceneIdx].characterActions || []).filter((_, i) => i !== actIdx);
+    newScenes[sceneIdx] = { ...newScenes[sceneIdx], characterActions: currentActions };
     setDraftResult({ ...draftResult, scenes: newScenes });
   };
 
@@ -304,7 +352,7 @@ export const ImportScriptModal: React.FC<ImportScriptModalProps> = ({
                       onChange={(e) => setSelectedLanguage(e.target.value as any)}
                       style={{ padding: '4px 10px', fontSize: '12px' }}
                     >
-                      <option value="Hindi">Hindi (हिंदी) - Earth Voice hf_alpha</option>
+                      <option value="Hindi">Hindi (हिंदी) - Female Voice (hf_alpha)</option>
                       <option value="English">English</option>
                     </select>
                   </label>
@@ -391,7 +439,7 @@ Effects: sunshine_rays
               )}
 
               <div style={{ marginTop: '14px', padding: '10px 14px', background: 'var(--ed-surface-elevated)', borderRadius: '6px', fontSize: '11.5px', color: 'var(--ed-text-secondary)', lineHeight: '1.4' }}>
-                <strong style={{ color: 'var(--ed-text)' }}>Note:</strong> We will structure this script into editable draft storyboard scenes with background prompts, Hindi narration, Earth's female Hindi voice (<code style={{ color: '#c084fc' }}>hf_alpha</code>), and suggested overlays. <strong>No images, voice audios, or videos are generated until you choose to generate them in the editor.</strong>
+                <strong style={{ color: 'var(--ed-text)' }}>Note:</strong> We will structure this script into editable draft storyboard scenes with background prompts, narration, character dialogues, actions, and suggested overlays. <strong>No images, voice audios, or videos are generated until you choose to generate them in the editor.</strong>
               </div>
             </div>
           ) : (
@@ -441,6 +489,60 @@ Effects: sunshine_rays
                   </label>
                 </div>
               </div>
+
+              {/* Parser Warnings & Diagnostics */}
+              {draftResult?.warnings && draftResult.warnings.length > 0 && (
+                <div
+                  style={{
+                    padding: '12px 14px',
+                    borderRadius: '8px',
+                    background: 'rgba(234, 179, 8, 0.1)',
+                    border: '1px solid rgba(234, 179, 8, 0.35)',
+                    marginBottom: '16px',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                    <AlertTriangleIcon size={16} color="#eab308" />
+                    <strong style={{ fontSize: '12.5px', color: '#facc15' }}>
+                      Script Parser Diagnostics ({draftResult.warnings.length})
+                    </strong>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    {draftResult.warnings.map((w, idx) => (
+                      <div
+                        key={`modal-warning-${idx}`}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'baseline',
+                          gap: '8px',
+                          fontSize: '11.5px',
+                          color: w.severity === 'error' ? '#f87171' : w.severity === 'warning' ? '#fde047' : '#93c5fd',
+                        }}
+                      >
+                        <span
+                          style={{
+                            fontSize: '10px',
+                            fontWeight: 700,
+                            padding: '1px 5px',
+                            borderRadius: '4px',
+                            background: w.severity === 'error' ? 'rgba(239, 68, 68, 0.2)' : 'rgba(234, 179, 8, 0.2)',
+                            border: `1px solid ${w.severity === 'error' ? '#ef4444' : '#eab308'}`,
+                            textTransform: 'uppercase',
+                          }}
+                        >
+                          {w.code}
+                        </span>
+                        <span>{w.message}</span>
+                        {w.suggestion && (
+                          <span style={{ color: 'var(--ed-text-muted)', fontStyle: 'italic' }}>
+                            — {w.suggestion}
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Parsed Scenes List */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>

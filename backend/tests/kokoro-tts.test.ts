@@ -113,6 +113,7 @@ test('Audio Effects Service - Robot and Cartoon Creature Audio Post-Processing',
     const raw = await kokoroProvider.generateSpeech('Greetings traveler, I am unit 42.', {
       voice: 'am_adam',
       speed: 1.0,
+      lang: 'en',
     });
     fs.writeFileSync(baseWavPath, raw.audioBuffer);
   } else {
