@@ -598,13 +598,13 @@ export class StoryImporterService {
 
     const isHindi = language ? language.toLowerCase().includes('hi') : true;
 
-    // 1. Resolve and link characters (excluding reserved metadata keys)
+    // 1. Resolve character names (excluding reserved metadata keys and Narrator)
     const charNamesSet = new Set<string>();
     for (const sc of draftScenes) {
       for (const d of sc.dialogue || []) {
         if (d.characterName) {
           const cleaned = cleanSpeakerName(d.characterName);
-          if (!isReservedMetadataKey(cleaned)) {
+          if (cleaned && !isReservedMetadataKey(cleaned) && cleaned.toLowerCase() !== 'narrator') {
             charNamesSet.add(cleaned);
           }
         }
@@ -612,404 +612,501 @@ export class StoryImporterService {
       for (const a of sc.characterActions || []) {
         if (a.characterName) {
           const cleaned = cleanSpeakerName(a.characterName);
-          if (!isReservedMetadataKey(cleaned)) {
+          if (cleaned && !isReservedMetadataKey(cleaned) && cleaned.toLowerCase() !== 'narrator') {
             charNamesSet.add(cleaned);
           }
         }
       }
     }
 
-    // If charNamesSet is empty, this is a narrator-only script with no characters.
-    // In replace mode, clean up ghost characters and stale storyCharacter links
-    if (importMode === 'replace') {
-      const ghostNames = [
-        'Duration',
-        'Background Prompt',
-        'Opening Caption',
-        'Earth Speaking Emotion',
-        'Earth Facial Expression',
-        'Character Action',
-        'Closing Dialogue',
-        'Visual Prompt',
-        'Narration',
-      ];
-      try {
-        const ghostChars = await (prisma as any).character.findMany({
-          where: { name: { in: ghostNames } },
-          select: { id: true },
+    const runInTransaction = async (fn: (tx: any) => Promise<any>) => {
+      if (typeof (prisma as any)?.$transaction === 'function') {
+        return (prisma as any).$transaction(fn);
+      }
+      return fn(prisma);
+    };
+
+    return await runInTransaction(async (tx: any) => {
+      // 2. In replace mode, clean up old scenes, links, and unshared orphaned characters
+      if (importMode === 'replace') {
+        const oldScenes = await tx.scene.findMany({
+          where: { storyId },
+          select: { sceneId: true },
         });
-        if (ghostChars.length > 0) {
-          const ghostIds = ghostChars.map((c: any) => c.id);
-          await (prisma as any).storyCharacter.deleteMany({ where: { characterId: { in: ghostIds } } });
-          await (prisma as any).character.deleteMany({ where: { id: { in: ghostIds } } });
-        }
-      } catch (err) {
-        console.warn('[StoryImporter] Ghost character cleanup notice:', err);
-      }
-
-      await (prisma as any).storyCharacter.deleteMany({ where: { storyId } });
-    }
-
-    const resolvedCharsMap = new Map<string, any>();
-    const allLinkedChars: any[] = [];
-
-    for (const name of charNamesSet) {
-      const lower = name.toLowerCase();
-      let charRecord = await getCharacterByName(name);
-      if (!charRecord) {
-        const isEarth = lower.includes('earth') || lower.includes('terra') || name.includes('पृथ्वी');
-        const isBear = lower.includes('bear') || lower.includes('pip');
-        const isRobot = lower.includes('robot');
-        const isGirl = lower.includes('maya') || lower.includes('girl');
-
-        const charVoiceId = resolveCanonicalVoiceForCharacter(name, isHindi ? 'hi' : 'en');
-        const voiceConfig = {
-          voiceId: charVoiceId,
-          lang: isHindi ? 'hi' : 'en',
-          speed: 1.0,
-          style: 'cheerful',
-          effect: 'normal',
-        };
-
-        let app: any;
-        if (isEarth) {
-          app = {
-            ...CHARACTER_PRESETS.earth.appearance,
-            voiceConfig,
-          };
-        } else if (isBear) {
-          app = {
-            ...CHARACTER_PRESETS.bear_cub.appearance,
-            voiceConfig,
-          };
-        } else if (isRobot) {
-          app = {
-            ...CHARACTER_PRESETS.robot.appearance,
-            voiceConfig,
-          };
-        } else if (isGirl) {
-          app = {
-            ...CHARACTER_PRESETS.kid_girl.appearance,
-            voiceConfig,
-          };
-        } else {
-          app = {
-            ...DEFAULT_APPEARANCE,
-            species: 'human',
-            voiceConfig,
-          };
+        const oldSceneIds = oldScenes.map((s: any) => s.sceneId);
+        if (oldSceneIds.length > 0) {
+          await tx.image.deleteMany({ where: { sceneId: { in: oldSceneIds } } });
+          await tx.sceneVersion.deleteMany({ where: { sceneId: { in: oldSceneIds } } });
+          await tx.scene.deleteMany({ where: { storyId } });
         }
 
-        charRecord = await createCharacter({
-          id: randomUUID(),
-          name,
-          species: isEarth ? 'earth' : isBear ? 'bear' : 'human',
-          personality: isEarth ? 'Smiling, wise living planet' : 'Friendly and curious',
-          visualDescription: `${name} the character in the story`,
-          distinctiveFeatures: isEarth ? 'Planet Earth continents' : 'Storybook character',
-          canonicalAppearance: app,
+        const existingLinks = await tx.storyCharacter.findMany({
+          where: { storyId },
+          select: { characterId: true },
         });
-      }
 
-      resolvedCharsMap.set(lower, charRecord);
-      allLinkedChars.push(charRecord);
+        await tx.storyCharacter.deleteMany({ where: { storyId } });
 
-      // Link to story if not already linked
-      const existingLink = await (prisma as any).storyCharacter.findFirst({
-        where: { storyId, characterId: charRecord.id },
-      });
-      if (!existingLink) {
-        await (prisma as any).storyCharacter.create({
-          data: {
-            id: randomUUID(),
-            storyId,
-            characterId: charRecord.id,
-          },
-        });
-      }
-    }
-
-    // 2. Determine ordering and starting timestamps
-    let runningTimeMs = 0;
-    let startOrder = 1;
-    let startNumber = 1;
-
-    if (importMode === 'replace') {
-      const oldScenes = await (prisma as any).scene.findMany({
-        where: { storyId },
-        select: { sceneId: true },
-      });
-      const oldSceneIds = oldScenes.map((s: any) => s.sceneId);
-      if (oldSceneIds.length > 0) {
-        await (prisma as any).image.deleteMany({ where: { sceneId: { in: oldSceneIds } } });
-        await (prisma as any).sceneVersion.deleteMany({ where: { sceneId: { in: oldSceneIds } } });
-        await (prisma as any).scene.deleteMany({ where: { storyId } });
-      }
-      runningTimeMs = 0;
-      startOrder = 1;
-      startNumber = 1;
-    } else {
-      const existingScenes = await getScenesByStoryId(storyId, false);
-      if (existingScenes.length > 0) {
-        const last = existingScenes[existingScenes.length - 1];
-        runningTimeMs = last.endMs || 0;
-        startOrder = (last.order || existingScenes.length) + 1;
-        startNumber = (last.number || existingScenes.length) + 1;
-      }
-    }
-
-    // 3. Create real scenes in database
-    for (let i = 0; i < draftScenes.length; i++) {
-      const draft = draftScenes[i];
-      const sceneNum = startNumber + i;
-      const order = startOrder + i;
-      const durationSeconds = draft.durationSeconds || 10;
-      const durationMs = Math.max(2000, durationSeconds * 1000);
-      const startMs = runningTimeMs;
-      const endMs = startMs + durationMs;
-      runningTimeMs = endMs;
-
-      // Identify scene characters
-      const sceneCharRecords: any[] = [];
-      const sceneCharNames = new Set<string>();
-      for (const d of draft.dialogue || []) {
-        if (d.characterName) {
-          const cl = cleanSpeakerName(d.characterName);
-          if (!isReservedMetadataKey(cl)) sceneCharNames.add(cl.toLowerCase());
-        }
-      }
-      for (const a of draft.characterActions || []) {
-        if (a.characterName) {
-          const cl = cleanSpeakerName(a.characterName);
-          if (!isReservedMetadataKey(cl)) sceneCharNames.add(cl.toLowerCase());
-        }
-      }
-
-      for (const cName of sceneCharNames) {
-        const rec = resolvedCharsMap.get(cName);
-        if (rec && !sceneCharRecords.some((c) => c.id === rec.id)) {
-          sceneCharRecords.push(rec);
-        }
-      }
-
-      // Build character instances with rigs
-      const count = sceneCharRecords.length;
-      const characterInstances: CharacterInstance[] = sceneCharRecords.map((char, cIdx) => {
-        const instanceId = `char-${char.id}-${sceneNum}-${cIdx}`;
-        let xPos = 640;
-        if (count === 2) {
-          xPos = cIdx === 0 ? 460 : 820;
-        } else if (count >= 3) {
-          const step = 640 / (count + 1);
-          xPos = 320 + (cIdx + 1) * step;
-        }
-
-        let app = char.canonicalAppearance;
-        if (!app) {
-          const isEarth = char.species === 'earth' || char.name?.toLowerCase().includes('earth');
-          app = isEarth ? CHARACTER_PRESETS.earth.appearance : DEFAULT_APPEARANCE;
-        }
-
-        const rig = buildRigFromAppearance(char.id, char.name, app);
-
-        return {
-          instanceId,
-          characterId: char.id,
-          assetType: 'vector_rig',
-          name: char.name?.toLowerCase() === 'earth' ? 'Earth' : char.name,
-          x: Math.round(xPos),
-          y: 470,
-          scale: 1.0,
-          rotation: 0,
-          flipX: count === 2 && cIdx === 1,
-          zIndex: cIdx + 1,
-          customRig: rig,
-          appearance: app,
-        };
-      });
-
-      // Build sequential dialogue lines and expression cues
-      const speechDurationMs = estimateSpeechDurationMs(draft.narration);
-      let curDiagStartMs = speechDurationMs > 0 ? speechDurationMs + 500 : 500;
-      const dialogueLines: SceneDialogue[] = [];
-      const expressionCues: ExpressionCue[] = [];
-
-      for (const d of draft.dialogue || []) {
-        if (!d.text || !d.text.trim()) continue;
-        const cleanedName = cleanSpeakerName(d.characterName || '');
-        if (isReservedMetadataKey(cleanedName)) continue;
-        const charNameLower = cleanedName.toLowerCase();
-        // Resolve speaker by exact name against scene characters, then globally resolved characters
-        const matchedChar = sceneCharRecords.find((c) => c.name.toLowerCase() === charNameLower)
-          || (cleanedName ? resolvedCharsMap.get(charNameLower) : undefined);
-        const matchedInst = characterInstances.find(
-          (ci) => ci.name?.toLowerCase() === charNameLower || (matchedChar && ci.characterId === matchedChar.id)
-        );
-
-        let charVoice = d.voice;
-        if (!charVoice) {
-          charVoice = resolveDefaultVoiceForCharacter(cleanedName || matchedChar?.name || '', isHindi);
-        }
-
-        const { speakingDirection, facialExpression } = mapEmotionToDirectionAndExpression(d.emotion || 'cheerful');
-        const lineDurationMs = Math.max(1500, estimateSpeechDurationMs(d.text));
-        const visemeCues = generateVisemeCues(d.text, lineDurationMs);
-
-        const dialogueItem: SceneDialogue = {
-          id: d.id || randomUUID(),
-          characterId: matchedChar?.id,
-          characterInstanceId: matchedInst?.instanceId,
-          characterName: cleanedName || matchedChar?.name || 'Narrator',
-          text: d.text,
-          lang: isHindi ? 'hi' : 'en',
-          voice: charVoice,
-          speakingDirection,
-          emotion: (d.emotion || 'cheerful') as any,
-          facialExpression,
-          speed: 1.0,
-          startMs: curDiagStartMs,
-          durationMs: lineDurationMs,
-          visemeCues,
-        };
-        dialogueLines.push(dialogueItem);
-
-        if (matchedInst) {
-          expressionCues.push({
-            id: randomUUID(),
-            instanceId: matchedInst.instanceId,
-            characterInstanceId: matchedInst.instanceId,
-            characterId: matchedInst.characterId,
-            expression: facialExpression,
-            startMs: curDiagStartMs,
-            durationMs: lineDurationMs + 400,
+        // Only delete character record if no other story references it
+        for (const link of existingLinks) {
+          const otherLinksCount = await tx.storyCharacter.count({
+            where: { characterId: link.characterId },
           });
-        }
-
-        curDiagStartMs += lineDurationMs + 400;
-      }
-
-      // Build EducationalOverlays from suggested overlays
-      const overlays: EducationalOverlay[] = [];
-      for (const sug of draft.suggestedOverlays || []) {
-        const type = sug.type as EducationalOverlayType;
-        const isAbove = ['rain', 'water_splashes', 'snowfall', 'falling_leaves', 'butterflies'].includes(type);
-        overlays.push({
-          id: sug.id || `overlay-${type}-${randomUUID().slice(0, 6)}`,
-          type,
-          startMs: 0,
-          durationMs,
-          x: 0,
-          y: 0,
-          color: sug.color || '#38bdf8',
-          layerPosition: isAbove ? 'above_characters' : 'below_characters',
-        });
-      }
-
-      // Build character animation clips
-      const clips: AnimationClip[] = characterInstances.map((ci) => {
-        const matchingAction = (draft.characterActions || []).find(
-          (a) => cleanSpeakerName(a.characterName || '').toLowerCase() === ci.name?.toLowerCase()
-        );
-        const act = matchingAction?.action || 'idle';
-        return {
-          clipId: `clip-${ci.instanceId}-${act}`,
-          instanceId: ci.instanceId,
-          action: (['idle', 'walk', 'wave', 'jump', 'point'].includes(act) ? act : 'idle') as any,
-          startMs: 0,
-          durationMs,
-          loop: true,
-        };
-      });
-
-      const animationData: VectorSceneData = {
-        version: 1,
-        viewport: { width: 1280, height: 720 },
-        characterInstances,
-        animationClips: clips,
-        expressionCues,
-        dialogueLines,
-        overlays,
-      };
-
-      const sceneId = `${storyId}-scene-${sceneNum}-${randomUUID().slice(0, 6)}`;
-      await createScene({
-        id: randomUUID(),
-        sceneId,
-        storyId,
-        title: draft.title || `Scene ${sceneNum}`,
-        number: sceneNum,
-        order,
-        startMs,
-        endMs,
-        narration: draft.narration || '',
-        visualPrompt: draft.visualPrompt || null,
-        cameraDirection: 'Eye level wide establishing shot',
-        characterIds: JSON.stringify(sceneCharRecords.map((c) => c.id)),
-        estimatedDurationMs: durationMs,
-        generationStatus: 'draft',
-        imageUrl: null, // NOT automatically generated
-        audioUrl: null, // NOT automatically generated
-        videoUrl: null, // NOT automatically generated
-        animationData,
-      });
-    }
-
-    // 4. Update story metadata if requested
-    if (shouldUpdateMeta) {
-      const updateData: any = {};
-      if (title && title.trim()) updateData.title = title.trim();
-      if (targetDurationSeconds && targetDurationSeconds > 0) {
-        updateData.targetDuration = targetDurationSeconds;
-      }
-      if (Object.keys(updateData).length > 0) {
-        await updateStoryMetadata(storyId, updateData);
-      }
-    }
-
-    // 5. Fetch and return all scenes for this story with formatting matching GET /story/:storyId
-    const allScenes = await getScenesByStoryId(storyId, false);
-    return await Promise.all(
-      allScenes.map(async (scene: any) => {
-        const images = await getImagesBySceneId(scene.sceneId);
-        const latestImage = images.length > 0 ? images[0] : null;
-
-        let parsedCharacterIds: string[] = [];
-        if (scene.characterIds) {
-          try {
-            parsedCharacterIds = JSON.parse(scene.characterIds);
-          } catch {
-            parsedCharacterIds = [scene.characterIds];
+          if (otherLinksCount === 0) {
+            const charRec = await tx.character.findUnique({
+              where: { id: link.characterId },
+              select: { name: true },
+            });
+            const stillNeeded = charRec && Array.from(charNamesSet).some(
+              (cn) => cn.toLowerCase() === charRec.name.toLowerCase()
+            );
+            if (!stillNeeded) {
+              await tx.character.deleteMany({ where: { id: link.characterId } });
+            }
           }
         }
 
-        return {
-          id: scene.id,
-          sceneId: scene.sceneId,
-          storyId: scene.storyId,
-          title: scene.title,
-          number: scene.number,
-          order: scene.order ?? scene.number,
-          startMs: scene.startMs ?? 0,
-          endMs: scene.endMs ?? 0,
-          narration: scene.narration,
-          visualPrompt: scene.visualPrompt || null,
-          cameraDirection: scene.cameraDirection || 'Eye level wide establishing shot',
-          characterIds: parsedCharacterIds,
-          imageUrl: scene.imageUrl || (latestImage ? latestImage.imageUrl : null),
-          videoUrl: scene.videoUrl || null,
-          audioUrl: scene.audioUrl || null,
-          generationStatus: scene.generationStatus || 'draft',
-          estimatedDurationMs: scene.estimatedDurationMs || 0,
-          actualAudioDurationMs: scene.actualAudioDurationMs || null,
-          generationError: scene.generationError || null,
-          animationData: scene.animationData || null,
-          versions: scene.versions || [],
-          image: latestImage || null,
-          createdAt: scene.createdAt,
-          updatedAt: scene.updatedAt,
+        const ghostNames = [
+          'Duration',
+          'Background Prompt',
+          'Opening Caption',
+          'Earth Speaking Emotion',
+          'Earth Facial Expression',
+          'Character Action',
+          'Closing Dialogue',
+          'Visual Prompt',
+          'Narration',
+        ];
+        try {
+          const ghostChars = await tx.character.findMany({
+            where: { name: { in: ghostNames } },
+            select: { id: true },
+          });
+          if (ghostChars.length > 0) {
+            const ghostIds = ghostChars.map((c: any) => c.id);
+            await tx.storyCharacter.deleteMany({ where: { characterId: { in: ghostIds } } });
+            await tx.character.deleteMany({ where: { id: { in: ghostIds } } });
+          }
+        } catch (err) {
+          console.warn('[StoryImporter] Ghost character cleanup notice:', err);
+        }
+      }
+
+      // 3. Resolve and link characters
+      const resolvedCharsMap = new Map<string, any>();
+      const allLinkedChars: any[] = [];
+
+      for (const name of charNamesSet) {
+        const lower = name.toLowerCase();
+        let charRecord = await tx.character.findFirst({
+          where: {
+            name: {
+              equals: name.trim(),
+              mode: 'insensitive',
+            },
+          },
+        });
+        if (!charRecord) {
+          const isEarth = lower === 'earth' || lower === 'terra' || lower === 'धरती' || lower === 'पृथ्वी' || name.includes('पृथ्वी') || name.includes('धरती');
+          const isPip = lower === 'pip' || lower.startsWith('pip ');
+          const isMaya = lower === 'maya' || lower.startsWith('maya ');
+          const isSparky = lower === 'sparky' || lower.startsWith('sparky ');
+          const isSammy = lower === 'sammy' || lower.startsWith('sammy ');
+
+          const charVoiceId = resolveCanonicalVoiceForCharacter(name, isHindi ? 'hi' : 'en');
+          const voiceConfig = {
+            voiceId: charVoiceId,
+            lang: isHindi ? 'hi' : 'en',
+            speed: 1.0,
+            style: 'cheerful',
+            effect: 'normal',
+          };
+
+          let app: any;
+          let species = 'human';
+          let personality = 'Friendly and curious';
+          let distinctiveFeatures = 'Storybook character';
+
+          if (isEarth) {
+            app = {
+              ...CHARACTER_PRESETS.earth.appearance,
+              voiceConfig,
+            };
+            species = 'earth';
+            personality = 'Smiling, wise living planet';
+            distinctiveFeatures = 'Planet Earth continents';
+          } else if (isPip) {
+            app = {
+              ...CHARACTER_PRESETS.bear_cub.appearance,
+              voiceConfig,
+            };
+            species = 'bear';
+            personality = 'Curious and playful bear cub';
+            distinctiveFeatures = 'Bear ears and honey golden fur';
+          } else if (isSparky) {
+            app = {
+              ...CHARACTER_PRESETS.robot.appearance,
+              voiceConfig,
+            };
+            species = 'robot';
+            personality = 'Inventive and energetic robot';
+            distinctiveFeatures = 'Metallic body and glowing eyes';
+          } else if (isMaya) {
+            app = {
+              ...CHARACTER_PRESETS.kid_girl.appearance,
+              voiceConfig,
+            };
+            species = 'human';
+            personality = 'Bright and imaginative young girl';
+            distinctiveFeatures = 'Ponytail and pink hoodie';
+          } else if (isSammy) {
+            app = {
+              ...CHARACTER_PRESETS.kid_boy.appearance,
+              voiceConfig,
+            };
+            species = 'human';
+            personality = 'Adventurous and cheerful young boy';
+            distinctiveFeatures = 'Star shirt and sneakers';
+          } else {
+            const isBearSpecies = lower.includes('bear') || lower.includes('भालू');
+            const isRobotSpecies = lower.includes('robot') || lower.includes('रोबोट');
+            const isOwlSpecies = lower.includes('owl') || lower.includes('उल्लू');
+            species = isBearSpecies ? 'bear' : isRobotSpecies ? 'robot' : isOwlSpecies ? 'animal' : 'human';
+            app = {
+              ...DEFAULT_APPEARANCE,
+              species,
+              voiceConfig,
+            };
+          }
+
+          charRecord = await tx.character.create({
+            data: {
+              id: randomUUID(),
+              name,
+              species,
+              personality,
+              visualDescription: `${name} the character in the story`,
+              distinctiveFeatures,
+              canonicalAppearance: app,
+            },
+          });
+        }
+
+        resolvedCharsMap.set(lower, charRecord);
+        allLinkedChars.push(charRecord);
+
+        const existingLink = await tx.storyCharacter.findFirst({
+          where: { storyId, characterId: charRecord.id },
+        });
+        if (!existingLink) {
+          await tx.storyCharacter.create({
+            data: {
+              id: randomUUID(),
+              storyId,
+              characterId: charRecord.id,
+            },
+          });
+        }
+      }
+
+      // 4. Determine ordering and starting timestamps
+      let runningTimeMs = 0;
+      let startOrder = 1;
+      let startNumber = 1;
+
+      if (importMode === 'replace') {
+        runningTimeMs = 0;
+        startOrder = 1;
+        startNumber = 1;
+      } else {
+        const existingScenes = await tx.scene.findMany({
+          where: { storyId, deletedAt: null },
+          orderBy: { order: 'asc' },
+        });
+        if (existingScenes.length > 0) {
+          const last = existingScenes[existingScenes.length - 1];
+          runningTimeMs = last.endMs || 0;
+          const maxOrder = Math.max(...existingScenes.map((s: any) => s.order || 0));
+          const maxNumber = Math.max(...existingScenes.map((s: any) => s.number || 0));
+          startOrder = maxOrder + 1;
+          startNumber = maxNumber + 1;
+        }
+      }
+
+      // 5. Create real scenes in database
+      for (let i = 0; i < draftScenes.length; i++) {
+        const draft = draftScenes[i];
+        const sceneNum = startNumber + i;
+        const order = startOrder + i;
+        const durationSeconds = draft.durationSeconds || 10;
+        const durationMs = Math.max(2000, durationSeconds * 1000);
+        const startMs = runningTimeMs;
+        const endMs = startMs + durationMs;
+        runningTimeMs = endMs;
+
+        // Identify scene characters
+        const sceneCharRecords: any[] = [];
+        const sceneCharNames = new Set<string>();
+        for (const d of draft.dialogue || []) {
+          if (d.characterName) {
+            const cl = cleanSpeakerName(d.characterName);
+            if (cl && !isReservedMetadataKey(cl) && cl.toLowerCase() !== 'narrator') {
+              sceneCharNames.add(cl.toLowerCase());
+            }
+          }
+        }
+        for (const a of draft.characterActions || []) {
+          if (a.characterName) {
+            const cl = cleanSpeakerName(a.characterName);
+            if (cl && !isReservedMetadataKey(cl) && cl.toLowerCase() !== 'narrator') {
+              sceneCharNames.add(cl.toLowerCase());
+            }
+          }
+        }
+
+        for (const cName of sceneCharNames) {
+          const rec = resolvedCharsMap.get(cName);
+          if (rec && !sceneCharRecords.some((c) => c.id === rec.id)) {
+            sceneCharRecords.push(rec);
+          }
+        }
+
+        // Build character instances with rigs
+        const count = sceneCharRecords.length;
+        const characterInstances: CharacterInstance[] = sceneCharRecords.map((char, cIdx) => {
+          const instanceId = `char-${char.id}-${sceneNum}-${cIdx}`;
+          let xPos = 640;
+          if (count === 2) {
+            xPos = cIdx === 0 ? 460 : 820;
+          } else if (count >= 3) {
+            const step = 640 / (count + 1);
+            xPos = 320 + (cIdx + 1) * step;
+          }
+
+          let app = char.canonicalAppearance;
+          if (!app) {
+            const isEarth = char.species === 'earth' || char.name?.toLowerCase().includes('earth');
+            app = isEarth ? CHARACTER_PRESETS.earth.appearance : DEFAULT_APPEARANCE;
+          }
+
+          const rig = buildRigFromAppearance(char.id, char.name, app);
+
+          return {
+            instanceId,
+            characterId: char.id,
+            assetType: 'vector_rig',
+            name: char.name?.toLowerCase() === 'earth' ? 'Earth' : char.name,
+            x: Math.round(xPos),
+            y: 470,
+            scale: 1.0,
+            rotation: 0,
+            flipX: count === 2 && cIdx === 1,
+            zIndex: cIdx + 1,
+            customRig: rig,
+            appearance: app,
+          };
+        });
+
+        // Build sequential dialogue lines and expression cues
+        const speechDurationMs = estimateSpeechDurationMs(draft.narration);
+        let curDiagStartMs = speechDurationMs > 0 ? speechDurationMs + 500 : 500;
+        const dialogueLines: SceneDialogue[] = [];
+        const expressionCues: ExpressionCue[] = [];
+
+        for (const d of draft.dialogue || []) {
+          if (!d.text || !d.text.trim()) continue;
+          const cleanedName = cleanSpeakerName(d.characterName || '');
+          if (isReservedMetadataKey(cleanedName) && cleanedName.toLowerCase() !== 'narrator') continue;
+          const isNarratorOrEmpty = !cleanedName || cleanedName.toLowerCase() === 'narrator';
+          const charNameLower = cleanedName.toLowerCase();
+
+          // Resolve speaker by exact name against scene characters, then globally resolved characters
+          const matchedChar = isNarratorOrEmpty
+            ? undefined
+            : (sceneCharRecords.find((c) => c.name.toLowerCase() === charNameLower) || (cleanedName ? resolvedCharsMap.get(charNameLower) : undefined));
+          const matchedInst = isNarratorOrEmpty
+            ? undefined
+            : characterInstances.find(
+                (ci) => ci.name?.toLowerCase() === charNameLower || (matchedChar && ci.characterId === matchedChar.id)
+              );
+
+          let charVoice = d.voice;
+          if (!charVoice) {
+            charVoice = resolveDefaultVoiceForCharacter(isNarratorOrEmpty ? 'Narrator' : (cleanedName || matchedChar?.name || 'Narrator'), isHindi);
+          }
+
+          const { speakingDirection, facialExpression } = mapEmotionToDirectionAndExpression(d.emotion || 'cheerful');
+          const lineDurationMs = Math.max(1500, estimateSpeechDurationMs(d.text));
+          const visemeCues = generateVisemeCues(d.text, lineDurationMs);
+
+          const dialogueItem: SceneDialogue = {
+            id: d.id || randomUUID(),
+            characterId: matchedChar?.id,
+            characterInstanceId: matchedInst?.instanceId,
+            characterName: isNarratorOrEmpty ? 'Narrator' : (cleanedName || matchedChar?.name || 'Narrator'),
+            text: d.text,
+            lang: isHindi ? 'hi' : 'en',
+            voice: charVoice,
+            speakingDirection,
+            emotion: (d.emotion || 'cheerful') as any,
+            facialExpression,
+            speed: 1.0,
+            startMs: curDiagStartMs,
+            durationMs: lineDurationMs,
+            visemeCues,
+          };
+          dialogueLines.push(dialogueItem);
+
+          if (matchedInst) {
+            expressionCues.push({
+              id: randomUUID(),
+              instanceId: matchedInst.instanceId,
+              characterInstanceId: matchedInst.instanceId,
+              characterId: matchedInst.characterId,
+              expression: facialExpression,
+              startMs: curDiagStartMs,
+              durationMs: lineDurationMs + 400,
+            });
+          }
+
+          curDiagStartMs += lineDurationMs + 400;
+        }
+
+        // Build EducationalOverlays from suggested overlays
+        const overlays: EducationalOverlay[] = [];
+        for (const sug of draft.suggestedOverlays || []) {
+          const type = sug.type as EducationalOverlayType;
+          const isAbove = ['rain', 'water_splashes', 'snowfall', 'falling_leaves', 'butterflies'].includes(type);
+          overlays.push({
+            id: sug.id || `overlay-${type}-${randomUUID().slice(0, 6)}`,
+            type,
+            startMs: 0,
+            durationMs,
+            x: 0,
+            y: 0,
+            color: sug.color || '#38bdf8',
+            layerPosition: isAbove ? 'above_characters' : 'below_characters',
+          });
+        }
+
+        // Build character animation clips
+        const clips: AnimationClip[] = characterInstances.map((ci) => {
+          const matchingAction = (draft.characterActions || []).find(
+            (a) => cleanSpeakerName(a.characterName || '').toLowerCase() === ci.name?.toLowerCase()
+          );
+          const act = matchingAction?.action || 'idle';
+          return {
+            clipId: `clip-${ci.instanceId}-${act}`,
+            instanceId: ci.instanceId,
+            action: (['idle', 'walk', 'wave', 'jump', 'point'].includes(act) ? act : 'idle') as any,
+            startMs: 0,
+            durationMs,
+            loop: true,
+          };
+        });
+
+        const animationData: VectorSceneData = {
+          version: 1,
+          viewport: { width: 1280, height: 720 },
+          characterInstances,
+          animationClips: clips,
+          expressionCues,
+          dialogueLines,
+          overlays,
         };
-      })
-    );
+
+        const sceneId = `${storyId}-scene-${sceneNum}-${randomUUID().slice(0, 6)}`;
+        await tx.scene.create({
+          data: {
+            id: randomUUID(),
+            sceneId,
+            storyId,
+            title: draft.title || `Scene ${sceneNum}`,
+            number: sceneNum,
+            order,
+            startMs,
+            endMs,
+            narration: draft.narration || '',
+            visualPrompt: draft.visualPrompt || null,
+            cameraDirection: 'Eye level wide establishing shot',
+            characterIds: JSON.stringify(sceneCharRecords.map((c) => c.id)),
+            estimatedDurationMs: durationMs,
+            generationStatus: 'draft',
+            imageUrl: null, // NOT automatically generated
+            audioUrl: null, // NOT automatically generated
+            videoUrl: null, // NOT automatically generated
+            animationData,
+          },
+        });
+      }
+
+      // 6. Update story metadata if requested
+      if (shouldUpdateMeta) {
+        const updateData: any = {};
+        if (title && title.trim()) updateData.title = title.trim();
+        if (targetDurationSeconds && targetDurationSeconds > 0) {
+          updateData.targetDuration = targetDurationSeconds;
+        }
+        if (Object.keys(updateData).length > 0) {
+          await tx.story.update({
+            where: { storyId },
+            data: updateData,
+          });
+        }
+      }
+
+      // 7. Fetch and return all scenes for this story with formatting matching GET /story/:storyId
+      const allScenes = await tx.scene.findMany({
+        where: { storyId, deletedAt: null },
+        orderBy: { order: 'asc' },
+      });
+
+      return await Promise.all(
+        allScenes.map(async (scene: any) => {
+          const images = await tx.image.findMany({
+            where: { sceneId: scene.sceneId },
+            orderBy: { createdAt: 'desc' },
+          });
+          const latestImage = images.length > 0 ? images[0] : null;
+
+          let parsedCharacterIds: string[] = [];
+          if (scene.characterIds) {
+            try {
+              parsedCharacterIds = JSON.parse(scene.characterIds);
+            } catch {
+              parsedCharacterIds = [scene.characterIds];
+            }
+          }
+
+          return {
+            id: scene.id,
+            sceneId: scene.sceneId,
+            storyId: scene.storyId,
+            title: scene.title,
+            number: scene.number,
+            order: scene.order ?? scene.number,
+            startMs: scene.startMs ?? 0,
+            endMs: scene.endMs ?? 0,
+            narration: scene.narration,
+            visualPrompt: scene.visualPrompt || null,
+            cameraDirection: scene.cameraDirection || 'Eye level wide establishing shot',
+            characterIds: parsedCharacterIds,
+            imageUrl: scene.imageUrl || (latestImage ? latestImage.imageUrl : null),
+            videoUrl: scene.videoUrl || null,
+            audioUrl: scene.audioUrl || null,
+            generationStatus: scene.generationStatus || 'draft',
+            estimatedDurationMs: scene.estimatedDurationMs || 0,
+            actualAudioDurationMs: scene.actualAudioDurationMs || null,
+            generationError: scene.generationError || null,
+            animationData: scene.animationData || null,
+            versions: scene.versions || [],
+            image: latestImage || null,
+            createdAt: scene.createdAt,
+            updatedAt: scene.updatedAt,
+          };
+        })
+      );
+    });
   }
 
   /**
@@ -1042,7 +1139,7 @@ export class StoryImporterService {
     for (const char of declaredCharacters) {
       if (!char.name) continue;
       const cleanName = cleanSpeakerName(char.name);
-      if (isReservedMetadataKey(cleanName)) continue;
+      if (!cleanName || isReservedMetadataKey(cleanName) || cleanName.toLowerCase() === 'narrator') continue;
       let charRec = await getCharacterByName(cleanName);
       let charId = charRec?.id;
       if (!charRec) {
@@ -1187,26 +1284,42 @@ export function isReservedMetadataKey(str: string): boolean {
 }
 
 export function cleanSpeakerName(rawSpeaker: string): string {
-  if (!rawSpeaker) return 'Earth';
+  if (!rawSpeaker || typeof rawSpeaker !== 'string') return '';
   let cleaned = rawSpeaker
     .replace(/^[*_#\s]+|[*_#:\s]+$/g, '')
     .trim();
 
+  if (!cleaned) return '';
+
   // If passed "Earth dialogue — surprised" or "Earth: ...", take the first part before em-dash or dash with spaces
   if (cleaned.includes('—') || cleaned.includes('–')) {
     const parts = cleaned.split(/[—–]/);
-    if (parts[0] && parts[0].trim().length > 1) {
+    if (parts[0] && parts[0].trim().length > 0) {
       cleaned = parts[0].trim();
     }
   } else if (cleaned.includes(' - ')) {
     const parts = cleaned.split(' - ');
-    if (parts[0] && parts[0].trim().length > 1) {
+    if (parts[0] && parts[0].trim().length > 0) {
       cleaned = parts[0].trim();
     }
   }
 
+  // Strip parentheticals like (the bear), (V.O.), (O.S.), (angry) unless the whole string is inside parens
+  if (/^[^(].*\([^)]*\)/.test(cleaned)) {
+    cleaned = cleaned.replace(/\s*\([^)]*\)/g, '').trim();
+  }
+
   // Strip dialogue/speech/character suffixes
   cleaned = cleaned.replace(/\s+(?:dialogue|speech|speaking|line|lines|character|संवाद|बोली)$/i, '').trim();
+
+  if (!cleaned) return '';
+
+  // Strip descriptive suffix with "the ...": "Pip the bear" -> "Pip", "Bruno the bear" -> "Bruno", "Maya the little girl" -> "Maya"
+  // Keep names like "Professor Owl", "Mama Bear", "Barnaby Bear" intact!
+  cleaned = cleaned.replace(/\s+the\s+(?:little\s+|curious\s+|friendly\s+|wise\s+|small\s+)?(?:bear|cub|girl|boy|robot|dog|cat|owl|kid)\b/i, '').trim();
+
+  // Strip Hindi species/descriptor suffix: "चिंटू भालू" -> "चिंटू"
+  cleaned = cleaned.replace(/\s+(?:भालू|लड़की|लड़का|बच्चा|रोबोट)$/u, '').trim();
 
   const lower = cleaned.toLowerCase();
   if (lower === 'earth' || lower === 'terra' || cleaned.includes('धरती') || cleaned.includes('पृथ्वी')) {
@@ -1215,13 +1328,13 @@ export function cleanSpeakerName(rawSpeaker: string): string {
   if (lower === 'narrator' || cleaned.includes('सूत्रधार') || cleaned.includes('कथावाचक')) {
     return 'Narrator';
   }
-  if (lower === 'pip' || lower.includes('bear')) {
+  if (lower === 'pip') {
     return 'Pip';
   }
-  if (lower === 'maya' || lower.includes('girl')) {
+  if (lower === 'maya') {
     return 'Maya';
   }
-  if (lower === 'sparky' || lower.includes('robot')) {
+  if (lower === 'sparky') {
     return 'Sparky';
   }
   if (lower === 'milo') {

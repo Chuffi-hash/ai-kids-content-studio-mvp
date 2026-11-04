@@ -18,6 +18,7 @@ import {
   SourceRange,
   ProjectLookDNA,
   ProjectBibles,
+  isReservedMetadataKey,
 } from './types.js';
 import type { DraftStoryboardResult } from '../story-importer.service.js';
 import { randomUUID } from 'crypto';
@@ -49,41 +50,41 @@ export function normalizeAnimationAction(
   const matchesHindi = (patterns: string[]) => patterns.some((p) => clean.includes(p));
 
   // 1. Point / Directional gestures
-  // Hindi: इशारा करता है, इशारा करती है, इशारा, दिखाता है, निर्देश देता है
+  // Hindi: इशारा करता है, इशारा करती है, इशारा, दिखाता है, निर्देश देता है, उंगली से इशारा
   // English: point, points, pointing, indicate, indicates, direct, directs, show, shows, gesture toward
   if (
     matchesEnglish(/\b(point|points|pointing|indicate|indicates|indicating|direct|directs|directing|show|shows|showing|aim|aims|aiming|gesture[s]?\s+toward|gesturing\s+toward)\b/i) ||
-    matchesHindi(['इशारा करता', 'इशारा करती', 'इशारा करते', 'इशारा', 'दिखाता', 'दिखाती', 'दिखाते'])
+    matchesHindi(['इशारा करता', 'इशारा करती', 'इशारा करते', 'इशारा', 'दिखाता', 'दिखाती', 'दिखाते', 'उंगली से इशारा'])
   ) {
     return { action: 'point' };
   }
 
-  // 2. Walk synonyms (including run)
-  // Hindi: चलता है, चलती है, चलते हैं, दौड़ता है, दौड़ती है, दौड़ते हैं, भागता है
+  // 2. Walk synonyms (including run, move forward, step forward)
+  // Hindi: आगे चलता है, आगे बढ़ती है, आगे बढ़ता है, आगे बढ़ते हैं, चलता है, चलती है, चलते हैं, दौड़ता है, दौड़ती है, दौड़ते हैं, भागता है
   // English: walk, walks, walking, run, runs, running, move, moves, approach, march, stroll, step, enter
   if (
     matchesEnglish(/\b(walk|walks|walking|move|moves|moving|run|runs|running|approach|approaches|approaching|march|marches|marching|stroll|strolls|strolling|step|steps|stepping|enter|enters|entering)\b/i) ||
-    matchesHindi(['चलता है', 'चलती है', 'चलते हैं', 'चल रहा', 'चलता', 'चलती', 'दौड़ता है', 'दौड़ती है', 'दौड़ते हैं', 'दौड़ता', 'दौड़ती', 'भागता', 'कदम बढ़ाता'])
+    matchesHindi(['आगे चलता', 'आगे चलती', 'आगे चलते', 'आगे बढ़ता', 'आगे बढ़ती', 'आगे बढ़ते', 'चलता है', 'चलती है', 'चलते हैं', 'चल रहा', 'चलता', 'चलती', 'दौड़ता है', 'दौड़ती है', 'दौड़ते हैं', 'दौड़ता', 'दौड़ती', 'भागता', 'कदम बढ़ाता'])
   ) {
     return { action: 'walk' };
   }
 
   // 3. Wave synonyms
-  // Hindi: हाथ हिलाता है, हाथ हिलाती है, हाथ हिलाते हैं, हाथ हिला, अभिवादन
+  // Hindi: हाथ हिलाता है, हाथ हिलाती है, हाथ हिलाते हैं, हाथ हिलाकर, हाथ हिला, अभिवादन
   // English: wave, waves, waving, greet, greets, hello, salute, salutes, beckon, beckons
   if (
     matchesEnglish(/\b(wave|waves|waving|greet|greets|greeting|hello|gesture|gestures|gesturing|salute|salutes|saluting|beckon|beckons|beckoning|bye)\b/i) ||
-    matchesHindi(['हाथ हिलाता है', 'हाथ हिलाती है', 'हाथ हिलाते हैं', 'हाथ हिला', 'लहराता', 'अभिवादन'])
+    matchesHindi(['हाथ हिलाता', 'हाथ हिलाती', 'हाथ हिलाते', 'हाथ हिलाकर', 'हाथ हिला', 'लहराता', 'अभिवादन'])
   ) {
     return { action: 'wave' };
   }
 
   // 4. Jump synonyms
-  // Hindi: कूदता है, कूदती है, कूदते हैं, कूदता, उछलता है, उछलती है, उछलते हैं
+  // Hindi: ऊपर कूदता है, ऊपर कूदती है, ऊपर कूदते हैं, ऊपर उछलता है, कूदता है, कूदती है, कूदते हैं, कूदता, उछलता है, उछलती है
   // English: jump, jumps, jumping, hop, hops, hopping, bounce, bounces, leap, leaps, skip, skips
   if (
     matchesEnglish(/\b(jump|jumps|jumping|hop|hops|hopping|bounce|bounces|bouncing|leap|leaps|leaping|skip|skips|skipping)\b/i) ||
-    matchesHindi(['कूदता है', 'कूदती है', 'कूदते हैं', 'कूदता', 'कूदती', 'उछलता है', 'उछलती है', 'उछलते हैं', 'उछलता', 'उछलती'])
+    matchesHindi(['ऊपर कूदता', 'ऊपर कूदती', 'ऊपर कूदते', 'ऊपर उछलता', 'ऊपर उछलती', 'कूदता है', 'कूदती है', 'कूदते हैं', 'कूदता', 'कूदती', 'उछलता है', 'उछलती है', 'उछलते हैं', 'उछलता', 'उछलती'])
   ) {
     return { action: 'jump' };
   }
@@ -302,8 +303,7 @@ export class IntelligentScriptParser {
       if (!titleClean) titleClean = `Scene ${sceneNumber}`;
 
       const canonicalLocName = PromptSynthesizer.normalizeLocationName(group.headingText) || titleClean;
-      const locSlug = canonicalLocName.toLowerCase().replace(/[^a-z0-9]+/g, '_').slice(0, 30);
-      const locationId = `loc_${locSlug}`;
+      const locationId = PromptSynthesizer.generateLocationId(canonicalLocName);
 
       let sceneDuration = group.durationHint || 15;
       let durationConfidence: 'explicit' | 'estimated' = group.durationHint ? 'explicit' : 'estimated';
@@ -400,19 +400,20 @@ export class IntelligentScriptParser {
             if (!speaker) {
               if (dialogueLines.length > 0) {
                 speaker = dialogueLines[dialogueLines.length - 1].characterName;
-              } else if (declaredCharacters.length > 0) {
-                speaker = declaredCharacters[0].name;
-                warnings.push({
-                  code: 'UNRESOLVED_SPEAKER',
-                  message: `Dialogue line has no character name specified. Attributed to "${speaker}".`,
-                  line: node.range.start.line,
-                  severity: 'warning',
-                });
               } else {
                 speaker = 'Narrator';
+                warnings.push({
+                  code: 'UNRESOLVED_SPEAKER',
+                  message: 'Dialogue line has no character name specified. Defaulting to Narrator.',
+                  line: node.range.start.line,
+                  severity: 'warning',
+                  suggestion: 'Specify character name before dialogue line.',
+                });
               }
             }
-            allDetectedCharacters.add(speaker);
+            if (speaker.toLowerCase() !== 'narrator') {
+              allDetectedCharacters.add(speaker);
+            }
 
             const emo = meta.emotion || pendingEmotion || 'cheerful';
             const expr = pendingExpression;
@@ -435,19 +436,20 @@ export class IntelligentScriptParser {
           if (!speaker) {
             if (dialogueLines.length > 0) {
               speaker = dialogueLines[dialogueLines.length - 1].characterName;
-            } else if (declaredCharacters.length > 0) {
-              speaker = declaredCharacters[0].name;
-              warnings.push({
-                code: 'UNRESOLVED_SPEAKER',
-                message: `Dialogue line has no character name specified. Attributed to "${speaker}".`,
-                line: node.range.start.line,
-                severity: 'warning',
-              });
             } else {
               speaker = 'Narrator';
+              warnings.push({
+                code: 'UNRESOLVED_SPEAKER',
+                message: 'Dialogue line has no character name specified. Defaulting to Narrator.',
+                line: node.range.start.line,
+                severity: 'warning',
+                suggestion: 'Specify character name before dialogue line.',
+              });
             }
           }
-          allDetectedCharacters.add(speaker);
+          if (speaker.toLowerCase() !== 'narrator') {
+            allDetectedCharacters.add(speaker);
+          }
 
           const emo = dNode.emotion || pendingEmotion || 'cheerful';
           const expr = pendingExpression;
