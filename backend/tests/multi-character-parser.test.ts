@@ -5,7 +5,11 @@ import {
   normalizeAnimationAction,
 } from '../src/services/story-generation/parser/intelligent-script-parser.js';
 import { PromptSynthesizer } from '../src/services/story-generation/parser/prompt-synthesizer.js';
-import { StoryImporterService } from '../src/services/story-generation/story-importer.service.js';
+import {
+  StoryImporterService,
+  cleanSpeakerName,
+} from '../src/services/story-generation/story-importer.service.js';
+import { prisma, createStory } from '../src/services/database/database.service.js';
 
 test('1. Multi-Character Script - Krishna and Radha (Zero Earth Fabrication)', async () => {
   const script = `# Title: Krishna and Radha in Vrindavan
@@ -370,6 +374,265 @@ Rohan: नमस्ते अमन!
   assert.strictEqual(s1.dialogue.length, 2);
   assert.strictEqual(s1.dialogue[0].characterName, 'Aman');
   assert.strictEqual(s1.dialogue[1].characterName, 'Rohan');
+});
+ 
+test('11. P0 — Hindi Location ID Collision Resilience & Unicode NFC Normalization', async () => {
+  const loc1 = 'गर्मी का कमाल';
+  const loc2 = 'मानसून की मस्ती';
+  const loc3 = 'सर्दी का रहस्य';
+
+  const id1 = PromptSynthesizer.generateLocationId(loc1);
+  const id2 = PromptSynthesizer.generateLocationId(loc2);
+  const id3 = PromptSynthesizer.generateLocationId(loc3);
+
+  // Distinct locations must have distinct IDs (no collision)
+  assert.notStrictEqual(id1, id2, 'loc1 and loc2 must produce distinct IDs');
+  assert.notStrictEqual(id2, id3, 'loc2 and loc3 must produce distinct IDs');
+  assert.notStrictEqual(id1, id3, 'loc1 and loc3 must produce distinct IDs');
+
+  // Same location must produce identical ID deterministically
+  assert.strictEqual(PromptSynthesizer.generateLocationId(loc1), id1);
+
+  // Unicode NFD vs NFC must produce identical ID
+  const nfdLoc = loc1.normalize('NFD');
+  const nfcLoc = loc1.normalize('NFC');
+  assert.strictEqual(
+    PromptSynthesizer.generateLocationId(nfdLoc),
+    PromptSynthesizer.generateLocationId(nfcLoc),
+    'NFD and NFC forms must produce identical location IDs'
+  );
+
+  // Script with distinct Hindi scene headings creates distinct location IDs
+  const script = `# Title: Seasons
+**Scene 1: गर्मी का कमाल**
+Visual: Sunny field.
+**Scene 2: मानसून की मस्ती**
+Visual: Rainy clouds.
+`;
+  const ir = await IntelligentScriptParser.parse(script);
+  assert.strictEqual(ir.scenes.length, 2);
+  assert.notStrictEqual(
+    ir.scenes[0].locationId,
+    ir.scenes[1].locationId,
+    'Scenes with different Hindi locations must have distinct locationIds'
+  );
+});
+
+test('12. P0 — Character Identity Resolution Safety (Species != Identity)', async () => {
+  // Empty or whitespace returns empty string
+  assert.strictEqual(cleanSpeakerName(''), '');
+  assert.strictEqual(cleanSpeakerName('   '), '');
+  assert.strictEqual(cleanSpeakerName(null as any), '');
+  assert.strictEqual(cleanSpeakerName(undefined as any), '');
+
+  // Exact preset names
+  assert.strictEqual(cleanSpeakerName('Pip the bear'), 'Pip');
+  assert.strictEqual(cleanSpeakerName('Maya the little girl'), 'Maya');
+  assert.strictEqual(cleanSpeakerName('Sparky the robot'), 'Sparky');
+  assert.strictEqual(cleanSpeakerName('Sammy the boy'), 'Sammy');
+  assert.strictEqual(cleanSpeakerName('Earth'), 'Earth');
+  assert.strictEqual(cleanSpeakerName('धरती'), 'Earth');
+  assert.strictEqual(cleanSpeakerName('पृथ्वी'), 'Earth');
+
+  // Species keywords must NOT hijack other characters into Pip/Maya/Sparky
+  assert.strictEqual(cleanSpeakerName('Bruno the bear'), 'Bruno');
+  assert.strictEqual(cleanSpeakerName('Barnaby the bear'), 'Barnaby');
+  assert.strictEqual(cleanSpeakerName('Mama Bear'), 'Mama Bear');
+  assert.strictEqual(cleanSpeakerName('Riya the girl'), 'Riya');
+  assert.strictEqual(cleanSpeakerName('Aanya the girl'), 'Aanya');
+  assert.strictEqual(cleanSpeakerName('Unit 734 the robot'), 'Unit 734');
+  assert.strictEqual(cleanSpeakerName('Rohan the curious boy'), 'Rohan');
+
+  // Hindi and unfamiliar names preserved exactly
+  assert.strictEqual(cleanSpeakerName('चिंटू भालू'), 'चिंटू');
+  assert.strictEqual(cleanSpeakerName('चिंटू'), 'चिंटू');
+  assert.strictEqual(cleanSpeakerName('रोहन'), 'रोहन');
+  assert.strictEqual(cleanSpeakerName('दादी माँ'), 'दादी माँ');
+  assert.strictEqual(cleanSpeakerName('Professor Owl'), 'Professor Owl');
+
+  // Narrator preserved
+  assert.strictEqual(cleanSpeakerName('Narrator'), 'Narrator');
+  assert.strictEqual(cleanSpeakerName('सूत्रधार'), 'Narrator');
+  assert.strictEqual(cleanSpeakerName('कथावाचक'), 'Narrator');
+});
+
+test('13. P0 — Hindi Action Table Exhaustive Normalization', async () => {
+  const table: Record<string, string> = {
+    'हाथ हिलाता है': 'wave',
+    'हाथ हिलाती है': 'wave',
+    'हाथ हिलाकर स्वागत करता है': 'wave',
+    'आगे चलता है': 'walk',
+    'आगे बढ़ता है': 'walk',
+    'धीरे-धीरे आगे बढ़ती है': 'walk',
+    'ऊपर कूदता है': 'jump',
+    'उछलता है': 'jump',
+    'खुशी से ऊपर कूदती है': 'jump',
+    'इशारा करता है': 'point',
+    'उंगली से इशारा करती है': 'point',
+    'मुस्कुराता है': 'idle',
+    'हंसती है': 'idle',
+    'चारों ओर देखता है': 'idle',
+    'आसमान की ओर देखती है': 'idle',
+  };
+
+  for (const [hindiAction, expected] of Object.entries(table)) {
+    const res = normalizeAnimationAction(hindiAction);
+    assert.strictEqual(
+      res.action,
+      expected,
+      `Action "${hindiAction}" must normalize to "${expected}", got "${res.action}"`
+    );
+  }
+});
+
+test('14. P0 — Project Look DNA Prompt Composition (Format, Camera, Lensing, Lighting, Palette, Framing, Negatives)', async () => {
+  const look = {
+    format: 'cinematic 3D animation',
+    camera: 'medium close-up, eye level',
+    lensing: 'shallow depth of field, 50mm lens',
+    lighting: 'warm golden-hour rim lighting',
+    palette: 'vibrant saturated warm tones',
+    aspect: '9:16',
+    avoid: 'no text, no captions, no watermark, no characters',
+  };
+
+  // 1. English scene prompt
+  const englishPrompt = PromptSynthesizer.synthesizeBackgroundPrompt({
+    explicitPrompt: 'A lush forest with sunbeams filtering through ancient trees',
+    sceneTitle: 'Ancient Forest',
+    look,
+  });
+  assert.ok(englishPrompt.includes('cinematic 3D animation'));
+  assert.ok(englishPrompt.includes('medium close-up, eye level'));
+  assert.ok(englishPrompt.includes('shallow depth of field, 50mm lens'));
+  assert.ok(englishPrompt.includes('warm golden-hour rim lighting'));
+  assert.ok(englishPrompt.includes('vibrant saturated warm tones'));
+  assert.ok(englishPrompt.includes('Vertical 9:16 composition'));
+  assert.ok(englishPrompt.includes('no text, no captions, no watermark, no characters'));
+
+  // 2. Hindi scene prompt
+  const hindiPrompt = PromptSynthesizer.synthesizeBackgroundPrompt({
+    explicitPrompt: 'एक हरा-भरा जंगल जहाँ पुराने पेड़ों से धूप छनकर आ रही है',
+    sceneTitle: 'हरा-भरा जंगल',
+    look,
+  });
+  assert.ok(hindiPrompt.includes('cinematic 3D animation'));
+  assert.ok(hindiPrompt.includes('Vertical 9:16 composition'));
+  assert.ok(hindiPrompt.includes('एक हरा-भरा जंगल'));
+
+  // 3. Negative constraint blending
+  assert.ok(hindiPrompt.includes('no text, no captions, no watermark, no characters'));
+});
+
+test('15. P0 — Unresolved Speaker Handling (Defaults to Narrator, Emits Warning, No Phantom Earth)', async () => {
+  const script = `# Title: Unlabelled Dialogue Script
+Language: Hindi
+
+**Scene 1: Whispering Woods**
+Visual: Ancient misty woods.
+"किसने पुकारा मुझे इस घने जंगल में?"
+`;
+
+  const draft = StoryImporterService.parseScriptForDraft(script);
+
+  // Must not fabricate Earth
+  assert.strictEqual(draft.characters.length, 0, 'Must have 0 characters for unlabelled single dialogue');
+  assert.strictEqual(draft.scenes.length, 1);
+
+  const s1 = draft.scenes[0];
+  assert.strictEqual(s1.dialogue.length, 1);
+  assert.strictEqual(s1.dialogue[0].characterName, 'Narrator', 'Unlabelled dialogue must default to Narrator');
+
+  // Must emit UNRESOLVED_SPEAKER diagnostic warning
+  assert.ok(
+    draft.warnings?.some((w) => w.code === 'UNRESOLVED_SPEAKER'),
+    'Must emit UNRESOLVED_SPEAKER warning'
+  );
+});
+
+test('16. P1 — Story Importer Database Transactions (Replace vs Append & Shared Character Safety)', async () => {
+  const storyAId = `test-tx-story-a-${Date.now()}`;
+  const storyBId = `test-tx-story-b-${Date.now()}`;
+
+  // Clean up any stale records from previous runs
+  await (prisma as any).storyCharacter.deleteMany({ where: { storyId: { in: [storyAId, storyBId] } } });
+  await (prisma as any).scene.deleteMany({ where: { storyId: { in: [storyAId, storyBId] } } });
+  await (prisma as any).story.deleteMany({ where: { storyId: { in: [storyAId, storyBId] } } });
+
+  // Create stories A and B
+  await createStory({ storyId: storyAId, title: 'Story A', targetDuration: 30 });
+  await createStory({ storyId: storyBId, title: 'Story B', targetDuration: 30 });
+
+  const scriptA = `# Title: Story A
+**Scene 1: Meadow**
+Bruno (cheerful): Hello from Bruno!
+`;
+  const draftA = StoryImporterService.parseScriptForDraft(scriptA);
+
+  // Import Story A (creates Bruno and links to Story A)
+  const savedA = await StoryImporterService.importDraftScenesToStory({
+    storyId: storyAId,
+    scenes: draftA.scenes,
+    importMode: 'replace',
+    title: 'Story A Updated',
+    targetDurationSeconds: 25,
+    updateStoryMetadata: true,
+  });
+  assert.strictEqual(savedA.length, 1);
+  assert.strictEqual(savedA[0].number, 1);
+  assert.strictEqual(savedA[0].order, 1);
+
+  // Link Bruno also to Story B to make him a shared character
+  const bruno = await (prisma as any).character.findFirst({ where: { name: 'Bruno' } });
+  assert.ok(bruno, 'Bruno must exist in database');
+  await (prisma as any).storyCharacter.create({
+    data: { id: `link-${Date.now()}`, storyId: storyBId, characterId: bruno.id },
+  });
+
+  // Re-import Story A in replace mode: Bruno is shared with Story B, so Bruno MUST NOT be deleted
+  const scriptA2 = `# Title: Story A2
+**Scene 1: Beach**
+Visual: Sunny beach with waves.
+Narration: A sunny day at the beach.
+`;
+  const draftA2 = StoryImporterService.parseScriptForDraft(scriptA2);
+  const replacedA = await StoryImporterService.importDraftScenesToStory({
+    storyId: storyAId,
+    scenes: draftA2.scenes,
+    importMode: 'replace',
+  });
+  assert.strictEqual(replacedA.length, 1);
+
+  // Verify Bruno still exists in character table because Story B uses him
+  const brunoAfterReplace = await (prisma as any).character.findUnique({ where: { id: bruno.id } });
+  assert.ok(brunoAfterReplace, 'Shared character Bruno must NOT be deleted in replace mode');
+
+  // Test Append mode: Append a scene to Story A
+  const scriptA3 = `# Title: Story A3
+**Scene 1: Mountain**
+Visual: Snowy peak.
+`;
+  const draftA3 = StoryImporterService.parseScriptForDraft(scriptA3);
+  const appendedScenes = await StoryImporterService.importDraftScenesToStory({
+    storyId: storyAId,
+    scenes: draftA3.scenes,
+    importMode: 'append',
+  });
+
+  assert.strictEqual(appendedScenes.length, 2, 'Story A must now have 2 scenes');
+  assert.strictEqual(appendedScenes[1].number, 2, 'Appended scene must have sequential number 2');
+  assert.strictEqual(appendedScenes[1].order, 2, 'Appended scene must have sequential order 2');
+  assert.strictEqual(
+    appendedScenes[1].startMs,
+    appendedScenes[0].endMs,
+    'Appended scene startMs must equal previous scene endMs'
+  );
+
+  // Cleanup
+  await (prisma as any).storyCharacter.deleteMany({ where: { storyId: { in: [storyAId, storyBId] } } });
+  await (prisma as any).scene.deleteMany({ where: { storyId: { in: [storyAId, storyBId] } } });
+  await (prisma as any).story.deleteMany({ where: { storyId: { in: [storyAId, storyBId] } } });
+  await (prisma as any).character.deleteMany({ where: { id: bruno.id } });
 });
 
 

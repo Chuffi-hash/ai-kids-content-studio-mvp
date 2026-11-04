@@ -560,7 +560,7 @@ export class FountainParser {
       ].some((k) => lowerSpeaker === k || lowerSpeaker.startsWith(k + ' ') || lowerSpeaker.endsWith(' ' + k));
 
       let cleanSpeaker = rawSpeaker;
-      const genericModifiers = ['closing', 'opening', 'final', 'intro', 'outro', 'अंतिम', 'प्रारंभिक'];
+      const genericModifiers = ['closing', 'opening', 'final', 'intro', 'outro', 'अंतिम', 'प्रारंभिक', 'dialogue', 'speech', 'संवाद', 'लाइन', 'unspecified', 'unknown'];
       if (genericModifiers.includes(lowerSpeaker)) {
         cleanSpeaker = ''; // speaker unspecified, let scene character resolution attribute it
       }
@@ -589,6 +589,21 @@ export class FountainParser {
           };
         }
       }
+    }
+
+    // 5b. Unlabelled Quoted Dialogue Line: e.g. "किसने पुकारा मुझे इस घने जंगल में?"
+    const standaloneQuoteMatch = trimmed.match(/^["“']([^"”']{2,})["”']$/);
+    if (standaloneQuoteMatch) {
+      return {
+        type: 'production_instruction',
+        key: 'dialogue_inline',
+        value: standaloneQuoteMatch[1].trim(),
+        text: standaloneQuoteMatch[1].trim(),
+        raw: rawLine,
+        range,
+        actor: undefined,
+        metadata: { speaker: '', emotion: 'cheerful', speech: standaloneQuoteMatch[1].trim() },
+      };
     }
 
     return null;
