@@ -177,15 +177,60 @@ contentRouter.post("/story/import", async (req, res) => {
 // Parse unstructured script into draft storyboard scenes for user review
 contentRouter.post("/story/parse-script", async (req, res) => {
   try {
-    const { rawText, language, title, targetDuration, storyId } = req.body;
+    const {
+      rawText,
+      language,
+      title,
+      targetDuration,
+      targetDurationSeconds,
+      desiredDurationSeconds,
+      storyId,
+      existingCharacters: explicitCharacters,
+    } = req.body;
+
     if (!rawText || typeof rawText !== "string" || !rawText.trim()) {
       return res.status(400).json({ message: "rawText (script or markdown) is required" });
+    }
+
+    const effectiveDuration = [targetDurationSeconds, desiredDurationSeconds, targetDuration].find(
+      (d) => typeof d === "number" && Number.isFinite(d) && d > 0
+    );
+
+    // Collect existing characters from payload and/or database if storyId is provided
+    const charactersToPass: Array<{ id: string; name: string; species?: string }> = Array.isArray(explicitCharacters)
+      ? [...explicitCharacters]
+      : [];
+
+    if (storyId && typeof storyId === "string") {
+      try {
+        const dbChars = await getCharactersByStoryId(storyId);
+        if (Array.isArray(dbChars)) {
+          for (const c of dbChars) {
+            if (
+              c?.id &&
+              c?.name &&
+              !charactersToPass.some(
+                (p) => p.id === c.id || p.name.toLowerCase() === c.name.toLowerCase()
+              )
+            ) {
+              charactersToPass.push({
+                id: c.id,
+                name: c.name,
+                species: c.species || undefined,
+              });
+            }
+          }
+        }
+      } catch (dbErr) {
+        console.warn(`[Content] Could not fetch existing characters for storyId ${storyId}:`, dbErr);
+      }
     }
 
     const draftResult = StoryImporterService.parseScriptForDraft(rawText.trim(), {
       language: language || "Hindi",
       defaultTitle: title,
-      targetDuration: typeof targetDuration === "number" ? targetDuration : undefined,
+      targetDuration: effectiveDuration,
+      existingCharacters: charactersToPass.length > 0 ? charactersToPass : undefined,
     });
 
     return res.json(draftResult);
@@ -251,6 +296,8 @@ contentRouter.post("/story/create-from-draft", async (req, res) => {
     const {
       title,
       targetDurationSeconds,
+      targetDuration,
+      desiredDurationSeconds,
       language,
       logline,
       lesson,
@@ -266,9 +313,13 @@ contentRouter.post("/story/create-from-draft", async (req, res) => {
       return res.status(400).json({ message: "scenes array cannot be empty" });
     }
 
+    const effectiveDuration = [targetDurationSeconds, desiredDurationSeconds, targetDuration].find(
+      (d) => typeof d === "number" && Number.isFinite(d) && d > 0
+    ) || 60;
+
     const result = await StoryImporterService.createStoryFromDraft({
       title: title || "Untitled Story",
-      targetDurationSeconds: typeof targetDurationSeconds === "number" ? targetDurationSeconds : 60,
+      targetDurationSeconds: effectiveDuration,
       language: language || "Hindi",
       logline,
       lesson,
@@ -296,11 +347,24 @@ contentRouter.post("/story/create-from-draft", async (req, res) => {
 contentRouter.post("/story/:storyId/scenes/import-draft", async (req, res) => {
   try {
     const { storyId } = req.params;
-    const { scenes, importMode = "replace", updateStoryMetadata, title, targetDurationSeconds, language } = req.body;
+    const {
+      scenes,
+      importMode = "replace",
+      updateStoryMetadata,
+      title,
+      targetDurationSeconds,
+      targetDuration,
+      desiredDurationSeconds,
+      language,
+    } = req.body;
 
     if (!Array.isArray(scenes) || scenes.length === 0) {
       return res.status(400).json({ message: "scenes array cannot be empty" });
     }
+
+    const effectiveDuration = [targetDurationSeconds, desiredDurationSeconds, targetDuration].find(
+      (d) => typeof d === "number" && Number.isFinite(d) && d > 0
+    );
 
     const savedScenes = await StoryImporterService.importDraftScenesToStory({
       storyId,
@@ -308,7 +372,7 @@ contentRouter.post("/story/:storyId/scenes/import-draft", async (req, res) => {
       importMode: importMode === "append" ? "append" : "replace",
       updateStoryMetadata: Boolean(updateStoryMetadata),
       title,
-      targetDurationSeconds,
+      targetDurationSeconds: effectiveDuration,
       language: language || "Hindi",
     });
 

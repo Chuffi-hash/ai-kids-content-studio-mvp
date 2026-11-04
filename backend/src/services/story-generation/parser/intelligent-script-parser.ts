@@ -42,26 +42,59 @@ export function normalizeAnimationAction(
   rawAction: string,
   line?: number
 ): { action: SupportedAnimationAction; warning?: ScriptWarning } {
-  const clean = (rawAction || '').toLowerCase().trim();
+  const clean = (rawAction || '').normalize('NFC').toLowerCase().trim();
+
+  // Helper to check English with word boundaries and Hindi without ASCII \b
+  const matchesEnglish = (re: RegExp) => re.test(clean);
+  const matchesHindi = (patterns: string[]) => patterns.some((p) => clean.includes(p));
 
   // 1. Point / Directional gestures
-  if (/\b(point|points|pointing|indicate|indicates|indicating|direct|directs|directing|show|shows|showing|aim|aims|aiming|gesture[s]?\s+toward|gesturing\s+toward|इशारा|दिखा)\b/i.test(clean)) {
+  // Hindi: इशारा करता है, इशारा करती है, इशारा, दिखाता है, निर्देश देता है
+  // English: point, points, pointing, indicate, indicates, direct, directs, show, shows, gesture toward
+  if (
+    matchesEnglish(/\b(point|points|pointing|indicate|indicates|indicating|direct|directs|directing|show|shows|showing|aim|aims|aiming|gesture[s]?\s+toward|gesturing\s+toward)\b/i) ||
+    matchesHindi(['इशारा करता', 'इशारा करती', 'इशारा करते', 'इशारा', 'दिखाता', 'दिखाती', 'दिखाते'])
+  ) {
     return { action: 'point' };
   }
-  // 2. Walk synonyms
-  if (/\b(walk|walks|walking|move|moves|moving|run|runs|running|approach|approaches|approaching|march|marches|marching|stroll|strolls|strolling|step|steps|stepping|enter|enters|entering|चलता|चलती|दौड़)\b/i.test(clean)) {
+
+  // 2. Walk synonyms (including run)
+  // Hindi: चलता है, चलती है, चलते हैं, दौड़ता है, दौड़ती है, दौड़ते हैं, भागता है
+  // English: walk, walks, walking, run, runs, running, move, moves, approach, march, stroll, step, enter
+  if (
+    matchesEnglish(/\b(walk|walks|walking|move|moves|moving|run|runs|running|approach|approaches|approaching|march|marches|marching|stroll|strolls|strolling|step|steps|stepping|enter|enters|entering)\b/i) ||
+    matchesHindi(['चलता है', 'चलती है', 'चलते हैं', 'चल रहा', 'चलता', 'चलती', 'दौड़ता है', 'दौड़ती है', 'दौड़ते हैं', 'दौड़ता', 'दौड़ती', 'भागता', 'कदम बढ़ाता'])
+  ) {
     return { action: 'walk' };
   }
+
   // 3. Wave synonyms
-  if (/\b(wave|waves|waving|greet|greets|greeting|hello|gesture|gestures|gesturing|salute|salutes|saluting|beckon|beckons|beckoning|bye|लहरा|हाथ हिला)\b/i.test(clean)) {
+  // Hindi: हाथ हिलाता है, हाथ हिलाती है, हाथ हिलाते हैं, हाथ हिला, अभिवादन
+  // English: wave, waves, waving, greet, greets, hello, salute, salutes, beckon, beckons
+  if (
+    matchesEnglish(/\b(wave|waves|waving|greet|greets|greeting|hello|gesture|gestures|gesturing|salute|salutes|saluting|beckon|beckons|beckoning|bye)\b/i) ||
+    matchesHindi(['हाथ हिलाता है', 'हाथ हिलाती है', 'हाथ हिलाते हैं', 'हाथ हिला', 'लहराता', 'अभिवादन'])
+  ) {
     return { action: 'wave' };
   }
+
   // 4. Jump synonyms
-  if (/\b(jump|jumps|jumping|hop|hops|hopping|bounce|bounces|bouncing|leap|leaps|leaping|skip|skips|skipping|कूद|उछल)\b/i.test(clean)) {
+  // Hindi: कूदता है, कूदती है, कूदते हैं, कूदता, उछलता है, उछलती है, उछलते हैं
+  // English: jump, jumps, jumping, hop, hops, hopping, bounce, bounces, leap, leaps, skip, skips
+  if (
+    matchesEnglish(/\b(jump|jumps|jumping|hop|hops|hopping|bounce|bounces|bouncing|leap|leaps|leaping|skip|skips|skipping)\b/i) ||
+    matchesHindi(['कूदता है', 'कूदती है', 'कूदते हैं', 'कूदता', 'कूदती', 'उछलता है', 'उछलती है', 'उछलते हैं', 'उछलता', 'उछलती'])
+  ) {
     return { action: 'jump' };
   }
+
   // 5. Idle / Neutral synonyms
-  if (/\b(idle|idles|neutral|wait|waits|waiting|stand|stands|standing|listen|listens|listening|speak|speaks|speaking|talk|talks|talking|sit|sits|sitting|look|looks|looking|observe|observes|observing|rest|rests|resting|smile|smiles|smiling|float|floats|floating|शांत|खड़ा|बैठ|देख)\b/i.test(clean)) {
+  // Hindi: शांत, खड़ा है, खड़ी है, खड़े हैं, बैठा है, बैठती है, मुस्कुराता है, मुस्कुराती है, चारों ओर देखता है, देखता है
+  // English: idle, idles, neutral, wait, waits, stand, stands, listen, speaks, talks, sits, look, looks, looks around, observe, rests, smiles, smile, floats
+  if (
+    matchesEnglish(/\b(idle|idles|neutral|wait|waits|waiting|stand|stands|standing|listen|listens|listening|speak|speaks|speaking|talk|talks|talking|sit|sits|sitting|look|looks|looking|looks\s+around|looking\s+around|observe|observes|observing|rest|rests|resting|smile|smiles|smiling|float|floats|floating)\b/i) ||
+    matchesHindi(['खड़ा है', 'खड़ी है', 'खड़े हैं', 'खड़ा', 'खड़ी', 'बैठा है', 'बैठी है', 'बैठता', 'मुस्कुराता है', 'मुस्कुराती है', 'मुस्कुराते हैं', 'मुस्कुराता', 'मुस्कुराती', 'चारों ओर देखता है', 'चारों ओर देखती है', 'चारों ओर देखता', 'चारों तरफ देखता', 'देखता है', 'देखती है', 'देखता', 'शांत'])
+  ) {
     return { action: 'idle' };
   }
 
@@ -104,6 +137,8 @@ export interface ParseScriptOptions {
   language?: string;
   defaultTitle?: string;
   targetDuration?: number;
+  targetDurationSeconds?: number;
+  desiredDurationSeconds?: number;
   visualStyle?: string;
   genre?: string;
   look?: Partial<ProjectLookDNA>;
@@ -133,7 +168,15 @@ export class IntelligentScriptParser {
     // 1. Extract Global Metadata (Title, Target Duration, Language, Logline, Lesson)
     let title = options.defaultTitle || titlePage['title'] || '';
     let language = options.language || titlePage['language'] || 'Hindi';
-    let targetDurationSeconds = options.targetDuration || parseInt(titlePage['target duration'] || titlePage['duration'] || '60', 10);
+    const titleDurationRaw = parseInt(
+      titlePage['target duration'] || titlePage['target_duration'] || titlePage['duration'] || '',
+      10
+    );
+    const validTitleDuration = Number.isFinite(titleDurationRaw) && titleDurationRaw > 0 ? titleDurationRaw : undefined;
+    const effectiveOptionDuration = [options.targetDurationSeconds, options.desiredDurationSeconds, options.targetDuration].find(
+      (d) => typeof d === 'number' && Number.isFinite(d) && d > 0
+    );
+    let targetDurationSeconds = effectiveOptionDuration || validTitleDuration || 60;
     let logline = titlePage['logline'] || titlePage['synopsis'] || '';
     let lesson = titlePage['lesson'] || titlePage['moral'] || '';
     let genre = options.genre || titlePage['genre'] || 'Educational';
@@ -292,6 +335,9 @@ export class IntelligentScriptParser {
             explicitEffects.push(...tokens);
           } else if (pi.key === 'character_action') {
             let actor = (pi.actor || pi.metadata?.characterName || pi.metadata?.actor || '').trim();
+            if (/^(?:character|पात्र|char|action|क्रिया|अभिनय)$/i.test(actor)) {
+              actor = '';
+            }
             let actionText = pi.value.trim();
 
             // If actor was not parsed in label, check if value starts with a known character name:

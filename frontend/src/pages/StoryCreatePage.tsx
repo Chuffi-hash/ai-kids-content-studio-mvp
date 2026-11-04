@@ -102,6 +102,8 @@ export default function StoryCreatePage() {
         title: data.title,
         language: data.language || "Hindi",
         targetDuration: data.targetDurationSeconds || 60,
+        targetDurationSeconds: data.targetDurationSeconds || 60,
+        existingCharacters: characters.map((c) => ({ id: c.id, name: c.name, species: c.species })),
       });
 
       setDraftResult(draft);

@@ -387,6 +387,9 @@ export class FountainParser {
     const actionMatch = trimmed.match(actionPattern);
     if (actionMatch) {
       let actor = (actionMatch[1] || actionMatch[2] || '').replace(/^\*{1,2}|\*{1,2}$/g, '').trim();
+      if (/^(?:character|पात्र|char|action|क्रिया)$/i.test(actor)) {
+        actor = '';
+      }
       let actionValue = (actionMatch[3] || '').trim();
 
       return {
@@ -409,7 +412,10 @@ export class FountainParser {
     const emotionPattern = /^(?:\*{1,2})?(?:([A-Za-z0-9\u0900-\u097F\s\-_]+?)\s+)?(?:speaking\s+)?(?:emotion|भाव|बोलने का भाव)(?:\s*[\(—–-]\s*([A-Za-z0-9\u0900-\u097F\s\-_]+?)\s*[\)])?(?::\*{1,2}|\*{1,2}:|:)\s*(.*)$/i;
     const emotionMatch = trimmed.match(emotionPattern);
     if (emotionMatch) {
-      const actor = (emotionMatch[1] || emotionMatch[2] || '').replace(/^\*{1,2}|\*{1,2}$/g, '').trim();
+      let actor = (emotionMatch[1] || emotionMatch[2] || '').replace(/^\*{1,2}|\*{1,2}$/g, '').trim();
+      if (/^(?:character|speaking|पात्र|बोलने का भाव|भाव)$/i.test(actor)) {
+        actor = '';
+      }
       const val = (emotionMatch[3] || '').trim();
       return {
         type: 'production_instruction',
@@ -431,7 +437,10 @@ export class FountainParser {
     const expressionPattern = /^(?:\*{1,2})?(?:([A-Za-z0-9\u0900-\u097F\s\-_]+?)\s+)?(?:facial\s+)?(?:expression|चेहरे के भाव|अभिव्यक्ति)(?:\s*[\(—–-]\s*([A-Za-z0-9\u0900-\u097F\s\-_]+?)\s*[\)])?(?::\*{1,2}|\*{1,2}:|:)\s*(.*)$/i;
     const exprMatch = trimmed.match(expressionPattern);
     if (exprMatch) {
-      const actor = (exprMatch[1] || exprMatch[2] || '').replace(/^\*{1,2}|\*{1,2}$/g, '').trim();
+      let actor = (exprMatch[1] || exprMatch[2] || '').replace(/^\*{1,2}|\*{1,2}$/g, '').trim();
+      if (/^(?:character|facial|पात्र|चेहरे के भाव|अभिव्यक्ति)$/i.test(actor)) {
+        actor = '';
+      }
       const val = (exprMatch[3] || '').trim();
       return {
         type: 'production_instruction',

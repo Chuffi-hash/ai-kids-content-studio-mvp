@@ -553,6 +553,8 @@ export class StoryImporterService {
       language?: string;
       defaultTitle?: string;
       targetDuration?: number;
+      targetDurationSeconds?: number;
+      desiredDurationSeconds?: number;
       existingCharacters?: Array<{ id: string; name: string; species?: string }>;
     }
   ): DraftStoryboardResult {
@@ -561,10 +563,15 @@ export class StoryImporterService {
       throw new Error('Script text cannot be empty');
     }
 
+    const effectiveDuration = [options?.targetDurationSeconds, options?.desiredDurationSeconds, options?.targetDuration].find(
+      (d) => typeof d === 'number' && Number.isFinite(d) && d > 0
+    );
+
     const ir = IntelligentScriptParser.parse(text, {
       language: options?.language,
       defaultTitle: options?.defaultTitle,
-      targetDuration: options?.targetDuration,
+      targetDuration: effectiveDuration,
+      targetDurationSeconds: effectiveDuration,
       existingCharacters: options?.existingCharacters,
     });
 
@@ -612,10 +619,7 @@ export class StoryImporterService {
       }
     }
 
-    if (charNamesSet.size === 0) {
-      charNamesSet.add('Earth');
-    }
-
+    // If charNamesSet is empty, this is a narrator-only script with no characters.
     // In replace mode, clean up ghost characters and stale storyCharacter links
     if (importMode === 'replace') {
       const ghostNames = [
@@ -781,14 +785,10 @@ export class StoryImporterService {
         }
       }
 
-      if (sceneCharNames.size === 0 && allLinkedChars.length > 0) {
-        sceneCharRecords.push(allLinkedChars[0]);
-      } else {
-        for (const cName of sceneCharNames) {
-          const rec = resolvedCharsMap.get(cName);
-          if (rec && !sceneCharRecords.some((c) => c.id === rec.id)) {
-            sceneCharRecords.push(rec);
-          }
+      for (const cName of sceneCharNames) {
+        const rec = resolvedCharsMap.get(cName);
+        if (rec && !sceneCharRecords.some((c) => c.id === rec.id)) {
+          sceneCharRecords.push(rec);
         }
       }
 
@@ -836,10 +836,12 @@ export class StoryImporterService {
 
       for (const d of draft.dialogue || []) {
         if (!d.text || !d.text.trim()) continue;
-        const cleanedName = cleanSpeakerName(d.characterName || 'Earth');
+        const cleanedName = cleanSpeakerName(d.characterName || '');
         if (isReservedMetadataKey(cleanedName)) continue;
         const charNameLower = cleanedName.toLowerCase();
-        const matchedChar = sceneCharRecords.find((c) => c.name.toLowerCase() === charNameLower) || sceneCharRecords[0];
+        // Resolve speaker by exact name against scene characters, then globally resolved characters
+        const matchedChar = sceneCharRecords.find((c) => c.name.toLowerCase() === charNameLower)
+          || (cleanedName ? resolvedCharsMap.get(charNameLower) : undefined);
         const matchedInst = characterInstances.find(
           (ci) => ci.name?.toLowerCase() === charNameLower || (matchedChar && ci.characterId === matchedChar.id)
         );
@@ -857,7 +859,7 @@ export class StoryImporterService {
           id: d.id || randomUUID(),
           characterId: matchedChar?.id,
           characterInstanceId: matchedInst?.instanceId,
-          characterName: cleanedName || matchedChar?.name || 'Earth',
+          characterName: cleanedName || matchedChar?.name || 'Narrator',
           text: d.text,
           lang: isHindi ? 'hi' : 'en',
           voice: charVoice,
@@ -905,12 +907,9 @@ export class StoryImporterService {
 
       // Build character animation clips
       const clips: AnimationClip[] = characterInstances.map((ci) => {
-        let matchingAction = (draft.characterActions || []).find(
+        const matchingAction = (draft.characterActions || []).find(
           (a) => cleanSpeakerName(a.characterName || '').toLowerCase() === ci.name?.toLowerCase()
         );
-        if (!matchingAction && (draft.characterActions || []).length > 0) {
-          matchingAction = draft.characterActions[0];
-        }
         const act = matchingAction?.action || 'idle';
         return {
           clipId: `clip-${ci.instanceId}-${act}`,
