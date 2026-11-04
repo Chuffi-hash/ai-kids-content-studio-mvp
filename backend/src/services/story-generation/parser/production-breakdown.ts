@@ -124,15 +124,20 @@ export class ProductionBreakdownExtractor {
     explicitEffects?: string[];
     characterNames: string[];
   }): ProductionBreakdown {
-    const combinedCorpus = [
+    // Separate visual corpus (visual prompt, action lines, titles) from spoken corpus (narration, dialogue)
+    const visualCorpus = [
       sceneContext.title,
       sceneContext.locationText || '',
       sceneContext.visualPrompt || '',
+      ...sceneContext.actionTexts,
+    ].join(' ').toLowerCase();
+
+    const spokenCorpus = [
       sceneContext.narration || '',
       ...sceneContext.dialogueTexts,
-      ...sceneContext.actionTexts,
-      ...(sceneContext.explicitEffects || []),
     ].join(' ').toLowerCase();
+
+    const combinedCorpus = `${visualCorpus} ${spokenCorpus}`;
 
     // 1. Cast
     const cast = Array.from(new Set(sceneContext.characterNames)).filter(Boolean);
@@ -145,47 +150,52 @@ export class ProductionBreakdownExtractor {
       locations.push(sceneContext.title.trim());
     }
 
-    // 3. Props
+    // 3. Props (Scanned from visual descriptions, actions, and scene context)
     const detectedProps = new Set<string>();
     for (const [propName, terms] of Object.entries(PROP_KEYWORDS)) {
-      if (terms.some((term) => combinedCorpus.includes(term.toLowerCase()))) {
+      if (terms.some((term) => visualCorpus.includes(term.toLowerCase()))) {
         detectedProps.add(propName);
       }
     }
 
     // 4. VFX / Studio Overlays
+    // Rule: Spoken dialogue and narration MUST NOT trigger visual VFX overlays!
+    // VFX overlays are strictly driven by explicit instructions and visual/action descriptions.
+    const explicitVfx = new Set<string>();
     const detectedVfx = new Set<string>();
 
-    // A. Explicitly specified effects take precedence
+    // A. Explicitly specified effects take top precedence
     if (Array.isArray(sceneContext.explicitEffects)) {
       for (const eff of sceneContext.explicitEffects) {
         const clean = eff.trim().toLowerCase().replace(/[\s-]+/g, '_');
         if (OVERLAY_TYPE_MAPPINGS[clean]) {
-          detectedVfx.add(clean);
+          explicitVfx.add(clean);
         }
       }
     }
 
-    // B. Keyword scanning
+    // B. Deterministic visual keyword scanning (strictly from visualPrompt and actionTexts)
     for (const [overlayType, config] of Object.entries(OVERLAY_TYPE_MAPPINGS)) {
-      if (config.keywords.some((kw) => combinedCorpus.includes(kw.toLowerCase()))) {
+      if (config.keywords.some((kw) => visualCorpus.includes(kw.toLowerCase()))) {
         detectedVfx.add(overlayType);
       }
     }
 
-    // 5. Lighting & Time of Day
+    const allVfx = new Set<string>([...explicitVfx, ...detectedVfx]);
+
+    // 5. Lighting & Time of Day (Derived from scene slugline, title, and visual prompt)
     let timeOfDay = 'DAY';
     for (const [tod, terms] of Object.entries(LIGHTING_KEYWORDS)) {
-      if (terms.some((term) => combinedCorpus.includes(term.toLowerCase()))) {
+      if (terms.some((term) => visualCorpus.includes(term.toLowerCase()))) {
         timeOfDay = tod;
         break;
       }
     }
 
-    // 6. Sound Effects
+    // 6. Sound Effects (Scanned from visual cues, action lines, and auditory prompts)
     const detectedSounds = new Set<string>();
     for (const [sfx, terms] of Object.entries(SOUND_KEYWORDS)) {
-      if (terms.some((term) => combinedCorpus.includes(term.toLowerCase()))) {
+      if (terms.some((term) => visualCorpus.includes(term.toLowerCase()))) {
         detectedSounds.add(sfx);
       }
     }
@@ -217,7 +227,9 @@ export class ProductionBreakdownExtractor {
       cast,
       locations,
       props: Array.from(detectedProps),
-      vfx: Array.from(detectedVfx),
+      vfx: Array.from(allVfx),
+      explicitVfx: Array.from(explicitVfx),
+      detectedVfx: Array.from(detectedVfx),
       lighting: {
         timeOfDay,
         description: `${timeOfDay.replace('_', ' ')} natural ambient illumination`,

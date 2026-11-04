@@ -82,8 +82,9 @@ export interface DialogueNode extends FountainNode {
 
 export interface ProductionInstructionNode extends FountainNode {
   type: 'production_instruction';
-  key: string; // e.g. 'background_prompt', 'narration', 'effects', 'action', 'emotion', 'expression'
+  key: string; // e.g. 'background_prompt', 'narration', 'effects', 'character_action', 'speaking_emotion', 'facial_expression'
   value: string;
+  actor?: string;
 }
 
 /**
@@ -95,6 +96,8 @@ export interface ProductionBreakdown {
   locations: string[];
   props: string[];
   vfx: string[];
+  explicitVfx?: string[];
+  detectedVfx?: string[];
   lighting: {
     timeOfDay: string;
     description?: string;
@@ -135,9 +138,11 @@ export interface CharacterBibleEntry {
 }
 
 export interface LocationBibleEntry {
+  id?: string;
   name: string;
   desc: string;
   features?: string[];
+  canonicalPrompt?: string;
 }
 
 export interface ProjectBibles {
@@ -164,6 +169,7 @@ export interface ParsedScene {
   slugline?: string;
   intExt?: 'INT' | 'EXT' | 'INT/EXT';
   location: string;
+  locationId?: string;
   timeOfDay?: string;
   durationSeconds: number;
   durationConfidence: 'explicit' | 'estimated';

@@ -43,8 +43,16 @@ export class PromptSynthesizer {
     // 1. If explicit prompt is present, preserve it!
     if (explicitPrompt && explicitPrompt.trim().length > 15) {
       let prompt = explicitPrompt.trim();
-      // Ensure negative constraint is appended if missing
-      if (!prompt.toLowerCase().includes('no characters')) {
+      const lower = prompt.toLowerCase();
+      // Ensure negative constraint is appended only if not already specified
+      const hasNegativeConstraint =
+        lower.includes('no characters') ||
+        lower.includes('no people') ||
+        lower.includes('no figures') ||
+        lower.includes('environment only') ||
+        lower.includes('backdrop only');
+
+      if (!hasNegativeConstraint) {
         prompt += ' Environment only. Keep central foreground open for a separately animated character. No characters, text, captions, logos or watermarks.';
       }
       return prompt;
@@ -73,11 +81,22 @@ export class PromptSynthesizer {
   }
 
   /**
+   * Normalizes a raw location string or scene title to a canonical location name.
+   */
+  public static normalizeLocationName(name: string): string {
+    return (name || '')
+      .replace(/^(?:Scene|दृश्य)\s*(?:\d+|[०-९]+)[:\s—–-]*/i, '')
+      .replace(/\(.*?s.*?\)/i, '')
+      .replace(/[-–]\s*(?:DAY|NIGHT|MORNING|EVENING|GOLDEN_HOUR|SUNSET|SUNRISE).*$/i, '')
+      .trim();
+  }
+
+  /**
    * Creates initial project bibles from script title page and character declarations.
    */
   public static buildInitialBibles(options: {
-    characters: Array<{ name: string; description?: string; role?: string; voice?: string }>;
-    locations?: Array<{ name: string; desc?: string }>;
+    characters: Array<{ name: string; description?: string; role?: string; voice?: string; species?: string }>;
+    locations?: Array<{ name: string; desc?: string; id?: string }>;
   }): ProjectBibles {
     const bibles: ProjectBibles = {
       characters: {},
@@ -89,6 +108,7 @@ export class PromptSynthesizer {
       bibles.characters[c.name] = {
         name: c.name,
         role: c.role || 'protagonist',
+        species: c.species,
         desc: c.description || `Friendly animated character named ${c.name}`,
         voice: c.voice,
       };
@@ -96,10 +116,15 @@ export class PromptSynthesizer {
 
     if (Array.isArray(options.locations)) {
       for (const loc of options.locations) {
-        bibles.locations[loc.name] = {
-          name: loc.name,
-          desc: loc.desc || `Scenic storybook environment: ${loc.name}`,
-        };
+        const canonicalName = PromptSynthesizer.normalizeLocationName(loc.name) || loc.name;
+        if (!bibles.locations[canonicalName]) {
+          const locSlug = canonicalName.toLowerCase().replace(/[^a-z0-9]+/g, '_').slice(0, 30);
+          bibles.locations[canonicalName] = {
+            id: loc.id || `loc_${locSlug}`,
+            name: canonicalName,
+            desc: loc.desc || `Scenic storybook environment: ${canonicalName}`,
+          };
+        }
       }
     }
 

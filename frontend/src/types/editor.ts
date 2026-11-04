@@ -116,6 +116,16 @@ export interface DraftOverlayItem {
   color?: string;
 }
 
+export interface ScriptWarning {
+  code: string;
+  message: string;
+  line: number;
+  column?: number;
+  severity: 'info' | 'warning' | 'error';
+  suggestion?: string;
+  sourceContext?: string;
+}
+
 export interface DraftStoryboardScene {
   sceneNumber: number;
   title: string;
@@ -123,8 +133,10 @@ export interface DraftStoryboardScene {
   visualPrompt: string;
   narration: string;
   dialogue: DraftDialogueLine[];
-  characterActions: Array<{ characterName: string; action: string }>;
+  characterActions: Array<{ characterName: string; action: string; description?: string }>;
   suggestedOverlays: DraftOverlayItem[];
+  breakdown?: any;
+  shots?: any[];
 }
 
 export interface DraftStoryboardResult {
@@ -150,5 +162,7 @@ export interface DraftStoryboardResult {
     description?: string;
   }>;
   scenes: DraftStoryboardScene[];
+  look?: any;
+  warnings?: ScriptWarning[];
 }
 

@@ -40,7 +40,7 @@ test("Talking Earth Rig - Custom Rig Generation from Appearance", () => {
   const earthPreset = CHARACTER_PRESETS.earth;
   assert.ok(earthPreset, "Earth preset must exist");
   assert.strictEqual(earthPreset.appearance.species, "planet");
-  assert.strictEqual(earthPreset.appearance.voiceConfig?.voiceId, "bm_daniel");
+  assert.strictEqual(earthPreset.appearance.voiceConfig?.voiceId, "hf_alpha");
 
   const builtRig = buildRigFromAppearance("earth-instance-1", "Terra", earthPreset.appearance);
   assert.strictEqual(builtRig.species, "planet");
@@ -137,7 +137,7 @@ test("Character Resolution - Earth / Planet Recognition", async () => {
   assert.strictEqual(resolvedCharacters.length, 1);
   const terra = resolvedCharacters[0];
   assert.strictEqual(terra.species, "planet");
-  assert.strictEqual(terra.canonicalAppearance?.voiceConfig?.voiceId, "bm_daniel");
+  assert.strictEqual(terra.canonicalAppearance?.voiceConfig?.voiceId, "hf_alpha");
 
   if (terra.id) {
     await deleteCharacter(terra.id).catch(() => {});
@@ -181,6 +181,7 @@ test("Scene Preparation - Sequential Dialogue Timing & Viseme Generation", () =>
       location: "Space",
       timeOfDay: "Day",
       durationSeconds: 8,
+      language: "en",
       dialogue: [
         {
           characterName: "Terra",
@@ -219,7 +220,7 @@ test("Scene Preparation - Sequential Dialogue Timing & Viseme Generation", () =>
 
   const [d1, d2] = animData.dialogueLines;
   assert.strictEqual(d1.characterName, "Terra");
-  assert.strictEqual(d1.voice, "bm_daniel", "Terra must be assigned Daniel's Kokoro voice");
+  assert.strictEqual(d1.voice, "af_heart", "Terra must be assigned Kokoro voice af_heart in English");
   assert.ok(d1.visemeCues && d1.visemeCues.length > 0, "Terra must have initial viseme cues");
 
   assert.strictEqual(d2.characterName, "Pip");
@@ -412,21 +413,23 @@ test("Per-Character Voice Assignment - Normalization & Independent Persistence",
 test("Dialogue Voice Resolution - Resolves by Character ID or Name with Fallbacks", async () => {
   const audioService = new AudioGenerationService();
 
-  // Test 1: Fallback heuristic for Earth/Terra when no voice passed
+  // Test 1: Fallback heuristic for Earth/Terra when English requested
   const earthDialogue = await audioService.generateCharacterDialogueAudio({
     sceneId: "scene-test-fallback",
     characterName: "Terra",
     text: "Welcome to the solar system!",
+    lang: "en",
   });
-  assert.strictEqual(earthDialogue.voice, "bm_daniel", "Earth/Terra must resolve to bm_daniel by default");
+  assert.strictEqual(earthDialogue.voice, "af_heart", "Earth/Terra must resolve to af_heart in English");
 
-  // Test 2: Fallback heuristic for Bear when no voice passed
+  // Test 2: Fallback heuristic for Bear when English requested
   const bearDialogue = await audioService.generateCharacterDialogueAudio({
     sceneId: "scene-test-fallback",
     characterName: "Pip the Bear",
     text: "Look at the stars!",
+    lang: "en",
   });
-  assert.strictEqual(bearDialogue.voice, "bm_george", "Bear must resolve to bm_george by default");
+  assert.strictEqual(bearDialogue.voice, "bm_george", "Bear must resolve to bm_george in English");
 
   // Test 3: Resolution from DB character record
   const customCharId = `test-char-${randomUUID()}`;
@@ -441,6 +444,7 @@ test("Dialogue Voice Resolution - Resolves by Character ID or Name with Fallback
       ...CHARACTER_PRESETS.kid_boy.appearance,
       voiceConfig: {
         voiceId: "af_sky",
+        lang: "en",
         speed: 1.1,
         style: "curious",
         effect: "normal",

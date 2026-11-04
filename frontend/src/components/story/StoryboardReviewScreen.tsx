@@ -89,7 +89,7 @@ export const StoryboardReviewScreen: React.FC<StoryboardReviewScreenProps> = ({
 
   const handleAddScene = () => {
     const newSceneNum = draft.scenes.length + 1;
-    const defaultSpeaker = draft.characters[0]?.name || 'Earth';
+    const defaultSpeaker = draft.characters[0]?.name || 'Character';
     const isHindi = (draft.language || 'Hindi').toLowerCase().includes('hindi');
     const defaultVoice = isHindi ? 'hf_alpha' : 'af_heart';
 
@@ -113,7 +113,7 @@ export const StoryboardReviewScreen: React.FC<StoryboardReviewScreenProps> = ({
           voice: defaultVoice,
         },
       ],
-      characterActions: [{ characterName: defaultSpeaker, action: 'wave' }],
+      characterActions: [{ characterName: defaultSpeaker, action: 'idle' }],
       suggestedOverlays: [],
     };
 
@@ -122,7 +122,7 @@ export const StoryboardReviewScreen: React.FC<StoryboardReviewScreenProps> = ({
 
   const handleAddDialogue = (sceneIdx: number) => {
     const scene = draft.scenes[sceneIdx];
-    const defaultSpeaker = draft.characters[0]?.name || 'Earth';
+    const defaultSpeaker = draft.characters[0]?.name || 'Character';
     const isHindi = (draft.language || 'Hindi').toLowerCase().includes('hindi');
     const defaultVoice = isHindi ? 'hf_alpha' : 'af_heart';
 
@@ -139,6 +139,43 @@ export const StoryboardReviewScreen: React.FC<StoryboardReviewScreenProps> = ({
       ...scene,
       dialogue: [...scene.dialogue, newLine],
     });
+  };
+
+  const handleAddCharacterAction = (sceneIdx: number) => {
+    const scene = draft.scenes[sceneIdx];
+    const defaultActor = draft.characters[0]?.name || scene.dialogue[0]?.characterName || 'Character';
+    const newAction = {
+      characterName: defaultActor,
+      action: 'idle',
+      description: '',
+    };
+    const currentActions = scene.characterActions || [];
+    handleUpdateScene(sceneIdx, {
+      ...scene,
+      characterActions: [...currentActions, newAction],
+    });
+  };
+
+  const handleUpdateCharacterAction = (
+    sceneIdx: number,
+    actIdx: number,
+    field: 'characterName' | 'action' | 'description',
+    val: string
+  ) => {
+    const scene = draft.scenes[sceneIdx];
+    const currentActions = [...(scene.characterActions || [])];
+    if (!currentActions[actIdx]) return;
+    currentActions[actIdx] = {
+      ...currentActions[actIdx],
+      [field]: val,
+    };
+    handleUpdateScene(sceneIdx, { ...scene, characterActions: currentActions });
+  };
+
+  const handleDeleteCharacterAction = (sceneIdx: number, actIdx: number) => {
+    const scene = draft.scenes[sceneIdx];
+    const currentActions = (scene.characterActions || []).filter((_, i) => i !== actIdx);
+    handleUpdateScene(sceneIdx, { ...scene, characterActions: currentActions });
   };
 
   const handleUpdateDialogue = (
@@ -279,6 +316,59 @@ export const StoryboardReviewScreen: React.FC<StoryboardReviewScreenProps> = ({
             <span>
               <strong>Duration Notice:</strong> Total scene duration ({totalCalculatedDuration}s) is longer than your target video duration ({draft.targetDurationSeconds}s). You can adjust individual scene durations below.
             </span>
+          </div>
+        )}
+
+        {draft.warnings && draft.warnings.length > 0 && (
+          <div
+            style={{
+              padding: '12px 16px',
+              borderRadius: '8px',
+              background: 'rgba(234, 179, 8, 0.1)',
+              border: '1px solid rgba(234, 179, 8, 0.35)',
+              marginBottom: '16px',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+              <AlertTriangleIcon size={16} color="#eab308" />
+              <strong style={{ fontSize: '13px', color: '#facc15' }}>
+                Script Parser Diagnostics ({draft.warnings.length})
+              </strong>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              {draft.warnings.map((w, idx) => (
+                <div
+                  key={`warning-${idx}`}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'baseline',
+                    gap: '8px',
+                    fontSize: '12px',
+                    color: w.severity === 'error' ? '#f87171' : w.severity === 'warning' ? '#fde047' : '#93c5fd',
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: '10px',
+                      fontWeight: 700,
+                      padding: '1px 6px',
+                      borderRadius: '4px',
+                      background: w.severity === 'error' ? 'rgba(239, 68, 68, 0.2)' : 'rgba(234, 179, 8, 0.2)',
+                      border: `1px solid ${w.severity === 'error' ? '#ef4444' : '#eab308'}`,
+                      textTransform: 'uppercase',
+                    }}
+                  >
+                    {w.code}
+                  </span>
+                  <span>{w.message}</span>
+                  {w.suggestion && (
+                    <span style={{ color: 'var(--ed-text-muted, #94a3b8)', fontStyle: 'italic' }}>
+                      — {w.suggestion}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
@@ -440,6 +530,23 @@ export const StoryboardReviewScreen: React.FC<StoryboardReviewScreenProps> = ({
                 >
                   Scene {scene.sceneNumber}
                 </span>
+                {((scene as any).locationId || scene.breakdown?.location) && (
+                  <span
+                    style={{
+                      fontSize: '11px',
+                      padding: '3px 8px',
+                      borderRadius: '4px',
+                      background: 'rgba(56, 189, 248, 0.12)',
+                      color: '#38bdf8',
+                      border: '1px solid rgba(56, 189, 248, 0.3)',
+                      fontWeight: 600,
+                      flexShrink: 0,
+                    }}
+                    title={`Location: ${scene.breakdown?.location || (scene as any).locationId}`}
+                  >
+                    📍 {scene.breakdown?.location || (scene as any).locationId}
+                  </span>
+                )}
                 <input
                   type="text"
                   className="ed-details-input"
@@ -656,6 +763,107 @@ export const StoryboardReviewScreen: React.FC<StoryboardReviewScreenProps> = ({
                           justifyContent: 'center',
                         }}
                         title="Delete Dialogue Line"
+                      >
+                        <TrashIcon size={13} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Character Animation Actions */}
+            <div style={{ marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                <label style={{ fontSize: '11px', fontWeight: 600, color: '#a855f7' }}>
+                  🎭 Character Animation Actions ({scene.characterActions?.length || 0})
+                </label>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => handleAddCharacterAction(sceneIdx)}
+                  style={{ fontSize: '11px', padding: '3px 8px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                >
+                  <PlusIcon size={11} />
+                  <span>Add Action</span>
+                </button>
+              </div>
+
+              {(!scene.characterActions || scene.characterActions.length === 0) ? (
+                <div style={{ padding: '8px 12px', background: 'var(--ed-surface-elevated, #162035)', borderRadius: '6px', fontSize: '12px', color: 'var(--ed-text-muted, #94a3b8)' }}>
+                  No character actions specified for this scene (characters will default to idle).
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {scene.characterActions.map((act, actIdx) => (
+                    <div
+                      key={`action-${actIdx}`}
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: '150px 130px 1fr 32px',
+                        gap: '8px',
+                        alignItems: 'center',
+                        background: 'rgba(168, 85, 247, 0.06)',
+                        border: '1px solid rgba(168, 85, 247, 0.25)',
+                        borderRadius: '6px',
+                        padding: '6px 10px',
+                      }}
+                    >
+                      {/* Character Name */}
+                      <input
+                        type="text"
+                        className="ed-details-input"
+                        style={{ fontSize: '12px', padding: '4px 8px' }}
+                        value={act.characterName}
+                        onChange={(e) =>
+                          handleUpdateCharacterAction(sceneIdx, actIdx, 'characterName', e.target.value)
+                        }
+                        placeholder="Character name"
+                      />
+
+                      {/* Action Selector */}
+                      <select
+                        className="ed-details-select"
+                        style={{ fontSize: '12px', padding: '4px 6px' }}
+                        value={act.action || 'idle'}
+                        onChange={(e) =>
+                          handleUpdateCharacterAction(sceneIdx, actIdx, 'action', e.target.value)
+                        }
+                      >
+                        <option value="idle">Idle (Default)</option>
+                        <option value="walk">Walk</option>
+                        <option value="wave">Wave</option>
+                        <option value="jump">Jump</option>
+                        <option value="point">Point</option>
+                      </select>
+
+                      {/* Action Description */}
+                      <input
+                        type="text"
+                        className="ed-details-input"
+                        style={{ fontSize: '12px', padding: '4px 8px' }}
+                        value={act.description || ''}
+                        onChange={(e) =>
+                          handleUpdateCharacterAction(sceneIdx, actIdx, 'description', e.target.value)
+                        }
+                        placeholder="Action description (e.g. pointing at the sky, walks forward)..."
+                      />
+
+                      {/* Delete Action */}
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteCharacterAction(sceneIdx, actIdx)}
+                        style={{
+                          background: 'transparent',
+                          border: 'none',
+                          color: 'var(--ed-text-muted, #94a3b8)',
+                          cursor: 'pointer',
+                          padding: '4px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                        title="Delete Action"
                       >
                         <TrashIcon size={13} />
                       </button>
