@@ -4,6 +4,7 @@ export interface VideoGenerationInput {
   duration?: number;
   audioUrl?: string;
   cameraDirection?: string;
+  cameraMovement?: string;
   resolution?: string;
   fps?: number;
   workflow?: 'ffmpeg' | 'ai';

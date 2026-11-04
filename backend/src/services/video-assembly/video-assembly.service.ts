@@ -369,6 +369,7 @@ export class VideoAssemblyService {
             width,
             height,
             fps,
+            cameraMovement: (scene as any).animationData?.cameraMovement || (scene as any).cameraMovement,
             outputPath: segmentPath,
           });
         } else {
@@ -817,6 +818,7 @@ export class VideoAssemblyService {
     width: number;
     height: number;
     fps: number;
+    cameraMovement?: string;
     outputPath: string;
   }): Promise<void> {
     const {
@@ -828,10 +830,51 @@ export class VideoAssemblyService {
       width,
       height,
       fps,
+      cameraMovement,
       outputPath,
     } = options;
 
-    const vf = `scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2,format=yuv420p`;
+    const totalFrames = Math.max(fps * 2, Math.round(durationSec * fps));
+    const zoomStep = (0.15 / totalFrames).toFixed(6);
+    const mov = (cameraMovement || '').toLowerCase();
+
+    let vf: string;
+    if (mov && !mov.includes('static') && !mov.includes('no movement')) {
+      let zoomExpr: string;
+      let xExpr: string;
+      let yExpr: string;
+
+      if (mov.includes('zoom out')) {
+        zoomExpr = `'max(1.15-${zoomStep}*on,1.0)'`;
+        xExpr = `'iw/2-(iw/zoom/2)'`;
+        yExpr = `'ih/2-(ih/zoom/2)'`;
+      } else if (mov.includes('pan left')) {
+        zoomExpr = `'1.15'`;
+        xExpr = `'(iw-iw/zoom)*(1-on/${totalFrames})'`;
+        yExpr = `'ih/2-(ih/zoom/2)'`;
+      } else if (mov.includes('pan right')) {
+        zoomExpr = `'1.15'`;
+        xExpr = `'(iw-iw/zoom)*(on/${totalFrames})'`;
+        yExpr = `'ih/2-(ih/zoom/2)'`;
+      } else if (mov.includes('tilt up')) {
+        zoomExpr = `'1.15'`;
+        xExpr = `'iw/2-(iw/zoom/2)'`;
+        yExpr = `'(ih-ih/zoom)*(1-on/${totalFrames})'`;
+      } else if (mov.includes('tilt down')) {
+        zoomExpr = `'1.15'`;
+        xExpr = `'iw/2-(iw/zoom/2)'`;
+        yExpr = `'(ih-ih/zoom)*(on/${totalFrames})'`;
+      } else {
+        // slow zoom in
+        zoomExpr = `'min(zoom+${zoomStep},1.15)'`;
+        xExpr = `'iw/2-(iw/zoom/2)'`;
+        yExpr = `'ih/2-(ih/zoom/2)'`;
+      }
+      vf = `scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},zoompan=z=${zoomExpr}:x=${xExpr}:y=${yExpr}:d=${totalFrames}:s=${width}x${height}:fps=${fps},format=yuv420p`;
+    } else {
+      vf = `scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2,format=yuv420p`;
+    }
+
     const { audioInputArgs, filterComplexArgs, mapArgs } = this.buildAudioMixFfmpegArgs({
       videoInputCount: 1,
       audioPath,

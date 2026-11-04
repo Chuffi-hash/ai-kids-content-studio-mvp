@@ -49,7 +49,7 @@ export default function Sidebar() {
         </div>
         <div className="brand-text">
           <strong>Content Studio</strong>
-          <span>Kids Media Studio</span>
+          <span>Content Studio</span>
         </div>
       </div>
 

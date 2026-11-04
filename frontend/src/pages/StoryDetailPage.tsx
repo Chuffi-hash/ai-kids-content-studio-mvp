@@ -1315,55 +1315,87 @@ export default function StoryDetailPage() {
   // ----------------------------------------------------
   // AI Generation Operations (Real Services)
   // ----------------------------------------------------
-  const handleGenerateImage = async (sceneId: string, promptOverride?: string) => {
+  const handleGenerateImage = async (
+    sceneId: string,
+    promptOverride?: string,
+    options?: editorService.GenerateSceneImageOptions
+  ) => {
     if (!story) return;
     try {
       setGeneratingImageForScene(sceneId);
       const characters = story.characters || [];
+      const targetScene = scenes.find((s) => s.sceneId === sceneId);
+      const effectiveCameraDirection = options?.cameraDirection || targetScene?.cameraDirection || undefined;
+      const effectiveCameraMovement = options?.cameraMovement || (targetScene?.animationData as any)?.cameraMovement || undefined;
+
       const result = await editorService.generateSceneImage(
         sceneId,
         story.storyId,
         characters,
-        promptOverride
+        promptOverride,
+        {
+          cameraDirection: effectiveCameraDirection,
+          cameraMovement: effectiveCameraMovement,
+          aspectRatio: options?.aspectRatio,
+          visualStyle: options?.visualStyle,
+          projectLook: options?.projectLook,
+          fit: options?.fit,
+        }
       );
 
-      // Update scene with generated image. If the current animation background is unset
-      // or was using the previous scene image, keep the editor preview and export in sync.
-      // Preserve a separately selected background if it differs from the scene's image.
-      const updated = scenes.map((s) => {
-        if (s.sceneId !== sceneId) return s;
+      if (!options?.previewOnly) {
+        // Update scene with generated image. If the current animation background is unset
+        // or was using the previous scene image, keep the editor preview and export in sync.
+        // Preserve a separately selected background if it differs from the scene's image.
+        const updated = scenes.map((s) => {
+          if (s.sceneId !== sceneId) return s;
 
-        const currentBackgroundUrl = s.animationData?.background?.imageUrl;
-        const shouldSyncAnimationBackground =
-          !!s.animationData &&
-          (!currentBackgroundUrl || currentBackgroundUrl === s.imageUrl);
+          const currentBackgroundUrl = s.animationData?.background?.imageUrl;
+          const shouldSyncAnimationBackground =
+            !!s.animationData &&
+            (!currentBackgroundUrl || currentBackgroundUrl === s.imageUrl);
 
-        return {
-          ...s,
-          imageUrl: result.url,
-          animationData: shouldSyncAnimationBackground
+          const updatedAnim = shouldSyncAnimationBackground
             ? {
                 ...s.animationData!,
                 background: {
                   imageUrl: result.url,
-                  fit: s.animationData?.background?.fit || 'cover',
+                  fit: options?.fit || s.animationData?.background?.fit || 'cover',
+                  source: 'ai_generated',
+                  prompt: result.prompt,
+                  cameraDirection: effectiveCameraDirection,
+                  aspectRatio: options?.aspectRatio,
                 },
+                ...(effectiveCameraMovement ? { cameraMovement: effectiveCameraMovement } : {}),
               }
-            : s.animationData,
-          visualPrompt: promptOverride || s.visualPrompt,
-          generationStatus: 'completed' as const,
-        };
-      });
+            : {
+                ...s.animationData!,
+                ...(effectiveCameraMovement ? { cameraMovement: effectiveCameraMovement } : {}),
+              };
 
-      setScenes(updated);
-      triggerDebouncedSave(updated);
+          return {
+            ...s,
+            imageUrl: result.url,
+            cameraDirection: effectiveCameraDirection || s.cameraDirection,
+            animationData: updatedAnim,
+            visualPrompt: promptOverride || s.visualPrompt,
+            generationStatus: 'completed' as const,
+          };
+        });
 
-      // Refresh versions
-      const vers = await editorService.getSceneVersions(sceneId);
-      setActiveVersions(vers);
+        setScenes(updated);
+        triggerDebouncedSave(updated);
+
+        // Refresh versions
+        const vers = await editorService.getSceneVersions(sceneId);
+        setActiveVersions(vers);
+      }
+
+      return result;
     } catch (err: any) {
       console.error('Image generation error:', err);
       alert(`Image generation failed: ${err.message || 'Provider error'}`);
+      throw err;
     } finally {
       setGeneratingImageForScene(null);
     }
@@ -1706,7 +1738,7 @@ export default function StoryDetailPage() {
           onReorderScene={handleReorderScene}
           onOpenCharacterBuilder={() => setIsCharacterBuilderOpen(true)}
           onRegenerateScene={handleRegenerateScene}
-          onGenerateImage={(scId) => handleGenerateImage(scId)}
+          onGenerateImage={async (scId) => { await handleGenerateImage(scId); }}
           onGenerateVoice={(scId) => handleGenerateVoice(scId)}
           onGenerateVideo={(scId) => handleGenerateVideo(scId)}
           onToggleCharacterForScene={handleToggleCharacterForScene}
@@ -1831,7 +1863,7 @@ export default function StoryDetailPage() {
           onSetBackground={handleSetBackground}
           onUpdateBackgroundFit={handleUpdateBackgroundFit}
           onRemoveBackground={handleRemoveBackground}
-          onGenerateImage={(scId, prompt) => handleGenerateImage(scId, prompt)}
+          onGenerateImage={(scId, prompt, options) => handleGenerateImage(scId, prompt, options)}
           onGenerateVoice={(scId, opts) => handleGenerateVoice(scId, opts)}
           onRemoveVoice={handleRemoveVoice}
           onGenerateVideo={(scId) => handleGenerateVideo(scId)}

@@ -22,6 +22,7 @@ import {
   fetchStoryBackgrounds,
   StoryBackgroundImage,
   generateAllSceneDialogueAudios,
+  generateSceneImage,
 } from '../../services/editor.service';
 import { EMOTION_OPTIONS } from '../../utils/emotionSuggester';
 import {
@@ -74,7 +75,18 @@ interface PropertiesInspectorProps {
   onSetBackground?: (sceneId: string, imageUrl: string, fit?: 'cover' | 'contain') => Promise<void>;
   onUpdateBackgroundFit?: (sceneId: string, fit: 'cover' | 'contain') => Promise<void>;
   onRemoveBackground?: (sceneId: string) => Promise<void>;
-  onGenerateImage: (sceneId: string, promptOverride?: string) => Promise<void>;
+  onGenerateImage: (
+    sceneId: string,
+    promptOverride?: string,
+    options?: {
+      cameraDirection?: string;
+      cameraMovement?: string;
+      aspectRatio?: string;
+      visualStyle?: string;
+      fit?: 'cover' | 'contain';
+      previewOnly?: boolean;
+    }
+  ) => Promise<any>;
   onGenerateVoice: (
     sceneId: string,
     options?: {
@@ -208,6 +220,19 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
   const [localNarration, setLocalNarration] = useState(scene.narration);
   const [localPrompt, setLocalPrompt] = useState(scene.visualPrompt || '');
   const [localCamera, setLocalCamera] = useState(scene.cameraDirection || 'Eye level wide establishing shot');
+  const [localCameraMovement, setLocalCameraMovement] = useState<string>(
+    (scene.animationData as any)?.cameraMovement || 'Static (no movement)'
+  );
+  const [localAspectRatio, setLocalAspectRatio] = useState<string>(
+    (scene.animationData as any)?.background?.aspectRatio || '16:9'
+  );
+  const [localVisualStyle, setLocalVisualStyle] = useState<string>('Cinematic Storybook');
+  const [isGeneratingBg, setIsGeneratingBg] = useState<boolean>(false);
+  const [generatedPreview, setGeneratedPreview] = useState<{
+    url: string;
+    prompt?: string;
+    imageId?: string;
+  } | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showRemoveVoiceConfirm, setShowRemoveVoiceConfirm] = useState(false);
 
@@ -236,6 +261,8 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
     setLocalNarration(scene.narration);
     setLocalPrompt(scene.visualPrompt || '');
     setLocalCamera(scene.cameraDirection || 'Eye level wide establishing shot');
+    setLocalCameraMovement((scene.animationData as any)?.cameraMovement || 'Static (no movement)');
+    setLocalAspectRatio((scene.animationData as any)?.background?.aspectRatio || '16:9');
     setShowRemoveVoiceConfirm(false);
     setAudioPlaying(false);
     setAudioCurrentTime(0);
@@ -244,7 +271,16 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
       audioPlayerRef.current.pause();
       audioPlayerRef.current.currentTime = 0;
     }
-  }, [scene.sceneId, scene.title, scene.narration, scene.visualPrompt, scene.cameraDirection, scene.audioUrl]);
+  }, [
+    scene.sceneId,
+    scene.title,
+    scene.narration,
+    scene.visualPrompt,
+    scene.cameraDirection,
+    scene.audioUrl,
+    (scene.animationData as any)?.cameraMovement,
+    (scene.animationData as any)?.background?.aspectRatio,
+  ]);
 
   // Kokoro TTS Studio state
   const [ttsVoices, setTtsVoices] = useState<SupportedVoice[]>([]);
@@ -503,8 +539,15 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.type !== 'image/png' && file.type !== 'image/jpeg' && file.type !== 'image/jpg') {
-      setBgError('Please select a valid PNG or JPEG image file.');
+    const validTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
+    if (!validTypes.includes(file.type.toLowerCase())) {
+      setBgError('Please select a valid PNG, JPEG, or WebP image file.');
+      return;
+    }
+
+    const MAX_SIZE = 15 * 1024 * 1024;
+    if (file.size > MAX_SIZE) {
+      setBgError('Image file exceeds the 15MB limit.');
       return;
     }
 
@@ -578,6 +621,145 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
         })
         .catch((err) => setBgError(err.message || 'Failed to remove background'));
     }
+  };
+
+  const handleCameraMovementChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const val = e.target.value;
+    setLocalCameraMovement(val);
+    const anim = {
+      ...(scene.animationData || {
+        version: 1,
+        viewport: { width: 1280, height: 720 },
+        characterInstances: [],
+        animationClips: [],
+      }),
+      cameraMovement: val,
+    };
+    if (onUpdateAnimationData) {
+      onUpdateAnimationData(scene.sceneId, anim as any);
+    } else {
+      onUpdateScene(scene.sceneId, { animationData: anim as any });
+    }
+  };
+
+  const handleAspectRatioChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const val = e.target.value;
+    setLocalAspectRatio(val);
+    const currentBg = scene.animationData?.background;
+    const anim = {
+      ...(scene.animationData || {
+        version: 1,
+        viewport: { width: 1280, height: 720 },
+        characterInstances: [],
+        animationClips: [],
+      }),
+      background: {
+        ...(currentBg || { imageUrl: scene.imageUrl || '', fit: 'cover' }),
+        aspectRatio: val,
+      },
+    };
+    if (onUpdateAnimationData) {
+      onUpdateAnimationData(scene.sceneId, anim as any);
+    } else {
+      onUpdateScene(scene.sceneId, { animationData: anim as any });
+    }
+  };
+
+  const handleVisualStyleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setLocalVisualStyle(e.target.value);
+  };
+
+  const handleGenerateBackground = async () => {
+    setIsGeneratingBg(true);
+    setBgError(null);
+    try {
+      const opts: any = {
+        cameraDirection: localCamera,
+        cameraMovement: localCameraMovement,
+        aspectRatio: localAspectRatio,
+        visualStyle: localVisualStyle,
+        fit: currentBgFit,
+        previewOnly: true,
+      };
+      if (onGenerateImage) {
+        const res = await onGenerateImage(scene.sceneId, localPrompt, opts);
+        if (res && (res.url || res.imageUrl)) {
+          setGeneratedPreview({
+            url: res.url || res.imageUrl,
+            prompt: res.prompt || localPrompt,
+            imageId: res.imageId || res.image?.id,
+          });
+        }
+      } else {
+        const res = await generateSceneImage(
+          scene.sceneId,
+          storyId || '',
+          [],
+          localPrompt,
+          opts
+        );
+        if (res && (res.url || (res as any).imageUrl)) {
+          setGeneratedPreview({
+            url: res.url || (res as any).imageUrl,
+            prompt: res.prompt || localPrompt,
+            imageId: res.imageId || (res as any).image?.id,
+          });
+        }
+      }
+    } catch (err: any) {
+      console.error('Failed to generate background:', err);
+      setBgError(err.message || 'Failed to generate background');
+    } finally {
+      setIsGeneratingBg(false);
+    }
+  };
+
+  const handleApplyGeneratedBackground = async () => {
+    if (!generatedPreview) return;
+    setBgError(null);
+    try {
+      const meta = {
+        source: 'ai_generated' as const,
+        prompt: generatedPreview.prompt,
+        cameraDirection: localCamera,
+        aspectRatio: localAspectRatio,
+      };
+      if (onSetBackground) {
+        await onSetBackground(scene.sceneId, generatedPreview.url, currentBgFit);
+        const updatedAnim = {
+          ...(scene.animationData || {
+            version: 1,
+            viewport: { width: 1280, height: 720 },
+            characterInstances: [],
+            animationClips: [],
+          }),
+          background: {
+            imageUrl: generatedPreview.url,
+            fit: currentBgFit,
+            ...meta,
+          },
+          ...(localCameraMovement ? { cameraMovement: localCameraMovement } : {}),
+        };
+        onUpdateScene(scene.sceneId, {
+          imageUrl: generatedPreview.url,
+          cameraDirection: localCamera,
+          animationData: updatedAnim as any,
+        });
+      } else {
+        const res = await setSceneBackground(scene.sceneId, generatedPreview.url, currentBgFit, meta);
+        if (res.scene) {
+          onUpdateScene(scene.sceneId, res.scene);
+        }
+      }
+      setGeneratedPreview(null);
+    } catch (err: any) {
+      console.error('Failed to apply generated background:', err);
+      setBgError(err.message || 'Failed to apply generated background');
+    }
+  };
+
+  const handleCancelGeneratedBackground = () => {
+    setGeneratedPreview(null);
   };
 
   const canSplitAtPlayhead =
@@ -990,13 +1172,20 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
               <div className="ed-field-group">
                 <label className="ed-field-label">Camera Direction</label>
                 <select className="ed-select" value={localCamera} onChange={handleCameraChange}>
-                  <option value="Eye level wide establishing shot">Eye level wide establishing shot</option>
-                  <option value="Medium close-up">Medium close-up</option>
-                  <option value="Dramatic low angle looking up">Dramatic low angle looking up</option>
-                  <option value="High angle bird's eye view">High angle bird's eye view</option>
+                  <option value="Eye-level wide shot">Eye-level wide shot</option>
+                  <option value="Medium shot">Medium shot</option>
+                  <option value="Close-up">Close-up</option>
+                  <option value="High angle / Bird's eye view">High angle / Bird's eye view</option>
+                  <option value="Bird's-eye view">Bird's-eye view</option>
+                  <option value="Low-angle shot">Low-angle shot</option>
                   <option value="Over-the-shoulder shot">Over-the-shoulder shot</option>
-                  <option value="Dynamic tracking pan left-to-right">Dynamic tracking pan left-to-right</option>
-                  <option value="Soft bokeh macro focus">Soft bokeh macro focus</option>
+                  <option value="Wide establishing shot">Wide establishing shot</option>
+
+
+
+
+
+
                 </select>
               </div>
 
@@ -1011,7 +1200,14 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                       <button
                         className="ed-btn-action primary"
                         style={{ width: '100%' }}
-                        onClick={() => onGenerateImage(scene.sceneId, localPrompt)}
+                        onClick={() =>
+                          onGenerateImage(scene.sceneId, localPrompt, {
+                            cameraDirection: localCamera,
+                            cameraMovement: localCameraMovement,
+                            aspectRatio: localAspectRatio,
+                            visualStyle: localVisualStyle,
+                          })
+                        }
                         disabled={isGeneratingImage}
                       >
                         {isGeneratingImage ? 'Generating Image...' : hasVisual ? 'Regenerate Scene Image' : 'Generate Scene Image'}
@@ -1763,7 +1959,23 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div className="ed-field-group ed-background-card">
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-                  <label className="ed-field-label" style={{ margin: 0, fontWeight: 600 }}>Scene Background</label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <label className="ed-field-label" style={{ margin: 0, fontWeight: 600 }}>Scene Background</label>
+                    <span
+                      style={{
+                        fontSize: '10px',
+                        color: '#8b5cf6',
+                        background: 'rgba(139, 92, 246, 0.1)',
+                        border: '1px solid rgba(139, 92, 246, 0.3)',
+                        padding: '1px 6px',
+                        borderRadius: '10px',
+                        fontWeight: 600,
+                      }}
+                      title="Project Look DNA and style tokens are active"
+                    >
+                      ✨ Look DNA Applied
+                    </span>
+                  </div>
                   {currentBgUrl ? (
                     <span className="ed-bg-badge-fit">{currentBgFit.toUpperCase()}</span>
                   ) : (
@@ -1780,7 +1992,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
             type="file"
             ref={bgFileInputRef}
             style={{ display: 'none' }}
-            accept="image/png,image/jpeg"
+            accept="image/png,image/jpeg,image/webp"
             onChange={handleUploadBackgroundFile}
           />
 
@@ -1790,8 +2002,146 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
             </div>
           )}
 
+          {/* Dual Action Cards */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '12px' }}>
+            <div
+              style={{
+                border: '1px solid var(--ed-border)',
+                borderRadius: '8px',
+                padding: '10px',
+                background: 'var(--ed-surface-elevated, #f8fafc)',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+                gap: '8px',
+              }}
+            >
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                  <UploadIcon size={14} color="#3b82f6" />
+                  <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--ed-text)' }}>Import Image</span>
+                </div>
+                <p style={{ fontSize: '10px', color: '#64748b', margin: 0, lineHeight: 1.3 }}>
+                  Local disk (PNG, JPEG, WebP &bull; Max 15MB)
+                </p>
+              </div>
+              <button
+                type="button"
+                className="ed-btn-action"
+                style={{ width: '100%', fontSize: '11px', padding: '5px 8px' }}
+                disabled={isUploadingBg}
+                onClick={() => bgFileInputRef.current?.click()}
+              >
+                {isUploadingBg ? 'Importing...' : 'Choose Image'}
+              </button>
+            </div>
+
+            <div
+              style={{
+                border: '1px solid rgba(139, 92, 246, 0.3)',
+                borderRadius: '8px',
+                padding: '10px',
+                background: 'rgba(139, 92, 246, 0.04)',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+                gap: '8px',
+              }}
+            >
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                  <SparklesIcon size={14} color="#8b5cf6" />
+                  <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--ed-text)' }}>Generate with AI</span>
+                </div>
+                <p style={{ fontSize: '10px', color: '#64748b', margin: 0, lineHeight: 1.3 }}>
+                  Camera angle, style & scene prompt
+                </p>
+              </div>
+              <button
+                type="button"
+                className="ed-btn-action primary"
+                style={{ width: '100%', fontSize: '11px', padding: '5px 8px', background: '#7c3aed', borderColor: '#7c3aed' }}
+                disabled={isGeneratingBg}
+                onClick={handleGenerateBackground}
+              >
+                {isGeneratingBg ? 'Generating...' : 'Generate Image'}
+              </button>
+            </div>
+          </div>
+
+          {/* Generated Preview (Review Before Apply) */}
+          {generatedPreview && (
+            <div
+              style={{
+                border: '1px solid #7c3aed',
+                borderRadius: '8px',
+                padding: '10px',
+                background: 'rgba(124, 58, 237, 0.06)',
+                marginBottom: '12px',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                <span style={{ fontSize: '11px', fontWeight: 600, color: '#7c3aed', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <SparklesIcon size={12} /> Generated Preview (Review Before Apply)
+                </span>
+                <span style={{ fontSize: '10px', color: '#64748b' }}>Unsaved</span>
+              </div>
+              <div style={{ position: 'relative', width: '100%', aspectRatio: '16/9', borderRadius: '6px', overflow: 'hidden', background: '#000', marginBottom: '8px' }}>
+                <img
+                  src={generatedPreview.url}
+                  alt="AI Generated Background Preview"
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                />
+              </div>
+              {generatedPreview.prompt && (
+                <div style={{ fontSize: '10px', color: '#64748b', background: 'rgba(0,0,0,0.03)', padding: '6px 8px', borderRadius: '4px', marginBottom: '8px', maxHeight: '50px', overflowY: 'auto' }}>
+                  <strong style={{ color: '#475569' }}>Prompt:</strong> {generatedPreview.prompt}
+                </div>
+              )}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                <button
+                  type="button"
+                  className="ed-btn-action primary"
+                  style={{ fontSize: '11px', padding: '6px 8px', background: '#059669', borderColor: '#059669' }}
+                  onClick={handleApplyGeneratedBackground}
+                >
+                  Apply to Scene
+                </button>
+                <button
+                  type="button"
+                  className="ed-btn-action"
+                  style={{ fontSize: '11px', padding: '6px 8px' }}
+                  onClick={handleCancelGeneratedBackground}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
           {currentBgUrl ? (
             <div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--ed-text)' }}>Active Background</span>
+                <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                  <span
+                    style={{
+                      fontSize: '9px',
+                      fontWeight: 600,
+                      padding: '1px 6px',
+                      borderRadius: '4px',
+                      background: ((scene.animationData as any)?.background?.source === 'imported') ? 'rgba(245, 158, 11, 0.15)' : 'rgba(59, 130, 246, 0.15)',
+                      color: ((scene.animationData as any)?.background?.source === 'imported') ? '#d97706' : '#2563eb',
+                      border: ((scene.animationData as any)?.background?.source === 'imported') ? '1px solid rgba(245, 158, 11, 0.3)' : '1px solid rgba(59, 130, 246, 0.3)',
+                    }}
+                  >
+                    {(scene.animationData as any)?.background?.source === 'imported' ? 'Imported' : 'AI Generated'}
+                  </span>
+                  <span style={{ fontSize: '9px', color: '#94a3b8' }}>
+                    {(scene.animationData as any)?.background?.aspectRatio || '16:9'}
+                  </span>
+                </div>
+              </div>
               <div className="ed-bg-preview-box">
                 <img
                   src={currentBgUrl}
@@ -1928,6 +2278,95 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
             </div>
           )}
         </div>
+
+              <div className="ed-field-group ed-background-card" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2px' }}>
+                  <label className="ed-field-label" style={{ margin: 0, fontWeight: 600 }}>Camera & Composition Settings</label>
+                  <span style={{ fontSize: '10px', color: '#64748b' }}>Environment Only</span>
+                </div>
+
+                {/* Camera Perspective */}
+                <div className="ed-field-group" style={{ margin: 0 }}>
+                  <label className="ed-field-label">Camera Perspective (Still Image)</label>
+                  <select className="ed-select" value={localCamera} onChange={handleCameraChange}>
+                    <option value="Eye-level wide shot">Eye-level wide shot</option>
+                    <option value="Medium shot">Medium shot</option>
+                    <option value="Close-up">Close-up</option>
+                    <option value="High angle / Bird's eye view">High angle / Bird's eye view</option>
+                    <option value="Bird's-eye view">Bird's-eye view</option>
+                    <option value="Low-angle shot">Low-angle shot</option>
+                    <option value="Over-the-shoulder shot">Over-the-shoulder shot</option>
+                    <option value="Wide establishing shot">Wide establishing shot</option>
+                  </select>
+                </div>
+
+                {/* Camera Movement */}
+                <div className="ed-field-group" style={{ margin: 0 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label className="ed-field-label" style={{ margin: 0 }}>Camera Movement (Video Motion)</label>
+                    <span style={{ fontSize: '9px', color: '#94a3b8' }}>FFmpeg / Video</span>
+                  </div>
+                  <select className="ed-select" value={localCameraMovement} onChange={handleCameraMovementChange}>
+                    <option value="Static (no movement)">Static (no movement)</option>
+                    <option value="Slow zoom in">Slow zoom in</option>
+                    <option value="Slow zoom out">Slow zoom out</option>
+                    <option value="Pan left">Pan left</option>
+                    <option value="Pan right">Pan right</option>
+                    <option value="Tilt up">Tilt up</option>
+                    <option value="Tilt down">Tilt down</option>
+                  </select>
+                  <span style={{ fontSize: '9px', color: '#94a3b8', marginTop: '2px', display: 'block' }}>
+                    Applied during video assembly, does not affect still background
+                  </span>
+                </div>
+
+                {/* Aspect Ratio & Visual Style */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                  <div className="ed-field-group" style={{ margin: 0 }}>
+                    <label className="ed-field-label">Aspect Ratio</label>
+                    <select className="ed-select" value={localAspectRatio} onChange={handleAspectRatioChange}>
+                      <option value="16:9">16:9 (Landscape)</option>
+                      <option value="9:16">9:16 (Portrait / Reels)</option>
+                      <option value="1:1">1:1 (Square)</option>
+                      <option value="4:5">4:5 (Social)</option>
+                    </select>
+                  </div>
+
+                  <div className="ed-field-group" style={{ margin: 0 }}>
+                    <label className="ed-field-label">Visual Style</label>
+                    <select className="ed-select" value={localVisualStyle} onChange={handleVisualStyleChange}>
+                      <option value="Cinematic Storybook">Cinematic Storybook</option>
+                      <option value="Whimsical Watercolor">Whimsical Watercolor</option>
+                      <option value="3D Pixar Cartoon">3D Pixar Cartoon</option>
+                      <option value="Vector Flat Art">Vector Flat Art</option>
+                      <option value="Retro Comic Book">Retro Comic Book</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Visual Scene Prompt */}
+                <div className="ed-field-group" style={{ margin: 0 }}>
+                  <label className="ed-field-label">Visual Scene Prompt</label>
+                  <textarea
+                    className="ed-textarea"
+                    rows={3}
+                    value={localPrompt}
+                    onChange={(e) => setLocalPrompt(e.target.value)}
+                    onBlur={handlePromptBlur}
+                    placeholder="Describe the environment plate (e.g. cozy treehouse in oak tree at sunset)..."
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  className="ed-btn-action primary"
+                  style={{ width: '100%', fontSize: '11px', padding: '6px 8px', background: '#7c3aed', borderColor: '#7c3aed' }}
+                  disabled={isGeneratingBg}
+                  onClick={handleGenerateBackground}
+                >
+                  {isGeneratingBg ? 'Generating Background...' : 'Generate Background Image'}
+                </button>
+              </div>
             </div>
           )}
 

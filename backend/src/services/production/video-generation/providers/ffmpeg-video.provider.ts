@@ -22,8 +22,74 @@ export class FFmpegVideoProvider implements VideoGenerationProvider {
     }
   }
 
+  public static buildZoompanFilter(options: {
+    cameraMovement?: string;
+    cameraDirection?: string;
+    totalFrames: number;
+    fps?: number;
+  }): { zoomExpr: string; xExpr: string; yExpr: string; vf: string } {
+    const fps = options.fps || 30;
+    const totalFrames = options.totalFrames;
+    const zoomStep = (0.15 / totalFrames).toFixed(6);
+    const mov = (options.cameraMovement || '').toLowerCase();
+    const cameraDirection = options.cameraDirection;
+
+    let zoomExpr: string;
+    let xExpr: string;
+    let yExpr: string;
+
+    if (mov.includes('static') || mov.includes('no movement')) {
+      zoomExpr = `'1.0'`;
+      xExpr = `'iw/2-(iw/zoom/2)'`;
+      yExpr = `'ih/2-(ih/zoom/2)'`;
+    } else if (mov.includes('zoom out')) {
+      zoomExpr = `'max(1.15-${zoomStep}*on,1.0)'`;
+      xExpr = `'iw/2-(iw/zoom/2)'`;
+      yExpr = `'ih/2-(ih/zoom/2)'`;
+    } else if (mov.includes('zoom in')) {
+      zoomExpr = `'min(zoom+${zoomStep},1.15)'`;
+      xExpr = `'iw/2-(iw/zoom/2)'`;
+      yExpr = `'ih/2-(ih/zoom/2)'`;
+    } else if (mov.includes('pan left')) {
+      zoomExpr = `'1.15'`;
+      xExpr = `'(iw-iw/zoom)*(1-on/${totalFrames})'`;
+      yExpr = `'ih/2-(ih/zoom/2)'`;
+    } else if (mov.includes('pan right')) {
+      zoomExpr = `'1.15'`;
+      xExpr = `'(iw-iw/zoom)*(on/${totalFrames})'`;
+      yExpr = `'ih/2-(ih/zoom/2)'`;
+    } else if (mov.includes('tilt up')) {
+      zoomExpr = `'1.15'`;
+      xExpr = `'iw/2-(iw/zoom/2)'`;
+      yExpr = `'(ih-ih/zoom)*(1-on/${totalFrames})'`;
+    } else if (mov.includes('tilt down')) {
+      zoomExpr = `'1.15'`;
+      xExpr = `'iw/2-(iw/zoom/2)'`;
+      yExpr = `'(ih-ih/zoom)*(on/${totalFrames})'`;
+    } else if (cameraDirection && cameraDirection.toLowerCase().includes('pan left-to-right')) {
+      zoomExpr = `'1.1'`;
+      xExpr = `'(iw-iw/zoom)*(on/${totalFrames})'`;
+      yExpr = `'ih/2-(ih/zoom/2)'`;
+    } else if (cameraDirection && cameraDirection.toLowerCase().includes('low angle')) {
+      zoomExpr = `'1.12'`;
+      xExpr = `'iw/2-(iw/zoom/2)'`;
+      yExpr = `'(ih-ih/zoom)*(1-on/${totalFrames})'`;
+    } else if (cameraDirection && cameraDirection.toLowerCase().includes('high angle')) {
+      zoomExpr = `'1.12'`;
+      xExpr = `'iw/2-(iw/zoom/2)'`;
+      yExpr = `'(ih-ih/zoom)*(on/${totalFrames})'`;
+    } else {
+      zoomExpr = `'min(zoom+${zoomStep},1.15)'`;
+      xExpr = `'iw/2-(iw/zoom/2)'`;
+      yExpr = `'ih/2-(ih/zoom/2)'`;
+    }
+
+    const vf = `scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,zoompan=z=${zoomExpr}:x=${xExpr}:y=${yExpr}:d=${totalFrames}:s=1280x720:fps=${fps},format=yuv420p`;
+    return { zoomExpr, xExpr, yExpr, vf };
+  }
+
   async generateVideo(input: VideoGenerationInput): Promise<VideoGenerationOutput> {
-    const { imageUrl, duration = 4, audioUrl, cameraDirection } = input;
+    const { imageUrl, duration = 4, audioUrl, cameraDirection, cameraMovement } = input;
 
     if (!imageUrl) {
       throw new Error('FFmpegVideoProvider: imageUrl is required to render a video clip');
@@ -83,33 +149,13 @@ export class FFmpegVideoProvider implements VideoGenerationProvider {
 
     console.log(`[FFmpegVideoProvider] Rendering Ken Burns clip from image: ${localImagePath} -> ${outputPath} (${clipDuration}s)`);
 
-    // Build cinematic Ken Burns motion filter according to camera direction
-    let zoomExpr: string;
-    let xExpr: string;
-    let yExpr: string;
 
-    const zoomStep = (0.15 / totalFrames).toFixed(6);
-
-    if (cameraDirection && cameraDirection.toLowerCase().includes('pan left-to-right')) {
-      zoomExpr = `'1.1'`;
-      xExpr = `'(iw-iw/zoom)*(on/${totalFrames})'`;
-      yExpr = `'ih/2-(ih/zoom/2)'`;
-    } else if (cameraDirection && cameraDirection.toLowerCase().includes('low angle')) {
-      zoomExpr = `'1.12'`;
-      xExpr = `'iw/2-(iw/zoom/2)'`;
-      yExpr = `'(ih-ih/zoom)*(1-on/${totalFrames})'`;
-    } else if (cameraDirection && cameraDirection.toLowerCase().includes('high angle')) {
-      zoomExpr = `'1.12'`;
-      xExpr = `'iw/2-(iw/zoom/2)'`;
-      yExpr = `'(ih-ih/zoom)*(on/${totalFrames})'`;
-    } else {
-      // Default: smooth center zoom-in from 1.0 to 1.15
-      zoomExpr = `'min(zoom+${zoomStep},1.15)'`;
-      xExpr = `'iw/2-(iw/zoom/2)'`;
-      yExpr = `'ih/2-(ih/zoom/2)'`;
-    }
-
-    const vf = `scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,zoompan=z=${zoomExpr}:x=${xExpr}:y=${yExpr}:d=${totalFrames}:s=1280x720:fps=${fps},format=yuv420p`;
+    const { vf } = FFmpegVideoProvider.buildZoompanFilter({
+      cameraMovement,
+      cameraDirection,
+      totalFrames,
+      fps,
+    });
 
     const args: string[] = ['-y', '-i', localImagePath];
 
