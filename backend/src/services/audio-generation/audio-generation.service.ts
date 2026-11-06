@@ -600,11 +600,14 @@ export class AudioGenerationService {
       effect: delivery.effectiveEffect,
       volume: typeof volume === 'number' && Number.isFinite(volume) ? Math.max(0, Math.min(2.0, volume)) : 1.0,
       audioUrl: `/storage/audio/${filename}`,
+      provider: ttsResult.provider || effectiveProvider,
+      model: (ttsResult.provider || effectiveProvider) === 'fish_audio' ? 's2.1-pro-free' : undefined,
       audioMeta: {
         text: textToSpeak,
         lang: effectiveLang,
         voice: ttsResult.voice || effectiveVoice,
-        provider: ttsResult.provider,
+        provider: ttsResult.provider || effectiveProvider,
+        model: (ttsResult.provider || effectiveProvider) === 'fish_audio' ? 's2.1-pro-free' : undefined,
         emotion: effectiveEmotion,
         emotionIntensity: delivery.intensity,
         speed: baseSpeed,
@@ -651,20 +654,23 @@ export class AudioGenerationService {
       if (!line.text || !line.text.trim()) continue;
 
       let lineVoice = line.voice;
-      if (options.forceRegenerate || !lineVoice || lineVoice === 'default') {
-        try {
-          let char = line.characterId ? await getCharacterById(line.characterId) : null;
-          if (!char && line.characterName) {
-            char = await getCharacterByName(line.characterName);
-          }
-          const cfg = (char?.canonicalAppearance as any)?.voiceConfig || (char as any)?.voiceConfig;
-          if (cfg?.voiceId) {
-            lineVoice = cfg.voiceId;
-          }
-        } catch {
-          // keep existing lineVoice
+      let charCfg: any = null;
+      try {
+        let char = line.characterId ? await getCharacterById(line.characterId) : null;
+        if (!char && line.characterName) {
+          char = await getCharacterByName(line.characterName);
         }
+        charCfg = (char?.canonicalAppearance as any)?.voiceConfig || (char as any)?.voiceConfig;
+        if (options.forceRegenerate || !lineVoice || lineVoice === 'default') {
+          if (charCfg?.voiceId) {
+            lineVoice = charCfg.voiceId;
+          }
+        }
+      } catch {
+        // keep existing lineVoice
       }
+
+      const effectiveLineProvider = options.provider || line.provider || charCfg?.provider;
 
       // If audio already exists and we are not forcing regeneration, verify file existence and settings compatibility
       if (line.audioUrl && !options.forceRegenerate) {
@@ -681,7 +687,7 @@ export class AudioGenerationService {
           requestedVoice: line.voice || lineVoice,
           characterName: line.characterName,
           lang: targetLang,
-          provider: options.provider,
+          provider: effectiveLineProvider,
         });
         const targetSpeed = line.speed || 1.0;
         const targetEffect = line.effect || options.effect || 'normal';
@@ -692,12 +698,12 @@ export class AudioGenerationService {
         // 2. The spoken text matches
         // 3. The language matches (crucial: avoids English audio serving Hindi lines)
         // 4. The voice matches (crucial: avoids bm_daniel serving hf_alpha)
-        // 5. Emotion, intensity, speed, and audio effect match
+        // 5. Emotion, intensity, speed, audio effect, and provider match
         const isCompatible = Boolean(meta) && (
           meta.text === line.text.trim() &&
           meta.lang === targetLang &&
           meta.voice === targetVoice &&
-          (!options.provider || !meta.provider || meta.provider === options.provider) &&
+          (!effectiveLineProvider || !meta.provider || meta.provider === effectiveLineProvider) &&
           meta.emotion === targetEmotion &&
           meta.emotionIntensity === targetIntensity &&
           meta.speed === targetSpeed &&
@@ -725,7 +731,7 @@ export class AudioGenerationService {
           speed: line.speed,
           startMs: line.startMs,
           effect: line.effect || options.effect || 'normal',
-          provider: options.provider,
+          provider: effectiveLineProvider,
         });
 
         // Preserve original id and startMs

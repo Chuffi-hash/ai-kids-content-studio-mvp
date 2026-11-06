@@ -18,6 +18,8 @@
 export type RestrainedEmotion =
   | 'neutral'
   | 'happy'
+  | 'cheerful'
+  | 'warm'
   | 'sad'
   | 'excited'
   | 'curious'
@@ -40,6 +42,8 @@ export type RestrainedEmotion =
 export const FISH_DIRECTION_TAG_MAP: Record<RestrainedEmotion, string | null> = {
   neutral: null,
   happy: '[warm]',
+  cheerful: '[cheerful]',
+  warm: '[warm]',
   sad: '[soft]',
   excited: '[cheerful]',
   curious: '[inquisitive]',

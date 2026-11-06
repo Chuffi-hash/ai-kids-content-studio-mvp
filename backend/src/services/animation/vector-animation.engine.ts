@@ -131,6 +131,8 @@ export interface SceneDialogue {
   text: string;
   lang?: string;
   voice?: string;
+  provider?: string;
+  model?: string;
   speakingDirection?: SpeakingDirection;
   emotion?: SpeakingEmotion;
   emotionIntensity?: number; // 0 - 100%
@@ -144,6 +146,7 @@ export interface SceneDialogue {
     lang: string;
     voice: string;
     provider?: string;
+    model?: string;
     emotion: string;
     emotionIntensity: number;
     speed: number;

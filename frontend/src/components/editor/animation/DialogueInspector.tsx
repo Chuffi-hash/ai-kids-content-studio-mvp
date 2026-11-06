@@ -34,7 +34,14 @@ interface DialogueInspectorProps {
   onUpdateDialogue: (dialogueId: string, updates: Partial<SceneDialogue>) => void;
   onDeleteDialogue: (dialogueId: string) => Promise<void>;
   onAddDialogue: (dialogue: SceneDialogue) => void;
-  onSaveCharacterDefault?: (characterId: string, settings: { voice?: string; lang?: string; emotion?: SpeakingEmotion; emotionIntensity?: number }) => Promise<void>;
+  onSaveCharacterDefault?: (characterId: string, settings: {
+    provider?: string;
+    model?: string;
+    voice?: string;
+    lang?: string;
+    emotion?: SpeakingEmotion;
+    emotionIntensity?: number;
+  }) => Promise<void>;
 }
 
 export const DialogueInspector: React.FC<DialogueInspectorProps> = ({
@@ -52,7 +59,9 @@ export const DialogueInspector: React.FC<DialogueInspectorProps> = ({
 
   // TTS Voices
   const [ttsVoices, setTtsVoices] = useState<SupportedVoice[]>([]);
+  const [fishAudioVoices, setFishAudioVoices] = useState<SupportedVoice[]>([]);
   const [isKokoroAvailable, setIsKokoroAvailable] = useState<boolean>(true);
+  const [isFishAudioAvailable, setIsFishAudioAvailable] = useState<boolean>(true);
 
   // Audio Playback
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
@@ -98,8 +107,10 @@ export const DialogueInspector: React.FC<DialogueInspectorProps> = ({
   useEffect(() => {
     getTTSVoices()
       .then((data) => {
-        setTtsVoices(data.voices);
+        setTtsVoices(data.voices || []);
+        setFishAudioVoices(data.fishAudioVoices || []);
         setIsKokoroAvailable(data.isKokoroAvailable);
+        setIsFishAudioAvailable(Boolean(data.isFishAudioAvailable));
       })
       .catch((err) => console.warn('Could not load TTS voices in DialogueInspector:', err));
   }, []);
@@ -115,13 +126,73 @@ export const DialogueInspector: React.FC<DialogueInspectorProps> = ({
     setSuccessNotice(null);
   }, [selectedDialogueId]);
 
-  // Stale detection
+  // Resolve matching character and default voice config
+  const selectedCharacter = useMemo(() => {
+    if (!selectedDialogue) return null;
+    return (
+      characters.find(
+        (c) => c.id === selectedDialogue.characterId || c.name === selectedDialogue.characterName
+      ) || null
+    );
+  }, [selectedDialogue, characters]);
+
+  const characterVoiceConfig = useMemo(() => {
+    if (!selectedCharacter) return null;
+    return (
+      (selectedCharacter.canonicalAppearance as any)?.voiceConfig ||
+      (selectedCharacter as any)?.voiceConfig ||
+      null
+    );
+  }, [selectedCharacter]);
+
+  // Resolve active provider
+  const currentProvider: 'kokoro' | 'fish_audio' | 'google' = useMemo(() => {
+    if (selectedDialogue?.provider) return selectedDialogue.provider as any;
+    if (selectedDialogue?.audioMeta?.provider) return selectedDialogue.audioMeta.provider as any;
+    if (characterVoiceConfig?.provider) return characterVoiceConfig.provider as any;
+    return 'kokoro';
+  }, [selectedDialogue, characterVoiceConfig]);
+
+  // Handle provider switching safely
+  const handleSelectProvider = (newProvider: 'kokoro' | 'fish_audio' | 'google') => {
+    if (!selectedDialogue || newProvider === currentProvider) return;
+    const currentLang = selectedDialogue.lang || 'hi';
+
+    if (newProvider === 'fish_audio') {
+      const nextVoice = 'fish_default';
+      const nextIntensity = selectedDialogue.emotion === 'neutral' ? 0 : 15;
+      onUpdateDialogue(selectedDialogue.id, {
+        provider: 'fish_audio',
+        model: 's2.1-pro-free',
+        voice: nextVoice,
+        emotionIntensity: nextIntensity,
+      });
+    } else if (newProvider === 'kokoro') {
+      const nextVoice = currentLang === 'hi' ? 'hf_alpha' : 'af_heart';
+      onUpdateDialogue(selectedDialogue.id, {
+        provider: 'kokoro',
+        model: undefined,
+        voice: nextVoice,
+      });
+    } else {
+      const nextVoice = currentLang === 'hi' ? 'hi-IN-Standard-A' : 'en-US-Standard-C';
+      onUpdateDialogue(selectedDialogue.id, {
+        provider: 'google',
+        model: undefined,
+        voice: nextVoice,
+      });
+    }
+  };
+
+  // Stale detection: recognizes provider changes as well as text/emotion/voice changes
   const isAudioStale = useMemo(() => {
     if (!selectedDialogue?.audioUrl) return false;
     const meta = selectedDialogue.audioMeta;
     if (!meta) return false;
     if (meta.text && meta.text.trim() !== selectedDialogue.text.trim()) return true;
     if (selectedDialogue.voice && meta.voice && meta.voice !== selectedDialogue.voice) return true;
+    const metaProv = meta.provider || 'kokoro';
+    if (currentProvider !== metaProv) return true;
     if (selectedDialogue.emotion && meta.emotion && meta.emotion !== selectedDialogue.emotion) return true;
     if (
       typeof selectedDialogue.emotionIntensity === 'number' &&
@@ -139,23 +210,64 @@ export const DialogueInspector: React.FC<DialogueInspectorProps> = ({
       meta.volume !== selectedDialogue.volume
     ) return true;
     return false;
-  }, [selectedDialogue]);
+  }, [selectedDialogue, currentProvider]);
 
-  // Filter voices by language
+  // Filter voices strictly by active provider and language (never leak Kokoro voices into Fish Audio)
   const currentLang = selectedDialogue?.lang || 'hi';
   const filteredVoices = useMemo(() => {
-    if (currentLang === 'hi') {
-      const hi = ttsVoices.filter(
-        (v) => v.lang === 'hi' || v.lang === 'Hindi' || v.id.startsWith('h') || v.id.startsWith('fish_hi')
+    if (currentProvider === 'fish_audio') {
+      const defaultVoiceItem: SupportedVoice = {
+        id: 'fish_default',
+        name: 'Fish Audio Default (Zero-Shot Natural)',
+        gender: 'neutral',
+        lang: currentLang,
+        accent: 'Multilingual Natural',
+        description: 'Fish Audio s2.1-pro-free multilingual base model',
+      };
+      if (!fishAudioVoices || fishAudioVoices.length === 0) {
+        return [defaultVoiceItem];
+      }
+      const hasDefault = fishAudioVoices.some((v) => v.id === 'fish_default');
+      const list = hasDefault ? [...fishAudioVoices] : [defaultVoiceItem, ...fishAudioVoices];
+      return list.filter(
+        (v) =>
+          !v.id.startsWith('hf_') &&
+          !v.id.startsWith('hm_') &&
+          !v.id.startsWith('af_') &&
+          !v.id.startsWith('am_') &&
+          !v.id.startsWith('bf_') &&
+          !v.id.startsWith('bm_')
       );
-      return hi.length > 0 ? hi : ttsVoices;
-    } else {
-      const en = ttsVoices.filter(
-        (v) => v.lang === 'en' || v.lang === 'en-us' || v.lang === 'English' || v.id.startsWith('a') || v.id.startsWith('b') || v.id.startsWith('fish_en')
-      );
-      return en.length > 0 ? en : ttsVoices;
     }
-  }, [ttsVoices, currentLang]);
+
+    if (currentProvider === 'google') {
+      return currentLang === 'hi'
+        ? [
+            { id: 'hi-IN-Standard-A', name: 'Hindi Female (Google)', lang: 'hi', gender: 'female' },
+            { id: 'hi-IN-Standard-B', name: 'Hindi Male (Google)', lang: 'hi', gender: 'male' },
+          ]
+        : [
+            { id: 'en-US-Standard-C', name: 'English Female (Google)', lang: 'en', gender: 'female' },
+            { id: 'en-US-Standard-B', name: 'English Male (Google)', lang: 'en', gender: 'male' },
+          ];
+    }
+
+    // Default: Kokoro-82M
+    const kokoroOnly = ttsVoices.filter(
+      (v) => !v.id.startsWith('fish_') && v.id !== 'fish_default'
+    );
+    if (currentLang === 'hi') {
+      const hi = kokoroOnly.filter(
+        (v) => v.lang === 'hi' || v.lang === 'Hindi' || v.id.startsWith('h')
+      );
+      return hi.length > 0 ? hi : kokoroOnly;
+    } else {
+      const en = kokoroOnly.filter(
+        (v) => v.lang === 'en' || v.lang === 'en-us' || v.lang === 'English' || v.id.startsWith('a') || v.id.startsWith('b')
+      );
+      return en.length > 0 ? en : kokoroOnly;
+    }
+  }, [currentProvider, ttsVoices, fishAudioVoices, currentLang]);
 
   // Audio preview handler
   const handleTogglePlayDialogue = () => {
@@ -192,7 +304,8 @@ export const DialogueInspector: React.FC<DialogueInspectorProps> = ({
 
   // Preview voice sample
   const handlePreviewVoice = async () => {
-    const voiceId = selectedDialogue?.voice || (currentLang === 'hi' ? 'hf_alpha' : 'af_heart');
+    const defaultVoice = currentProvider === 'fish_audio' ? 'fish_default' : (currentLang === 'hi' ? 'hf_alpha' : 'af_heart');
+    const voiceId = selectedDialogue?.voice || defaultVoice;
     setIsPreviewingVoice(true);
     try {
       const sampleText = currentLang === 'hi'
@@ -200,9 +313,11 @@ export const DialogueInspector: React.FC<DialogueInspectorProps> = ({
         : (selectedDialogue?.text?.slice(0, 30) || 'Hello! This is how my voice sounds.');
       const res = await previewVoice({
         voice: voiceId,
-        provider: (voiceId.startsWith('fish_') || (selectedDialogue as any)?.provider === 'fish_audio') ? 'fish_audio' : undefined,
+        provider: currentProvider,
         sampleText,
         lang: currentLang,
+        emotion: selectedDialogue?.emotion || 'neutral',
+        emotionIntensity: selectedDialogue?.emotionIntensity ?? (selectedDialogue?.emotion === 'neutral' ? 0 : 15),
       });
       if (res?.audioUrl) {
         if (previewAudioRef.current) {
@@ -217,6 +332,7 @@ export const DialogueInspector: React.FC<DialogueInspectorProps> = ({
       }
     } catch (err: any) {
       console.warn('Voice preview error:', err);
+      setErrorMsg(err.message || 'Failed to preview voice');
     } finally {
       setIsPreviewingVoice(false);
     }
@@ -242,21 +358,24 @@ export const DialogueInspector: React.FC<DialogueInspectorProps> = ({
     setSuccessNotice(null);
 
     try {
-      const voice = selectedDialogue.voice || (currentLang === 'hi' ? 'hf_alpha' : 'af_heart');
+      const defaultVoice = currentProvider === 'fish_audio' ? 'fish_default' : (currentLang === 'hi' ? 'hf_alpha' : 'af_heart');
+      const voice = selectedDialogue.voice || defaultVoice;
       const emotion = selectedDialogue.emotion || 'neutral';
-      const intensity = typeof selectedDialogue.emotionIntensity === 'number' ? selectedDialogue.emotionIntensity : (emotion === 'neutral' ? 0 : 15);
+      const intensity = typeof selectedDialogue.emotionIntensity === 'number'
+        ? selectedDialogue.emotionIntensity
+        : (emotion === 'neutral' ? 0 : 15);
       const speed = selectedDialogue.speed || 1.0;
       const volume = typeof selectedDialogue.volume === 'number' ? selectedDialogue.volume : 1.0;
-      const isFish = voice.startsWith('fish_') || (selectedDialogue as any).provider === 'fish_audio' || selectedDialogue.audioMeta?.provider === 'fish_audio';
-      const provider = isFish ? 'fish_audio' : undefined;
 
       const res = await generateSceneDialogueAudio(scene.sceneId, {
+        dialogueId: selectedDialogue.id,
         characterId: selectedDialogue.characterId,
         characterInstanceId: selectedDialogue.characterInstanceId,
         characterName: selectedDialogue.characterName,
         text: selectedDialogue.text,
         voice,
-        provider,
+        provider: currentProvider,
+        model: currentProvider === 'fish_audio' ? 's2.1-pro-free' : undefined,
         emotion,
         emotionIntensity: intensity,
         facialExpression: selectedDialogue.facialExpression,
@@ -268,6 +387,9 @@ export const DialogueInspector: React.FC<DialogueInspectorProps> = ({
 
       if (res.success && res.dialogue) {
         onUpdateDialogue(selectedDialogue.id, {
+          provider: res.dialogue.provider || currentProvider,
+          model: res.dialogue.model || (currentProvider === 'fish_audio' ? 's2.1-pro-free' : undefined),
+          voice: res.dialogue.voice || voice,
           audioUrl: res.dialogue.audioUrl,
           durationMs: res.dialogue.durationMs,
           visemeCues: res.dialogue.visemeCues,
@@ -277,6 +399,8 @@ export const DialogueInspector: React.FC<DialogueInspectorProps> = ({
         // If scope is char_default, also save as default
         if (editScope === 'char_default' && selectedDialogue.characterId && onSaveCharacterDefault) {
           await onSaveCharacterDefault(selectedDialogue.characterId, {
+            provider: currentProvider,
+            model: currentProvider === 'fish_audio' ? 's2.1-pro-free' : undefined,
             voice,
             lang: currentLang,
             emotion,
@@ -660,7 +784,7 @@ export const DialogueInspector: React.FC<DialogueInspectorProps> = ({
         subtitle="TTS engine voice profile"
         badge={
           <span style={{ fontSize: '10px', color: 'var(--ed-text-muted)' }}>
-            {currentLang === 'hi' ? '🇮🇳 Hindi' : '🇬🇧 English'}
+            {currentProvider === 'fish_audio' ? '🐟 Fish Audio' : currentProvider === 'google' ? '☁ Google' : '⚡ Kokoro'} • {currentLang === 'hi' ? '🇮🇳 Hindi' : '🇬🇧 English'}
           </span>
         }
         headerActions={
@@ -673,7 +797,7 @@ export const DialogueInspector: React.FC<DialogueInspectorProps> = ({
               handlePreviewVoice();
             }}
             disabled={isPreviewingVoice || playingPreview}
-            title="Audition voice sample"
+            title="Audition voice sample with currently selected provider"
           >
             {playingPreview ? 'Playing...' : 'Audition'}
           </button>
@@ -682,54 +806,110 @@ export const DialogueInspector: React.FC<DialogueInspectorProps> = ({
         onToggle={() => toggleSection('dlg-voice')}
         variant="card"
       >
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '10px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          {/* TTS Provider Selector */}
           <div>
             <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--ed-text-muted)', display: 'block', marginBottom: '4px' }}>
-              Language
+              TTS Provider / Engine
             </label>
-            <select
-              className="ed-select"
-              value={currentLang}
-              onChange={(e) => {
-                const lang = e.target.value;
-                const defaultVoice = lang === 'hi' ? 'hf_alpha' : 'af_heart';
-                onUpdateDialogue(selectedDialogue.id, { lang, voice: defaultVoice });
-              }}
-              style={{ width: '100%', fontSize: '11px' }}
-            >
-              <option value="hi">🇮🇳 Hindi (Default)</option>
-              <option value="en">🇬🇧 English</option>
-            </select>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '6px' }}>
+              <button
+                type="button"
+                className={`ed-tool-btn ${currentProvider === 'kokoro' ? 'primary' : ''}`}
+                style={{
+                  fontSize: '11px',
+                  fontWeight: currentProvider === 'kokoro' ? 700 : 400,
+                  background: currentProvider === 'kokoro' ? '#047857' : undefined,
+                  borderColor: currentProvider === 'kokoro' ? '#059669' : undefined,
+                  justifyContent: 'center',
+                }}
+                onClick={() => handleSelectProvider('kokoro')}
+                title="Kokoro-82M Local ONNX (Hindi + English, 0-100% prosody)"
+              >
+                Kokoro-82M
+              </button>
+              <button
+                type="button"
+                className={`ed-tool-btn ${currentProvider === 'fish_audio' ? 'primary' : ''}`}
+                style={{
+                  fontSize: '11px',
+                  fontWeight: currentProvider === 'fish_audio' ? 700 : 400,
+                  background: currentProvider === 'fish_audio' ? '#2563eb' : undefined,
+                  borderColor: currentProvider === 'fish_audio' ? '#3b82f6' : undefined,
+                  justifyContent: 'center',
+                }}
+                onClick={() => handleSelectProvider('fish_audio')}
+                title="Fish Audio Cloud Free (s2.1-pro-free zero-shot, natural subtle emotional tags)"
+              >
+                Fish Audio
+              </button>
+              <button
+                type="button"
+                className={`ed-tool-btn ${currentProvider === 'google' ? 'primary' : ''}`}
+                style={{
+                  fontSize: '11px',
+                  fontWeight: currentProvider === 'google' ? 700 : 400,
+                  background: currentProvider === 'google' ? '#7c3aed' : undefined,
+                  borderColor: currentProvider === 'google' ? '#8b5cf6' : undefined,
+                  justifyContent: 'center',
+                }}
+                onClick={() => handleSelectProvider('google')}
+                title="Google Cloud TTS (Fallback provider)"
+              >
+                Google TTS
+              </button>
+            </div>
           </div>
 
-          <div>
-            <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--ed-text-muted)', display: 'block', marginBottom: '4px' }}>
-              Voice Profile
-            </label>
-            <select
-              className="ed-select"
-              value={selectedDialogue.voice || (currentLang === 'hi' ? 'hf_alpha' : 'af_heart')}
-              onChange={(e) => onUpdateDialogue(selectedDialogue.id, { voice: e.target.value })}
-              style={{ width: '100%', fontSize: '11px' }}
-            >
-              {filteredVoices.map((v) => (
-                <option key={v.id} value={v.id}>
-                  {v.name} ({v.gender || 'voice'})
-                </option>
-              ))}
-            </select>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '10px' }}>
+            <div>
+              <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--ed-text-muted)', display: 'block', marginBottom: '4px' }}>
+                Language
+              </label>
+              <select
+                className="ed-select"
+                value={currentLang}
+                onChange={(e) => {
+                  const lang = e.target.value;
+                  const defaultVoice = currentProvider === 'fish_audio' ? 'fish_default' : (lang === 'hi' ? 'hf_alpha' : 'af_heart');
+                  onUpdateDialogue(selectedDialogue.id, { lang, voice: defaultVoice });
+                }}
+                style={{ width: '100%', fontSize: '11px' }}
+              >
+                <option value="hi">🇮🇳 Hindi (Default)</option>
+                <option value="en">🇬🇧 English</option>
+              </select>
+            </div>
+
+            <div>
+              <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--ed-text-muted)', display: 'block', marginBottom: '4px' }}>
+                Voice Profile {currentProvider === 'fish_audio' ? '(Fish Audio)' : '(Kokoro)'}
+              </label>
+              <select
+                className="ed-select"
+                value={selectedDialogue.voice || (currentProvider === 'fish_audio' ? 'fish_default' : (currentLang === 'hi' ? 'hf_alpha' : 'af_heart'))}
+                onChange={(e) => onUpdateDialogue(selectedDialogue.id, { voice: e.target.value })}
+                style={{ width: '100%', fontSize: '11px' }}
+              >
+                {filteredVoices.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.name} ({v.gender || 'voice'})
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
       </CollapsibleSection>
 
-      {/* 3. Speaking Emotion and Intensity Slider */}
+      {/* 3. Speaking Emotion and Intensity */}
       <CollapsibleSection
         id="dlg-emotion"
         title="Speaking Emotion & Expression"
         subtitle="Delivery style & synced face"
         badge={
           <span style={{ fontSize: '10px', color: '#f43f5e', fontWeight: 600 }}>
-            {selectedDialogue.emotion || 'neutral'} • {selectedDialogue.emotionIntensity ?? 0}%
+            {selectedDialogue.emotion || 'neutral'} • {selectedDialogue.emotionIntensity ?? (selectedDialogue.emotion === 'neutral' ? 0 : 15)}%
           </span>
         }
         isOpen={openSections['dlg-emotion']}
@@ -785,31 +965,81 @@ export const DialogueInspector: React.FC<DialogueInspectorProps> = ({
           </div>
         </div>
 
-        {/* Emotion Intensity Slider (0% to 100%) */}
-        <div style={{ background: 'var(--ed-bg)', padding: '10px 12px', borderRadius: '6px', border: '1px solid var(--ed-border)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-            <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--ed-text)' }}>
-              Emotion Intensity
-            </span>
-            <span style={{ fontSize: '11px', fontWeight: 700, color: '#f43f5e', fontFamily: 'monospace' }}>
-              {selectedDialogue.emotionIntensity ?? (selectedDialogue.emotion === 'neutral' ? 0 : 15)}%
-            </span>
+        {/* Emotion Intensity: Fish Audio uses discrete Neutral (0%) vs Subtle (15%) presets; Kokoro uses linear prosody */}
+        {currentProvider === 'fish_audio' ? (
+          <div style={{ background: 'var(--ed-bg)', padding: '10px 12px', borderRadius: '6px', border: '1px solid var(--ed-border)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+              <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--ed-text)' }}>
+                Fish Audio Emotional Delivery
+              </span>
+              <span style={{ fontSize: '10px', fontWeight: 700, color: '#38bdf8', padding: '1px 6px', borderRadius: '4px', background: 'rgba(56, 189, 248, 0.15)' }}>
+                s2.1-pro-free
+              </span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+              <button
+                type="button"
+                className="ed-tool-btn"
+                style={{
+                  fontSize: '11px',
+                  justifyContent: 'center',
+                  padding: '6px',
+                  background: (selectedDialogue.emotionIntensity ?? 0) === 0 ? 'rgba(59, 130, 246, 0.25)' : 'var(--ed-surface-elevated)',
+                  borderColor: (selectedDialogue.emotionIntensity ?? 0) === 0 ? '#3b82f6' : 'var(--ed-border)',
+                  color: (selectedDialogue.emotionIntensity ?? 0) === 0 ? '#93c5fd' : 'var(--ed-text-muted)',
+                  fontWeight: (selectedDialogue.emotionIntensity ?? 0) === 0 ? 600 : 400,
+                }}
+                onClick={() => onUpdateDialogue(selectedDialogue.id, { emotionIntensity: 0 })}
+              >
+                😐 Neutral (0% - Clean)
+              </button>
+              <button
+                type="button"
+                className="ed-tool-btn"
+                style={{
+                  fontSize: '11px',
+                  justifyContent: 'center',
+                  padding: '6px',
+                  background: (selectedDialogue.emotionIntensity ?? 0) > 0 ? 'rgba(236, 72, 153, 0.25)' : 'var(--ed-surface-elevated)',
+                  borderColor: (selectedDialogue.emotionIntensity ?? 0) > 0 ? '#ec4899' : 'var(--ed-border)',
+                  color: (selectedDialogue.emotionIntensity ?? 0) > 0 ? '#fbcfe8' : 'var(--ed-text-muted)',
+                  fontWeight: (selectedDialogue.emotionIntensity ?? 0) > 0 ? 600 : 400,
+                }}
+                onClick={() => onUpdateDialogue(selectedDialogue.id, { emotionIntensity: 15 })}
+              >
+                ✨ Subtle (15% - Tagged)
+              </button>
+            </div>
+            <div style={{ fontSize: '10px', color: 'var(--ed-text-muted)', marginTop: '6px', lineHeight: 1.4 }}>
+              Fish Audio Free models use natural storytelling tags at 15% or uninflected neutral speech at 0% to prevent vocal distortion.
+            </div>
           </div>
-          <input
-            type="range"
-            min="0"
-            max="100"
-            step="5"
-            value={selectedDialogue.emotionIntensity ?? (selectedDialogue.emotion === 'neutral' ? 0 : 15)}
-            onChange={(e) => onUpdateDialogue(selectedDialogue.id, { emotionIntensity: parseInt(e.target.value, 10) || 0 })}
-            style={{ width: '100%', accentColor: '#f43f5e' }}
-          />
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px', color: 'var(--ed-text-muted)', marginTop: '2px' }}>
-            <span>0% (Neutral)</span>
-            <span>15% (Subtle)</span>
-            <span>100% (Max)</span>
+        ) : (
+          <div style={{ background: 'var(--ed-bg)', padding: '10px 12px', borderRadius: '6px', border: '1px solid var(--ed-border)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+              <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--ed-text)' }}>
+                Emotion Intensity
+              </span>
+              <span style={{ fontSize: '11px', fontWeight: 700, color: '#f43f5e', fontFamily: 'monospace' }}>
+                {selectedDialogue.emotionIntensity ?? (selectedDialogue.emotion === 'neutral' ? 0 : 15)}%
+              </span>
+            </div>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              step="5"
+              value={selectedDialogue.emotionIntensity ?? (selectedDialogue.emotion === 'neutral' ? 0 : 15)}
+              onChange={(e) => onUpdateDialogue(selectedDialogue.id, { emotionIntensity: parseInt(e.target.value, 10) || 0 })}
+              style={{ width: '100%', accentColor: '#f43f5e' }}
+            />
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px', color: 'var(--ed-text-muted)', marginTop: '2px' }}>
+              <span>0% (Neutral)</span>
+              <span>15% (Subtle)</span>
+              <span>100% (Max)</span>
+            </div>
           </div>
-        </div>
+        )}
       </CollapsibleSection>
 
       {/* 4. Speed, Volume & Timing within scene */}

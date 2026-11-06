@@ -13,7 +13,7 @@ import { getImageGenerationProvider } from "../services/image-generation/provide
 import { LocalStorageService } from "../services/storage/local-storage.service.js";
 import { randomUUID } from "crypto";
 import { normalizeEmotionIntensity } from "../services/audio-generation/emotion-suggester.service.js";
-import { resolveCanonicalVoiceForCharacter } from "../services/audio-generation/language-resolver.service.js";
+import { resolveCanonicalVoiceForCharacter, isKokoroVoice } from "../services/audio-generation/language-resolver.service.js";
 
 export const characterRouter = Router();
 
@@ -211,11 +211,15 @@ characterRouter.get("/:id/voice", async (req, res) => {
       characterId: character.id,
       name: character.name,
       voiceConfig: voiceConfig || {
+        provider: 'kokoro',
+        model: undefined,
         voiceId: resolveCanonicalVoiceForCharacter(character.id || character.name, 'hi'),
         lang: 'hi',
         speed: 1.0,
         style: 'cheerful',
         effect: 'normal',
+        emotion: 'neutral',
+        emotionIntensity: 0,
       },
     });
   } catch (error: any) {
@@ -228,7 +232,7 @@ characterRouter.get("/:id/voice", async (req, res) => {
 characterRouter.put("/:id/voice", async (req, res) => {
   try {
     const { id } = req.params;
-    const { voiceId, speed, style, effect, emotion, emotionIntensity, lang } = req.body;
+    const { voiceId, speed, style, effect, emotion, emotionIntensity, lang, provider, model } = req.body;
 
     if (!voiceId) {
       return res.status(400).json({ message: "voiceId is required" });
@@ -251,9 +255,26 @@ characterRouter.put("/:id/voice", async (req, res) => {
         ? (existingCanonical as any).voiceConfig.emotionIntensity
         : normalizeEmotionIntensity(undefined, effectiveEmotion));
 
+    const resolvedProvider = provider || (existingCanonical as any)?.voiceConfig?.provider || 'kokoro';
+
+    let resolvedVoiceId = voiceId;
+    if (resolvedProvider === 'fish_audio') {
+      if (isKokoroVoice(resolvedVoiceId)) {
+        resolvedVoiceId = 'fish_default';
+      }
+    } else if (resolvedProvider === 'kokoro') {
+      if (resolvedVoiceId === 'fish_default' || resolvedVoiceId.startsWith('fish_')) {
+        resolvedVoiceId = resolveCanonicalVoiceForCharacter(existing.id || existing.name, lang || 'hi');
+      }
+    }
+
+    const resolvedModel = resolvedProvider === 'fish_audio' ? (model || 's2.1-pro-free') : undefined;
+
     const newVoiceConfig = {
-      lang: lang || (existingCanonical as any)?.voiceConfig?.lang || (voiceId.startsWith('h') ? 'hi' : 'en'),
-      voiceId,
+      provider: resolvedProvider,
+      model: resolvedModel,
+      lang: lang || (existingCanonical as any)?.voiceConfig?.lang || (resolvedVoiceId.startsWith('h') ? 'hi' : 'en'),
+      voiceId: resolvedVoiceId,
       speed: typeof speed === "number" ? speed : 1.0,
       emotion: effectiveEmotion,
       emotionIntensity: effectiveIntensity,

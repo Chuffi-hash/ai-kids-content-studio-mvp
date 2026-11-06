@@ -24,7 +24,7 @@ import { StoryDetailsModal } from '../components/editor/StoryDetailsModal';
 import { ImportScriptModal } from '../components/editor/ImportScriptModal';
 import { CharacterBuilderModal } from '../components/characters/CharacterBuilderModal';
 import { buildRigFromAppearance } from '../utils/customCharacterRig';
-import { createCharacter, updateCharacter } from '../services/character.service';
+import { createCharacter, updateCharacter, updateCharacterVoice } from '../services/character.service';
 import { SceneDialogue, EducationalOverlayType, AspectRatioType } from '../types/animation';
 import { AlertTriangleIcon, ArrowLeftIcon, FilmIcon, SparklesIcon, PlusIcon } from '../components/common/Icons';
 import '../components/editor/editor.css';
@@ -816,6 +816,55 @@ export default function StoryDetailPage() {
       }
     },
     [activeSceneId, scenes, selectedDialogueId, handleUpdateAnimationData]
+  );
+
+  const handleSaveCharacterDefault = useCallback(
+    async (
+      characterId: string,
+      settings: {
+        provider?: string;
+        model?: string;
+        voice?: string;
+        lang?: string;
+        emotion?: any;
+        emotionIntensity?: number;
+      }
+    ) => {
+      try {
+        const voiceConfig = {
+          provider: settings.provider || 'kokoro',
+          model: settings.provider === 'fish_audio' ? (settings.model || 's2.1-pro-free') : undefined,
+          voiceId: settings.voice || (settings.lang === 'hi' ? 'hf_alpha' : 'af_heart'),
+          lang: settings.lang || 'hi',
+          emotion: settings.emotion,
+          emotionIntensity: settings.emotionIntensity,
+          speed: 1.0,
+        };
+        await updateCharacterVoice(characterId, voiceConfig as any);
+        setStory((prev) => {
+          if (!prev || !prev.characters) return prev;
+          const updated = prev.characters.map((c) => {
+            if (c.id === characterId) {
+              const canonical = typeof c.canonicalAppearance === 'object' && c.canonicalAppearance !== null ? c.canonicalAppearance : {};
+              return {
+                ...c,
+                canonicalAppearance: {
+                  ...canonical,
+                  voiceConfig,
+                },
+                voiceConfig,
+              };
+            }
+            return c;
+          });
+          return { ...prev, characters: updated };
+        });
+      } catch (err) {
+        console.error('Failed to save character voice default:', err);
+        throw err;
+      }
+    },
+    []
   );
 
   const handleDeleteOverlay = useCallback(
@@ -1888,6 +1937,7 @@ export default function StoryDetailPage() {
           selectedDialogueId={selectedDialogueId}
           onSelectDialogue={handleSelectDialogue}
           onUpdateAnimationData={handleUpdateAnimationData}
+          onSaveCharacterDefault={handleSaveCharacterDefault}
           onAddCharacterToScene={handleAddCharacterToScene}
           onRemoveCharacterFromScene={handleRemoveCharacterFromScene}
           isRippleOn={isRippleOn}
