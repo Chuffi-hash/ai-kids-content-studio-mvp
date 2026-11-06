@@ -22,6 +22,7 @@ model Story {
   genre          String?
   visualStyle    String?
   targetDuration Int?
+  visualBible    Json?
   scenes         Scene[]
   storyCharacters StoryCharacter[]
   createdAt      DateTime         @default(now())

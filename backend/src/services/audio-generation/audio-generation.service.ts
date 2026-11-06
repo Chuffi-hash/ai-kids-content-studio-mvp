@@ -83,9 +83,8 @@ export class AudioGenerationService {
     const speed = options.speed || 1.0;
     const emotion = (options.emotion || 'neutral') as SpeakingEmotion;
 
-    // Delivery calculation with emotion intensity
-    // Default intensity for Fish Audio is 0.15 (15%) when not explicitly overridden
-    const defaultIntensity = providerInstance.name === 'fish_audio' ? 15 : undefined;
+    // Delivery calculation with subtle emotion intensity: neutral = 0%, non-neutral = 15%
+    const defaultIntensity = emotion === 'neutral' ? 0 : 15;
     const resolvedIntensity = options.emotionIntensity !== undefined ? options.emotionIntensity : defaultIntensity;
 
     const delivery = calculateEmotionDelivery({
@@ -502,15 +501,15 @@ export class AudioGenerationService {
     const baseSpeed = lineSpeed ?? sceneSpeed ?? charSpeed ?? 1.0;
     const baseEffect = lineEffect || charEffect || 'normal';
 
-    // Effective intensity according to strict precedence (default 15% for Fish Audio)
+    // Effective intensity according to strict precedence: neutral = 0%, subtle non-neutral = 15%
     let effectiveIntensity = lineIntensity !== undefined
       ? lineIntensity
       : (sceneIntensity !== undefined
         ? sceneIntensity
         : (charIntensity !== undefined ? charIntensity : undefined));
 
-    if (effectiveIntensity === undefined && (effectiveProvider === 'fish_audio' || effectiveProvider === 'fish')) {
-      effectiveIntensity = 15;
+    if (effectiveIntensity === undefined) {
+      effectiveIntensity = effectiveEmotion === 'neutral' ? 0 : 15;
     }
 
     // Calculate emotion delivery with intensity

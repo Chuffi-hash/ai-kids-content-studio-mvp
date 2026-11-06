@@ -951,8 +951,9 @@ export default function StoryDetailPage() {
         voice: 'hf_alpha',
         startMs: startOffsetMs !== undefined ? Math.max(0, startOffsetMs - targetScene.startMs) : 0,
         durationMs: 3000,
-        emotion: 'happy',
-        emotionIntensity: 50,
+        emotion: 'neutral',
+        emotionIntensity: 0,
+        facialExpression: 'neutral',
         speed: 1.0,
         volume: 1.0,
       };
@@ -1031,7 +1032,7 @@ export default function StoryDetailPage() {
           lang: dlg.lang || 'hi',
           speed: dlg.speed || 1.0,
           emotion: dlg.emotion || 'neutral',
-          emotionIntensity: dlg.emotionIntensity || 50,
+          emotionIntensity: dlg.emotionIntensity !== undefined ? dlg.emotionIntensity : (dlg.emotion && dlg.emotion !== 'neutral' ? 15 : 0),
           volume: dlg.volume !== undefined ? dlg.volume : 1.0,
         });
 

@@ -44,6 +44,7 @@ export async function createStory(data: {
   genre?: string | null;
   visualStyle?: string | null;
   targetDuration?: number | null;
+  visualBible?: any;
 }) {
   const id = data.id || randomUUID();
   const storyId = data.storyId || `story-${Date.now()}-${randomUUID().slice(0, 8)}`;
@@ -59,6 +60,7 @@ export async function createStory(data: {
       genre: data.genre,
       visualStyle: data.visualStyle,
       targetDuration: data.targetDuration,
+      ...(data.visualBible !== undefined ? { visualBible: data.visualBible } : {}),
     },
     create: {
       id,
@@ -72,6 +74,7 @@ export async function createStory(data: {
       genre: data.genre,
       visualStyle: data.visualStyle,
       targetDuration: data.targetDuration,
+      visualBible: data.visualBible || null,
     },
   });
 }
@@ -86,11 +89,35 @@ export async function updateStoryMetadata(storyId: string, data: {
   genre?: string | null;
   visualStyle?: string | null;
   targetDuration?: number | null;
+  visualBible?: any;
 }) {
   return await prisma.story.update({
     where: { storyId },
     data,
   });
+}
+
+export async function updateStoryVisualBible(storyId: string, visualBible: any) {
+  return await prisma.story.update({
+    where: { storyId },
+    data: {
+      visualBible,
+    },
+  });
+}
+
+export async function getStoryVisualBible(storyId: string) {
+  const story = await prisma.story.findUnique({
+    where: { storyId },
+    select: {
+      visualBible: true,
+      visualStyle: true,
+      title: true,
+      genre: true,
+      ageGroup: true,
+    },
+  });
+  return story?.visualBible || null;
 }
 
 export async function getStoryByStoryId(storyId: string) {

@@ -347,15 +347,15 @@ test("10. Emotion Intensity Normalization & Backward-Compatible Defaults", () =>
   assert.strictEqual(normalizeEmotionIntensity("75", "happy"), 75, "String numbers must be parsed");
 
   // Documented backward-compatible defaults:
-  // Neutral: 0%, Happy: 60%, others: 50%
+  // Neutral: 0%, Any emotion: 15% subtle
   assert.strictEqual(normalizeEmotionIntensity(undefined, "neutral"), 0, "Neutral default must be 0%");
   assert.strictEqual(normalizeEmotionIntensity(null, "neutral"), 0, "Neutral default must be 0%");
-  assert.strictEqual(normalizeEmotionIntensity(undefined, "happy"), 60, "Happy default must be 60%");
-  assert.strictEqual(normalizeEmotionIntensity(null, "happy"), 60, "Happy default must be 60%");
-  assert.strictEqual(normalizeEmotionIntensity(NaN, "happy"), 60, "NaN on happy must fallback to 60%");
-  assert.strictEqual(normalizeEmotionIntensity(undefined, "excited"), 50, "Excited default must be 50%");
-  assert.strictEqual(normalizeEmotionIntensity(undefined, "sad"), 50, "Sad default must be 50%");
-  assert.strictEqual(normalizeEmotionIntensity(undefined, "angry"), 50, "Angry default must be 50%");
+  assert.strictEqual(normalizeEmotionIntensity(undefined, "happy"), 15, "Happy default must be 15%");
+  assert.strictEqual(normalizeEmotionIntensity(null, "happy"), 15, "Happy default must be 15%");
+  assert.strictEqual(normalizeEmotionIntensity(NaN, "happy"), 15, "NaN on happy must fallback to 15%");
+  assert.strictEqual(normalizeEmotionIntensity(undefined, "excited"), 15, "Excited default must be 15%");
+  assert.strictEqual(normalizeEmotionIntensity(undefined, "sad"), 15, "Sad default must be 15%");
+  assert.strictEqual(normalizeEmotionIntensity(undefined, "angry"), 15, "Angry default must be 15%");
 });
 
 test("11. Continuous Prosody Delivery Adapter - Linear Interpolation Across 0% to 100%", () => {

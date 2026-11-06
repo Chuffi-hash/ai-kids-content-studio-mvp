@@ -169,40 +169,40 @@ export const EMOTION_DELIVERY_MAP: Record<SpeakingEmotion, EmotionDeliveryConfig
 };
 
 /**
- * Documented backward-compatible default intensity per emotion.
+ * Application subtle emotional presets.
  * - Neutral: 0% (resting neutral baseline)
- * - Happy: 60% (acceptance-test default)
- * - All other expressive emotions: 50% (moderate expression)
+ * - All subtle expressive presets: strictly 15% to maintain natural, intelligible storytelling
  */
 export const DEFAULT_EMOTION_INTENSITY: Record<SpeakingEmotion, number> = {
   neutral: 0,
-  happy: 60,
-  excited: 50,
-  sad: 50,
-  sleepy: 50,
-  confused: 50,
-  worried: 50,
-  curious: 50,
-  calm: 50,
-  serious: 50,
-  angry: 50,
-  surprised: 50,
-  whispering: 50,
-  shouting: 50,
+  happy: 15,
+  excited: 15,
+  sad: 15,
+  sleepy: 15,
+  confused: 15,
+  worried: 15,
+  curious: 15,
+  calm: 15,
+  serious: 15,
+  angry: 15,
+  surprised: 15,
+  whispering: 15,
+  shouting: 15,
   reassuring: 15,
   fearful: 15,
 };
 
 /**
  * Validates, normalizes, and clamps emotion intensity between 0 and 100%.
- * Missing, NaN, or non-finite values fall back to the documented emotion default.
+ * Explicit 0 is strictly preserved.
+ * Missing, NaN, or non-finite values default to 0 for neutral, or 15 for expressive presets.
  */
 export function normalizeEmotionIntensity(
   rawIntensity: any,
   emotion: string = 'neutral'
 ): number {
   const normEmotion = (emotion || 'neutral').toLowerCase() as SpeakingEmotion;
-  const defaultVal = DEFAULT_EMOTION_INTENSITY[normEmotion] ?? 50;
+  const defaultVal = DEFAULT_EMOTION_INTENSITY[normEmotion] ?? (normEmotion === 'neutral' ? 0 : 15);
 
   if (rawIntensity === undefined || rawIntensity === null || rawIntensity === '') {
     return defaultVal;
@@ -474,16 +474,6 @@ export function suggestEmotionForText(text: string): EmotionSuggestion {
       facialExpression: 'angry',
       confidence: 0.78,
       rationale: 'Emphasis on instruction or gravity',
-    };
-  }
-
-  // Fallback: Check exclamation mark -> Happy / Excited
-  if (lower.includes('!')) {
-    return {
-      emotion: 'happy',
-      facialExpression: 'happy',
-      confidence: 0.70,
-      rationale: 'Exclamatory ending indicates upbeat energy',
     };
   }
 

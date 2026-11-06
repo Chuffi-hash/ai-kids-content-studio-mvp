@@ -122,31 +122,35 @@ export function toTTSLanguageCode(
 export const KOKORO_HINDI_VOICES = ['hf_alpha', 'hf_beta', 'hm_psi', 'hm_omega'] as const;
 
 /**
- * Known Fish Audio curated Hindi voice IDs:
+ * Checks if a voice ID is a Kokoro-82M neural voice identifier.
  */
-export const FISH_AUDIO_HINDI_VOICES = [
-  'fish_hi_aditi',
-  'fish_hi_kabir',
-  'fish_hi_ananya',
-  'fish_hi_aarav',
-] as const;
+export function isKokoroVoice(voiceId?: string | null): boolean {
+  if (!voiceId || typeof voiceId !== 'string') return false;
+  const v = voiceId.toLowerCase().trim();
+  return (
+    v.startsWith('hf_') ||
+    v.startsWith('hm_') ||
+    v.startsWith('af_') ||
+    v.startsWith('am_') ||
+    v.startsWith('bf_') ||
+    v.startsWith('bm_') ||
+    v.startsWith('kokoro')
+  );
+}
 
 /**
  * Checks whether a voice ID is valid for the specified language.
  */
 export function isVoiceCompatibleWithLanguage(voiceId?: string | null, lang: SupportedLanguage = 'hi'): boolean {
-  if (!voiceId || typeof voiceId !== 'string' || voiceId === 'default') {
-    return true; // Unspecified will resolve to a valid default
+  if (!voiceId || typeof voiceId !== 'string' || voiceId === 'default' || voiceId === 'fish_default') {
+    return true; // Unspecified or Fish Audio default multilingual voice is compatible with both hi & en
   }
 
   const v = voiceId.toLowerCase().trim();
 
   // Fish Audio voice conventions
-  if (v.startsWith('fish_hi_') || v.startsWith('hindi_')) {
-    return lang === 'hi';
-  }
-  if (v.startsWith('fish_en_') || v.startsWith('english_')) {
-    return lang === 'en';
+  if (v === 'fish_default') {
+    return true;
   }
   // Generic custom reference ID (e.g. 24-36 hex characters) from Fish Audio model library
   if (/^[a-f0-9]{24,36}$/.test(v)) {
@@ -270,24 +274,33 @@ export function resolveEffectiveVoice(options: {
 
   if (provider === 'fish_audio' || provider === 'fish' || provider === 'fishaudio') {
     if (requestedVoice && requestedVoice !== 'default') {
+      // NEVER allow Kokoro voice IDs into Fish Audio
+      if (isKokoroVoice(requestedVoice)) {
+        console.warn(
+          `[LanguageResolver] Kokoro voice "${requestedVoice}" is incompatible with Fish Audio. Resolving to "fish_default".`
+        );
+        return 'fish_default';
+      }
+      if (requestedVoice === 'fish_default') {
+        return 'fish_default';
+      }
+      // Custom Fish Audio reference ID (hex format or verified custom ID)
       if (isVoiceCompatibleWithLanguage(requestedVoice, lang)) {
         return requestedVoice;
       }
       console.warn(
-        `[LanguageResolver] Fish Audio voice "${requestedVoice}" is incompatible with target language "${lang}". Substituting canonical Fish Audio voice.`
+        `[LanguageResolver] Fish Audio voice "${requestedVoice}" is incompatible with target language "${lang}". Resolving to "fish_default".`
       );
     }
-    const norm = (characterName || species || '').toLowerCase().trim();
-    if (norm.includes('pip') || norm.includes('bear') || norm.includes('भालू') || norm.includes('sammy') || norm.includes('boy')) {
-      return lang === 'hi' ? 'fish_hi_aarav' : 'fish_en_leo';
-    }
-    if (norm.includes('maya') || norm.includes('girl')) {
-      return lang === 'hi' ? 'fish_hi_ananya' : 'fish_en_lily';
-    }
-    if (norm.includes('sparky') || norm.includes('robot')) {
-      return lang === 'hi' ? 'fish_hi_kabir' : 'fish_en_oliver';
-    }
-    return lang === 'hi' ? 'fish_hi_aditi' : 'fish_en_clara';
+    return 'fish_default';
+  }
+
+  // Kokoro / default provider: NEVER allow Fish Audio voice IDs into Kokoro
+  if (requestedVoice && (requestedVoice === 'fish_default' || requestedVoice.startsWith('fish_') || /^[a-f0-9]{24,36}$/i.test(requestedVoice))) {
+    console.warn(
+      `[LanguageResolver] Fish Audio voice "${requestedVoice}" is incompatible with Kokoro. Substituting canonical Kokoro voice.`
+    );
+    return resolveCanonicalVoiceForCharacter(characterName || species, lang);
   }
 
   // If a voice was requested, check compatibility
