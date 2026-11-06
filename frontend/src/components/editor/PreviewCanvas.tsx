@@ -179,23 +179,26 @@ export const PreviewCanvas: React.FC<PreviewCanvasProps> = ({
     }
   };
 
-  const mediaUrl = activeScene?.imageUrl || activeScene?.image?.imageUrl;
+  const isBgExplicitlyRemoved = Boolean((activeScene as any)?.animationData?.background?.removed);
+  const mediaUrl = isBgExplicitlyRemoved ? null : (activeScene?.imageUrl || activeScene?.image?.imageUrl);
   const hasAnimation = Boolean(
     activeScene?.animationData &&
     ((activeScene.animationData.characterInstances?.length ?? 0) > 0 ||
       (activeScene.animationData.overlays?.length ?? 0) > 0 ||
-      activeScene.animationData.background?.imageUrl),
+      (!isBgExplicitlyRemoved && activeScene.animationData.background?.imageUrl)),
   );
 
   const effectiveAnimationData: VectorSceneData | null =
     activeScene?.animationData
       ? {
           ...activeScene.animationData,
-          background: activeScene.animationData.background?.imageUrl
-            ? activeScene.animationData.background
-            : mediaUrl
-              ? { imageUrl: mediaUrl, fit: "cover" }
-              : undefined,
+          background: isBgExplicitlyRemoved
+            ? { imageUrl: "", fit: "cover", removed: true }
+            : activeScene.animationData.background?.imageUrl
+              ? activeScene.animationData.background
+              : mediaUrl
+                ? { imageUrl: mediaUrl, fit: "cover", removed: false }
+                : undefined,
         }
       : null;
 
@@ -469,6 +472,11 @@ export const PreviewCanvas: React.FC<PreviewCanvasProps> = ({
             currentTimeMs={currentTimeMs}
             sceneStartMs={
               (activeScene as any)?.startTimeMs ?? activeScene?.startMs ?? 0
+            }
+            sceneDurationMs={
+              activeScene?.endMs && activeScene?.startMs && activeScene.endMs > activeScene.startMs
+                ? activeScene.endMs - activeScene.startMs
+                : activeScene?.estimatedDurationMs || 5000
             }
             activeFormat={activeFormat}
             selectedInstanceId={selectedInstanceId || null}

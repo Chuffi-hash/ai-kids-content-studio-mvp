@@ -342,11 +342,12 @@ test('Scene Backgrounds — Full Lifecycle, Parity, and Safety Suite', async (t)
     const data = await res.json();
     assert.strictEqual(data.success, true);
     assert.strictEqual(data.scene.imageUrl, null);
-    assert.strictEqual(data.scene.animationData.background, undefined);
+    assert.strictEqual(Boolean(data.scene.animationData.background?.removed), true);
+    assert.strictEqual(data.scene.animationData.background?.imageUrl || '', '');
 
     const dbScene = await getSceneBySceneId(testScene1Id);
     assert.strictEqual(dbScene?.imageUrl, null);
-    assert.strictEqual((dbScene?.animationData as any)?.background, undefined);
+    assert.strictEqual(Boolean((dbScene?.animationData as any)?.background?.removed), true);
     // Characters must remain present
     assert.strictEqual((dbScene?.animationData as any)?.characterInstances?.length, 1);
   });

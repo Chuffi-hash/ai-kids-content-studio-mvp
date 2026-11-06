@@ -223,6 +223,14 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
   const [localCameraMovement, setLocalCameraMovement] = useState<string>(
     (scene.animationData as any)?.cameraMovement || 'Static (no movement)'
   );
+  const [localCameraRotation, setLocalCameraRotation] = useState<string>(
+    (scene.animationData as any)?.cameraRotation || 'none'
+  );
+  const [localCameraRotationDegrees, setLocalCameraRotationDegrees] = useState<number>(
+    typeof (scene.animationData as any)?.cameraRotationDegrees === 'number'
+      ? (scene.animationData as any).cameraRotationDegrees
+      : 10
+  );
   const [localAspectRatio, setLocalAspectRatio] = useState<string>(
     (scene.animationData as any)?.background?.aspectRatio || '16:9'
   );
@@ -245,7 +253,11 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
   const [isLoadingStoryBackgrounds, setIsLoadingStoryBackgrounds] = useState(false);
   const [showRemoveBgConfirm, setShowRemoveBgConfirm] = useState(false);
 
-  const currentBgUrl = scene.animationData?.background?.imageUrl || scene.imageUrl;
+  const [bgImgLoadError, setBgImgLoadError] = useState(false);
+  const [previewImgError, setPreviewImgError] = useState(false);
+
+  const isBgExplicitlyRemoved = Boolean((scene.animationData as any)?.background?.removed);
+  const currentBgUrl = isBgExplicitlyRemoved ? '' : (scene.animationData?.background?.imageUrl || scene.imageUrl || '');
   const currentBgFit = scene.animationData?.background?.fit || 'cover';
 
   // Dedicated audio player state for scene inspector
@@ -262,11 +274,19 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
     setLocalPrompt(scene.visualPrompt || '');
     setLocalCamera(scene.cameraDirection || 'Eye level wide establishing shot');
     setLocalCameraMovement((scene.animationData as any)?.cameraMovement || 'Static (no movement)');
+    setLocalCameraRotation((scene.animationData as any)?.cameraRotation || 'none');
+    setLocalCameraRotationDegrees(
+      typeof (scene.animationData as any)?.cameraRotationDegrees === 'number'
+        ? (scene.animationData as any).cameraRotationDegrees
+        : 10
+    );
     setLocalAspectRatio((scene.animationData as any)?.background?.aspectRatio || '16:9');
     setShowRemoveVoiceConfirm(false);
     setAudioPlaying(false);
     setAudioCurrentTime(0);
     setAudioError(null);
+    setBgImgLoadError(false);
+    setPreviewImgError(false);
     if (audioPlayerRef.current) {
       audioPlayerRef.current.pause();
       audioPlayerRef.current.currentTime = 0;
@@ -279,7 +299,12 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
     scene.cameraDirection,
     scene.audioUrl,
     (scene.animationData as any)?.cameraMovement,
+    (scene.animationData as any)?.cameraRotation,
+    (scene.animationData as any)?.cameraRotationDegrees,
     (scene.animationData as any)?.background?.aspectRatio,
+    (scene.animationData as any)?.background?.removed,
+    (scene.animationData as any)?.background?.imageUrl,
+    scene.imageUrl,
   ]);
 
   // Kokoro TTS Studio state
@@ -609,17 +634,57 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
     }
   };
 
-  const handleRemoveBackground = () => {
+  const handleRemoveBackground = async () => {
     setShowRemoveBgConfirm(false);
     setBgError(null);
     if (onRemoveBackground) {
-      onRemoveBackground(scene.sceneId);
+      await onRemoveBackground(scene.sceneId);
     } else {
       removeSceneBackground(scene.sceneId)
         .then((res) => {
           if (res.scene) onUpdateScene(scene.sceneId, res.scene);
         })
         .catch((err) => setBgError(err.message || 'Failed to remove background'));
+    }
+  };
+
+  const handleCameraRotationChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const val = e.target.value;
+    setLocalCameraRotation(val);
+    const anim = {
+      ...(scene.animationData || {
+        version: 1,
+        viewport: { width: 1280, height: 720 },
+        characterInstances: [],
+        animationClips: [],
+      }),
+      cameraRotation: val,
+      cameraRotationDegrees: localCameraRotationDegrees,
+    };
+    if (onUpdateAnimationData) {
+      onUpdateAnimationData(scene.sceneId, anim as any);
+    } else {
+      onUpdateScene(scene.sceneId, { animationData: anim as any });
+    }
+  };
+
+  const handleCameraRotationDegreesChange = (val: number) => {
+    const clamped = Math.max(0, Math.min(45, Math.round(val)));
+    setLocalCameraRotationDegrees(clamped);
+    const anim = {
+      ...(scene.animationData || {
+        version: 1,
+        viewport: { width: 1280, height: 720 },
+        characterInstances: [],
+        animationClips: [],
+      }),
+      cameraRotation: localCameraRotation,
+      cameraRotationDegrees: clamped,
+    };
+    if (onUpdateAnimationData) {
+      onUpdateAnimationData(scene.sceneId, anim as any);
+    } else {
+      onUpdateScene(scene.sceneId, { animationData: anim as any });
     }
   };
 
@@ -2087,11 +2152,18 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                 <span style={{ fontSize: '10px', color: '#64748b' }}>Unsaved</span>
               </div>
               <div style={{ position: 'relative', width: '100%', aspectRatio: '16/9', borderRadius: '6px', overflow: 'hidden', background: '#000', marginBottom: '8px' }}>
-                <img
-                  src={generatedPreview.url}
-                  alt="AI Generated Background Preview"
-                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                />
+                {!previewImgError ? (
+                  <img
+                    src={resolveAssetUrl(generatedPreview.url)}
+                    alt="AI Generated Background Preview"
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    onError={() => setPreviewImgError(true)}
+                  />
+                ) : (
+                  <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#f87171', fontSize: '11px', padding: '8px', textAlign: 'center' }}>
+                    Preview image failed to load.
+                  </div>
+                )}
               </div>
               {generatedPreview.prompt && (
                 <div style={{ fontSize: '10px', color: '#64748b', background: 'rgba(0,0,0,0.03)', padding: '6px 8px', borderRadius: '4px', marginBottom: '8px', maxHeight: '50px', overflowY: 'auto' }}>
@@ -2144,7 +2216,8 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
               </div>
               <div className="ed-bg-preview-box">
                 <img
-                  src={currentBgUrl}
+                  src={resolveAssetUrl(currentBgUrl)}
+                  onError={() => setBgImgLoadError(true)}
                   alt="Scene Background"
                   className={currentBgFit === 'contain' ? 'fit-contain' : 'fit-cover'}
                 />
@@ -2317,6 +2390,39 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                   </select>
                   <span style={{ fontSize: '9px', color: '#94a3b8', marginTop: '2px', display: 'block' }}>
                     Applied during video assembly, does not affect still background
+                  </span>
+                </div>
+
+                {/* Camera Rotation (2D Scene Roll) */}
+                <div className="ed-field-group" style={{ margin: 0 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label className="ed-field-label" style={{ margin: 0 }}>Camera Rotation (2D Roll)</label>
+                    <span style={{ fontSize: '9px', color: '#94a3b8' }}>Vector Stage</span>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '8px', marginTop: '4px' }}>
+                    <select className="ed-select" value={localCameraRotation} onChange={handleCameraRotationChange}>
+                      <option value="none">None (0°)</option>
+                      <option value="clockwise">Rotate Clockwise</option>
+                      <option value="anticlockwise">Rotate Anticlockwise</option>
+                    </select>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <input
+                        type="number"
+                        className="ed-input"
+                        style={{ padding: '4px 6px', fontSize: '12px' }}
+                        min={0}
+                        max={45}
+                        step={1}
+                        value={localCameraRotationDegrees}
+                        disabled={localCameraRotation === 'none'}
+                        onChange={(e) => handleCameraRotationDegreesChange(parseFloat(e.target.value) || 0)}
+                        title="Rotation roll amount in degrees (0° - 45°)"
+                      />
+                      <span style={{ fontSize: '11px', color: '#64748b' }}>deg</span>
+                    </div>
+                  </div>
+                  <span style={{ fontSize: '9px', color: '#94a3b8', marginTop: '2px', display: 'block' }}>
+                    2D scene roll applied around center anchor; does not alter 3D perspective of flat backdrop
                   </span>
                 </div>
 
@@ -2715,7 +2821,13 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                       onClick={() => handleSelectStoryBackground(bg.imageUrl)}
                       title={`Used in Scene ${bg.sceneNumber}`}
                     >
-                      <img src={bg.imageUrl} alt={`Scene ${bg.sceneNumber}`} />
+                      <img
+                        src={resolveAssetUrl(bg.imageUrl)}
+                        alt={`Scene ${bg.sceneNumber}`}
+                        onError={(e) => {
+                          (e.target as HTMLElement).style.display = 'none';
+                        }}
+                      />
                       <div className="ed-bg-picker-caption">Scene {bg.sceneNumber}</div>
                     </div>
                   ))}

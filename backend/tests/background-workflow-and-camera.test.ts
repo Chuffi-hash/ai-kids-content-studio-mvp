@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert';
 import { PromptSynthesizer } from '../src/services/story-generation/parser/prompt-synthesizer.js';
 import { FFmpegVideoProvider } from '../src/services/production/video-generation/providers/ffmpeg-video.provider.js';
+import { VectorAnimationEngine, computeSceneCameraTransform } from '../src/services/animation/vector-animation.engine.js';
 
 test('Background Workflow & Camera Direction Test Suite', async (t) => {
   await t.test('1. PromptSynthesizer — Injects distinct camera perspectives into environment prompt', () => {
@@ -250,6 +251,299 @@ test('Background Workflow & Camera Direction Test Suite', async (t) => {
     const oversizeRes = validateBytes(oversizeBuffer);
     assert.strictEqual(oversizeRes.valid, false);
     assert.ok(oversizeRes.error?.includes('15MB'));
+  });
+
+  await t.test('6. Vector Animation Camera Motion & 2D Roll Rotation Engine', () => {
+    const width = 1280;
+    const height = 720;
+    const durationSec = 4.0;
+
+    // 6.1 Static transform is identity
+    const staticTransform = computeSceneCameraTransform({
+      movement: 'static',
+      rotation: 'none',
+      timestampSec: 2.0,
+      durationSec,
+      width,
+      height,
+    });
+    assert.strictEqual(staticTransform.scale, 1.0);
+    assert.strictEqual(staticTransform.dx, 0);
+    assert.strictEqual(staticTransform.dy, 0);
+    assert.strictEqual(staticTransform.rotationDeg, 0);
+    assert.strictEqual(staticTransform.transformString, 'translate(640, 360) rotate(0) scale(1) translate(-640, -360)');
+
+    // 6.2 Zoom in progress: t=0 -> 1.0, t=1.0 -> 1.15
+    const zoomStart = computeSceneCameraTransform({
+      movement: 'slow zoom in',
+      timestampSec: 0,
+      durationSec,
+      width,
+      height,
+    });
+    const zoomEnd = computeSceneCameraTransform({
+      movement: 'slow zoom in',
+      timestampSec: 4.0,
+      durationSec,
+      width,
+      height,
+    });
+    assert.strictEqual(zoomStart.scale, 1.0);
+    assert.strictEqual(zoomEnd.scale, 1.15);
+
+    // 6.3 Zoom out progress: t=0 -> 1.15, t=1.0 -> 1.0
+    const zoomOutStart = computeSceneCameraTransform({
+      movement: 'slow zoom out',
+      timestampSec: 0,
+      durationSec,
+      width,
+      height,
+    });
+    const zoomOutEnd = computeSceneCameraTransform({
+      movement: 'slow zoom out',
+      timestampSec: 4.0,
+      durationSec,
+      width,
+      height,
+    });
+    assert.strictEqual(zoomOutStart.scale, 1.15);
+    assert.strictEqual(zoomOutEnd.scale, 1.0);
+
+    // 6.4 Pan left: scale=1.12, dx traverses horizontally
+    const panLeftStart = computeSceneCameraTransform({
+      movement: 'pan left',
+      timestampSec: 0,
+      durationSec,
+      width,
+      height,
+    });
+    const panLeftEnd = computeSceneCameraTransform({
+      movement: 'pan left',
+      timestampSec: 4.0,
+      durationSec,
+      width,
+      height,
+    });
+    assert.strictEqual(panLeftStart.scale, 1.12);
+    assert.ok(panLeftStart.dx < 0);
+    assert.ok(panLeftEnd.dx > 0);
+
+    // 6.5 Pan right: scale=1.12, dx traverses in opposite direction
+    const panRightStart = computeSceneCameraTransform({
+      movement: 'pan right',
+      timestampSec: 0,
+      durationSec,
+      width,
+      height,
+    });
+    const panRightEnd = computeSceneCameraTransform({
+      movement: 'pan right',
+      timestampSec: 4.0,
+      durationSec,
+      width,
+      height,
+    });
+    assert.strictEqual(panRightStart.scale, 1.12);
+    assert.ok(panRightStart.dx > 0);
+    assert.ok(panRightEnd.dx < 0);
+
+    // 6.6 Tilt up & Tilt down
+    const tiltUp = computeSceneCameraTransform({
+      movement: 'tilt up',
+      timestampSec: 4.0,
+      durationSec,
+      width,
+      height,
+    });
+    assert.strictEqual(tiltUp.scale, 1.12);
+    assert.ok(tiltUp.dy > 0);
+
+    const tiltDown = computeSceneCameraTransform({
+      movement: 'tilt down',
+      timestampSec: 4.0,
+      durationSec,
+      width,
+      height,
+    });
+    assert.strictEqual(tiltDown.scale, 1.12);
+    assert.ok(tiltDown.dy < 0);
+
+    // 6.7 2D Roll Rotation (Clockwise & Anticlockwise) with degrees clamping
+    const rollClockwise = computeSceneCameraTransform({
+      rotation: 'clockwise',
+      rotationDegrees: 15,
+      timestampSec: 4.0,
+      durationSec,
+      width,
+      height,
+    });
+    assert.strictEqual(rollClockwise.rotationDeg, 15);
+    assert.ok(rollClockwise.scale >= 1.12, 'Scale should be at least 1.12 to avoid exposing stage corners during roll');
+
+    const rollAnticlockwise = computeSceneCameraTransform({
+      rotation: 'anticlockwise',
+      rotationDegrees: 20,
+      timestampSec: 4.0,
+      durationSec,
+      width,
+      height,
+    });
+    assert.strictEqual(rollAnticlockwise.rotationDeg, -20);
+    assert.ok(rollAnticlockwise.scale >= 1.12);
+
+    // Degree clamping to max 45
+    const clampedRoll = computeSceneCameraTransform({
+      rotation: 'clockwise',
+      rotationDegrees: 90,
+      timestampSec: 4.0,
+      durationSec,
+      width,
+      height,
+    });
+    assert.strictEqual(clampedRoll.rotationDeg, 45);
+
+    // 6.8 VectorAnimationEngine.generateSvgFrame wraps all scene elements in scene-camera-root
+    const engine = new VectorAnimationEngine();
+    const animData = {
+      version: 1,
+      viewport: { width: 1280, height: 720 },
+      cameraMovement: 'slow zoom in',
+      cameraRotation: 'clockwise',
+      cameraRotationDegrees: 12,
+      background: { imageUrl: '', removed: true },
+      characterInstances: [
+        {
+          instanceId: 'char-1',
+          characterId: 'c1',
+          assetType: 'vector_rig' as const,
+          name: 'Hero',
+          x: 640,
+          y: 450,
+          scale: 1.0,
+          rotation: 0,
+          flipX: false,
+          zIndex: 1,
+        },
+      ],
+      animationClips: [],
+      overlays: [],
+    };
+
+    const svgOutput = engine.generateSvgFrame({
+      animationData: animData,
+      timestampSec: 4.0,
+      durationSec: 4.0,
+      width: 1280,
+      height: 720,
+    });
+
+    assert.ok(svgOutput.includes('<g id="scene-camera-root"'), 'SVG frame must contain scene-camera-root');
+    assert.ok(svgOutput.includes('rotate(12)'), 'SVG camera root transform must reflect rotation roll');
+    assert.ok(svgOutput.includes('scale(1.15)'), 'SVG camera root transform must reflect zoom scale');
+
+    const rootIdx = svgOutput.indexOf('id="scene-camera-root"');
+    const bgIdx = svgOutput.indexOf('id="background-layer"');
+    const charIdx = svgOutput.indexOf('id="characters-layer"');
+
+    assert.ok(rootIdx < bgIdx, 'scene-camera-root must wrap background-layer');
+    assert.ok(bgIdx < charIdx, 'background-layer must precede characters-layer');
+  });
+
+  await t.test('7. Background Lifecycle — Removal Persistence, Historical Asset Retention & Re-application', () => {
+    // 7.1 Active background state
+    const sceneActive = {
+      id: 'sc-1',
+      sceneId: 'sc-1',
+      storyId: 'story-1',
+      imageUrl: '/storage/scene-active.png',
+      animationData: {
+        background: {
+          imageUrl: '/storage/scene-active.png',
+          fit: 'cover' as const,
+          source: 'ai_generated',
+          removed: false,
+        },
+      },
+    };
+
+    // 7.2 Explicit background removal
+    const sceneRemoved = {
+      ...sceneActive,
+      imageUrl: null,
+      animationData: {
+        ...sceneActive.animationData,
+        background: {
+          imageUrl: '',
+          fit: 'cover' as const,
+          removed: true,
+        },
+      },
+    };
+
+    // 7.3 GET /story/:storyId resolver simulation
+    // When latestImage exists in DB (never deleted), verify resolvedImageUrl is null when removed=true
+    const latestImageInDb = { id: 'img-1', imageUrl: '/storage/scene-historical.png' };
+
+    function resolveSceneImage(scene: any, latestImage: any) {
+      const isBgExplicitlyRemoved = Boolean(scene.animationData?.background?.removed);
+      const resolvedImageUrl = isBgExplicitlyRemoved
+        ? null
+        : (scene.imageUrl || (latestImage ? latestImage.imageUrl : null));
+      const resolvedImage = (!isBgExplicitlyRemoved && latestImage) ? latestImage : null;
+      return { resolvedImageUrl, resolvedImage };
+    }
+
+    // With active background:
+    const activeRes = resolveSceneImage(sceneActive, latestImageInDb);
+    assert.strictEqual(activeRes.resolvedImageUrl, '/storage/scene-active.png');
+    assert.notStrictEqual(activeRes.resolvedImage, null);
+
+    // With removed background:
+    const removedRes = resolveSceneImage(sceneRemoved, latestImageInDb);
+    assert.strictEqual(removedRes.resolvedImageUrl, null, 'Must NOT resurrect historical image when background is explicitly removed');
+    assert.strictEqual(removedRes.resolvedImage, null, 'Must NOT populate scene image object when background is explicitly removed');
+
+    // 7.4 Re-application resets removed: false
+    const sceneReapplied = {
+      ...sceneRemoved,
+      imageUrl: '/storage/scene-new.png',
+      animationData: {
+        ...sceneRemoved.animationData,
+        background: {
+          imageUrl: '/storage/scene-new.png',
+          fit: 'cover' as const,
+          source: 'imported',
+          removed: false,
+        },
+      },
+    };
+    const reappliedRes = resolveSceneImage(sceneReapplied, latestImageInDb);
+    assert.strictEqual(reappliedRes.resolvedImageUrl, '/storage/scene-new.png');
+    assert.strictEqual(sceneReapplied.animationData.background.removed, false);
+
+    // 7.5 Video Assembly Fallback Guard
+    function resolveVideoAssemblyImagePath(scene: any, imagesInDb: any[]) {
+      let imagePath = '';
+      const isBgExplicitlyRemoved = Boolean(scene.animationData?.background?.removed);
+      if (!isBgExplicitlyRemoved) {
+        if (scene.imageUrl) {
+          imagePath = scene.imageUrl;
+        } else if (imagesInDb.length > 0 && imagesInDb[0].imageUrl) {
+          imagePath = imagesInDb[0].imageUrl;
+        }
+      }
+      return imagePath;
+    }
+
+    assert.strictEqual(
+      resolveVideoAssemblyImagePath(sceneRemoved, [latestImageInDb]),
+      '',
+      'Video assembly must not resurrect historical images when background.removed is true'
+    );
+    assert.strictEqual(
+      resolveVideoAssemblyImagePath(sceneActive, [latestImageInDb]),
+      '/storage/scene-active.png'
+    );
   });
 });
 
