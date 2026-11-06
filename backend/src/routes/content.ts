@@ -497,6 +497,11 @@ contentRouter.get("/story/:storyId", async (req, res) => {
           }
         }
 
+        const isBgExplicitlyRemoved = Boolean((scene.animationData as any)?.background?.removed);
+        const resolvedImageUrl = isBgExplicitlyRemoved
+          ? null
+          : (scene.imageUrl || (latestImage ? latestImage.imageUrl : null));
+
         return {
           id: scene.id,
           sceneId: scene.sceneId,
@@ -510,7 +515,7 @@ contentRouter.get("/story/:storyId", async (req, res) => {
           visualPrompt: scene.visualPrompt || null,
           cameraDirection: scene.cameraDirection || "Eye level wide establishing shot",
           characterIds: parsedCharacterIds,
-          imageUrl: scene.imageUrl || (latestImage ? latestImage.imageUrl : null),
+          imageUrl: resolvedImageUrl,
           videoUrl: scene.videoUrl || null,
           audioUrl: scene.audioUrl || null,
           generationStatus: scene.generationStatus || "draft",
@@ -522,7 +527,7 @@ contentRouter.get("/story/:storyId", async (req, res) => {
           deletedAt: scene.deletedAt || null,
           createdAt: scene.createdAt,
           updatedAt: scene.updatedAt,
-          image: latestImage
+          image: (!isBgExplicitlyRemoved && latestImage)
             ? {
                 id: latestImage.id,
                 sceneId: latestImage.sceneId,
@@ -862,6 +867,15 @@ const handleSceneUpdate = async (req: any, res: any) => {
         ...(dialogue !== undefined ? { dialogue } : {}),
         ...(characterActions !== undefined ? { characterActions } : {}),
       };
+    }
+
+    if (finalAnimationData && finalAnimationData.background) {
+      if (imageUrl && !finalAnimationData.background.imageUrl) {
+        finalAnimationData.background.imageUrl = imageUrl;
+        finalAnimationData.background.removed = false;
+      } else if (finalAnimationData.background.imageUrl && finalAnimationData.background.removed === undefined) {
+        finalAnimationData.background.removed = false;
+      }
     }
 
     const updatedScene = await updateScene(sceneId, {
@@ -1494,6 +1508,14 @@ const storageService = new LocalStorageService();
 const providerType = process.env.IMAGE_PROVIDER || "mock";
 
 contentRouter.get("/scenes/:sceneId/image", async (req, res) => {
+  const scene = await getSceneBySceneId(req.params.sceneId);
+  const isBgExplicitlyRemoved = Boolean((scene?.animationData as any)?.background?.removed);
+  if (isBgExplicitlyRemoved) {
+    return res
+      .status(404)
+      .json({ success: false, message: "No active image for this scene (background removed)" });
+  }
+
   const images = await getImagesBySceneId(req.params.sceneId);
   const latestImage = images[0];
 
@@ -1685,6 +1707,7 @@ contentRouter.post("/scenes/:sceneId/image", async (req, res) => {
         cameraDirection: effectiveCameraDirection,
         aspectRatio: effectiveAspectRatio,
         dimensions: { width, height },
+        removed: false,
       },
       ...(reqCameraMovement ? { cameraMovement: reqCameraMovement } : {}),
     };
@@ -1840,6 +1863,7 @@ contentRouter.post("/scenes/:sceneId/background/upload", async (req, res) => {
         source: 'imported',
         filename: clientFilename || storageFilename,
         sizeBytes: buffer.length,
+        removed: false,
       },
     };
 
@@ -1939,6 +1963,7 @@ contentRouter.put("/scenes/:sceneId/background", async (req, res) => {
         imageUrl: targetUrl,
         fit,
         source: source || currentAnim.background?.source || (imageUrl ? 'imported' : 'ai_generated'),
+        removed: false,
         ...(prompt ? { prompt } : (currentAnim.background?.prompt ? { prompt: currentAnim.background.prompt } : {})),
         ...(cameraDirection ? { cameraDirection } : (currentAnim.background?.cameraDirection ? { cameraDirection: currentAnim.background.cameraDirection } : {})),
         ...(aspectRatio ? { aspectRatio } : (currentAnim.background?.aspectRatio ? { aspectRatio: currentAnim.background.aspectRatio } : {})),
@@ -1990,17 +2015,39 @@ contentRouter.delete("/scenes/:sceneId/background", async (req, res) => {
     }
 
     const currentAnim = (scene.animationData || {}) as any;
-    const { background: _removed, ...restAnim } = currentAnim;
+    const updatedAnimData = {
+      ...currentAnim,
+      background: {
+        imageUrl: '',
+        fit: 'cover',
+        removed: true,
+      },
+    };
 
     const updatedScene = await updateScene(scene.sceneId, {
       imageUrl: null,
-      animationData: restAnim,
+      animationData: updatedAnimData,
+    });
+
+    // Create scene version for historical auditing
+    await createSceneVersion({
+      id: randomUUID(),
+      sceneId: scene.sceneId,
+      prompt: 'Background removed (restored to default stage)',
+      imageUrl: null,
+      cameraDirection: scene.cameraDirection,
+      narration: scene.narration,
     });
 
     return res.json({
       success: true,
       sceneId: scene.sceneId,
       message: "Background removed. Default stage restored.",
+      background: {
+        imageUrl: '',
+        fit: 'cover',
+        removed: true,
+      },
       scene: updatedScene,
     });
   } catch (error: any) {
@@ -2054,6 +2101,21 @@ contentRouter.get("/story/:storyId/backgrounds", async (req, res) => {
               createdAt: ver.createdAt,
             });
           }
+        }
+      }
+
+      // Check Image table records (historical image assets preserved even after removal)
+      const sceneImages = await getImagesBySceneId(sc.sceneId);
+      for (const img of sceneImages) {
+        if (img.imageUrl && !backgroundsMap.has(img.imageUrl)) {
+          backgroundsMap.set(img.imageUrl, {
+            imageUrl: img.imageUrl,
+            sceneId: sc.sceneId,
+            sceneTitle: sc.title || `Scene ${sc.number}`,
+            sceneNumber: sc.number,
+            prompt: img.prompt || undefined,
+            createdAt: img.createdAt,
+          });
         }
       }
     }

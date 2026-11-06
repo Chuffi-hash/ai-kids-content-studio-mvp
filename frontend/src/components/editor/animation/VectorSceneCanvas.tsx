@@ -19,6 +19,7 @@ interface VectorSceneCanvasProps {
   animationData: VectorSceneData;
   currentTimeMs: number;
   sceneStartMs: number;
+  sceneDurationMs?: number;
   activeFormat?: AspectRatioType;
   selectedInstanceId: string | null;
   onSelectInstance: (instanceId: string | null) => void;
@@ -39,6 +40,7 @@ export const VectorSceneCanvas: React.FC<VectorSceneCanvasProps> = ({
   animationData,
   currentTimeMs,
   sceneStartMs,
+  sceneDurationMs,
   activeFormat,
   selectedInstanceId,
   onSelectInstance,
@@ -272,6 +274,67 @@ export const VectorSceneCanvas: React.FC<VectorSceneCanvasProps> = ({
     }
   };
 
+  const durationMs = sceneDurationMs || (animationData as any).durationMs || 5000;
+  const effectiveSec = Math.max(1.5, durationMs / 1000);
+  const t = Math.max(0, Math.min(1, (sceneRelativeMs / 1000) / effectiveSec));
+  const cx = canvasWidth / 2;
+  const cy = canvasHeight / 2;
+
+  const moveStr = (animationData.cameraMovement || '').toLowerCase().trim();
+  const rotStr = (animationData.cameraRotation || '').toLowerCase().trim();
+  const rotDegrees = typeof animationData.cameraRotationDegrees === 'number' && Number.isFinite(animationData.cameraRotationDegrees)
+    ? Math.max(0, Math.min(45, animationData.cameraRotationDegrees))
+    : 10;
+
+  let scale = 1.0;
+  let dx = 0;
+  let dy = 0;
+  let rotationDeg = 0;
+
+  if (moveStr.includes('zoom in') || moveStr === 'slow zoom in') {
+    scale = 1.0 + 0.15 * t;
+  } else if (moveStr.includes('zoom out') || moveStr === 'slow zoom out') {
+    scale = 1.15 - 0.15 * t;
+  } else if (moveStr.includes('pan left')) {
+    scale = 1.12;
+    dx = (t - 0.5) * (canvasWidth * 0.08);
+  } else if (moveStr.includes('pan right')) {
+    scale = 1.12;
+    dx = (0.5 - t) * (canvasWidth * 0.08);
+  } else if (moveStr.includes('tilt up')) {
+    scale = 1.12;
+    dy = (t - 0.5) * (canvasHeight * 0.08);
+  } else if (moveStr.includes('tilt down')) {
+    scale = 1.12;
+    dy = (0.5 - t) * (canvasHeight * 0.08);
+  }
+
+  let isClockwise = rotStr.includes('clockwise') && !rotStr.includes('anti') && !rotStr.includes('counter');
+  let isAnticlockwise = rotStr.includes('anti') || rotStr.includes('counter');
+  if (!isClockwise && !isAnticlockwise) {
+    if (moveStr.includes('clockwise') && !moveStr.includes('anti') && !moveStr.includes('counter')) {
+      isClockwise = true;
+    } else if (moveStr.includes('anticlockwise') || moveStr.includes('counterclockwise')) {
+      isAnticlockwise = true;
+    }
+  }
+
+  if (isClockwise) {
+    rotationDeg = t * rotDegrees;
+    scale = Math.max(scale, 1.12);
+  } else if (isAnticlockwise) {
+    rotationDeg = -t * rotDegrees;
+    scale = Math.max(scale, 1.12);
+  }
+
+  scale = Number(scale.toFixed(4));
+  dx = Number(dx.toFixed(2));
+  dy = Number(dy.toFixed(2));
+  rotationDeg = Number(rotationDeg.toFixed(2));
+
+  const cameraTransform = `translate(${cx + dx}, ${cy + dy}) rotate(${rotationDeg}) scale(${scale}) translate(${-cx}, ${-cy})`;
+  const isBgRemoved = Boolean(animationData.background?.removed);
+
   return (
     <svg
       ref={svgRef}
@@ -293,8 +356,11 @@ export const VectorSceneCanvas: React.FC<VectorSceneCanvasProps> = ({
         </radialGradient>
       </defs>
 
+      {/* Scene Camera Root (Syncs camera motion and 2D roll across all stage elements) */}
+      <g id="scene-camera-root" transform={cameraTransform}>
+
       {/* 1. Background Layer */}
-      {animationData.background?.imageUrl ? (
+      {!isBgRemoved && animationData.background?.imageUrl ? (
         <g id="scene-background-group">
           <rect
             id="scene-background-backdrop"
@@ -469,6 +535,7 @@ export const VectorSceneCanvas: React.FC<VectorSceneCanvasProps> = ({
           }
         />
       )}
+      </g>
     </svg>
   );
 };

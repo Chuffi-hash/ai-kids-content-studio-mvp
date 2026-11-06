@@ -193,13 +193,118 @@ export interface VectorSceneData {
   background?: {
     imageUrl: string;
     fit?: 'cover' | 'contain';
+    source?: 'ai_generated' | 'imported';
+    removed?: boolean;
+    prompt?: string;
+    cameraDirection?: string;
+    aspectRatio?: string;
+    dimensions?: { width: number; height: number };
   };
+  cameraMovement?: string;
+  cameraRotation?: string;
+  cameraRotationDegrees?: number;
   characterInstances: CharacterInstance[];
   animationClips: AnimationClip[];
   expressionCues?: ExpressionCue[];
   dialogueLines?: SceneDialogue[];
   overlays?: EducationalOverlay[];
   characterPerformances?: Record<string, CharacterPerformanceOverride>;
+}
+
+export interface CameraTransformOptions {
+  movement?: string;
+  rotation?: string;
+  rotationDegrees?: number;
+  timestampSec: number;
+  durationSec: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * Computes a scene-level camera 2D transform matrix (pan, tilt, zoom, and 2D roll rotation)
+ * around the center anchor (width/2, height/2) for both vector characters and stage backdrop.
+ */
+export function computeSceneCameraTransform(opts: CameraTransformOptions): {
+  scale: number;
+  dx: number;
+  dy: number;
+  rotationDeg: number;
+  transformString: string;
+} {
+  const {
+    movement = 'static',
+    rotation = 'none',
+    rotationDegrees = 10,
+    timestampSec,
+    durationSec,
+    width,
+    height,
+  } = opts;
+
+  const effectiveDuration = durationSec > 0 ? durationSec : 5.0;
+  const t = Math.max(0, Math.min(1, timestampSec / effectiveDuration));
+  const cx = width / 2;
+  const cy = height / 2;
+
+  const moveStr = (movement || '').toLowerCase().trim();
+  const rotStr = (rotation || '').toLowerCase().trim();
+
+  let scale = 1.0;
+  let dx = 0;
+  let dy = 0;
+  let rotationDeg = 0;
+
+  // 1. Camera Movement: Zoom, Pan, Tilt
+  if (moveStr.includes('zoom in') || moveStr === 'slow zoom in') {
+    scale = 1.0 + 0.15 * t;
+  } else if (moveStr.includes('zoom out') || moveStr === 'slow zoom out') {
+    scale = 1.15 - 0.15 * t;
+  } else if (moveStr.includes('pan left')) {
+    scale = 1.12;
+    dx = (t - 0.5) * (width * 0.08);
+  } else if (moveStr.includes('pan right')) {
+    scale = 1.12;
+    dx = (0.5 - t) * (width * 0.08);
+  } else if (moveStr.includes('tilt up')) {
+    scale = 1.12;
+    dy = (t - 0.5) * (height * 0.08);
+  } else if (moveStr.includes('tilt down')) {
+    scale = 1.12;
+    dy = (0.5 - t) * (height * 0.08);
+  }
+
+  // 2. Camera Rotation: Clockwise or Anticlockwise 2D Roll around center anchor
+  const degAmount = Math.max(0, Math.min(45, typeof rotationDegrees === 'number' && Number.isFinite(rotationDegrees) ? rotationDegrees : 10));
+  let isClockwise = rotStr.includes('clockwise') && !rotStr.includes('anti') && !rotStr.includes('counter');
+  let isAnticlockwise = rotStr.includes('anti') || rotStr.includes('counter');
+
+  // Also support rotation if specified inside movement string
+  if (!isClockwise && !isAnticlockwise) {
+    if (moveStr.includes('clockwise') && !moveStr.includes('anti') && !moveStr.includes('counter')) {
+      isClockwise = true;
+    } else if (moveStr.includes('anticlockwise') || moveStr.includes('counterclockwise')) {
+      isAnticlockwise = true;
+    }
+  }
+
+  if (isClockwise) {
+    rotationDeg = t * degAmount;
+    scale = Math.max(scale, 1.12);
+  } else if (isAnticlockwise) {
+    rotationDeg = -t * degAmount;
+    scale = Math.max(scale, 1.12);
+  }
+
+  // Precision formatting
+  scale = Number(scale.toFixed(4));
+  dx = Number(dx.toFixed(2));
+  dy = Number(dy.toFixed(2));
+  rotationDeg = Number(rotationDeg.toFixed(2));
+
+  const transformString = `translate(${cx + dx}, ${cy + dy}) rotate(${rotationDeg}) scale(${scale}) translate(${-cx}, ${-cy})`;
+
+  return { scale, dx, dy, rotationDeg, transformString };
 }
 
 export interface EvaluatedPose {
@@ -612,6 +717,7 @@ export class VectorAnimationEngine {
   generateSvgFrame(options: {
     animationData: VectorSceneData;
     timestampSec: number;
+    durationSec?: number;
     width?: number;
     height?: number;
     activeFormat?: AspectRatioType;
@@ -631,7 +737,8 @@ export class VectorAnimationEngine {
     const formatVariant = animationData?.formatVariants?.[activeFormat];
 
     let backgroundXml = '';
-    if (animationData?.background?.imageUrl) {
+    const isBgExplicitlyRemoved = Boolean(animationData?.background?.removed);
+    if (!isBgExplicitlyRemoved && animationData?.background?.imageUrl) {
       let imageHref = animationData.background.imageUrl;
       if (resolveLocalPath) {
         try {
@@ -874,16 +981,33 @@ export class VectorAnimationEngine {
       .filter(Boolean)
       .join('\n');
 
+    const effectiveDurationSec =
+      options.durationSec && options.durationSec > 0
+        ? options.durationSec
+        : (animationData as any)?.durationSec || 5.0;
+
+    const cameraTransform = computeSceneCameraTransform({
+      movement: animationData?.cameraMovement,
+      rotation: animationData?.cameraRotation,
+      rotationDegrees: animationData?.cameraRotationDegrees,
+      timestampSec,
+      durationSec: effectiveDurationSec,
+      width,
+      height,
+    });
+
     return `
       <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">
-        <g id="background-layer">
-          ${backgroundXml}
+        <g id="scene-camera-root" transform="${cameraTransform.transformString}">
+          <g id="background-layer">
+            ${backgroundXml}
+          </g>
+          ${belowOverlaysXml ? `<g id="below-characters-overlays-layer">\n${belowOverlaysXml}\n</g>` : ''}
+          <g id="characters-layer">
+            ${charactersXml}
+          </g>
+          ${aboveOverlaysXml ? `<g id="above-characters-overlays-layer">\n${aboveOverlaysXml}\n</g>` : ''}
         </g>
-        ${belowOverlaysXml ? `<g id="below-characters-overlays-layer">\n${belowOverlaysXml}\n</g>` : ''}
-        <g id="characters-layer">
-          ${charactersXml}
-        </g>
-        ${aboveOverlaysXml ? `<g id="above-characters-overlays-layer">\n${aboveOverlaysXml}\n</g>` : ''}
       </svg>
     `.trim();
   }

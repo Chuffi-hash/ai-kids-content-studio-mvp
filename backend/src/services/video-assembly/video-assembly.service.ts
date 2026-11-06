@@ -230,15 +230,18 @@ export class VideoAssemblyService {
           videoClipPath = this.resolveLocalPath(scene.videoUrl);
         }
 
-        // Resolve visual asset
+        // Resolve visual asset (respecting explicit background removal)
         let imagePath = '';
-        if (scene.imageUrl) {
-          imagePath = this.resolveLocalPath(scene.imageUrl);
-        } else {
-          // Check images table for this scene
-          const images = await getImagesBySceneId(scene.sceneId);
-          if (images.length > 0 && images[0].imageUrl) {
-            imagePath = this.resolveLocalPath(images[0].imageUrl);
+        const isBgExplicitlyRemoved = Boolean((scene as any).animationData?.background?.removed);
+        if (!isBgExplicitlyRemoved) {
+          if (scene.imageUrl) {
+            imagePath = this.resolveLocalPath(scene.imageUrl);
+          } else {
+            // Check images table for this scene
+            const images = await getImagesBySceneId(scene.sceneId);
+            if (images.length > 0 && images[0].imageUrl) {
+              imagePath = this.resolveLocalPath(images[0].imageUrl);
+            }
           }
         }
 
@@ -309,22 +312,24 @@ export class VideoAssemblyService {
 
         // Case 0: Vector character animation exists
         if ((scene as any).animationData && (scene as any).animationData.characterInstances?.length > 0) {
+          const effectiveBg = isBgExplicitlyRemoved
+            ? { imageUrl: '', fit: 'cover', removed: true }
+            : (scene as any).animationData.background?.imageUrl &&
+              fs.existsSync(this.resolveLocalPath((scene as any).animationData.background.imageUrl))
+                ? (scene as any).animationData.background
+                : imagePath && fs.existsSync(imagePath)
+                  ? {
+                      imageUrl: imagePath,
+                      fit: (scene as any).animationData.background?.fit || 'cover',
+                      removed: false,
+                    }
+                  : (scene as any).animationData.background;
+
           await this.renderVectorAnimationSceneSegment({
             ffmpegPath,
             animationData: {
               ...(scene as any).animationData,
-              // Mirror PreviewCanvas: if no valid animation background is set, use the scene image.
-              // Passing a resolved local path also supports scenes whose background was found in the Images table.
-              background:
-                (scene as any).animationData.background?.imageUrl &&
-                fs.existsSync(this.resolveLocalPath((scene as any).animationData.background.imageUrl))
-                  ? (scene as any).animationData.background
-                  : imagePath && fs.existsSync(imagePath)
-                    ? {
-                        imageUrl: imagePath,
-                        fit: (scene as any).animationData.background?.fit || 'cover',
-                      }
-                    : (scene as any).animationData.background,
+              background: effectiveBg,
             },
             audioPath: audioPath && fs.existsSync(audioPath) ? audioPath : null,
             dialogueAudios,
@@ -688,6 +693,7 @@ export class VideoAssemblyService {
       const svgXml = engine.generateSvgFrame({
         animationData,
         timestampSec,
+        durationSec,
         width,
         height,
         activeFormat: activeFormat as any,

@@ -279,7 +279,18 @@ export interface VectorSceneData {
   background?: {
     imageUrl?: string;
     fit?: 'cover' | 'contain';
+    source?: 'ai_generated' | 'imported' | string;
+    removed?: boolean;
+    prompt?: string;
+    cameraDirection?: string;
+    aspectRatio?: string;
+    dimensions?: { width: number; height: number };
+    filename?: string;
+    sizeBytes?: number;
   };
+  cameraMovement?: string;
+  cameraRotation?: string;
+  cameraRotationDegrees?: number;
   characterInstances: CharacterInstance[];
   animationClips: AnimationClip[];
   dialogue?: Array<{ speaker: string; text: string }>;
