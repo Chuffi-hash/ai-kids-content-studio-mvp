@@ -99,7 +99,9 @@ export type SpeakingEmotion =
   | 'angry'
   | 'surprised'
   | 'whispering'
-  | 'shouting';
+  | 'shouting'
+  | 'reassuring'
+  | 'fearful';
 
 export type SpeakingDirection =
   | SpeakingEmotion
@@ -122,6 +124,8 @@ export interface VisemeCue {
 }
 
 export interface CharacterPerformanceOverride {
+  provider?: 'kokoro' | 'fish_audio' | 'google' | string;
+  model?: string;
   lang?: 'hi' | 'en' | string;
   voiceId?: string;
   emotion?: SpeakingEmotion;
@@ -157,6 +161,8 @@ export interface SceneDialogue {
     speed: number;
     effect?: string;
     volume?: number;
+    provider?: string;
+    model?: string;
   };
   startMs: number;
   durationMs: number;
@@ -164,6 +170,8 @@ export interface SceneDialogue {
 }
 
 export interface CharacterVoiceConfig {
+  provider?: 'kokoro' | 'fish_audio' | 'google' | string;
+  model?: string;
   lang?: 'hi' | 'en' | string;
   voiceId: string;
   speed?: number;

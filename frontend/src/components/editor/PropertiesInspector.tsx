@@ -310,7 +310,9 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
   // Kokoro TTS Studio state
   const [ttsVoices, setTtsVoices] = useState<SupportedVoice[]>([]);
   const [isKokoroAvailable, setIsKokoroAvailable] = useState<boolean>(true);
-  const [selectedProvider, setSelectedProvider] = useState<'kokoro' | 'google'>('kokoro');
+  const [fishAudioVoices, setFishAudioVoices] = useState<SupportedVoice[]>([]);
+  const [isFishAudioAvailable, setIsFishAudioAvailable] = useState<boolean>(false);
+  const [selectedProvider, setSelectedProvider] = useState<'kokoro' | 'fish_audio' | 'google'>('kokoro');
   const [selectedLanguage, setSelectedLanguage] = useState<string>('hi');
   const [selectedVoice, setSelectedVoice] = useState<string>('hf_alpha');
   const [voiceEmotion, setVoiceEmotion] = useState<SpeakingEmotion>('neutral');
@@ -330,7 +332,9 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
       .then((data) => {
         setTtsVoices(data.voices);
         setIsKokoroAvailable(data.isKokoroAvailable);
-        setSelectedProvider(data.isKokoroAvailable ? 'kokoro' : 'google');
+        if (data.fishAudioVoices) setFishAudioVoices(data.fishAudioVoices);
+        setIsFishAudioAvailable(Boolean(data.isFishAudioAvailable));
+        setSelectedProvider(data.isKokoroAvailable ? 'kokoro' : (data.isFishAudioAvailable ? 'fish_audio' : 'google'));
         if (data.voices.length > 0) {
           const hasHfAlpha = data.voices.some((v) => v.id === 'hf_alpha');
           setSelectedVoice(hasHfAlpha ? 'hf_alpha' : data.voices[0].id);
@@ -1489,7 +1493,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                   fontWeight: 600,
                 }}
               >
-                {selectedProvider === 'kokoro' ? '● Kokoro-82M (Local)' : '● Google TTS (Cloud)'}
+                {selectedProvider === 'kokoro' ? '● Kokoro-82M (Local)' : selectedProvider === 'fish_audio' ? '● Fish Audio (s2.1-pro-free)' : '● Google TTS (Cloud)'}
               </span>
             </div>
 
@@ -1505,7 +1509,8 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                   value={selectedProvider}
                   onChange={(e) => setSelectedProvider(e.target.value as any)}
                 >
-                  <option value="kokoro">Kokoro-82M (Neural)</option>
+                  <option value="kokoro">Kokoro-82M (Neural Local)</option>
+                  <option value="fish_audio">Fish Audio (Cloud - Free s2.1-pro-free)</option>
                   <option value="google">Google TTS (Fallback)</option>
                 </select>
               </div>
@@ -1521,9 +1526,9 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                   onChange={(e) => {
                     const l = e.target.value;
                     setSelectedLanguage(l);
-                    if (l === 'hi') setSelectedVoice('hf_alpha');
-                    else if (l === 'en-gb') setSelectedVoice('bf_emma');
-                    else setSelectedVoice('af_heart');
+                    if (l === 'hi') setSelectedVoice(selectedProvider === 'fish_audio' ? 'fish_hi_aditi' : 'hf_alpha');
+                    else if (l === 'en-gb') setSelectedVoice(selectedProvider === 'fish_audio' ? 'fish_en_clara' : 'bf_emma');
+                    else setSelectedVoice(selectedProvider === 'fish_audio' ? 'fish_en_clara' : 'af_heart');
                   }}
                 >
                   <option value="hi">🇮🇳 Hindi (हिन्दी) [Default]</option>
@@ -1532,6 +1537,34 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                 </select>
               </div>
             </div>
+
+            {selectedProvider === 'fish_audio' && (
+              <div
+                style={{
+                  fontSize: '10px',
+                  padding: '6px 8px',
+                  borderRadius: '4px',
+                  background: 'rgba(59, 130, 246, 0.12)',
+                  border: '1px solid rgba(59, 130, 246, 0.3)',
+                  color: '#93c5fd',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '3px',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span>🎯 Model: <strong>s2.1-pro-free</strong> (Free Developer Tier)</span>
+                  <span style={{ color: isFishAudioAvailable ? '#34d399' : '#f87171', fontWeight: 600 }}>
+                    {isFishAudioAvailable ? '● Key Configured' : '○ Missing API Key'}
+                  </span>
+                </div>
+                {!isFishAudioAvailable && (
+                  <span style={{ fontSize: '9px', color: '#fca5a5' }}>
+                    Set FISH_API_KEY in backend/.env to synthesize audio with Fish Audio.
+                  </span>
+                )}
+              </div>
+            )}
 
             {/* Voice Selection & Preview */}
             <div>
@@ -1553,16 +1586,16 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                 value={selectedVoice}
                 onChange={(e) => setSelectedVoice(e.target.value)}
               >
-                {ttsVoices
+                {(selectedProvider === 'fish_audio' && fishAudioVoices.length > 0 ? fishAudioVoices : ttsVoices)
                   .filter((v) => {
                     if (selectedLanguage === 'hi') {
-                      return v.lang === 'hi' || v.id.startsWith('hf_') || v.id.startsWith('hm_');
+                      return v.lang === 'hi' || v.id.startsWith('hf_') || v.id.startsWith('hm_') || v.id.startsWith('fish_hi_');
                     }
                     if (selectedLanguage === 'en-gb') {
-                      return v.lang === 'en-gb' || v.id.startsWith('bf_') || v.id.startsWith('bm_');
+                      return v.lang === 'en-gb' || v.id.startsWith('bf_') || v.id.startsWith('bm_') || v.id.startsWith('fish_en_');
                     }
                     if (selectedLanguage === 'en-us') {
-                      return v.lang === 'en-us' || v.id.startsWith('af_') || v.id.startsWith('am_');
+                      return v.lang === 'en-us' || v.id.startsWith('af_') || v.id.startsWith('am_') || v.id.startsWith('fish_en_');
                     }
                     return true;
                   })

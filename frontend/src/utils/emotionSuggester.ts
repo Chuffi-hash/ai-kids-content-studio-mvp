@@ -27,6 +27,8 @@ export const EMOTION_OPTIONS: Array<{
   { id: 'surprised', label: 'Surprised', emoji: '😲', desc: 'Breathless wonder' },
   { id: 'whispering', label: 'Whispering', emoji: '🤫', desc: 'Soft breathy whisper' },
   { id: 'shouting', label: 'Shouting', emoji: '📢', desc: 'Loud presence and punch' },
+  { id: 'reassuring', label: 'Reassuring', emoji: '🤗', desc: 'Gentle, soothing and protective' },
+  { id: 'fearful', label: 'Fearful', emoji: '😨', desc: 'Hesitant, trembling fear' },
 ];
 
 export const EMOTION_TO_FACIAL_EXPRESSION: Record<SpeakingEmotion, FacialExpression> = {
@@ -44,6 +46,8 @@ export const EMOTION_TO_FACIAL_EXPRESSION: Record<SpeakingEmotion, FacialExpress
   surprised: 'surprised',
   whispering: 'curious',
   shouting: 'angry',
+  reassuring: 'happy',
+  fearful: 'scared',
 };
 
 export function suggestEmotionForText(text: string): EmotionSuggestion {
