@@ -146,7 +146,7 @@ interface PropertiesInspectorProps {
   onUpdateDialogue?: (dialogueId: string, updates: Partial<SceneDialogue>) => void;
   onDeleteDialogue?: (dialogueId: string) => Promise<void>;
   onAddDialogue?: (dialogue: SceneDialogue) => void;
-  onSaveCharacterDefault?: (characterId: string, settings: { voice?: string; lang?: string; emotion?: SpeakingEmotion; emotionIntensity?: number }) => Promise<void>;
+  onSaveCharacterDefault?: (characterId: string, settings: { provider?: string; model?: string; voice?: string; lang?: string; emotion?: SpeakingEmotion; emotionIntensity?: number }) => Promise<void>;
   activeInspectorTab?: string;
   onTabChange?: (tab: string) => void;
   isOpen?: boolean;
