@@ -181,11 +181,14 @@ export class ScenePreparationService {
         });
 
         // Map emotion to speaking direction and facial expression
-        const emotionLower = (d.emotion || 'cheerful').toLowerCase();
-        let speakingDirection: SpeakingDirection = 'cheerful';
-        let facialExpression: FacialExpression = 'happy';
+        const emotionLower = (d.emotion || 'neutral').toLowerCase();
+        let speakingDirection: SpeakingDirection = 'neutral';
+        let facialExpression: FacialExpression = 'neutral';
 
-        if (emotionLower.includes('sad')) {
+        if (emotionLower.includes('cheer') || emotionLower.includes('happy')) {
+          speakingDirection = 'cheerful';
+          facialExpression = 'happy';
+        } else if (emotionLower.includes('sad')) {
           speakingDirection = 'sad';
           facialExpression = 'sad';
         } else if (emotionLower.includes('excit')) {
@@ -227,8 +230,9 @@ export class ScenePreparationService {
           lang: effectiveLang,
           voice: charVoice,
           speakingDirection,
-          emotion: (d.emotion || 'cheerful') as any,
-          facialExpression,
+          emotion: (d.emotion || 'neutral') as any,
+          emotionIntensity: d.emotionIntensity !== undefined ? d.emotionIntensity : (d.emotion && d.emotion !== 'neutral' ? 15 : 0),
+          facialExpression: (d.facialExpression as FacialExpression) || facialExpression,
           speed: 1.0,
           startMs: currentDialogueStartMs,
           durationMs: lineDurationMs,

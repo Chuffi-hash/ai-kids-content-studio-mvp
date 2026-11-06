@@ -107,7 +107,8 @@ export class StoryGenerationService {
           characterName: charName,
           characterId: charRec?.id,
           text: d.text,
-          emotion: d.emotion || 'cheerful',
+          emotion: d.emotion || 'neutral',
+          emotionIntensity: d.emotionIntensity !== undefined ? d.emotionIntensity : (d.emotion && d.emotion !== 'neutral' ? 15 : 0),
           voice,
         };
       });
@@ -265,7 +266,8 @@ export class StoryGenerationService {
       {
         speaker: mainChar.name,
         line: `Look what I found! Let's explore together!`,
-        emotion: 'happy',
+        emotion: 'neutral',
+        emotionIntensity: 0,
       },
     ];
     (updatedAnimationData as any).characterActions = [

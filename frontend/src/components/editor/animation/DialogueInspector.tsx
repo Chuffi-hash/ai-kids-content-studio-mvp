@@ -18,6 +18,7 @@ import {
   CheckIcon,
   AlertTriangleIcon,
 } from '../../common/Icons';
+import { CollapsibleSection } from '../CollapsibleSection';
 import {
   EMOTION_OPTIONS,
   EMOTION_TO_FACIAL_EXPRESSION,
@@ -69,6 +70,30 @@ export const DialogueInspector: React.FC<DialogueInspectorProps> = ({
 
   // Scope: 'line' | 'char_default'
   const [editScope, setEditScope] = useState<'line' | 'char_default'>('line');
+
+  // Accordion sections for selected dialogue
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({
+    'dlg-text': true,
+    'dlg-voice': true,
+    'dlg-emotion': true,
+    'dlg-timing': false,
+  });
+
+  const toggleSection = (key: string) => {
+    setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const areAllSectionsOpen = Object.values(openSections).every(Boolean);
+
+  const handleToggleAllSections = () => {
+    const next = !areAllSectionsOpen;
+    setOpenSections({
+      'dlg-text': next,
+      'dlg-voice': next,
+      'dlg-emotion': next,
+      'dlg-timing': next,
+    });
+  };
 
   useEffect(() => {
     getTTSVoices()
@@ -219,7 +244,7 @@ export const DialogueInspector: React.FC<DialogueInspectorProps> = ({
     try {
       const voice = selectedDialogue.voice || (currentLang === 'hi' ? 'hf_alpha' : 'af_heart');
       const emotion = selectedDialogue.emotion || 'neutral';
-      const intensity = typeof selectedDialogue.emotionIntensity === 'number' ? selectedDialogue.emotionIntensity : 60;
+      const intensity = typeof selectedDialogue.emotionIntensity === 'number' ? selectedDialogue.emotionIntensity : (emotion === 'neutral' ? 0 : 15);
       const speed = selectedDialogue.speed || 1.0;
       const volume = typeof selectedDialogue.volume === 'number' ? selectedDialogue.volume : 1.0;
       const isFish = voice.startsWith('fish_') || (selectedDialogue as any).provider === 'fish_audio' || selectedDialogue.audioMeta?.provider === 'fish_audio';
@@ -288,9 +313,9 @@ export const DialogueInspector: React.FC<DialogueInspectorProps> = ({
       text: 'नमस्ते! मैं यहाँ हूँ।',
       startMs,
       durationMs: 3000,
-      emotion: 'happy',
-      emotionIntensity: 60,
-      facialExpression: 'happy',
+      emotion: 'neutral',
+      emotionIntensity: 0,
+      facialExpression: 'neutral',
       lang: 'hi',
       voice: 'hf_alpha',
       speed: 1.0,
@@ -429,7 +454,7 @@ export const DialogueInspector: React.FC<DialogueInspectorProps> = ({
 
   return (
     <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-      {/* Header with Back button and Delete */}
+      {/* Header with Back button, Collapse All, and Delete */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--ed-border)', paddingBottom: '10px' }}>
         <button
           type="button"
@@ -439,21 +464,32 @@ export const DialogueInspector: React.FC<DialogueInspectorProps> = ({
         >
           ← All Dialogue ({dialogues.length})
         </button>
-        <button
-          type="button"
-          className="ed-tool-btn danger"
-          style={{ fontSize: '11px', color: '#ef4444' }}
-          onClick={async () => {
-            if (confirm(`Delete dialogue line for ${selectedDialogue.characterName}?`)) {
-              await onDeleteDialogue(selectedDialogue.id);
-              onSelectDialogue(null);
-            }
-          }}
-          title="Delete this dialogue line"
-        >
-          <TrashIcon size={12} />
-          <span>Delete</span>
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <button
+            type="button"
+            className="ed-collapse-all-btn"
+            style={{ fontSize: '10px', padding: '3px 8px' }}
+            onClick={handleToggleAllSections}
+            title={areAllSectionsOpen ? 'Collapse all dialogue sections' : 'Expand all dialogue sections'}
+          >
+            {areAllSectionsOpen ? 'Collapse All' : 'Expand All'}
+          </button>
+          <button
+            type="button"
+            className="ed-tool-btn danger"
+            style={{ fontSize: '11px', color: '#ef4444' }}
+            onClick={async () => {
+              if (confirm(`Delete dialogue line for ${selectedDialogue.characterName}?`)) {
+                await onDeleteDialogue(selectedDialogue.id);
+                onSelectDialogue(null);
+              }
+            }}
+            title="Delete this dialogue line"
+          >
+            <TrashIcon size={12} />
+            <span>Delete</span>
+          </button>
+        </div>
       </div>
 
       {/* Speaker Identity Badge */}
@@ -583,23 +619,30 @@ export const DialogueInspector: React.FC<DialogueInspectorProps> = ({
         </div>
       </div>
 
-      {/* Dialogue Text Input */}
-      <div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-          <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--ed-text)' }}>
-            Dialogue Spoken Text
-          </label>
+      {/* 1. Dialogue Text Input */}
+      <CollapsibleSection
+        id="dlg-text"
+        title="Spoken Dialogue Text"
+        subtitle="Script line delivered by character"
+        headerActions={
           <button
             type="button"
             className="ed-tool-btn"
             style={{ fontSize: '10px', padding: '2px 8px', color: '#a78bfa' }}
-            onClick={handleAutoDetect}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleAutoDetect();
+            }}
             title="Analyze spoken text to automatically set speaking emotion and facial expression"
           >
             <SparklesIcon size={10} color="#a78bfa" />
             <span>Auto Emotion</span>
           </button>
-        </div>
+        }
+        isOpen={openSections['dlg-text']}
+        onToggle={() => toggleSection('dlg-text')}
+        variant="card"
+      >
         <textarea
           className="ed-textarea"
           rows={3}
@@ -608,62 +651,91 @@ export const DialogueInspector: React.FC<DialogueInspectorProps> = ({
           placeholder="Enter what the character says..."
           style={{ width: '100%', boxSizing: 'border-box', fontSize: '12px' }}
         />
-      </div>
+      </CollapsibleSection>
 
-      {/* Language & Voice Selection */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '10px' }}>
-        <div>
-          <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--ed-text-muted)', display: 'block', marginBottom: '4px' }}>
-            Language
-          </label>
-          <select
-            className="ed-select"
-            value={currentLang}
-            onChange={(e) => {
-              const lang = e.target.value;
-              const defaultVoice = lang === 'hi' ? 'hf_alpha' : 'af_heart';
-              onUpdateDialogue(selectedDialogue.id, { lang, voice: defaultVoice });
+      {/* 2. Language & Voice Selection */}
+      <CollapsibleSection
+        id="dlg-voice"
+        title="Voice & Language"
+        subtitle="TTS engine voice profile"
+        badge={
+          <span style={{ fontSize: '10px', color: 'var(--ed-text-muted)' }}>
+            {currentLang === 'hi' ? '🇮🇳 Hindi' : '🇬🇧 English'}
+          </span>
+        }
+        headerActions={
+          <button
+            type="button"
+            className="ed-tool-btn"
+            style={{ fontSize: '10px', padding: '2px 6px' }}
+            onClick={(e) => {
+              e.stopPropagation();
+              handlePreviewVoice();
             }}
-            style={{ width: '100%', fontSize: '11px' }}
+            disabled={isPreviewingVoice || playingPreview}
+            title="Audition voice sample"
           >
-            <option value="hi">🇮🇳 Hindi (Default)</option>
-            <option value="en">🇬🇧 English</option>
-          </select>
-        </div>
-
-        <div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-            <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--ed-text-muted)' }}>
-              Kokoro Voice
+            {playingPreview ? 'Playing...' : 'Audition'}
+          </button>
+        }
+        isOpen={openSections['dlg-voice']}
+        onToggle={() => toggleSection('dlg-voice')}
+        variant="card"
+      >
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '10px' }}>
+          <div>
+            <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--ed-text-muted)', display: 'block', marginBottom: '4px' }}>
+              Language
             </label>
-            <button
-              type="button"
-              className="ed-tool-btn"
-              style={{ fontSize: '10px', padding: '1px 6px' }}
-              onClick={handlePreviewVoice}
-              disabled={isPreviewingVoice || playingPreview}
-              title="Audition voice sample"
+            <select
+              className="ed-select"
+              value={currentLang}
+              onChange={(e) => {
+                const lang = e.target.value;
+                const defaultVoice = lang === 'hi' ? 'hf_alpha' : 'af_heart';
+                onUpdateDialogue(selectedDialogue.id, { lang, voice: defaultVoice });
+              }}
+              style={{ width: '100%', fontSize: '11px' }}
             >
-              {playingPreview ? 'Playing...' : 'Audition'}
-            </button>
+              <option value="hi">🇮🇳 Hindi (Default)</option>
+              <option value="en">🇬🇧 English</option>
+            </select>
           </div>
-          <select
-            className="ed-select"
-            value={selectedDialogue.voice || (currentLang === 'hi' ? 'hf_alpha' : 'af_heart')}
-            onChange={(e) => onUpdateDialogue(selectedDialogue.id, { voice: e.target.value })}
-            style={{ width: '100%', fontSize: '11px' }}
-          >
-            {filteredVoices.map((v) => (
-              <option key={v.id} value={v.id}>
-                {v.name} ({v.gender || 'voice'})
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
 
-      {/* Speaking Emotion and Intensity Slider */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          <div>
+            <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--ed-text-muted)', display: 'block', marginBottom: '4px' }}>
+              Voice Profile
+            </label>
+            <select
+              className="ed-select"
+              value={selectedDialogue.voice || (currentLang === 'hi' ? 'hf_alpha' : 'af_heart')}
+              onChange={(e) => onUpdateDialogue(selectedDialogue.id, { voice: e.target.value })}
+              style={{ width: '100%', fontSize: '11px' }}
+            >
+              {filteredVoices.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.name} ({v.gender || 'voice'})
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </CollapsibleSection>
+
+      {/* 3. Speaking Emotion and Intensity Slider */}
+      <CollapsibleSection
+        id="dlg-emotion"
+        title="Speaking Emotion & Expression"
+        subtitle="Delivery style & synced face"
+        badge={
+          <span style={{ fontSize: '10px', color: '#f43f5e', fontWeight: 600 }}>
+            {selectedDialogue.emotion || 'neutral'} • {selectedDialogue.emotionIntensity ?? 0}%
+          </span>
+        }
+        isOpen={openSections['dlg-emotion']}
+        onToggle={() => toggleSection('dlg-emotion')}
+        variant="card"
+      >
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
           <div>
             <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--ed-text-muted)', display: 'block', marginBottom: '4px' }}>
@@ -678,7 +750,7 @@ export const DialogueInspector: React.FC<DialogueInspectorProps> = ({
                 onUpdateDialogue(selectedDialogue.id, {
                   emotion: emo,
                   facialExpression: expr,
-                  emotionIntensity: typeof selectedDialogue.emotionIntensity === 'number' && selectedDialogue.emotionIntensity > 0 ? selectedDialogue.emotionIntensity : 60,
+                  emotionIntensity: typeof selectedDialogue.emotionIntensity === 'number' && selectedDialogue.emotionIntensity > 0 ? selectedDialogue.emotionIntensity : (emo === 'neutral' ? 0 : 15),
                 });
               }}
               style={{ width: '100%', fontSize: '11px' }}
@@ -720,7 +792,7 @@ export const DialogueInspector: React.FC<DialogueInspectorProps> = ({
               Emotion Intensity
             </span>
             <span style={{ fontSize: '11px', fontWeight: 700, color: '#f43f5e', fontFamily: 'monospace' }}>
-              {selectedDialogue.emotionIntensity ?? 60}%
+              {selectedDialogue.emotionIntensity ?? (selectedDialogue.emotion === 'neutral' ? 0 : 15)}%
             </span>
           </div>
           <input
@@ -728,104 +800,117 @@ export const DialogueInspector: React.FC<DialogueInspectorProps> = ({
             min="0"
             max="100"
             step="5"
-            value={selectedDialogue.emotionIntensity ?? 60}
-            onChange={(e) => onUpdateDialogue(selectedDialogue.id, { emotionIntensity: parseInt(e.target.value, 10) })}
+            value={selectedDialogue.emotionIntensity ?? (selectedDialogue.emotion === 'neutral' ? 0 : 15)}
+            onChange={(e) => onUpdateDialogue(selectedDialogue.id, { emotionIntensity: parseInt(e.target.value, 10) || 0 })}
             style={{ width: '100%', accentColor: '#f43f5e' }}
           />
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px', color: 'var(--ed-text-muted)', marginTop: '2px' }}>
-            <span>0% (Subtle)</span>
-            <span>50% (Moderate)</span>
-            <span>100% (Strong)</span>
+            <span>0% (Neutral)</span>
+            <span>15% (Subtle)</span>
+            <span>100% (Max)</span>
           </div>
         </div>
-      </div>
+      </CollapsibleSection>
 
-      {/* Speed & Per-Dialogue Volume Controls */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-        <div style={{ background: 'var(--ed-bg)', padding: '10px 12px', borderRadius: '6px', border: '1px solid var(--ed-border)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-            <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--ed-text)' }}>
-              Speech Speed
-            </span>
-            <span style={{ fontSize: '11px', fontWeight: 700, color: '#38bdf8', fontFamily: 'monospace' }}>
-              {(selectedDialogue.speed ?? 1.0).toFixed(2)}x
-            </span>
+      {/* 4. Speed, Volume & Timing within scene */}
+      <CollapsibleSection
+        id="dlg-timing"
+        title="Speed, Volume & Timing"
+        subtitle="Delivery rate, level & scene offset"
+        badge={
+          <span style={{ fontSize: '10px', color: 'var(--ed-text-muted)' }}>
+            +{(selectedDialogue.startMs || 0) / 1000}s
+          </span>
+        }
+        isOpen={openSections['dlg-timing']}
+        onToggle={() => toggleSection('dlg-timing')}
+        variant="card"
+      >
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+          <div style={{ background: 'var(--ed-bg)', padding: '10px 12px', borderRadius: '6px', border: '1px solid var(--ed-border)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+              <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--ed-text)' }}>
+                Speech Speed
+              </span>
+              <span style={{ fontSize: '11px', fontWeight: 700, color: '#38bdf8', fontFamily: 'monospace' }}>
+                {(selectedDialogue.speed ?? 1.0).toFixed(2)}x
+              </span>
+            </div>
+            <input
+              type="range"
+              min="0.5"
+              max="2.0"
+              step="0.05"
+              value={selectedDialogue.speed ?? 1.0}
+              onChange={(e) => onUpdateDialogue(selectedDialogue.id, { speed: parseFloat(e.target.value) })}
+              style={{ width: '100%', accentColor: '#38bdf8' }}
+            />
           </div>
-          <input
-            type="range"
-            min="0.5"
-            max="2.0"
-            step="0.05"
-            value={selectedDialogue.speed ?? 1.0}
-            onChange={(e) => onUpdateDialogue(selectedDialogue.id, { speed: parseFloat(e.target.value) })}
-            style={{ width: '100%', accentColor: '#38bdf8' }}
-          />
-        </div>
 
-        <div style={{ background: 'var(--ed-bg)', padding: '10px 12px', borderRadius: '6px', border: '1px solid var(--ed-border)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-            <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--ed-text)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-              <VolumeHighIcon size={12} />
-              <span>Volume</span>
-            </span>
-            <span style={{ fontSize: '11px', fontWeight: 700, color: '#34d399', fontFamily: 'monospace' }}>
-              {Math.round((selectedDialogue.volume ?? 1.0) * 100)}%
-            </span>
+          <div style={{ background: 'var(--ed-bg)', padding: '10px 12px', borderRadius: '6px', border: '1px solid var(--ed-border)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+              <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--ed-text)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                <VolumeHighIcon size={12} />
+                <span>Volume</span>
+              </span>
+              <span style={{ fontSize: '11px', fontWeight: 700, color: '#34d399', fontFamily: 'monospace' }}>
+                {Math.round((selectedDialogue.volume ?? 1.0) * 100)}%
+              </span>
+            </div>
+            <input
+              type="range"
+              min="0"
+              max="1.5"
+              step="0.05"
+              value={selectedDialogue.volume ?? 1.0}
+              onChange={(e) => onUpdateDialogue(selectedDialogue.id, { volume: parseFloat(e.target.value) })}
+              style={{ width: '100%', accentColor: '#34d399' }}
+            />
           </div>
-          <input
-            type="range"
-            min="0"
-            max="1.5"
-            step="0.05"
-            value={selectedDialogue.volume ?? 1.0}
-            onChange={(e) => onUpdateDialogue(selectedDialogue.id, { volume: parseFloat(e.target.value) })}
-            style={{ width: '100%', accentColor: '#34d399' }}
-          />
-        </div>
-      </div>
-
-      {/* Timing within scene */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-        <div>
-          <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--ed-text-muted)', display: 'block', marginBottom: '4px' }}>
-            Start Offset (seconds)
-          </label>
-          <input
-            type="number"
-            step="0.1"
-            min="0"
-            value={((selectedDialogue.startMs || 0) / 1000).toFixed(1)}
-            onChange={(e) => {
-              const val = parseFloat(e.target.value);
-              if (!isNaN(val)) {
-                onUpdateDialogue(selectedDialogue.id, { startMs: Math.max(0, Math.round(val * 1000)) });
-              }
-            }}
-            className="ed-input"
-            style={{ width: '100%', fontSize: '11px' }}
-          />
         </div>
 
-        <div>
-          <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--ed-text-muted)', display: 'block', marginBottom: '4px' }}>
-            Duration (seconds)
-          </label>
-          <input
-            type="number"
-            step="0.1"
-            min="0.5"
-            value={(((selectedDialogue.durationMs || 3000)) / 1000).toFixed(1)}
-            onChange={(e) => {
-              const val = parseFloat(e.target.value);
-              if (!isNaN(val)) {
-                onUpdateDialogue(selectedDialogue.id, { durationMs: Math.max(500, Math.round(val * 1000)) });
-              }
-            }}
-            className="ed-input"
-            style={{ width: '100%', fontSize: '11px' }}
-          />
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+          <div>
+            <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--ed-text-muted)', display: 'block', marginBottom: '4px' }}>
+              Start Offset (seconds)
+            </label>
+            <input
+              type="number"
+              step="0.1"
+              min="0"
+              value={((selectedDialogue.startMs || 0) / 1000).toFixed(1)}
+              onChange={(e) => {
+                const val = parseFloat(e.target.value);
+                if (!isNaN(val)) {
+                  onUpdateDialogue(selectedDialogue.id, { startMs: Math.max(0, Math.round(val * 1000)) });
+                }
+              }}
+              className="ed-input"
+              style={{ width: '100%', fontSize: '11px' }}
+            />
+          </div>
+
+          <div>
+            <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--ed-text-muted)', display: 'block', marginBottom: '4px' }}>
+              Duration (seconds)
+            </label>
+            <input
+              type="number"
+              step="0.1"
+              min="0.5"
+              value={(((selectedDialogue.durationMs || 3000)) / 1000).toFixed(1)}
+              onChange={(e) => {
+                const val = parseFloat(e.target.value);
+                if (!isNaN(val)) {
+                  onUpdateDialogue(selectedDialogue.id, { durationMs: Math.max(500, Math.round(val * 1000)) });
+                }
+              }}
+              className="ed-input"
+              style={{ width: '100%', fontSize: '11px' }}
+            />
+          </div>
         </div>
-      </div>
+      </CollapsibleSection>
 
       {/* Notices & Errors */}
       {successNotice && (

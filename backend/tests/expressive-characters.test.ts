@@ -211,7 +211,7 @@ test('Expressive Characters, Default Voices, and Lip-Sync Suite', async (t) => {
     // Create test character
     await createCharacter({
       id: testCharId,
-      name: 'Oliver Owl',
+      name: `Oliver Owl ${Date.now()}`,
       species: 'owl',
       personality: 'Wise and observant',
       visualDescription: 'A brown horned owl with round golden glasses',

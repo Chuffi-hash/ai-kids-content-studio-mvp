@@ -32,6 +32,8 @@ export interface StructuredDialogue {
   characterName: string;
   text: string;
   emotion?: string;
+  emotionIntensity?: number;
+  facialExpression?: string;
   voice?: string;
   lang?: string;
 }

@@ -16,6 +16,7 @@ import {
 import { EditorCharacter } from '../../../types/editor';
 import { getVectorRig } from '../../../assets/characters/defaultCharacters';
 import { TrashIcon, CheckIcon, PlayIcon, PauseIcon, SparklesIcon, MicIcon } from '../../common/Icons';
+import { CollapsibleSection } from '../CollapsibleSection';
 import { resolveAssetUrl } from '../../../utils/urlHelper';
 import {
   generateSceneDialogueAudio,
@@ -122,23 +123,10 @@ export const KOKORO_VOICES = [
 
 export const FISH_AUDIO_VOICES = [
   {
-    group: 'Hindi Storytelling (Fish Audio • Free s2.1-pro-free)',
+    group: 'Fish Audio (s2.1-pro-free • Multilingual)',
     lang: 'hi',
     voices: [
-      { id: 'fish_hi_aditi', name: 'Aditi (Female • Warm Storyteller)' },
-      { id: 'fish_hi_kabir', name: 'Kabir (Male • Gentle Narrator)' },
-      { id: 'fish_hi_ananya', name: 'Ananya (Girl • Curious & Sweet)' },
-      { id: 'fish_hi_aarav', name: 'Aarav (Boy • Playful Explorer)' },
-    ],
-  },
-  {
-    group: 'English Storytelling (Fish Audio • Free s2.1-pro-free)',
-    lang: 'en',
-    voices: [
-      { id: 'fish_en_clara', name: 'Clara (Female • Warm Storyteller)' },
-      { id: 'fish_en_oliver', name: 'Oliver (Male • Calm Narrator)' },
-      { id: 'fish_en_lily', name: 'Lily (Girl • Cheerful & Gentle)' },
-      { id: 'fish_en_leo', name: 'Leo (Boy • Playful Explorer)' },
+      { id: 'fish_default', name: 'Fish Audio Default Voice (Multilingual Hindi & English)' },
     ],
   },
 ];
@@ -165,6 +153,32 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
 }) => {
   const rig = getVectorRig(instance.characterId);
   const clips = animationData.animationClips || [];
+
+  // Collapsible accordion state for character inspector sections
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({
+    'char-expression': true,
+    'char-voice': true,
+    'char-dialogue': true,
+    'char-transform': false,
+    'char-actions': true,
+  });
+
+  const toggleSection = (key: string) => {
+    setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const areAllSectionsOpen = Object.values(openSections).every(Boolean);
+
+  const handleToggleAllSections = () => {
+    const next = !areAllSectionsOpen;
+    setOpenSections({
+      'char-expression': next,
+      'char-voice': next,
+      'char-dialogue': next,
+      'char-transform': next,
+      'char-actions': next,
+    });
+  };
 
   // -------------------------------------------------------------
   // Animation Clip Management
@@ -309,7 +323,7 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
   const [voiceId, setVoiceId] = useState<string>(scenePerformance?.voiceId || initialVoiceConfig.voiceId || 'hf_alpha');
   const [voiceEmotion, setVoiceEmotion] = useState<SpeakingEmotion>(scenePerformance?.emotion || initialVoiceConfig.emotion || 'neutral');
   const [voiceEmotionIntensity, setVoiceEmotionIntensity] = useState<number>(
-    scenePerformance?.emotionIntensity ?? initialVoiceConfig.emotionIntensity ?? (initialVoiceConfig.emotion === 'happy' ? 60 : (initialVoiceConfig.emotion === 'neutral' ? 0 : 50))
+    scenePerformance?.emotionIntensity ?? initialVoiceConfig.emotionIntensity ?? (initialVoiceConfig.emotion === 'neutral' ? 0 : 15)
   );
   const [voiceSpeed, setVoiceSpeed] = useState<number>(scenePerformance?.speed ?? initialVoiceConfig.speed ?? 1.0);
   const [voiceEffect, setVoiceEffect] = useState<'normal' | 'cartoon' | 'robot' | 'whisper' | 'shout'>(
@@ -331,7 +345,7 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
     const effLang: 'hi' | 'en' = (override?.lang === 'en' || config?.lang === 'en') ? 'en' : 'hi';
     const effVoice = override?.voiceId || config?.voiceId || (effLang === 'hi' ? 'hf_alpha' : 'af_heart');
     const effEmotion = override?.emotion || config?.emotion || 'neutral';
-    const effIntensity = override?.emotionIntensity ?? config?.emotionIntensity ?? (effEmotion === 'happy' ? 60 : (effEmotion === 'neutral' ? 0 : 50));
+    const effIntensity = override?.emotionIntensity ?? config?.emotionIntensity ?? (effEmotion === 'neutral' ? 0 : 15);
     const effSpeed = override?.speed ?? config?.speed ?? 1.0;
     const effEffect = override?.effect || config?.effect || 'normal';
 
@@ -483,13 +497,9 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
   const [newDialogueText, setNewDialogueText] = useState<string>('');
   const [newDialogueLang, setNewDialogueLang] = useState<'hi' | 'en'>(voiceLang);
   const [newDialogueVoice, setNewDialogueVoice] = useState<string>(voiceId);
-  const [newDialogueEmotion, setNewDialogueEmotion] = useState<SpeakingEmotion>(voiceEmotion);
-  const [newDialogueEmotionIntensity, setNewDialogueEmotionIntensity] = useState<number>(
-    voiceEmotionIntensity ?? (voiceEmotion === 'happy' ? 60 : (voiceEmotion === 'neutral' ? 0 : 50))
-  );
-  const [newDialogueFacialExpression, setNewDialogueFacialExpression] = useState<FacialExpression>(
-    EMOTION_TO_FACIAL_EXPRESSION[voiceEmotion] || 'neutral'
-  );
+  const [newDialogueEmotion, setNewDialogueEmotion] = useState<SpeakingEmotion>('neutral');
+  const [newDialogueEmotionIntensity, setNewDialogueEmotionIntensity] = useState<number>(0);
+  const [newDialogueFacialExpression, setNewDialogueFacialExpression] = useState<FacialExpression>('neutral');
   const [newDialogueStartSec, setNewDialogueStartSec] = useState<number>(0);
   const [isGeneratingDialogue, setIsGeneratingDialogue] = useState<boolean>(false);
   const [isSuggestingEmotion, setIsSuggestingEmotion] = useState<boolean>(false);
@@ -502,10 +512,7 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
   useEffect(() => {
     setNewDialogueLang(voiceLang);
     setNewDialogueVoice(voiceId);
-    setNewDialogueEmotion(voiceEmotion);
-    setNewDialogueEmotionIntensity(voiceEmotionIntensity);
-    setNewDialogueFacialExpression(EMOTION_TO_FACIAL_EXPRESSION[voiceEmotion] || 'neutral');
-  }, [voiceLang, voiceId, voiceEmotion, voiceEmotionIntensity]);
+  }, [voiceLang, voiceId]);
 
   const handleAutoSuggestEmotion = () => {
     if (!newDialogueText.trim()) return;
@@ -514,6 +521,7 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
       const suggestion = suggestEmotionForText(newDialogueText.trim());
       setNewDialogueEmotion(suggestion.emotion);
       setNewDialogueFacialExpression(suggestion.facialExpression);
+      setNewDialogueEmotionIntensity(suggestion.emotion === 'neutral' ? 0 : 15);
       setSuggestionBadge(`${suggestion.emotion.toUpperCase()} (${Math.round(suggestion.confidence * 100)}%): ${suggestion.rationale}`);
       setTimeout(() => setSuggestionBadge(null), 5000);
     } catch (e) {
@@ -631,7 +639,7 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
   return (
     <div className="char-animation-inspector" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
       {/* 1. Header / Identity */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--ed-border)', paddingBottom: '10px' }}>
         <div>
           <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: 'var(--ed-text)' }}>
             {instance.name || rig.name}
@@ -640,25 +648,38 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
             Vector Rig • {rig.species}
           </span>
         </div>
-        <button
-          type="button"
-          className="ed-tool-btn danger"
-          onClick={() => onRemoveInstance(instance.instanceId)}
-          title="Remove character from scene"
-          style={{ padding: '4px 8px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-        >
-          <TrashIcon size={12} />
-          <span>Remove</span>
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <button
+            type="button"
+            className="ed-collapse-all-btn"
+            style={{ fontSize: '10px', padding: '3px 8px' }}
+            onClick={handleToggleAllSections}
+            title={areAllSectionsOpen ? 'Collapse all character sections' : 'Expand all character sections'}
+          >
+            {areAllSectionsOpen ? 'Collapse All' : 'Expand All'}
+          </button>
+          <button
+            type="button"
+            className="ed-tool-btn danger"
+            onClick={() => onRemoveInstance(instance.instanceId)}
+            title="Remove character from scene"
+            style={{ padding: '4px 8px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+          >
+            <TrashIcon size={12} />
+            <span>Remove</span>
+          </button>
+        </div>
       </div>
 
       {/* 2. Facial Expressions Selector */}
-      <div className="ed-inspector-section">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-          <label className="ed-field-label" style={{ margin: 0 }}>Facial Expression</label>
+      <CollapsibleSection
+        id="char-expression"
+        title="Facial Expression"
+        subtitle="Current active face and timed cues"
+        badge={
           <span
             style={{
-              fontSize: '11px',
+              fontSize: '10px',
               padding: '2px 6px',
               borderRadius: '4px',
               background: 'rgba(139, 92, 246, 0.15)',
@@ -666,10 +687,13 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
               fontWeight: 600,
             }}
           >
-            Active: {currentExpression.toUpperCase()}
+            {currentExpression.toUpperCase()}
           </span>
-        </div>
-
+        }
+        isOpen={openSections['char-expression']}
+        onToggle={() => toggleSection('char-expression')}
+        variant="card"
+      >
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px', marginBottom: '8px' }}>
           {FACIAL_EXPRESSIONS.map((expr) => {
             const isSelected = currentExpression === expr.id;
@@ -791,14 +815,16 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
             </button>
           </div>
         </div>
-      </div>
+      </CollapsibleSection>
 
-      {/* 3. Character Voice Settings & Scene Performance (Kokoro-82M) */}
-      <div className="ed-inspector-section">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <label className="ed-field-label" style={{ margin: 0 }}>Voice & Performance</label>
-            {scenePerformance ? (
+      {/* 3. Character Voice Settings & Scene Performance (Kokoro-82M / Fish Audio) */}
+      <CollapsibleSection
+        id="char-voice"
+        title="Voice & Performance"
+        subtitle="Voice model, language, emotion & speed"
+        badge={
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            {scenePerformance && (
               <span
                 style={{
                   fontSize: '9px',
@@ -810,38 +836,28 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
                   border: '1px solid rgba(139, 92, 246, 0.4)',
                 }}
               >
-                SCENE OVERRIDE
-              </span>
-            ) : (
-              <span
-                style={{
-                  fontSize: '9px',
-                  fontWeight: 600,
-                  padding: '1px 5px',
-                  borderRadius: '3px',
-                  background: 'rgba(148, 163, 184, 0.15)',
-                  color: '#94a3b8',
-                }}
-              >
-                CHAR DEFAULT
+                OVERRIDE
               </span>
             )}
+            <span
+              style={{
+                fontSize: '9px',
+                fontWeight: 700,
+                padding: '2px 5px',
+                borderRadius: '3px',
+                background: voiceProvider === 'fish_audio' ? '#2563eb' : '#047857',
+                color: '#ecfdf5',
+                letterSpacing: '0.04em',
+              }}
+            >
+              {voiceProvider === 'fish_audio' ? 'FISH AUDIO' : 'KOKORO'}
+            </span>
           </div>
-          <span
-            style={{
-              fontSize: '10px',
-              fontWeight: 700,
-              padding: '2px 5px',
-              borderRadius: '3px',
-              background: voiceProvider === 'fish_audio' ? '#2563eb' : '#047857',
-              color: '#ecfdf5',
-              letterSpacing: '0.04em',
-            }}
-          >
-            {voiceProvider === 'fish_audio' ? 'FISH AUDIO (s2.1-pro-free)' : 'KOKORO-82M'}
-          </span>
-        </div>
-
+        }
+        isOpen={openSections['char-voice']}
+        onToggle={() => toggleSection('char-voice')}
+        variant="card"
+      >
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '10px' }}>
           {/* TTS Provider Toggle */}
           <div>
@@ -876,10 +892,11 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
                 }}
                 onClick={() => {
                   setVoiceProvider('fish_audio');
-                  const nextVoice = voiceLang === 'hi' ? 'fish_hi_aditi' : 'fish_en_clara';
+                  const nextVoice = 'fish_default';
                   setVoiceId(nextVoice);
-                  setVoiceEmotionIntensity(15);
-                  handleUpdateSceneVoice({ provider: 'fish_audio' as any, voiceId: nextVoice, emotionIntensity: 15 });
+                  const nextIntensity = voiceEmotion === 'neutral' ? 0 : 15;
+                  setVoiceEmotionIntensity(nextIntensity);
+                  handleUpdateSceneVoice({ provider: 'fish_audio' as any, voiceId: nextVoice, emotionIntensity: nextIntensity });
                 }}
               >
                 Fish Audio (Cloud Free)
@@ -901,7 +918,7 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
                   borderColor: voiceLang === 'hi' ? '#059669' : undefined,
                 }}
                 onClick={() => {
-                  const defaultHindiVoice = 'hf_alpha';
+                  const defaultHindiVoice = voiceProvider === 'fish_audio' ? 'fish_default' : 'hf_alpha';
                   handleUpdateSceneVoice({ lang: 'hi', voiceId: defaultHindiVoice });
                 }}
               >
@@ -915,7 +932,7 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
                   fontWeight: voiceLang === 'en' ? 700 : 400,
                 }}
                 onClick={() => {
-                  const defaultEngVoice = instance.characterId === 'pip_the_bear' ? 'bm_george' : 'af_heart';
+                  const defaultEngVoice = voiceProvider === 'fish_audio' ? 'fish_default' : (instance.characterId === 'pip_the_bear' ? 'bm_george' : 'af_heart');
                   handleUpdateSceneVoice({ lang: 'en', voiceId: defaultEngVoice });
                 }}
               >
@@ -927,7 +944,7 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
           {/* Assigned Voice Dropdown */}
           <div>
             <span style={{ fontSize: '11px', color: 'var(--ed-text-muted)' }}>
-              Assigned Voice ({voiceProvider === 'fish_audio' ? (voiceLang === 'hi' ? '4 Hindi' : '4 English') : (voiceLang === 'hi' ? '4 Hindi' : '28 English')} Styles)
+              Assigned Voice ({voiceProvider === 'fish_audio' ? 'Fish Audio Default' : (voiceLang === 'hi' ? '4 Hindi' : '28 English')} Styles)
             </span>
             <select
               className="ed-select"
@@ -937,13 +954,13 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
                 const isHindi = vid.startsWith('hf_') || vid.startsWith('hm_');
                 handleUpdateSceneVoice({
                   voiceId: vid,
-                  lang: isHindi ? 'hi' : 'en',
+                  lang: isHindi ? 'hi' : voiceLang,
                 });
               }}
               style={{ width: '100%', fontSize: '11px', marginTop: '2px' }}
             >
               {(voiceProvider === 'fish_audio' ? FISH_AUDIO_VOICES : KOKORO_VOICES)
-                .filter((grp) => (voiceLang === 'hi' ? grp.lang === 'hi' : grp.lang === 'en'))
+                .filter((grp) => (voiceProvider === 'fish_audio' ? true : (voiceLang === 'hi' ? grp.lang === 'hi' : grp.lang === 'en')))
                 .map((grp) => (
                   <optgroup key={grp.group} label={grp.group}>
                     {grp.voices.map((v) => (
@@ -965,7 +982,8 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
                 value={voiceEmotion}
                 onChange={(e) => {
                   const em = e.target.value as SpeakingEmotion;
-                  handleUpdateSceneVoice({ emotion: em });
+                  const newInt = em === 'neutral' ? 0 : 15;
+                  handleUpdateSceneVoice({ emotion: em, emotionIntensity: newInt });
                 }}
                 style={{ width: '100%', fontSize: '11px', marginTop: '2px' }}
               >
@@ -1008,14 +1026,14 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
                 >
                   {voiceEmotionIntensity === 0
                     ? '0% Minimal'
-                    : voiceEmotionIntensity <= 25
-                    ? '25% Subtle'
-                    : voiceEmotionIntensity <= 50
-                    ? '50% Moderate'
-                    : voiceEmotionIntensity === 60
-                    ? '60% Happy'
-                    : voiceEmotionIntensity <= 75
-                    ? '75% Strong'
+                    : voiceEmotionIntensity <= 20
+                    ? '15% Subtle'
+                    : voiceEmotionIntensity <= 40
+                    ? '30% Moderate'
+                    : voiceEmotionIntensity <= 65
+                    ? '50% Strong'
+                    : voiceEmotionIntensity <= 85
+                    ? '75% Elevated'
                     : '100% Max'}
                 </span>
                 <span style={{ fontWeight: 700, color: 'var(--ed-text)', minWidth: '38px', textAlign: 'right' }}>
@@ -1036,10 +1054,10 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
             <div style={{ display: 'flex', gap: '4px', marginTop: '4px', flexWrap: 'wrap' }}>
               {[
                 { val: 0, label: '0% Min' },
-                { val: 25, label: '25% Subtle' },
-                { val: 50, label: '50% Mod' },
-                { val: 60, label: '60% Happy' },
-                { val: 75, label: '75% Strong' },
+                { val: 15, label: '15% Subtle' },
+                { val: 30, label: '30% Mod' },
+                { val: 50, label: '50% Strong' },
+                { val: 75, label: '75% Elevated' },
                 { val: 100, label: '100% Max' },
               ].map((p) => (
                 <button
@@ -1109,30 +1127,39 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
             </div>
           )}
         </div>
-      </div>
+      </CollapsibleSection>
 
       {/* 4. Character Dialogue & Lip-Sync Manager */}
-      <div className="ed-inspector-section">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-          <label className="ed-field-label" style={{ margin: 0 }}>Dialogue & Lip-Sync</label>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '11px', color: 'var(--ed-text-muted)' }}>
-              {characterDialogues.length} line{characterDialogues.length !== 1 ? 's' : ''}
-            </span>
-            {characterDialogues.length > 0 && (
-              <button
-                type="button"
-                className="ed-tool-btn primary"
-                disabled={isBatchGenerating}
-                onClick={handleGenerateAllDialogues}
-                style={{ fontSize: '10px', padding: '2px 8px' }}
-                title="Synthesize Kokoro-82M speech audio for all dialogue lines in this scene"
-              >
-                {isBatchGenerating ? '⏳ Generating...' : '⚡ Generate All Audio'}
-              </button>
-            )}
-          </div>
-        </div>
+      <CollapsibleSection
+        id="char-dialogue"
+        title="Dialogue & Lip-Sync"
+        subtitle="Character speech lines and batch audio generation"
+        badge={
+          <span style={{ fontSize: '10px', color: 'var(--ed-text-muted)' }}>
+            {characterDialogues.length} line{characterDialogues.length !== 1 ? 's' : ''}
+          </span>
+        }
+        headerActions={
+          characterDialogues.length > 0 ? (
+            <button
+              type="button"
+              className="ed-tool-btn primary"
+              disabled={isBatchGenerating}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleGenerateAllDialogues();
+              }}
+              style={{ fontSize: '10px', padding: '2px 8px' }}
+              title="Synthesize Kokoro-82M / Fish Audio speech for all dialogue lines in this scene"
+            >
+              {isBatchGenerating ? '⏳ Generating...' : '⚡ Generate All Audio'}
+            </button>
+          ) : undefined
+        }
+        isOpen={openSections['char-dialogue']}
+        onToggle={() => toggleSection('char-dialogue')}
+        variant="card"
+      >
 
         {/* Existing Dialogue Lines */}
         {characterDialogues.length > 0 && (
@@ -1208,9 +1235,9 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
                           borderRadius: '3px',
                           background: 'rgba(244, 63, 94, 0.15)',
                         }}
-                        title={`Emotion Intensity: ${dlg.emotionIntensity ?? (lineEmotion === 'happy' ? 60 : (lineEmotion === 'neutral' ? 0 : 50))}%`}
+                        title={`Emotion Intensity: ${dlg.emotionIntensity ?? (lineEmotion === 'neutral' ? 0 : 15)}%`}
                       >
-                        ⚡ {dlg.emotionIntensity ?? (lineEmotion === 'happy' ? 60 : (lineEmotion === 'neutral' ? 0 : 50))}%
+                        ⚡ {dlg.emotionIntensity ?? (lineEmotion === 'neutral' ? 0 : 15)}%
                       </span>
                       <span
                         style={{
@@ -1385,7 +1412,7 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
                   const em = e.target.value as SpeakingEmotion;
                   setNewDialogueEmotion(em);
                   setNewDialogueFacialExpression(EMOTION_TO_FACIAL_EXPRESSION[em] || 'neutral');
-                  setNewDialogueEmotionIntensity(em === 'happy' ? 60 : (em === 'neutral' ? 0 : 50));
+                  setNewDialogueEmotionIntensity(em === 'neutral' ? 0 : 15);
                 }}
                 style={{ width: '100%', fontSize: '11px', marginTop: '2px' }}
               >
@@ -1406,14 +1433,14 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
                 <span style={{ fontSize: '10px', color: '#c4b5fd' }}>
                   {newDialogueEmotionIntensity <= 0
                     ? '0% Neutral'
-                    : newDialogueEmotionIntensity <= 25
-                    ? '25% Subtle'
-                    : newDialogueEmotionIntensity <= 50
-                    ? '50% Moderate'
-                    : newDialogueEmotionIntensity === 60
-                    ? '60% Happy'
-                    : newDialogueEmotionIntensity <= 75
-                    ? '75% Strong'
+                    : newDialogueEmotionIntensity <= 20
+                    ? '15% Subtle'
+                    : newDialogueEmotionIntensity <= 40
+                    ? '30% Moderate'
+                    : newDialogueEmotionIntensity <= 65
+                    ? '50% Strong'
+                    : newDialogueEmotionIntensity <= 85
+                    ? '75% Elevated'
                     : '100% Max'}
                 </span>
                 <span style={{ fontWeight: 700, color: 'var(--ed-text)', minWidth: '38px', textAlign: 'right' }}>
@@ -1434,10 +1461,10 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
             <div style={{ display: 'flex', gap: '4px', marginTop: '4px', flexWrap: 'wrap' }}>
               {[
                 { val: 0, label: '0% Min' },
-                { val: 25, label: '25% Subtle' },
-                { val: 50, label: '50% Mod' },
-                { val: 60, label: '60% Happy' },
-                { val: 75, label: '75% Strong' },
+                { val: 15, label: '15% Subtle' },
+                { val: 30, label: '30% Mod' },
+                { val: 50, label: '50% Strong' },
+                { val: 75, label: '75% Elevated' },
                 { val: 100, label: '100% Max' },
               ].map((p) => (
                 <button
@@ -1509,11 +1536,22 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
             </div>
           )}
         </div>
-      </div>
+      </CollapsibleSection>
 
       {/* 5. Transform & Placement */}
-      <div className="ed-inspector-section">
-        <label className="ed-field-label">Transform & Placement</label>
+      <CollapsibleSection
+        id="char-transform"
+        title="Transform & Placement"
+        subtitle="Position, scale, rotation and layering"
+        badge={
+          <span style={{ fontSize: '10px', color: 'var(--ed-text-muted)' }}>
+            {Math.round(instance.scale * 100)}% • Z:{instance.zIndex}
+          </span>
+        }
+        isOpen={openSections['char-transform']}
+        onToggle={() => toggleSection('char-transform')}
+        variant="card"
+      >
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
           <div>
             <span style={{ fontSize: '11px', color: 'var(--ed-text-muted)' }}>X (Canvas px)</span>
@@ -1591,11 +1629,22 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
             ▼ Layer
           </button>
         </div>
-      </div>
+      </CollapsibleSection>
 
       {/* 6. Animation Action Controls */}
-      <div className="ed-inspector-section">
-        <label className="ed-field-label">Animation Action</label>
+      <CollapsibleSection
+        id="char-actions"
+        title="Animation Action"
+        subtitle="Idle, walk, wave, jump or point"
+        badge={
+          <span style={{ fontSize: '10px', color: '#c4b5fd', fontWeight: 600, textTransform: 'capitalize' }}>
+            {clip?.action || 'idle'}
+          </span>
+        }
+        isOpen={openSections['char-actions']}
+        onToggle={() => toggleSection('char-actions')}
+        variant="card"
+      >
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '4px', marginBottom: '12px' }}>
           {(['idle', 'walk', 'wave', 'jump', 'point'] as AnimationActionType[]).map((action) => (
             <button
@@ -1816,7 +1865,7 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
             ))}
           </div>
         </div>
-      </div>
+      </CollapsibleSection>
     </div>
   );
 };

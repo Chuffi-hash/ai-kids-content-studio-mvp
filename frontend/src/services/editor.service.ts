@@ -550,7 +550,9 @@ export interface StoryBackgroundImage {
 export async function uploadSceneBackground(
   sceneId: string,
   file: File,
-  fit: 'cover' | 'contain' = 'cover'
+  fit: 'cover' | 'contain' = 'cover',
+  source: 'imported' | 'google_flow_manual' | string = 'imported',
+  prompt?: string
 ): Promise<SceneBackgroundResult> {
   const validTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
   if (!validTypes.includes(file.type.toLowerCase())) {
@@ -579,6 +581,8 @@ export async function uploadSceneBackground(
       filename: file.name,
       fileData: base64Data,
       fit,
+      source,
+      prompt,
     }),
   });
 
@@ -871,4 +875,188 @@ export async function createStoryFromDraft(payload: {
 
   return res.json();
 }
+
+// =========================================================================
+// V2 Visual Bible & Scene Background Prompt Interfaces & Service Calls
+// =========================================================================
+
+export interface PromptHistoryEntry {
+  id: string;
+  version: number;
+  prompt: string;
+  cameraPerspective?: string;
+  aspectRatio?: string;
+  locationId?: string;
+  timestamp: string;
+  isManualEdit?: boolean;
+  source?: 'auto_synthesizer' | 'user_edit' | 'google_flow_manual';
+  specification?: any;
+}
+
+export interface StoryVisualBible {
+  version: number;
+  updatedAt: string;
+  artDirection: {
+    primaryStyle: string;
+    styleDescription: string;
+    renderingTechnique: string;
+    medium: string;
+    detailLevel: string;
+    targetAgeGroup?: string;
+  };
+  worldIdentity: {
+    settingType: string;
+    worldDescription: string;
+    recurringLocations: Record<string, {
+      name: string;
+      terrain: string;
+      horizonStructure: string;
+      primaryStructures: string[];
+      vegetationSignature: string;
+      colorPalette: string[];
+      lightingSignature: string;
+      keyLandmarks: string[];
+      clearingDirective: string;
+    }>;
+  };
+  lightingAndColorIdentity: {
+    baseColorPalette: string[];
+    dominantMood: string;
+    naturalLightingStyle: string;
+    saturationProfile: string;
+    contrastProfile: string;
+  };
+  compositionRules: {
+    defaultAspectRatio: string;
+    horizonLinePreference: string;
+    depthLayeringMandate: string;
+    framingStyle: string;
+    negativeSpaceDirective: string;
+  };
+  exclusionRules: string[];
+}
+
+export interface V2PromptGenerateResult {
+  success: boolean;
+  prompt: string;
+  specification?: any;
+  validation?: {
+    valid: boolean;
+    violations: string[];
+    cleanPrompt: string;
+  };
+  locationId?: string;
+  visualBibleVersion?: number;
+  promptEntry?: PromptHistoryEntry;
+  totalVersions?: number;
+  history?: PromptHistoryEntry[];
+}
+
+export async function getStoryVisualBible(storyId: string): Promise<StoryVisualBible> {
+  const res = await fetch(`${API_URL}/api/content/stories/${storyId}/visual-bible`);
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.message || 'Failed to fetch visual bible');
+  }
+  const data = await res.json();
+  return data.visualBible;
+}
+
+export async function updateStoryVisualBible(
+  storyId: string,
+  updates: Partial<StoryVisualBible>
+): Promise<StoryVisualBible> {
+  const res = await fetch(`${API_URL}/api/content/stories/${storyId}/visual-bible`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(updates),
+  });
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.message || 'Failed to update visual bible');
+  }
+  const data = await res.json();
+  return data.visualBible;
+}
+
+export async function generateSceneBackgroundPrompt(
+  sceneId: string,
+  options?: {
+    aspectRatio?: string;
+    cameraDirection?: string;
+    visualStyle?: string;
+    overrides?: any;
+  }
+): Promise<V2PromptGenerateResult> {
+  const res = await fetch(`${API_URL}/api/content/scenes/${sceneId}/background-prompt/generate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(options || {}),
+  });
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.message || 'Failed to generate background prompt');
+  }
+  return res.json();
+}
+
+export async function getScenePromptHistory(sceneId: string): Promise<PromptHistoryEntry[]> {
+  const res = await fetch(`${API_URL}/api/content/scenes/${sceneId}/background-prompt/history`);
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.message || 'Failed to get prompt history');
+  }
+  const data = await res.json();
+  return data.history || [];
+}
+
+export async function saveScenePrompt(
+  sceneId: string,
+  payload: {
+    prompt: string;
+    cameraPerspective?: string;
+    aspectRatio?: string;
+    locationId?: string;
+  }
+): Promise<{
+  success: boolean;
+  prompt: string;
+  validation: any;
+  promptEntry: PromptHistoryEntry;
+  totalVersions: number;
+  history: PromptHistoryEntry[];
+}> {
+  const res = await fetch(`${API_URL}/api/content/scenes/${sceneId}/background-prompt/save`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.message || 'Failed to save prompt');
+  }
+  return res.json();
+}
+
+export async function restoreScenePrompt(
+  sceneId: string,
+  versionId: string
+): Promise<{
+  success: boolean;
+  prompt: string;
+  restoredEntry: PromptHistoryEntry;
+  history: PromptHistoryEntry[];
+}> {
+  const res = await fetch(`${API_URL}/api/content/scenes/${sceneId}/background-prompt/restore`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ versionId }),
+  });
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.message || 'Failed to restore prompt');
+  }
+  return res.json();
+}
+
 

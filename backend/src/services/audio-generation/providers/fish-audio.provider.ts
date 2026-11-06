@@ -1,5 +1,9 @@
 import fs from 'fs';
 import path from 'path';
+import { promisify } from 'util';
+import { execFile } from 'child_process';
+// @ts-ignore
+import ffprobeStatic from '@ffprobe-installer/ffprobe';
 import {
   TTSProvider,
   SupportedVoice,
@@ -15,82 +19,46 @@ import {
   composeFishAudioText,
   stripDirectionTags,
 } from '../fish-emotion-composer.js';
-import { promisify } from 'util';
-import { execFile } from 'child_process';
-// @ts-ignore
-import ffprobeStatic from '@ffprobe-installer/ffprobe';
 
 const execFileAsync = promisify(execFile);
 
 export const DEFAULT_FISH_MODEL = 's2.1-pro-free';
 export const ALLOWED_FREE_MODELS = ['s2.1-pro-free'] as const;
 
+/**
+ * Honest Fish Audio voice catalogue.
+ * Instead of fabricated aliases, the primary choice is 'fish_default'
+ * which omits reference_id to use Fish Audio's natural multilingual zero-shot base voice.
+ * Real custom models are loaded dynamically from GET /model?self=true.
+ */
 export const DEFAULT_FISH_VOICES: SupportedVoice[] = [
   {
-    id: 'fish_hi_aditi',
-    name: 'Aditi (Hindi Female - Warm Storyteller)',
-    gender: 'female',
+    id: 'fish_default',
+    name: 'Fish Audio Default Voice',
+    gender: 'neutral',
     lang: 'hi',
-    accent: 'Hindi',
-    description: 'Warm and gentle storytelling voice for children tales',
-  },
-  {
-    id: 'fish_hi_kabir',
-    name: 'Kabir (Hindi Male - Gentle Narrator)',
-    gender: 'male',
-    lang: 'hi',
-    accent: 'Hindi',
-    description: 'Calm, friendly male narrator voice for bedtime and adventure',
-  },
-  {
-    id: 'fish_hi_ananya',
-    name: 'Ananya (Hindi Girl - Curious & Sweet)',
-    gender: 'female',
-    lang: 'hi',
-    accent: 'Hindi',
-    description: 'Youthful, sweet girl voice for child characters like Maya',
-  },
-  {
-    id: 'fish_hi_aarav',
-    name: 'Aarav (Hindi Boy - Playful Explorer)',
-    gender: 'male',
-    lang: 'hi',
-    accent: 'Hindi',
-    description: 'Playful boy voice for young animal and child characters',
-  },
-  {
-    id: 'fish_en_clara',
-    name: 'Clara (English Female - Warm Storyteller)',
-    gender: 'female',
-    lang: 'en-us',
-    accent: 'American',
-    description: 'Gentle and expressive female storyteller for children',
-  },
-  {
-    id: 'fish_en_oliver',
-    name: 'Oliver (English Male - Calm Narrator)',
-    gender: 'male',
-    lang: 'en-us',
-    accent: 'American',
-    description: 'Friendly and clear male narrator for adventure stories',
-  },
-  {
-    id: 'fish_en_lily',
-    name: 'Lily (English Girl - Cheerful & Gentle)',
-    gender: 'female',
-    lang: 'en-us',
-    accent: 'American',
-    description: 'Sweet, bright girl voice for young protagonists',
-  },
-  {
-    id: 'fish_en_leo',
-    name: 'Leo (English Boy - Playful Explorer)',
-    gender: 'male',
-    lang: 'en-us',
-    accent: 'American',
-    description: 'Energetic and friendly boy voice for character dialogue',
+    accent: 'Multilingual Natural',
+    description: 'Fish Audio base multilingual zero-shot voice for natural Hindi and English storytelling',
   },
 ];
+
+/**
+ * Checks if a voice identifier belongs to the Kokoro-82M TTS engine.
+ * Used to prevent Kokoro IDs from ever leaking into Fish Audio as reference IDs.
+ */
+export function isKokoroVoiceId(voice?: string | null): boolean {
+  if (!voice || typeof voice !== 'string') return false;
+  const v = voice.toLowerCase().trim();
+  return (
+    v.startsWith('hf_') ||
+    v.startsWith('hm_') ||
+    v.startsWith('af_') ||
+    v.startsWith('am_') ||
+    v.startsWith('bf_') ||
+    v.startsWith('bm_') ||
+    v.startsWith('kokoro')
+  );
+}
 
 /**
  * Validates whether a model string meets the strict free-model safeguard policy.
@@ -127,6 +95,13 @@ export interface FishAudioProviderOptions {
   model?: string;
   baseUrl?: string;
   timeoutMs?: number;
+}
+
+export interface AudioProbeMetadata {
+  durationMs: number;
+  sampleRate: number;
+  channels: number;
+  format: string;
 }
 
 export class FishAudioProvider implements TTSProvider {
@@ -172,7 +147,7 @@ export class FishAudioProvider implements TTSProvider {
   }
 
   /**
-   * Returns the next API key in round-robin order.
+   * Returns the primary or configured API key.
    */
   getNextApiKey(): string | undefined {
     const keys = this.getEffectiveApiKeys();
@@ -222,22 +197,21 @@ export class FishAudioProvider implements TTSProvider {
 
   /**
    * Returns supported voices catalogue for Fish Audio.
-   * Includes curated natural storytelling voices for Hindi and English,
-   * plus custom models if the account has any.
+   * Features honest provider default voice plus verified account custom models.
    */
   async getSupportedVoices(): Promise<SupportedVoice[]> {
-    const curatedVoices = [...DEFAULT_FISH_VOICES];
+    const defaultList = [...DEFAULT_FISH_VOICES];
 
     const { apiKey, baseUrl } = this.getEffectiveConfig();
     if (!apiKey) {
-      return curatedVoices;
+      return defaultList;
     }
 
-    // Try fetching account custom voice models if available
+    // Retrieve custom voice models from user account if available
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 4000);
-      const res = await fetch(`${baseUrl}/model?self=true&page_size=20`, {
+      const res = await fetch(`${baseUrl}/model?self=true&page_size=50`, {
         headers: {
           Authorization: `Bearer ${apiKey}`,
         },
@@ -255,13 +229,13 @@ export class FishAudioProvider implements TTSProvider {
           lang: m.languages?.includes('hi') ? 'hi' : m.languages?.includes('en') ? 'en-us' : 'hi',
           description: m.description || 'Custom Fish Audio Voice Reference',
         }));
-        return [...curatedVoices, ...customVoices];
+        return [...defaultList, ...customVoices];
       }
     } catch {
-      // Gracefully fall back to curated voices on network or permission issues
+      // Gracefully fall back to default list on network or permission issues
     }
 
-    return curatedVoices;
+    return defaultList;
   }
 
   /**
@@ -304,47 +278,59 @@ export class FishAudioProvider implements TTSProvider {
       intensity: options?.emotionIntensity,
     });
 
-    // Determine voice reference_id if specified (Fish Audio uses 24-32 hex characters for custom models)
+    // Voice reference handling:
+    // 1. NEVER send Kokoro voice IDs (e.g. hf_alpha, hm_omega) as reference_id
+    // 2. 'fish_default' or 'default' omits reference_id to use base model zero-shot voice
+    // 3. Real custom model reference IDs (24-36 hex characters or verified custom IDs) are passed as reference_id
     let referenceId: string | undefined;
-    if (voice && !voice.startsWith('fish_') && voice !== 'default') {
+    if (
+      voice &&
+      !isKokoroVoiceId(voice) &&
+      voice !== 'fish_default' &&
+      voice !== 'default' &&
+      !voice.startsWith('fish_')
+    ) {
       referenceId = voice;
     }
 
     const payload: Record<string, any> = {
       text: composed.synthesizedText,
       format: 'mp3',
+      normalize: true,
     };
     if (referenceId) {
       payload.reference_id = referenceId;
     }
 
-    // Pick starting key via round-robin
-    const startingIndex = this.currentKeyIndex % keys.length;
-    this.currentKeyIndex = (this.currentKeyIndex + 1) % keys.length;
+    // Speaking speed prosody control (multiplier 0.5 - 2.0)
+    if (options?.speed && typeof options.speed === 'number' && options.speed !== 1.0) {
+      payload.prosody = {
+        speed: Math.max(0.5, Math.min(2.0, options.speed)),
+      };
+    }
+
+    const primaryKey = keys[0];
+    const maskedKey = primaryKey.length > 12
+      ? `${primaryKey.substring(0, 10)}...${primaryKey.slice(-4)}`
+      : '***';
 
     let audioBuffer: Buffer | null = null;
     let attempts = 0;
-    const maxAttempts = Math.max(keys.length, 3);
+    const maxAttempts = 3; // Max 2 retries for transient 5xx/network errors only
 
     while (attempts < maxAttempts) {
-      const activeKey = keys[(startingIndex + attempts) % keys.length];
-      const maskedKey = activeKey.length > 12 
-        ? `${activeKey.substring(0, 10)}...${activeKey.slice(-4)}`
-        : '***';
-
       attempts++;
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
 
       const headers: Record<string, string> = {
-        'Authorization': `Bearer ${activeKey}`,
+        'Authorization': `Bearer ${primaryKey}`,
         'Content-Type': 'application/json',
         'model': model,
       };
 
       console.log(
-        `[FishAudioProvider] Synthesizing speech with model "${model}" using key ${maskedKey} ` +
-        `(attempt ${attempts}/${maxAttempts}, lang: ${effectiveLang}, voice: ${voice}, emotion: ${options?.emotion || 'neutral'}, tag: ${composed.appliedTag || 'none'})`
+        `[FishAudioProvider] Synthesizing speech with model "${model}" (attempt ${attempts}/${maxAttempts}, lang: ${effectiveLang}, voice: ${voice}, ref: ${referenceId || 'none'}, speed: ${options?.speed || 1.0}, tag: ${composed.appliedTag || 'none'})`
       );
 
       try {
@@ -369,41 +355,36 @@ export class FishAudioProvider implements TTSProvider {
           errorBody = await response.text();
         } catch {}
 
+        // 401 / 403 Authentication Failure: do NOT retry or rotate evasively
         if (statusCode === 401 || statusCode === 403) {
-          if (attempts < maxAttempts && keys.length > 1) {
-            console.warn(`[FishAudioProvider] Key ${maskedKey} failed authentication (401/403). Rotating to next API key...`);
-            continue;
-          }
           throw new Error(
             'Fish Audio authentication failed (401/403). Please verify that your FISH_API_KEY is valid.'
           );
         }
 
+        // 429 Rate Limit: do NOT rotate keys or evade limits
         if (statusCode === 429) {
-          if (attempts < maxAttempts && keys.length > 1) {
-            console.warn(`[FishAudioProvider] Key ${maskedKey} rate-limited (429). Rotating to next API key...`);
-            continue;
-          }
+          const retryAfter = response.headers?.get?.('retry-after');
+          const delayInfo = retryAfter ? ` Retry-After: ${retryAfter}s.` : '';
           throw new Error(
-            'Fish Audio rate limit exceeded (429). Please wait a moment before generating more audio.'
+            `Fish Audio rate limit exceeded (429).${delayInfo} Please wait a moment before generating more audio.`
           );
         }
 
+        // 400 Bad Request / 404 Not Found: do NOT retry invalid inputs
         if (statusCode === 400 || statusCode === 404) {
-          // Check if error is related to the free model
           if (errorBody.toLowerCase().includes('model') || errorBody.toLowerCase().includes('tier')) {
             throw new Error(
-              `Fish Audio free model "${model}" rejected: ${errorBody}. ` +
-              `Free-model policy prevents falling back to paid models.`
+              `Fish Audio free model "${model}" rejected: ${errorBody}. Free-model policy prevents falling back to paid models.`
             );
           }
           throw new Error(`Fish Audio bad request (${statusCode}): ${errorBody}`);
         }
 
         // 5xx Server errors - retry with backoff if attempts remaining
-        if (statusCode >= 500 && attempts < maxAttempts && this.timeoutMs >= 1000) {
-          console.warn(`[FishAudioProvider] Transient error (${statusCode}), retrying attempt ${attempts + 1}...`);
-          await new Promise((resolve) => setTimeout(resolve, 800 * attempts));
+        if (statusCode >= 500 && attempts < maxAttempts) {
+          console.warn(`[FishAudioProvider] Transient server error (${statusCode}), retrying attempt ${attempts + 1}...`);
+          await new Promise((resolve) => setTimeout(resolve, 1000 * attempts));
           continue;
         }
 
@@ -411,14 +392,23 @@ export class FishAudioProvider implements TTSProvider {
       } catch (err: any) {
         clearTimeout(timeoutId);
         if (err.name === 'AbortError') {
-          if (attempts < maxAttempts && this.timeoutMs >= 1000) {
+          if (attempts < maxAttempts) {
             console.warn(`[FishAudioProvider] Request timed out, retrying attempt ${attempts + 1}...`);
-            await new Promise((resolve) => setTimeout(resolve, 800 * attempts));
+            await new Promise((resolve) => setTimeout(resolve, 1000 * attempts));
             continue;
           }
-          throw new Error(`Fish Audio request timed out after ${Math.round(this.timeoutMs / 1000)} seconds. Please check your network connection.`);
+          throw new Error(
+            `Fish Audio request timed out after ${Math.round(this.timeoutMs / 1000)} seconds. Please check your network connection.`
+          );
         }
-        if (attempts >= maxAttempts || err.message?.includes('authentication failed') || err.message?.includes('rate limit') || err.message?.includes('free-model')) {
+        // Non-retryable errors
+        if (
+          attempts >= maxAttempts ||
+          err.message?.includes('authentication failed') ||
+          err.message?.includes('rate limit') ||
+          err.message?.includes('bad request') ||
+          err.message?.includes('Free-model')
+        ) {
           throw err;
         }
       }
@@ -428,7 +418,7 @@ export class FishAudioProvider implements TTSProvider {
       throw new Error('Fish Audio returned empty audio buffer');
     }
 
-    // Save temporary audio file to measure duration and apply optional post-processing effects
+    // Save temporary audio file to measure duration and sample rate via ffprobe
     const tempDir = path.join(process.cwd(), 'storage', 'temp');
     if (!fs.existsSync(tempDir)) {
       fs.mkdirSync(tempDir, { recursive: true });
@@ -440,10 +430,12 @@ export class FishAudioProvider implements TTSProvider {
     try {
       await fs.promises.writeFile(rawFile, audioBuffer);
 
-      let durationMs = 0;
-      try {
-        durationMs = await this.probeAudioDuration(rawFile);
-      } catch {
+      // Probe actual duration and sample rate via ffprobe
+      const probeMeta = await this.probeAudioMetadata(rawFile);
+      let durationMs = probeMeta.durationMs;
+      const sampleRate = probeMeta.sampleRate;
+
+      if (!durationMs || durationMs <= 0) {
         // Fallback estimation based on spoken word count
         const words = composed.spokenText.split(/\s+/).length;
         durationMs = Math.round(words * 450 + 800);
@@ -454,7 +446,7 @@ export class FishAudioProvider implements TTSProvider {
       // Apply audio effects if requested
       if (effect && effect !== 'normal') {
         const effectRes = await this.effectsService.applyEffect(rawFile, procFile, effect, {
-          sampleRate: 24000,
+          sampleRate,
         });
         if (fs.existsSync(procFile)) {
           finalBuffer = await fs.promises.readFile(procFile);
@@ -466,7 +458,7 @@ export class FishAudioProvider implements TTSProvider {
         audioBuffer: finalBuffer,
         format: 'mp3',
         durationMs,
-        sampleRate: 24000,
+        sampleRate,
         provider: this.name,
         voice,
         effect,
@@ -478,25 +470,47 @@ export class FishAudioProvider implements TTSProvider {
   }
 
   /**
-   * Probes audio file duration accurately via ffprobe.
+   * Probes audio file metadata (duration, sample rate, channels, format) accurately via ffprobe.
    */
-  private async probeAudioDuration(filePath: string): Promise<number> {
+  private async probeAudioMetadata(filePath: string): Promise<AudioProbeMetadata> {
     const ffprobePath = ffprobeStatic?.path || 'ffprobe';
-    const { stdout } = await execFileAsync(ffprobePath, [
-      '-v',
-      'error',
-      '-show_entries',
-      'format=duration',
-      '-of',
-      'default=noprint_wrappers=1:nokey=1',
-      filePath,
-    ]);
+    try {
+      const { stdout } = await execFileAsync(ffprobePath, [
+        '-v',
+        'error',
+        '-show_entries',
+        'stream=sample_rate,channels,codec_name:format=duration,format_name',
+        '-of',
+        'json',
+        filePath,
+      ]);
 
-    const seconds = parseFloat(stdout.trim());
-    if (Number.isFinite(seconds) && seconds > 0) {
-      return Math.round(seconds * 1000);
+      const parsed = JSON.parse(stdout);
+      const stream = parsed.streams?.[0] || {};
+      const format = parsed.format || {};
+
+      const durationSec = parseFloat(format.duration || stream.duration);
+      const sampleRate = parseInt(stream.sample_rate, 10);
+      const channels = parseInt(stream.channels, 10);
+      const formatName = format.format_name || stream.codec_name || 'mp3';
+
+      const durationMs = Number.isFinite(durationSec) && durationSec > 0
+        ? Math.round(durationSec * 1000)
+        : 0;
+
+      return {
+        durationMs,
+        sampleRate: Number.isFinite(sampleRate) && sampleRate > 0 ? sampleRate : 44100,
+        channels: Number.isFinite(channels) && channels > 0 ? channels : 1,
+        format: formatName,
+      };
+    } catch {
+      return {
+        durationMs: 0,
+        sampleRate: 44100,
+        channels: 1,
+        format: 'mp3',
+      };
     }
-    throw new Error(`Invalid duration output from ffprobe: "${stdout}"`);
   }
 }
-

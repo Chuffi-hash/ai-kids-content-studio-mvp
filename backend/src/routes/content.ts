@@ -37,6 +37,8 @@ import { getImageGenerationProvider } from "../services/image-generation/provide
 import { LocalStorageService } from "../services/storage/local-storage.service.js";
 import { buildSceneImagePrompt } from "../services/image-generation/prompt-builder.js";
 import { PromptSynthesizer } from "../services/story-generation/parser/prompt-synthesizer.js";
+import { VisualBibleService } from "../services/story-generation/visual-bible.service.js";
+import { ScenePromptV2Service } from "../services/story-generation/scene-prompt-v2.service.js";
 import { AudioGenerationService } from "../services/audio-generation/audio-generation.service.js";
 import { suggestEmotionForText } from "../services/audio-generation/emotion-suggester.service.js";
 import { estimateSpeechDurationMs, formatTimeMs } from "../services/timing/timing.service.js";
@@ -1176,8 +1178,8 @@ contentRouter.post("/scenes/:sceneId/voice", async (req, res) => {
       voice,
       speed: speed ? parseFloat(speed) : undefined,
       effect,
-      emotion,
-      emotionIntensity: emotionIntensity !== undefined ? Number(emotionIntensity) : undefined,
+      emotion: emotion || "neutral",
+      emotionIntensity: emotionIntensity !== undefined ? Number(emotionIntensity) : (emotion && emotion !== "neutral" ? 15 : 0),
     });
 
     return res.json({
@@ -1248,8 +1250,8 @@ contentRouter.post("/scenes/:sceneId/dialogue/generate", async (req, res) => {
       text,
       voice,
       speakingDirection,
-      emotion,
-      emotionIntensity: emotionIntensity !== undefined ? Number(emotionIntensity) : undefined,
+      emotion: emotion || "neutral",
+      emotionIntensity: emotionIntensity !== undefined ? Number(emotionIntensity) : (emotion && emotion !== "neutral" ? 15 : 0),
       facialExpression,
       speed: speed ? parseFloat(speed) : undefined,
       startMs: typeof startMs === "number" ? startMs : 0,
@@ -1827,7 +1829,7 @@ function validateImageBuffer(buffer: Buffer): { valid: boolean; mimeType?: strin
 contentRouter.post("/scenes/:sceneId/background/upload", async (req, res) => {
   try {
     const { sceneId } = req.params;
-    const { data, fileData, image, filename: clientFilename, fit: rawFit } = req.body;
+    const { data, fileData, image, filename: clientFilename, fit: rawFit, source: reqSource, prompt: reqPrompt } = req.body;
 
     const base64Input = data || fileData || image;
     if (!base64Input || typeof base64Input !== 'string') {
@@ -1856,12 +1858,17 @@ contentRouter.post("/scenes/:sceneId/background/upload", async (req, res) => {
 
     // Synchronize scene.imageUrl and scene.animationData.background with source metadata
     const currentAnim = (scene.animationData || {}) as any;
+    const effectiveSource = (reqSource === 'google_flow_manual') ? 'google_flow_manual' : (reqSource || 'imported');
+    const effectivePrompt = reqPrompt || currentAnim.background?.prompt || scene.visualPrompt || (clientFilename ? `User upload: ${clientFilename}` : 'Uploaded scene background');
+
     const updatedAnimData = {
       ...currentAnim,
       background: {
+        ...currentAnim.background,
         imageUrl: url,
         fit,
-        source: 'imported',
+        source: effectiveSource,
+        prompt: effectivePrompt,
         filename: clientFilename || storageFilename,
         sizeBytes: buffer.length,
         removed: false,
@@ -1878,9 +1885,9 @@ contentRouter.post("/scenes/:sceneId/background/upload", async (req, res) => {
     await createImage({
       id: imageId,
       sceneId: scene.sceneId,
-      provider: 'upload',
-      model: 'user',
-      prompt: clientFilename ? `User upload: ${clientFilename}` : 'Uploaded scene background',
+      provider: effectiveSource === 'google_flow_manual' ? 'google_flow_manual' : 'upload',
+      model: effectiveSource === 'google_flow_manual' ? 'google_flow' : 'user',
+      prompt: effectivePrompt,
       storageKey: storageFilename,
       imageUrl: url,
       width: 1280,
@@ -1892,7 +1899,9 @@ contentRouter.post("/scenes/:sceneId/background/upload", async (req, res) => {
     await createSceneVersion({
       id: randomUUID(),
       sceneId: scene.sceneId,
-      prompt: `Background uploaded: ${clientFilename || storageFilename} (fit: ${fit})`,
+      prompt: effectiveSource === 'google_flow_manual'
+        ? `Google Flow manual background imported: ${effectivePrompt.slice(0, 80)}`
+        : `Background uploaded: ${clientFilename || storageFilename} (fit: ${fit})`,
       imageUrl: url,
       cameraDirection: scene.cameraDirection,
       narration: scene.narration,
@@ -1904,7 +1913,8 @@ contentRouter.post("/scenes/:sceneId/background/upload", async (req, res) => {
       background: {
         imageUrl: url,
         fit,
-        source: 'imported',
+        source: effectiveSource,
+        prompt: effectivePrompt,
         filename: clientFilename || storageFilename,
         sizeBytes: buffer.length,
       },
@@ -2130,4 +2140,170 @@ contentRouter.get("/story/:storyId/backgrounds", async (req, res) => {
     return res.status(500).json({ message: error.message || "Failed to list story backgrounds" });
   }
 });
+
+// =========================================================================
+// V2 Visual Bible & Scene Background Prompt Endpoints (Google Flow Manual)
+// =========================================================================
+
+// 5. Get or initialize Story Visual Bible
+contentRouter.get("/stories/:storyId/visual-bible", async (req, res) => {
+  try {
+    const { storyId } = req.params;
+    const visualBible = await VisualBibleService.getOrInitializeVisualBible(storyId);
+    return res.json({ success: true, visualBible });
+  } catch (error: any) {
+    console.error("[Content] Failed to fetch visual bible:", error);
+    return res.status(500).json({ message: error.message || "Failed to fetch visual bible" });
+  }
+});
+
+// 6. Update Story Visual Bible
+contentRouter.put("/stories/:storyId/visual-bible", async (req, res) => {
+  try {
+    const { storyId } = req.params;
+    const updated = await VisualBibleService.updateVisualBible(storyId, req.body);
+    return res.json({ success: true, visualBible: updated });
+  } catch (error: any) {
+    console.error("[Content] Failed to update visual bible:", error);
+    return res.status(500).json({ message: error.message || "Failed to update visual bible" });
+  }
+});
+
+// 7. Generate V2 Scene Background Prompt (Workflow A - Prompt Only, No Image Credits Consumed)
+contentRouter.post("/scenes/:sceneId/background-prompt/generate", async (req, res) => {
+  try {
+    const { sceneId } = req.params;
+    const { aspectRatio, cameraDirection, visualStyle, overrides } = req.body;
+
+    const scene = await getSceneBySceneId(sceneId);
+    if (!scene) {
+      return res.status(404).json({ message: `Scene not found: ${sceneId}` });
+    }
+
+    const visualBible = await VisualBibleService.getOrInitializeVisualBible(scene.storyId);
+
+    const spec = await ScenePromptV2Service.analyzeScene({
+      storyId: scene.storyId,
+      sceneId: scene.sceneId,
+      visualBible,
+      overrides: {
+        ...(overrides || {}),
+        ...(aspectRatio ? { aspectRatio } : {}),
+        ...(cameraDirection ? { cameraPerspective: cameraDirection } : {}),
+      },
+    });
+
+    const prompt = ScenePromptV2Service.composePrompt(spec, visualBible, {
+      aspectRatio,
+      cameraDirection,
+      visualStyle,
+    });
+
+    const validation = ScenePromptV2Service.validatePrompt(prompt);
+
+    const { promptEntry, totalVersions } = await ScenePromptV2Service.savePromptVersion({
+      sceneId: scene.sceneId,
+      prompt: validation.cleanPrompt,
+      cameraPerspective: spec.cameraPerspective,
+      aspectRatio: spec.aspectRatio,
+      locationId: spec.locationId,
+      isManualEdit: false,
+      source: 'google_flow_manual',
+      specification: spec,
+    });
+
+    const history = await ScenePromptV2Service.getPromptHistory(scene.sceneId);
+
+    return res.json({
+      success: true,
+      prompt: validation.cleanPrompt,
+      specification: spec,
+      validation,
+      locationId: spec.locationId,
+      visualBibleVersion: visualBible.version,
+      promptEntry,
+      totalVersions,
+      history,
+    });
+  } catch (error: any) {
+    console.error("[Content] Failed to generate V2 background prompt:", error);
+    return res.status(500).json({ message: error.message || "Failed to generate background prompt" });
+  }
+});
+
+// 8. Get prompt history for a scene
+contentRouter.get("/scenes/:sceneId/background-prompt/history", async (req, res) => {
+  try {
+    const { sceneId } = req.params;
+    const history = await ScenePromptV2Service.getPromptHistory(sceneId);
+    return res.json({ success: true, history });
+  } catch (error: any) {
+    console.error("[Content] Failed to get prompt history:", error);
+    return res.status(500).json({ message: error.message || "Failed to get prompt history" });
+  }
+});
+
+// 9. Save edited prompt version
+contentRouter.post("/scenes/:sceneId/background-prompt/save", async (req, res) => {
+  try {
+    const { sceneId } = req.params;
+    const { prompt, cameraPerspective, aspectRatio, locationId } = req.body;
+
+    if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0) {
+      return res.status(400).json({ message: "Prompt text is required" });
+    }
+
+    const validation = ScenePromptV2Service.validatePrompt(prompt);
+
+    const { promptEntry, totalVersions } = await ScenePromptV2Service.savePromptVersion({
+      sceneId,
+      prompt: validation.cleanPrompt,
+      cameraPerspective,
+      aspectRatio,
+      locationId,
+      isManualEdit: true,
+      source: 'user_edit',
+    });
+
+    const history = await ScenePromptV2Service.getPromptHistory(sceneId);
+
+    return res.json({
+      success: true,
+      prompt: validation.cleanPrompt,
+      validation,
+      promptEntry,
+      totalVersions,
+      history,
+    });
+  } catch (error: any) {
+    console.error("[Content] Failed to save prompt version:", error);
+    return res.status(500).json({ message: error.message || "Failed to save prompt version" });
+  }
+});
+
+// 10. Restore a previous prompt version
+contentRouter.post("/scenes/:sceneId/background-prompt/restore", async (req, res) => {
+  try {
+    const { sceneId } = req.params;
+    const { versionId } = req.body;
+
+    if (!versionId) {
+      return res.status(400).json({ message: "versionId is required" });
+    }
+
+    const restored = await ScenePromptV2Service.restorePromptVersion(sceneId, String(versionId));
+    const history = await ScenePromptV2Service.getPromptHistory(sceneId);
+
+    return res.json({
+      success: true,
+      prompt: restored.prompt,
+      restoredEntry: restored,
+      history,
+    });
+  } catch (error: any) {
+    console.error("[Content] Failed to restore prompt version:", error);
+    return res.status(500).json({ message: error.message || "Failed to restore prompt version" });
+  }
+});
+
 

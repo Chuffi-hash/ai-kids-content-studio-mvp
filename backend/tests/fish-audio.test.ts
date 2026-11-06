@@ -6,6 +6,7 @@ import {
   DEFAULT_FISH_MODEL,
   DEFAULT_FISH_VOICES,
   validateFreeModelPolicy,
+  isKokoroVoiceId,
   parseApiKeys
 } from '../src/services/audio-generation/providers/fish-audio.provider.js';
 import {
@@ -15,7 +16,6 @@ import {
   FISH_DIRECTION_TAG_MAP
 } from '../src/services/audio-generation/fish-emotion-composer.js';
 import { TTSProviderFactory } from '../src/services/audio-generation/tts-provider.factory.js';
-import { AudioGenerationService } from '../src/services/audio-generation/audio-generation.service.js';
 
 test('Fish Audio - Free-Model Policy Enforcement', () => {
   // s2.1-pro-free must pass validation
@@ -62,7 +62,7 @@ test('Fish Audio - Availability and Missing API Key Handling', async () => {
   await assert.rejects(
     async () => {
       await providerWithoutKey.generateSpeech('नमस्ते बच्चों', {
-        voiceId: 'fish_hi_aarav'
+        voice: 'fish_default'
       });
     },
     /API key is not configured/i,
@@ -70,24 +70,99 @@ test('Fish Audio - Availability and Missing API Key Handling', async () => {
   );
 });
 
-test('Fish Audio - Curated Storytelling Voices Catalogue', async () => {
+test('Fish Audio - Honest Voice Catalogue & Dynamic Account Models', async () => {
   const provider = new FishAudioProvider({ apiKey: 'mock-key' });
   const voices = await provider.getVoices();
 
   assert.ok(Array.isArray(voices), 'Voices should be an array');
-  assert.ok(voices.length >= 8, 'Should provide at least 8 curated voices');
+  assert.ok(voices.length >= 1, 'Should provide at least the honest default voice');
 
-  // Verify Hindi voices
-  const hindiVoices = voices.filter(v => v.lang === 'hi' || v.lang.startsWith('hi-'));
-  assert.ok(hindiVoices.length >= 4, 'Should include at least 4 Hindi voices');
-  assert.ok(hindiVoices.some(v => v.id === 'fish_hi_aarav'), 'Should include fish_hi_aarav');
-  assert.ok(hindiVoices.some(v => v.id === 'fish_hi_ananya'), 'Should include fish_hi_ananya');
+  // The primary voice must be the honest fish_default
+  const defaultVoice = voices.find(v => v.id === 'fish_default');
+  assert.ok(defaultVoice, 'Should include fish_default');
+  assert.strictEqual(defaultVoice?.name, 'Fish Audio Default Voice');
+  assert.strictEqual(defaultVoice?.lang, 'hi');
 
-  // Verify English voices
-  const englishVoices = voices.filter(v => v.lang === 'en' || v.lang.startsWith('en-'));
-  assert.ok(englishVoices.length >= 4, 'Should include at least 4 English voices');
-  assert.ok(englishVoices.some(v => v.id === 'fish_en_oliver'), 'Should include fish_en_oliver');
-  assert.ok(englishVoices.some(v => v.id === 'fish_en_lily'), 'Should include fish_en_lily');
+  // Fictional voice names must be eliminated
+  assert.strictEqual(voices.some(v => v.id === 'fish_hi_aarav'), false, 'Fictional voice fish_hi_aarav must not exist');
+  assert.strictEqual(voices.some(v => v.id === 'fish_hi_ananya'), false, 'Fictional voice fish_hi_ananya must not exist');
+  assert.strictEqual(voices.some(v => v.id === 'fish_en_oliver'), false, 'Fictional voice fish_en_oliver must not exist');
+  assert.strictEqual(voices.some(v => v.id === 'fish_en_lily'), false, 'Fictional voice fish_en_lily must not exist');
+
+  // Verify dynamic user models merge from GET /model?self=true
+  const originalFetch = global.fetch;
+  try {
+    global.fetch = async (url: any) => {
+      if (url.toString().includes('/model?self=true')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            items: [
+              {
+                _id: '7f938b826433434f853c822663116cd3',
+                title: 'Storyteller Grandpa',
+                tags: ['male', 'storytelling'],
+                languages: ['hi'],
+                description: 'Gentle grandfather storytelling voice'
+              }
+            ]
+          })
+        } as any;
+      }
+      return { ok: false, status: 404 } as any;
+    };
+
+    const providerWithCustom = new FishAudioProvider({ apiKey: 'test-custom-key' });
+    const customVoices = await providerWithCustom.getSupportedVoices();
+    assert.strictEqual(customVoices.length, 2, 'Should include fish_default and custom model');
+    assert.ok(customVoices.some(v => v.id === '7f938b826433434f853c822663116cd3'), 'Should include custom voice ID');
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('Fish Audio - Cross-Provider Isolation & Voice ID Handling', async () => {
+  // Kokoro voice ID detection
+  assert.strictEqual(isKokoroVoiceId('hf_alpha'), true, 'hf_alpha is Kokoro voice');
+  assert.strictEqual(isKokoroVoiceId('hf_beta'), true, 'hf_beta is Kokoro voice');
+  assert.strictEqual(isKokoroVoiceId('hm_omega'), true, 'hm_omega is Kokoro voice');
+  assert.strictEqual(isKokoroVoiceId('af_heart'), true, 'af_heart is Kokoro voice');
+  assert.strictEqual(isKokoroVoiceId('bm_george'), true, 'bm_george is Kokoro voice');
+  assert.strictEqual(isKokoroVoiceId('fish_default'), false, 'fish_default is NOT Kokoro voice');
+  assert.strictEqual(isKokoroVoiceId('7f938b826433434f853c822663116cd3'), false, 'Hex ID is NOT Kokoro voice');
+  assert.strictEqual(isKokoroVoiceId(undefined), false);
+
+  const originalFetch = global.fetch;
+  let capturedPayload: any = null;
+
+  try {
+    global.fetch = async (_url: any, init: any) => {
+      capturedPayload = JSON.parse(init.body);
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'audio/mpeg' }),
+        arrayBuffer: async () => Buffer.from('MOCK-MP3-BUFFER').buffer
+      } as any;
+    };
+
+    const provider = new FishAudioProvider({ apiKey: 'test-key' });
+
+    // 1. When a Kokoro voice ID is passed to Fish Audio, reference_id must be omitted
+    await provider.generateSpeech('नमस्ते', { voice: 'hf_alpha' });
+    assert.strictEqual(capturedPayload.reference_id, undefined, 'Kokoro voice ID must NEVER be passed as reference_id');
+
+    // 2. When 'fish_default' is passed, reference_id must be omitted
+    await provider.generateSpeech('नमस्ते', { voice: 'fish_default' });
+    assert.strictEqual(capturedPayload.reference_id, undefined, 'fish_default must omit reference_id');
+
+    // 3. When a verified custom model hex ID is passed, reference_id must be included
+    await provider.generateSpeech('नमस्ते', { voice: '7f938b826433434f853c822663116cd3' });
+    assert.strictEqual(capturedPayload.reference_id, '7f938b826433434f853c822663116cd3', 'Custom hex ID must be passed as reference_id');
+  } finally {
+    global.fetch = originalFetch;
+  }
 });
 
 test('Fish Audio - Restrained Emotion Delivery & Tag Composition', () => {
@@ -107,7 +182,7 @@ test('Fish Audio - Restrained Emotion Delivery & Tag Composition', () => {
   // 3. Emotion with intensity >= 0.15 prepends at most one restrained tag
   const warmRes = composeFishAudioText('चलो एक नई कहानी सुनते हैं।', {
     emotion: 'happy',
-    intensity: 0.20
+    intensity: 0.15
   });
   assert.strictEqual(warmRes.composedText, '[warm] चलो एक नई कहानी सुनते हैं।');
   assert.strictEqual(warmRes.appliedTag, '[warm]');
@@ -121,19 +196,19 @@ test('Fish Audio - Restrained Emotion Delivery & Tag Composition', () => {
 
   const reassuringRes = composeFishAudioText('डरने की कोई बात नहीं है।', {
     emotion: 'reassuring',
-    intensity: 0.25
+    intensity: 0.15
   });
   assert.strictEqual(reassuringRes.composedText, '[reassuring] डरने की कोई बात नहीं है।');
   assert.strictEqual(reassuringRes.appliedTag, '[reassuring]');
 
   const curiousRes = composeFishAudioText('गुफा के अंदर क्या हो सकता है?', {
     emotion: 'curious',
-    intensity: 0.30
+    intensity: 0.15
   });
   assert.strictEqual(curiousRes.composedText, '[inquisitive] गुफा के अंदर क्या हो सकता है?');
   assert.strictEqual(curiousRes.appliedTag, '[inquisitive]');
 
-  // 4. Shouting and angry are softened to emphasis/tense to avoid exaggerated theatrical screams
+  // 4. Shouting and angry are softened to emphasis/firm to avoid exaggerated theatrical screams
   const shoutRes = composeFishAudioText('रुको वहां!', {
     emotion: 'shouting',
     intensity: 0.50
@@ -149,7 +224,7 @@ test('Fish Audio - Restrained Emotion Delivery & Tag Composition', () => {
   // 5. Existing tags in text are normalized and never duplicated
   const alreadyTagged = composeFishAudioText('[excited] यह अद्भुत है!', {
     emotion: 'happy',
-    intensity: 0.20
+    intensity: 0.15
   });
   // Should replace with the restrained tag [warm], not produce [[excited] [warm]...]
   assert.strictEqual(alreadyTagged.composedText, '[warm] यह अद्भुत है!');
@@ -160,6 +235,42 @@ test('Fish Audio - Restrained Emotion Delivery & Tag Composition', () => {
 
   const strippedMultiple = stripDirectionTags('[soft] [near-whisper] धीरे बोलो');
   assert.strictEqual(strippedMultiple, 'धीरे बोलो');
+});
+
+test('Fish Audio - Prosody Speed Control', async () => {
+  const originalFetch = global.fetch;
+  let capturedPayload: any = null;
+
+  try {
+    global.fetch = async (_url: any, init: any) => {
+      capturedPayload = JSON.parse(init.body);
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'audio/mpeg' }),
+        arrayBuffer: async () => Buffer.from('MOCK-MP3-BUFFER').buffer
+      } as any;
+    };
+
+    const provider = new FishAudioProvider({ apiKey: 'test-key' });
+
+    // Speed 1.25 -> prosody.speed === 1.25
+    await provider.generateSpeech('नमस्ते', { speed: 1.25 });
+    assert.deepStrictEqual(capturedPayload.prosody, { speed: 1.25 }, 'Should send prosody speed for 1.25');
+
+    // Speed 1.0 (default) -> no prosody field needed
+    await provider.generateSpeech('नमस्ते', { speed: 1.0 });
+    assert.strictEqual(capturedPayload.prosody, undefined, 'Speed 1.0 should omit prosody');
+
+    // Speed clamped between 0.5 and 2.0
+    await provider.generateSpeech('नमस्ते', { speed: 3.5 });
+    assert.deepStrictEqual(capturedPayload.prosody, { speed: 2.0 }, 'Speed > 2.0 should clamp to 2.0');
+
+    await provider.generateSpeech('नमस्ते', { speed: 0.2 });
+    assert.deepStrictEqual(capturedPayload.prosody, { speed: 0.5 }, 'Speed < 0.5 should clamp to 0.5');
+  } finally {
+    global.fetch = originalFetch;
+  }
 });
 
 test('Fish Audio - HTTP Mocking: 200 Success, Rate Limit, Auth Failure & Timeout', async () => {
@@ -188,16 +299,16 @@ test('Fish Audio - HTTP Mocking: 200 Success, Rate Limit, Auth Failure & Timeout
 
     const provider = new FishAudioProvider({ apiKey: 'test-valid-key' });
     const result = await provider.generateSpeech('नमस्ते दुनिया', {
-      voiceId: 'fish_hi_aarav',
+      voice: 'fish_default',
       emotion: 'happy',
-      intensity: 0.20
+      emotionIntensity: 15
     });
 
     assert.ok(result.audioBuffer, 'Should return audioBuffer');
     assert.strictEqual(result.format, 'mp3');
     assert.ok(result.durationMs > 0, 'Should estimate/probe durationMs');
 
-    // 2. Rate limit (429 Too Many Requests)
+    // 2. Rate limit (429 Too Many Requests) - fails cleanly without spinning
     global.fetch = async () => {
       return {
         ok: false,
@@ -211,10 +322,10 @@ test('Fish Audio - HTTP Mocking: 200 Success, Rate Limit, Auth Failure & Timeout
         await provider.generateSpeech('नमस्ते');
       },
       /rate limit/i,
-      'Should report rate limit on HTTP 429'
+      'Should report rate limit on HTTP 429 immediately without retry spinning'
     );
 
-    // 3. Auth failure (401 Unauthorized)
+    // 3. Auth failure (401 Unauthorized) - fails cleanly without spinning
     global.fetch = async () => {
       return {
         ok: false,
@@ -228,12 +339,11 @@ test('Fish Audio - HTTP Mocking: 200 Success, Rate Limit, Auth Failure & Timeout
         await provider.generateSpeech('नमस्ते');
       },
       /authentication failed/i,
-      'Should report authentication error on HTTP 401'
+      'Should report authentication error on HTTP 401 without retry spinning'
     );
 
-    // 4. Timeout handling
+    // 4. Timeout handling with AbortController
     global.fetch = async (_url: any, init: any) => {
-      // Simulate abort triggered by signal
       const signal = init?.signal as AbortSignal;
       return new Promise((_, reject) => {
         if (signal?.aborted) {
@@ -266,26 +376,6 @@ test('Fish Audio - HTTP Mocking: 200 Success, Rate Limit, Auth Failure & Timeout
   }
 });
 
-test('TTS Provider Factory - Coexistence of Kokoro-82M and Fish Audio', async () => {
-  // 1. Get Kokoro provider
-  const kokoro = await TTSProviderFactory.getProvider('kokoro');
-  assert.strictEqual(kokoro.name, 'kokoro');
-
-  // 2. Get Fish Audio provider
-  const fish = await TTSProviderFactory.getProvider('fish_audio');
-  assert.strictEqual(fish.name, 'fish_audio');
-
-  // 3. Catalogue includes both Kokoro 32 voices and Fish Audio voices
-  const catalogue = await TTSProviderFactory.getAllVoices();
-  assert.ok(catalogue.voices.length >= 32, 'Must preserve at least 32 Kokoro voices');
-  assert.ok(Array.isArray(catalogue.fishAudioVoices), 'Should include fishAudioVoices list');
-  assert.ok(catalogue.fishAudioVoices.length >= 8, 'Should include at least 8 Fish Audio voices');
-
-  // 4. Provider list includes fish_audio
-  assert.ok(catalogue.providers.some(p => p.id === 'fish_audio'), 'Providers array should include fish_audio');
-  assert.ok(catalogue.providers.some(p => p.id === 'kokoro'), 'Providers array should include kokoro');
-});
-
 test('Fish Audio - Multi-Key Parsing and Sanitization', () => {
   const parsed1 = parseApiKeys('key1, key2 , key3');
   assert.deepStrictEqual(parsed1, ['key1', 'key2', 'key3']);
@@ -300,75 +390,22 @@ test('Fish Audio - Multi-Key Parsing and Sanitization', () => {
   assert.deepStrictEqual(empty, []);
 });
 
-test('Fish Audio - Round-Robin Multi-Key Rotation', () => {
-  const provider = new FishAudioProvider({
-    apiKeys: ['test-key-1', 'test-key-2', 'test-key-3']
-  });
+test('TTS Provider Factory - Coexistence of Kokoro-82M and Fish Audio', async () => {
+  // 1. Get Kokoro provider
+  const kokoro = await TTSProviderFactory.getProvider('kokoro');
+  assert.strictEqual(kokoro.name, 'kokoro');
 
-  const keys = provider.getEffectiveApiKeys();
-  assert.strictEqual(keys.length, 3);
-  assert.strictEqual(keys[0], 'test-key-1');
-  assert.strictEqual(keys[1], 'test-key-2');
-  assert.strictEqual(keys[2], 'test-key-3');
+  // 2. Get Fish Audio provider
+  const fish = await TTSProviderFactory.getProvider('fish_audio');
+  assert.strictEqual(fish.name, 'fish_audio');
 
-  // Verify round-robin sequence
-  assert.strictEqual(provider.getNextApiKey(), 'test-key-1');
-  assert.strictEqual(provider.getNextApiKey(), 'test-key-2');
-  assert.strictEqual(provider.getNextApiKey(), 'test-key-3');
-  assert.strictEqual(provider.getNextApiKey(), 'test-key-1'); // loops back
+  // 3. Catalogue includes both Kokoro 32 voices and Fish Audio voices
+  const catalogue = await TTSProviderFactory.getAllVoices();
+  assert.ok(catalogue.voices.length >= 32, 'Must preserve at least 32 Kokoro voices');
+  assert.ok(Array.isArray(catalogue.fishAudioVoices), 'Should include fishAudioVoices list');
+  assert.ok(catalogue.fishAudioVoices.some(v => v.id === 'fish_default'), 'Should include honest fish_default');
+
+  // 4. Provider list includes fish_audio and kokoro
+  assert.ok(catalogue.providers.some(p => p.id === 'fish_audio'), 'Providers array should include fish_audio');
+  assert.ok(catalogue.providers.some(p => p.id === 'kokoro'), 'Providers array should include kokoro');
 });
-
-test('Fish Audio - Automatic Failover on 429 Rate Limit', async () => {
-  const originalFetch = global.fetch;
-  const usedKeys: string[] = [];
-
-  try {
-    const mockAudioBytes = Buffer.from('MULTI-KEY-FAILOVER-MP3-STREAM');
-
-    global.fetch = async (_url: any, init: any) => {
-      const authHeader = init?.headers?.['Authorization'] as string;
-      const key = authHeader.replace('Bearer ', '');
-      usedKeys.push(key);
-
-      // Key 1 hits rate limit (429)
-      if (key === 'key-rate-limited') {
-        return {
-          ok: false,
-          status: 429,
-          text: async () => 'Rate limit exceeded for key-rate-limited'
-        } as any;
-      }
-
-      // Key 2 succeeds (200)
-      if (key === 'key-healthy') {
-        return {
-          ok: true,
-          status: 200,
-          headers: new Headers({ 'content-type': 'audio/mpeg' }),
-          arrayBuffer: async () => mockAudioBytes.buffer
-        } as any;
-      }
-
-      return {
-        ok: false,
-        status: 500,
-        text: async () => 'Unknown key'
-      } as any;
-    };
-
-    const multiKeyProvider = new FishAudioProvider({
-      apiKeys: ['key-rate-limited', 'key-healthy']
-    });
-
-    const result = await multiKeyProvider.generateSpeech('नमस्ते बच्चों');
-    assert.ok(result.audioBuffer, 'Should successfully generate audio after failover');
-    assert.strictEqual(result.format, 'mp3');
-
-    // Both keys should have been called in sequence
-    assert.ok(usedKeys.includes('key-rate-limited'), 'Should have attempted first key');
-    assert.ok(usedKeys.includes('key-healthy'), 'Should have failed over to second key');
-  } finally {
-    global.fetch = originalFetch;
-  }
-});
-

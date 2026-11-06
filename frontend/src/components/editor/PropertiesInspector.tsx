@@ -23,6 +23,14 @@ import {
   StoryBackgroundImage,
   generateAllSceneDialogueAudios,
   generateSceneImage,
+  getStoryVisualBible,
+  updateStoryVisualBible,
+  generateSceneBackgroundPrompt,
+  getScenePromptHistory,
+  saveScenePrompt,
+  restoreScenePrompt,
+  PromptHistoryEntry,
+  StoryVisualBible,
 } from '../../services/editor.service';
 import { EMOTION_OPTIONS } from '../../utils/emotionSuggester';
 import {
@@ -40,7 +48,13 @@ import {
   ImageIcon,
   UploadIcon,
   SettingsIcon,
+  CopyIcon,
+  ArrowRightIcon,
+  BookOpenIcon,
+  ChevronDownIcon,
+  ChevronUpIcon,
 } from '../common/Icons';
+import { CollapsibleSection } from './CollapsibleSection';
 
 
 export type InspectorSection =
@@ -256,6 +270,20 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
   const [bgImgLoadError, setBgImgLoadError] = useState(false);
   const [previewImgError, setPreviewImgError] = useState(false);
 
+  // V2 Story Visual Bible & Prompt Generation State (Google Flow Workflow A)
+  const [visualBible, setVisualBible] = useState<StoryVisualBible | null>(null);
+  const [isLoadingVisualBible, setIsLoadingVisualBible] = useState<boolean>(false);
+  const [promptHistory, setPromptHistory] = useState<PromptHistoryEntry[]>([]);
+  const [showPromptHistory, setShowPromptHistory] = useState<boolean>(false);
+  const [isGeneratingV2Prompt, setIsGeneratingV2Prompt] = useState<boolean>(false);
+  const [copiedPromptToast, setCopiedPromptToast] = useState<boolean>(false);
+  const [promptValidationInfo, setPromptValidationInfo] = useState<{
+    valid: boolean;
+    violations: string[];
+  } | null>(null);
+  const flowFileInputRef = useRef<HTMLInputElement | null>(null);
+  const [isUploadingFlowBg, setIsUploadingFlowBg] = useState<boolean>(false);
+
   const isBgExplicitlyRemoved = Boolean((scene.animationData as any)?.background?.removed);
   const currentBgUrl = isBgExplicitlyRemoved ? '' : (scene.animationData?.background?.imageUrl || scene.imageUrl || '');
   const currentBgFit = scene.animationData?.background?.fit || 'cover';
@@ -306,6 +334,31 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
     (scene.animationData as any)?.background?.imageUrl,
     scene.imageUrl,
   ]);
+
+  // Load Story Visual Bible
+  useEffect(() => {
+    if (storyId) {
+      setIsLoadingVisualBible(true);
+      getStoryVisualBible(storyId)
+        .then((bible) => {
+          setVisualBible(bible);
+          if (bible?.artDirection?.primaryStyle) {
+            setLocalVisualStyle(bible.artDirection.primaryStyle);
+          }
+        })
+        .catch((err) => console.warn('Could not load Visual Bible:', err))
+        .finally(() => setIsLoadingVisualBible(false));
+    }
+  }, [storyId]);
+
+  // Load Scene Prompt History
+  useEffect(() => {
+    if (scene.sceneId) {
+      getScenePromptHistory(scene.sceneId)
+        .then((hist) => setPromptHistory(hist))
+        .catch((err) => console.warn('Could not load prompt history:', err));
+    }
+  }, [scene.sceneId]);
 
   // Kokoro TTS Studio state
   const [ttsVoices, setTtsVoices] = useState<SupportedVoice[]>([]);
@@ -411,6 +464,17 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
   const handlePromptBlur = () => {
     if (localPrompt !== scene.visualPrompt) {
       onUpdateScene(scene.sceneId, { visualPrompt: localPrompt });
+      if (localPrompt.trim().length > 0) {
+        saveScenePrompt(scene.sceneId, {
+          prompt: localPrompt,
+          cameraPerspective: localCamera,
+          aspectRatio: localAspectRatio,
+        })
+          .then((res) => {
+            if (res.history) setPromptHistory(res.history);
+          })
+          .catch(() => {});
+      }
     }
   };
 
@@ -597,6 +661,111 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
     } finally {
       setIsUploadingBg(false);
       if (bgFileInputRef.current) bgFileInputRef.current.value = '';
+    }
+  };
+
+  // -------------------------------------------------------------------------
+  // Google Flow Manual Workflow Handlers (Workflow A - Zero API Cost)
+  // -------------------------------------------------------------------------
+  const handleGenerateV2Prompt = async () => {
+    setIsGeneratingV2Prompt(true);
+    setBgError(null);
+    try {
+      const res = await generateSceneBackgroundPrompt(scene.sceneId, {
+        aspectRatio: localAspectRatio,
+        cameraDirection: localCamera,
+        visualStyle: localVisualStyle,
+      });
+
+      if (res.success && res.prompt) {
+        setLocalPrompt(res.prompt);
+        if (res.validation) {
+          setPromptValidationInfo(res.validation);
+        }
+        if (res.history) {
+          setPromptHistory(res.history);
+        }
+        onUpdateScene(scene.sceneId, {
+          visualPrompt: res.prompt,
+          cameraDirection: localCamera,
+        });
+      }
+    } catch (err: any) {
+      console.error('Failed to generate V2 scene prompt:', err);
+      setBgError(err.message || 'Failed to generate V2 scene prompt');
+    } finally {
+      setIsGeneratingV2Prompt(false);
+    }
+  };
+
+  const handleCopyV2Prompt = async () => {
+    if (!localPrompt) return;
+    try {
+      await navigator.clipboard.writeText(localPrompt);
+      setCopiedPromptToast(true);
+      setTimeout(() => setCopiedPromptToast(false), 2500);
+    } catch (err) {
+      console.error('Failed to copy to clipboard', err);
+    }
+  };
+
+  const handleOpenGoogleFlow = () => {
+    window.open('https://labs.google/fx/tools/flow', '_blank', 'noopener,noreferrer');
+  };
+
+  const handleUploadFlowBackgroundFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const validTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
+    if (!validTypes.includes(file.type.toLowerCase())) {
+      setBgError('Please select a valid PNG, JPEG, or WebP image file.');
+      return;
+    }
+
+    const MAX_SIZE = 15 * 1024 * 1024;
+    if (file.size > MAX_SIZE) {
+      setBgError('Image file exceeds the 15MB limit.');
+      return;
+    }
+
+    setBgError(null);
+    setIsUploadingFlowBg(true);
+    try {
+      const res = await uploadSceneBackground(
+        scene.sceneId,
+        file,
+        currentBgFit,
+        'google_flow_manual',
+        localPrompt
+      );
+      if (res.scene) {
+        onUpdateScene(scene.sceneId, res.scene);
+      }
+    } catch (err: any) {
+      console.error('Flow background upload failed:', err);
+      setBgError(err.message || 'Failed to upload Google Flow background image');
+    } finally {
+      setIsUploadingFlowBg(false);
+      if (flowFileInputRef.current) flowFileInputRef.current.value = '';
+    }
+  };
+
+  const handleRestorePrompt = async (versionId: string) => {
+    try {
+      const res = await restoreScenePrompt(scene.sceneId, versionId);
+      if (res.success && res.prompt) {
+        setLocalPrompt(res.prompt);
+        if (res.history) {
+          setPromptHistory(res.history);
+        }
+        onUpdateScene(scene.sceneId, {
+          visualPrompt: res.prompt,
+        });
+      }
+    } catch (err: any) {
+      console.error('Failed to restore prompt version:', err);
+      setBgError(err.message || 'Failed to restore prompt version');
     }
   };
 
@@ -838,6 +1007,70 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
     normalizeInspectorSection(activeInspectorTabProp)
   );
   const activeSection = normalizeInspectorSection(activeInspectorTabProp) || internalSection;
+
+  // Collapsible inspector section states (smart defaults to minimize scrolling)
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
+    // Background tab
+    'bg-plate': true,
+    'bg-bible': false,
+    'bg-flow': true,
+    'bg-inapp': false,
+    // Overview tab
+    'ov-details': true,
+    'ov-media': true,
+    // Timing tab
+    'tm-duration': true,
+    'tm-ripple': true,
+    // Narration tab
+    'nr-text': true,
+    'nr-studio': true,
+    'nr-player': true,
+    // Characters tab
+    'ch-list': true,
+    'ch-add': true,
+    'ch-story': false,
+    // Operations tab
+    'op-timeline': true,
+    'op-history': true,
+  });
+
+  const isSectionOpen = (key: string, defaultVal = true) => {
+    return collapsedSections[key] !== undefined ? collapsedSections[key] : defaultVal;
+  };
+
+  const toggleSection = (key: string, defaultVal = true) => {
+    setCollapsedSections((prev) => ({
+      ...prev,
+      [key]: !(prev[key] !== undefined ? prev[key] : defaultVal),
+    }));
+  };
+
+  const sectionKeysForTab: Record<InspectorSection, string[]> = {
+    overview: ['ov-details', 'ov-media'],
+    timing: ['tm-duration', 'tm-ripple'],
+    narration: ['nr-text', 'nr-studio', 'nr-player'],
+    background: ['bg-plate', 'bg-bible', 'bg-flow', 'bg-inapp'],
+    characters: ['ch-list', 'ch-add', 'ch-story'],
+    dialogue: [],
+    overlays: [],
+    operations: ['op-timeline', 'op-history'],
+  };
+
+  const activeTabSectionKeys = sectionKeysForTab[activeSection] || [];
+  const areAllSectionsOpenInTab =
+    activeTabSectionKeys.length > 0 && activeTabSectionKeys.every((k) => isSectionOpen(k));
+
+  const handleToggleAllSectionsInTab = () => {
+    if (activeTabSectionKeys.length === 0) return;
+    const nextState = !areAllSectionsOpenInTab;
+    setCollapsedSections((prev) => {
+      const updated = { ...prev };
+      activeTabSectionKeys.forEach((k) => {
+        updated[k] = nextState;
+      });
+      return updated;
+    });
+  };
 
   const handleSectionChange = (sec: InspectorSection) => {
     setInternalSection(sec);
@@ -1200,63 +1433,88 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
             Scene {scene.number} &bull; <span style={{ color: scene.generationStatus === 'completed' ? '#34d399' : 'inherit' }}>{scene.generationStatus || 'draft'}</span>
           </span>
         </div>
-        {onClose && (
-          <button
-            type="button"
-            className="ed-icon-btn"
-            onClick={onClose}
-            title="Collapse inspector"
-            style={{ width: '26px', height: '26px', fontSize: '11px', display: 'grid', placeItems: 'center' }}
-          >
-            ✕
-          </button>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          {activeTabSectionKeys.length > 0 && (
+            <button
+              type="button"
+              className="ed-collapse-all-btn"
+              onClick={handleToggleAllSectionsInTab}
+              title="Toggle expand or collapse all cards in this tab"
+            >
+              {areAllSectionsOpenInTab ? (
+                <>
+                  <ChevronUpIcon size={12} />
+                  <span>Collapse All</span>
+                </>
+              ) : (
+                <>
+                  <ChevronDownIcon size={12} />
+                  <span>Expand All</span>
+                </>
+              )}
+            </button>
+          )}
+          {onClose && (
+            <button
+              type="button"
+              className="ed-icon-btn"
+              onClick={onClose}
+              title="Collapse inspector"
+              style={{ width: '26px', height: '26px', fontSize: '11px', display: 'grid', placeItems: 'center' }}
+            >
+              ✕
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Content area */}
       <div className="ed-inspector-content">
           {activeSection === 'overview' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <div className="ed-field-group">
-                <label className="ed-field-label">Scene Title</label>
-                <input
-                  className="ed-input"
-                  value={localTitle}
-                  onChange={(e) => setLocalTitle(e.target.value)}
-                  onBlur={handleTitleBlur}
-                />
-              </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <CollapsibleSection
+                id="ov-details"
+                title="Scene Details & Visual Prompt"
+                icon={<SparklesIcon size={14} color="#8b5cf6" />}
+                isOpen={isSectionOpen('ov-details', true)}
+                onToggle={() => toggleSection('ov-details', true)}
+                variant="card"
+              >
+                <div className="ed-field-group">
+                  <label className="ed-field-label">Scene Title</label>
+                  <input
+                    className="ed-input"
+                    value={localTitle}
+                    onChange={(e) => setLocalTitle(e.target.value)}
+                    onBlur={handleTitleBlur}
+                  />
+                </div>
 
-              <div className="ed-field-group">
-                <label className="ed-field-label">Visual Scene Prompt</label>
-                <textarea
-                  className="ed-textarea"
-                  value={localPrompt}
-                  onChange={(e) => setLocalPrompt(e.target.value)}
-                  onBlur={handlePromptBlur}
-                  placeholder="Describe the visual composition, characters, action..."
-                />
-              </div>
+                <div className="ed-field-group">
+                  <label className="ed-field-label">Visual Scene Prompt</label>
+                  <textarea
+                    className="ed-textarea"
+                    value={localPrompt}
+                    onChange={(e) => setLocalPrompt(e.target.value)}
+                    onBlur={handlePromptBlur}
+                    placeholder="Describe the visual composition, characters, action..."
+                  />
+                </div>
 
-              <div className="ed-field-group">
-                <label className="ed-field-label">Camera Direction</label>
-                <select className="ed-select" value={localCamera} onChange={handleCameraChange}>
-                  <option value="Eye-level wide shot">Eye-level wide shot</option>
-                  <option value="Medium shot">Medium shot</option>
-                  <option value="Close-up">Close-up</option>
-                  <option value="High angle / Bird's eye view">High angle / Bird's eye view</option>
-                  <option value="Bird's-eye view">Bird's-eye view</option>
-                  <option value="Low-angle shot">Low-angle shot</option>
-                  <option value="Over-the-shoulder shot">Over-the-shoulder shot</option>
-                  <option value="Wide establishing shot">Wide establishing shot</option>
-
-
-
-
-
-
-                </select>
-              </div>
+                <div className="ed-field-group">
+                  <label className="ed-field-label">Camera Direction</label>
+                  <select className="ed-select" value={localCamera} onChange={handleCameraChange}>
+                    <option value="Eye-level wide shot">Eye-level wide shot</option>
+                    <option value="Medium shot">Medium shot</option>
+                    <option value="Close-up">Close-up</option>
+                    <option value="High angle / Bird's eye view">High angle / Bird's eye view</option>
+                    <option value="Bird's-eye view">Bird's-eye view</option>
+                    <option value="Low-angle shot">Low-angle shot</option>
+                    <option value="Over-the-shoulder shot">Over-the-shoulder shot</option>
+                    <option value="Wide establishing shot">Wide establishing shot</option>
+                  </select>
+                </div>
+              </CollapsibleSection>
 
               {/* Media Generation Workflows */}
               {(() => {
@@ -1264,7 +1522,23 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                 const hasVideo = Boolean(scene.videoUrl);
 
                 return (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '2px' }}>
+                  <CollapsibleSection
+                    id="ov-media"
+                    title="Scene Media & Motion Workflows"
+                    icon={<FilmIcon size={14} color="#34d399" />}
+                    badge={
+                      hasVideo ? (
+                        <span style={{ fontSize: '10px', color: '#34d399', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                          <FilmIcon size={11} /> Video Ready
+                        </span>
+                      ) : hasVisual ? (
+                        <span style={{ fontSize: '10px', color: '#60a5fa', fontWeight: 600 }}>Image Ready</span>
+                      ) : undefined
+                    }
+                    isOpen={isSectionOpen('ov-media', true)}
+                    onToggle={() => toggleSection('ov-media', true)}
+                    variant="card"
+                  >
                     <div>
                       <button
                         className="ed-btn-action primary"
@@ -1332,78 +1606,96 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                         </div>
                       )}
                     </div>
-                  </div>
+                  </CollapsibleSection>
                 );
               })()}
             </div>
           )}
 
           {activeSection === 'timing' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <div className="ed-field-group">
-                <div className="ed-field-label">
-                  <span>Start / End Timecode</span>
-                  <span style={{ fontFamily: 'monospace' }}>{formatDurationHuman(durationMs)}</span>
-                </div>
-
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: '1fr 1fr',
-                    gap: '8px',
-                    fontSize: '12px',
-                    fontFamily: 'monospace',
-                    background: 'var(--ed-surface-elevated)',
-                    padding: '8px',
-                    borderRadius: '6px',
-                  }}
-                >
-                  <div>Start: {formatTimeMs(scene.startMs)}</div>
-                  <div>End: {formatTimeMs(scene.endMs)}</div>
-                </div>
-
-                {/* Duration Adjust: Direct Numeric Input & Steppers */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
-                  <span style={{ fontSize: '11px', color: 'var(--ed-text-muted)' }}>Duration:</span>
-                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                    <input
-                      type="number"
-                      step="0.5"
-                      min="1.5"
-                      max="300"
-                      className="ed-input"
-                      style={{ width: '64px', padding: '4px 6px', fontSize: '12px', textAlign: 'center', fontFamily: 'monospace' }}
-                      value={durationInputVal}
-                      onChange={(e) => setDurationInputVal(e.target.value)}
-                      onBlur={handleDurationInputBlur}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          handleDurationInputBlur();
-                        }
-                      }}
-                    />
-                    <span style={{ fontSize: '11px', color: 'var(--ed-text-muted)', fontFamily: 'monospace' }}>s</span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <CollapsibleSection
+                id="tm-duration"
+                title="Timecode & Duration"
+                icon={<ScissorsIcon size={14} color="#c4b5fd" />}
+                badge={<span style={{ fontFamily: 'monospace', fontSize: '11px', color: '#c4b5fd' }}>{formatDurationHuman(durationMs)}</span>}
+                isOpen={isSectionOpen('tm-duration', true)}
+                onToggle={() => toggleSection('tm-duration', true)}
+                variant="card"
+              >
+                <div className="ed-field-group">
+                  <div className="ed-field-label">
+                    <span>Start / End Timecode</span>
+                    <span style={{ fontFamily: 'monospace' }}>{formatDurationHuman(durationMs)}</span>
                   </div>
-                  <button className="ed-tool-btn" onClick={() => handleDurationStep(-1)} title="Decrease duration by 1s">
-                    -1s
-                  </button>
-                  <button className="ed-tool-btn" onClick={() => handleDurationStep(1)} title="Increase duration by 1s">
-                    +1s
-                  </button>
-                  {scene.actualAudioDurationMs && scene.actualAudioDurationMs > durationMs && (
-                    <button
-                      className="ed-tool-btn"
-                      style={{ background: 'rgba(239, 68, 68, 0.2)', borderColor: '#ef4444', color: '#fca5a5' }}
-                      onClick={handleFitToVoice}
-                    >
-                      Fit to Voice
-                    </button>
-                  )}
-                </div>
 
-                {/* Ripple Mode Indicator & Explanation */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '8px', fontSize: '11px', color: 'var(--ed-text-muted)' }}>
-                  <span>Ripple Edit: <strong style={{ color: isRippleOn ? '#c4b5fd' : '#94a3b8' }}>{isRippleOn ? 'ON' : 'OFF'}</strong></span>
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: '1fr 1fr',
+                      gap: '8px',
+                      fontSize: '12px',
+                      fontFamily: 'monospace',
+                      background: 'var(--ed-surface-elevated)',
+                      padding: '8px',
+                      borderRadius: '6px',
+                    }}
+                  >
+                    <div>Start: {formatTimeMs(scene.startMs)}</div>
+                    <div>End: {formatTimeMs(scene.endMs)}</div>
+                  </div>
+
+                  {/* Duration Adjust: Direct Numeric Input & Steppers */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
+                    <span style={{ fontSize: '11px', color: 'var(--ed-text-muted)' }}>Duration:</span>
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                      <input
+                        type="number"
+                        step="0.5"
+                        min="1.5"
+                        max="300"
+                        className="ed-input"
+                        style={{ width: '64px', padding: '4px 6px', fontSize: '12px', textAlign: 'center', fontFamily: 'monospace' }}
+                        value={durationInputVal}
+                        onChange={(e) => setDurationInputVal(e.target.value)}
+                        onBlur={handleDurationInputBlur}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            handleDurationInputBlur();
+                          }
+                        }}
+                      />
+                      <span style={{ fontSize: '11px', color: 'var(--ed-text-muted)', fontFamily: 'monospace' }}>s</span>
+                    </div>
+                    <button className="ed-tool-btn" onClick={() => handleDurationStep(-1)} title="Decrease duration by 1s">
+                      -1s
+                    </button>
+                    <button className="ed-tool-btn" onClick={() => handleDurationStep(1)} title="Increase duration by 1s">
+                      +1s
+                    </button>
+                    {scene.actualAudioDurationMs && scene.actualAudioDurationMs > durationMs && (
+                      <button
+                        className="ed-tool-btn"
+                        style={{ background: 'rgba(239, 68, 68, 0.2)', borderColor: '#ef4444', color: '#fca5a5' }}
+                        onClick={handleFitToVoice}
+                      >
+                        Fit to Voice
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </CollapsibleSection>
+
+              <CollapsibleSection
+                id="tm-ripple"
+                title="Ripple Edit & Synchronization"
+                badge={<span style={{ fontSize: '10px', color: isRippleOn ? '#c4b5fd' : '#94a3b8', fontWeight: 600 }}>{isRippleOn ? 'Ripple ON' : 'Ripple OFF'}</span>}
+                isOpen={isSectionOpen('tm-ripple', true)}
+                onToggle={() => toggleSection('tm-ripple', true)}
+                variant="card"
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '11px', color: 'var(--ed-text-muted)' }}>
+                  <span>Ripple Edit Mode: <strong style={{ color: isRippleOn ? '#c4b5fd' : '#94a3b8' }}>{isRippleOn ? 'ON' : 'OFF'}</strong></span>
                   {onToggleRipple && (
                     <button
                       type="button"
@@ -1435,69 +1727,83 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                     <span>{timingValidation.warning}</span>
                   </div>
                 )}
-              </div>
+              </CollapsibleSection>
             </div>
           )}
 
           {activeSection === 'narration' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              {/* Narration Section */}
-              <div className="ed-field-group">
-                <div className="ed-field-label">
-
-            <span>Narration Text</span>
-            {scene.actualAudioDurationMs ? (
-              <span className="ed-audio-badge-verified" style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-                <CheckIcon size={11} /> {(scene.actualAudioDurationMs / 1000).toFixed(1)}s Verified
-              </span>
-            ) : (
-              <span className="ed-audio-badge-estimated">
-                ~{formatDurationHuman(estimatedSpeechMs)} Est.
-              </span>
-            )}
-          </div>
-          <textarea
-            className="ed-textarea"
-            value={localNarration}
-            onChange={(e) => setLocalNarration(e.target.value)}
-            onBlur={handleNarrationBlur}
-            placeholder="Type spoken narration for this scene..."
-          />
-
-          {/* Kokoro-82M Voice Studio Controls */}
-          <div
-            className="ed-voice-studio-panel"
-            style={{
-              background: 'var(--ed-bg)',
-              border: '1px solid var(--ed-border)',
-              borderRadius: '8px',
-              padding: '12px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '10px',
-              marginTop: '4px',
-              marginBottom: '8px',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: '11px', fontWeight: 700, color: '#c4b5fd', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                🎙️ Scene Narrator Voice Studio
-              </span>
-              <span
-                style={{
-                  fontSize: '10px',
-                  padding: '2px 6px',
-                  borderRadius: '4px',
-                  background: selectedProvider === 'kokoro' ? 'rgba(52, 211, 153, 0.15)' : 'rgba(245, 158, 11, 0.15)',
-                  color: selectedProvider === 'kokoro' ? '#34d399' : '#fbbf24',
-                  fontWeight: 600,
-                }}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <CollapsibleSection
+                id="nr-text"
+                title="Spoken Narration"
+                icon={<BookOpenIcon size={14} color="#c4b5fd" />}
+                badge={
+                  scene.actualAudioDurationMs ? (
+                    <span className="ed-audio-badge-verified" style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                      <CheckIcon size={10} /> {(scene.actualAudioDurationMs / 1000).toFixed(1)}s Verified
+                    </span>
+                  ) : (
+                    <span className="ed-audio-badge-estimated">
+                      ~{formatDurationHuman(estimatedSpeechMs)} Est.
+                    </span>
+                  )
+                }
+                isOpen={isSectionOpen('nr-text', true)}
+                onToggle={() => toggleSection('nr-text', true)}
+                variant="card"
               >
-                {selectedProvider === 'kokoro' ? '● Kokoro-82M (Local)' : selectedProvider === 'fish_audio' ? '● Fish Audio (s2.1-pro-free)' : '● Google TTS (Cloud)'}
-              </span>
-            </div>
+                <textarea
+                  className="ed-textarea"
+                  value={localNarration}
+                  onChange={(e) => setLocalNarration(e.target.value)}
+                  onBlur={handleNarrationBlur}
+                  placeholder="Type spoken narration for this scene..."
+                />
 
-            {/* Provider & Language Selection */}
+                {/* Outdated Narration Warning Banner */}
+                {Boolean(scene.audioUrl && localNarration.trim() !== (scene.narration || '').trim()) && (
+                  <div className="ed-warning-box" style={{ background: 'rgba(234, 179, 8, 0.1)', borderColor: '#eab308', color: '#fef08a', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <AlertTriangleIcon size={14} color="#eab308" />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 600 }}>Narration text changed</div>
+                      <div style={{ fontSize: '11px', marginTop: '2px', opacity: 0.9 }}>Existing voice audio does not match the edited text.</div>
+                      <button
+                        className="ed-tool-btn"
+                        style={{ marginTop: '6px', background: '#eab308', color: '#1a1a1a', fontWeight: 'bold' }}
+                        onClick={handleGenerateVoiceClick}
+                        disabled={isGeneratingVoice}
+                      >
+                        {isGeneratingVoice ? 'Regenerating...' : 'Regenerate Voice'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </CollapsibleSection>
+
+              {/* Kokoro-82M / Fish Audio Voice Studio Controls */}
+              <CollapsibleSection
+                id="nr-studio"
+                title="Scene Narrator Voice Studio"
+                icon={<VolumeHighIcon size={14} color="#c4b5fd" />}
+                badge={
+                  <span
+                    style={{
+                      fontSize: '10px',
+                      padding: '2px 6px',
+                      borderRadius: '4px',
+                      background: selectedProvider === 'kokoro' ? 'rgba(52, 211, 153, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                      color: selectedProvider === 'kokoro' ? '#34d399' : '#fbbf24',
+                      fontWeight: 600,
+                    }}
+                  >
+                    {selectedProvider === 'kokoro' ? '● Kokoro-82M (Local)' : selectedProvider === 'fish_audio' ? '● Fish Audio (s2.1-pro-free)' : '● Google TTS (Cloud)'}
+                  </span>
+                }
+                isOpen={isSectionOpen('nr-studio', true)}
+                onToggle={() => toggleSection('nr-studio', true)}
+                variant="card"
+              >
+                {/* Provider & Language Selection */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
               <div>
                 <label style={{ fontSize: '10px', color: 'var(--ed-text-muted)', display: 'block', marginBottom: '3px' }}>
@@ -1507,7 +1813,17 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                   className="ed-input"
                   style={{ fontSize: '11px', padding: '4px 6px', height: '28px' }}
                   value={selectedProvider}
-                  onChange={(e) => setSelectedProvider(e.target.value as any)}
+                  onChange={(e) => {
+                    const p = e.target.value as any;
+                    setSelectedProvider(p);
+                    if (p === 'fish_audio') {
+                      setSelectedVoice('fish_default');
+                    } else if (p === 'kokoro') {
+                      setSelectedVoice(selectedLanguage === 'hi' ? 'hf_alpha' : 'af_heart');
+                    } else {
+                      setSelectedVoice(selectedLanguage === 'hi' ? 'hi-IN-Standard' : 'en-US-Standard');
+                    }
+                  }}
                 >
                   <option value="kokoro">Kokoro-82M (Neural Local)</option>
                   <option value="fish_audio">Fish Audio (Cloud - Free s2.1-pro-free)</option>
@@ -1526,9 +1842,9 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                   onChange={(e) => {
                     const l = e.target.value;
                     setSelectedLanguage(l);
-                    if (l === 'hi') setSelectedVoice(selectedProvider === 'fish_audio' ? 'fish_hi_aditi' : 'hf_alpha');
-                    else if (l === 'en-gb') setSelectedVoice(selectedProvider === 'fish_audio' ? 'fish_en_clara' : 'bf_emma');
-                    else setSelectedVoice(selectedProvider === 'fish_audio' ? 'fish_en_clara' : 'af_heart');
+                    if (l === 'hi') setSelectedVoice(selectedProvider === 'fish_audio' ? 'fish_default' : 'hf_alpha');
+                    else if (l === 'en-gb') setSelectedVoice(selectedProvider === 'fish_audio' ? 'fish_default' : 'bf_emma');
+                    else setSelectedVoice(selectedProvider === 'fish_audio' ? 'fish_default' : 'af_heart');
                   }}
                 >
                   <option value="hi">🇮🇳 Hindi (हिन्दी) [Default]</option>
@@ -1586,20 +1902,23 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                 value={selectedVoice}
                 onChange={(e) => setSelectedVoice(e.target.value)}
               >
-                {(selectedProvider === 'fish_audio' && fishAudioVoices.length > 0 ? fishAudioVoices : ttsVoices)
-                  .filter((v) => {
+                {(selectedProvider === 'fish_audio' && fishAudioVoices.length > 0 ? fishAudioVoices : (selectedProvider === 'fish_audio' ? [{ id: 'fish_default', name: 'Fish Audio Default Voice (Multilingual)', gender: 'neutral', lang: 'hi', accent: 'Multilingual' }] : ttsVoices))
+                  .filter((v: any) => {
+                    if (selectedProvider === 'fish_audio') {
+                      return true; // Fish Audio s2.1 base voice is multilingual
+                    }
                     if (selectedLanguage === 'hi') {
-                      return v.lang === 'hi' || v.id.startsWith('hf_') || v.id.startsWith('hm_') || v.id.startsWith('fish_hi_');
+                      return v.lang === 'hi' || v.id.startsWith('hf_') || v.id.startsWith('hm_');
                     }
                     if (selectedLanguage === 'en-gb') {
-                      return v.lang === 'en-gb' || v.id.startsWith('bf_') || v.id.startsWith('bm_') || v.id.startsWith('fish_en_');
+                      return v.lang === 'en-gb' || v.id.startsWith('bf_') || v.id.startsWith('bm_');
                     }
                     if (selectedLanguage === 'en-us') {
-                      return v.lang === 'en-us' || v.id.startsWith('af_') || v.id.startsWith('am_') || v.id.startsWith('fish_en_');
+                      return v.lang === 'en-us' || v.id.startsWith('af_') || v.id.startsWith('am_');
                     }
                     return true;
                   })
-                  .map((v) => (
+                  .map((v: any) => (
                     <option key={v.id} value={v.id}>
                       {v.name} ({v.gender}, {v.accent || v.lang})
                     </option>
@@ -1619,7 +1938,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                 onChange={(e) => {
                   const em = e.target.value as SpeakingEmotion;
                   setVoiceEmotion(em);
-                  setVoiceEmotionIntensity(em === 'happy' ? 60 : (em === 'neutral' ? 0 : 50));
+                  setVoiceEmotionIntensity(em === 'neutral' ? 0 : 15);
                 }}
               >
                 {EMOTION_OPTIONS.map((emo) => (
@@ -1638,14 +1957,14 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                   <span style={{ fontSize: '10px', color: '#c4b5fd' }}>
                     {voiceEmotionIntensity <= 0
                       ? '0% Neutral'
-                      : voiceEmotionIntensity <= 25
-                      ? '25% Subtle'
-                      : voiceEmotionIntensity <= 50
-                      ? '50% Moderate'
-                      : voiceEmotionIntensity === 60
-                      ? '60% Happy'
-                      : voiceEmotionIntensity <= 75
-                      ? '75% Strong'
+                      : voiceEmotionIntensity <= 20
+                      ? '15% Subtle'
+                      : voiceEmotionIntensity <= 40
+                      ? '30% Moderate'
+                      : voiceEmotionIntensity <= 65
+                      ? '50% Strong'
+                      : voiceEmotionIntensity <= 85
+                      ? '75% Elevated'
                       : '100% Max'}
                   </span>
                   <span style={{ fontWeight: 700, color: 'var(--ed-text)', minWidth: '38px', textAlign: 'right' }}>
@@ -1665,10 +1984,10 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
               <div style={{ display: 'flex', gap: '4px', marginTop: '4px', flexWrap: 'wrap' }}>
                 {[
                   { val: 0, label: '0% Min' },
-                  { val: 25, label: '25% Subtle' },
-                  { val: 50, label: '50% Mod' },
-                  { val: 60, label: '60% Happy' },
-                  { val: 75, label: '75% Strong' },
+                  { val: 15, label: '15% Subtle' },
+                  { val: 30, label: '30% Mod' },
+                  { val: 50, label: '50% Strong' },
+                  { val: 75, label: '75% Elevated' },
                   { val: 100, label: '100% Max' },
                 ].map((p) => (
                   <button
@@ -1849,7 +2168,6 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                 </button>
               </div>
             </div>
-          </div>
 
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
             <span style={{ fontSize: '11px', color: 'var(--ed-text-muted)' }}>
@@ -1866,647 +2184,855 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
               {isGeneratingVoice ? 'Generating...' : scene.audioUrl ? 'Regenerate Voice' : 'Generate Voice (TTS)'}
             </button>
           </div>
-
-          {/* Outdated Narration Warning Banner */}
-          {Boolean(scene.audioUrl && localNarration.trim() !== (scene.narration || '').trim()) && (
-            <div className="ed-warning-box" style={{ background: 'rgba(234, 179, 8, 0.1)', borderColor: '#eab308', color: '#fef08a', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <AlertTriangleIcon size={14} color="#eab308" />
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 600 }}>Narration text changed</div>
-                <div style={{ fontSize: '11px', marginTop: '2px', opacity: 0.9 }}>Existing voice audio does not match the edited text.</div>
-                <button
-                  className="ed-tool-btn"
-                  style={{ marginTop: '6px', background: '#eab308', color: '#1a1a1a', fontWeight: 'bold' }}
-                  onClick={handleGenerateVoiceClick}
-                  disabled={isGeneratingVoice}
-                >
-                  {isGeneratingVoice ? 'Regenerating...' : 'Regenerate Voice'}
-                </button>
-              </div>
-            </div>
-          )}
+        </CollapsibleSection>
 
           {/* Dedicated Audio Player Widget */}
           {scene.audioUrl && (
-            <div className="ed-audio-player-card">
-              <audio
-                ref={audioPlayerRef}
-                src={resolveAssetUrl(scene.audioUrl)}
-                preload="metadata"
-                onLoadedMetadata={(e) => {
-                  setAudioDuration(e.currentTarget.duration);
-                  setAudioError(null);
-                }}
-                onTimeUpdate={(e) => setAudioCurrentTime(e.currentTarget.currentTime)}
-                onEnded={() => {
-                  setAudioPlaying(false);
-                  setAudioCurrentTime(0);
-                }}
-                onError={() => {
-                  setAudioError('Audio file could not be loaded from storage.');
-                  setAudioPlaying(false);
-                }}
-              />
+            <CollapsibleSection
+              id="nr-player"
+              title="Audio Playback & Transport"
+              icon={<PlayIcon size={14} color="#34d399" />}
+              badge={
+                <span style={{ fontSize: '10px', color: '#34d399', fontWeight: 600 }}>
+                  {(scene.actualAudioDurationMs ? scene.actualAudioDurationMs / 1000 : audioDuration).toFixed(1)}s Verified
+                </span>
+              }
+              isOpen={isSectionOpen('nr-player', true)}
+              onToggle={() => toggleSection('nr-player', true)}
+              variant="card"
+            >
+              <div className="ed-audio-player-card" style={{ border: 'none', padding: 0, background: 'transparent' }}>
+                <audio
+                  ref={audioPlayerRef}
+                  src={resolveAssetUrl(scene.audioUrl)}
+                  preload="metadata"
+                  onLoadedMetadata={(e) => {
+                    setAudioDuration(e.currentTarget.duration);
+                    setAudioError(null);
+                  }}
+                  onTimeUpdate={(e) => setAudioCurrentTime(e.currentTarget.currentTime)}
+                  onEnded={() => {
+                    setAudioPlaying(false);
+                    setAudioCurrentTime(0);
+                  }}
+                  onError={() => {
+                    setAudioError('Audio file could not be loaded from storage.');
+                    setAudioPlaying(false);
+                  }}
+                />
 
-              {audioError ? (
-                <div style={{ color: '#f87171', fontSize: '11px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                    <AlertTriangleIcon size={13} color="#f87171" />
-                    <span>{audioError}</span>
-                  </span>
-                  <button
-                    type="button"
-                    className="ed-tool-btn"
-                    style={{ fontSize: '10px' }}
-                    onClick={() => {
-                      if (audioPlayerRef.current) {
-                        audioPlayerRef.current.load();
-                        setAudioError(null);
-                      }
-                    }}
-                  >
-                    Retry
-                  </button>
-                </div>
-              ) : (
-                <>
-                  {/* Row 1: Transport & Scrubber */}
-                  <div className="ed-audio-transport-row">
+                {audioError ? (
+                  <div style={{ color: '#f87171', fontSize: '11px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                      <AlertTriangleIcon size={13} color="#f87171" />
+                      <span>{audioError}</span>
+                    </span>
                     <button
                       type="button"
-                      className="ed-audio-btn-sm"
+                      className="ed-tool-btn"
+                      style={{ fontSize: '10px' }}
                       onClick={() => {
-                        if (!audioPlayerRef.current) return;
-                        if (audioPlaying) {
-                          audioPlayerRef.current.pause();
-                          setAudioPlaying(false);
-                        } else {
-                          audioPlayerRef.current
-                            .play()
-                            .then(() => setAudioPlaying(true))
-                            .catch((err) => {
-                              console.error('Playback error:', err);
-                              setAudioError('Playback failed');
-                              setAudioPlaying(false);
-                            });
-                        }
-                      }}
-                      title={audioPlaying ? 'Pause Audio' : 'Play Audio'}
-                      style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-                    >
-                      {audioPlaying ? <PauseIcon size={11} color="#ffffff" /> : <PlayIcon size={11} color="#ffffff" />}
-                    </button>
-
-                    <input
-                      type="range"
-                      className="ed-audio-scrubber"
-                      min="0"
-                      max={audioDuration || (scene.actualAudioDurationMs ? scene.actualAudioDurationMs / 1000 : 1)}
-                      step="0.05"
-                      value={audioCurrentTime}
-                      onChange={(e) => {
-                        const newTime = parseFloat(e.target.value);
                         if (audioPlayerRef.current) {
-                          audioPlayerRef.current.currentTime = newTime;
+                          audioPlayerRef.current.load();
+                          setAudioError(null);
                         }
-                        setAudioCurrentTime(newTime);
                       }}
-                    />
-
-                    <div className="ed-audio-time">
-                      {formatTimeMs(Math.round(audioCurrentTime * 1000))} / {formatTimeMs(Math.round((audioDuration || (scene.actualAudioDurationMs ? scene.actualAudioDurationMs / 1000 : 0)) * 1000))}
-                    </div>
+                    >
+                      Retry
+                    </button>
                   </div>
-
-                  {/* Row 2: Volume, Badge & Actions */}
-                  <div className="ed-audio-controls-row">
-                    <div className="ed-audio-vol-group">
-                      <span title="Volume" style={{ display: 'inline-flex', alignItems: 'center', color: '#94a3b8' }}>
-                        <VolumeHighIcon size={12} />
-                      </span>
-                      <input
-                        type="range"
-                        className="ed-audio-vol-slider"
-                        min="0"
-                        max="1"
-                        step="0.05"
-                        value={audioVolume}
-                        onChange={(e) => {
-                          const newVol = parseFloat(e.target.value);
-                          setAudioVolume(newVol);
-                          if (audioPlayerRef.current) {
-                            audioPlayerRef.current.volume = newVol;
+                ) : (
+                  <>
+                    {/* Row 1: Transport & Scrubber */}
+                    <div className="ed-audio-transport-row">
+                      <button
+                        type="button"
+                        className="ed-audio-btn-sm"
+                        onClick={() => {
+                          if (!audioPlayerRef.current) return;
+                          if (audioPlaying) {
+                            audioPlayerRef.current.pause();
+                            setAudioPlaying(false);
+                          } else {
+                            audioPlayerRef.current
+                              .play()
+                              .then(() => setAudioPlaying(true))
+                              .catch((err) => {
+                                console.error('Playback error:', err);
+                                setAudioError('Playback failed');
+                                setAudioPlaying(false);
+                              });
                           }
                         }}
-                        title={`Volume: ${Math.round(audioVolume * 100)}%`}
+                        title={audioPlaying ? 'Pause Audio' : 'Play Audio'}
+                        style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                      >
+                        {audioPlaying ? <PauseIcon size={11} color="#ffffff" /> : <PlayIcon size={11} color="#ffffff" />}
+                      </button>
+
+                      <input
+                        type="range"
+                        className="ed-audio-scrubber"
+                        min="0"
+                        max={audioDuration || (scene.actualAudioDurationMs ? scene.actualAudioDurationMs / 1000 : 1)}
+                        step="0.05"
+                        value={audioCurrentTime}
+                        onChange={(e) => {
+                          const newTime = parseFloat(e.target.value);
+                          if (audioPlayerRef.current) {
+                            audioPlayerRef.current.currentTime = newTime;
+                          }
+                          setAudioCurrentTime(newTime);
+                        }}
                       />
-                      <span className="ed-audio-vol-label">{Math.round(audioVolume * 100)}%</span>
+
+                      <div className="ed-audio-time">
+                        {formatTimeMs(Math.round(audioCurrentTime * 1000))} / {formatTimeMs(Math.round((audioDuration || (scene.actualAudioDurationMs ? scene.actualAudioDurationMs / 1000 : 0)) * 1000))}
+                      </div>
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <span className="ed-audio-badge-verified" style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-                        <CheckIcon size={11} /> {(scene.actualAudioDurationMs ? scene.actualAudioDurationMs / 1000 : audioDuration).toFixed(1)}s Verified
-                      </span>
+                    {/* Row 2: Volume, Badge & Actions */}
+                    <div className="ed-audio-controls-row">
+                      <div className="ed-audio-vol-group">
+                        <span title="Volume" style={{ display: 'inline-flex', alignItems: 'center', color: '#94a3b8' }}>
+                          <VolumeHighIcon size={12} />
+                        </span>
+                        <input
+                          type="range"
+                          className="ed-audio-vol-slider"
+                          min="0"
+                          max="1"
+                          step="0.05"
+                          value={audioVolume}
+                          onChange={(e) => {
+                            const newVol = parseFloat(e.target.value);
+                            setAudioVolume(newVol);
+                            if (audioPlayerRef.current) {
+                              audioPlayerRef.current.volume = newVol;
+                            }
+                          }}
+                          title={`Volume: ${Math.round(audioVolume * 100)}%`}
+                        />
+                        <span className="ed-audio-vol-label">{Math.round(audioVolume * 100)}%</span>
+                      </div>
 
-                      {onRemoveVoice && (
-                        showRemoveVoiceConfirm ? (
-                          <div style={{ display: 'flex', gap: '3px', alignItems: 'center' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span className="ed-audio-badge-verified" style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                          <CheckIcon size={11} /> {(scene.actualAudioDurationMs ? scene.actualAudioDurationMs / 1000 : audioDuration).toFixed(1)}s Verified
+                        </span>
+
+                        {onRemoveVoice && (
+                          showRemoveVoiceConfirm ? (
+                            <div style={{ display: 'flex', gap: '3px', alignItems: 'center' }}>
+                              <button
+                                type="button"
+                                className="ed-tool-btn"
+                                style={{ fontSize: '10px', padding: '2px 5px', background: '#ef4444', color: 'white', borderColor: '#ef4444' }}
+                                onClick={() => {
+                                  setShowRemoveVoiceConfirm(false);
+                                  onRemoveVoice(scene.sceneId);
+                                }}
+                              >
+                                Confirm
+                              </button>
+                              <button
+                                type="button"
+                                className="ed-tool-btn"
+                                style={{ fontSize: '10px', padding: '2px 5px' }}
+                                onClick={() => setShowRemoveVoiceConfirm(false)}
+                              >
+                                <CloseIcon size={10} />
+                              </button>
+                            </div>
+                          ) : (
                             <button
                               type="button"
                               className="ed-tool-btn"
-                              style={{ fontSize: '10px', padding: '2px 5px', background: '#ef4444', color: 'white', borderColor: '#ef4444' }}
-                              onClick={() => {
-                                setShowRemoveVoiceConfirm(false);
-                                onRemoveVoice(scene.sceneId);
-                              }}
+                              style={{ fontSize: '10px', color: '#f87171', padding: '2px 6px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                              onClick={() => setShowRemoveVoiceConfirm(true)}
+                              title="Remove narration audio from this scene"
                             >
-                              Confirm
+                              <TrashIcon size={12} />
                             </button>
-                            <button
-                              type="button"
-                              className="ed-tool-btn"
-                              style={{ fontSize: '10px', padding: '2px 5px' }}
-                              onClick={() => setShowRemoveVoiceConfirm(false)}
-                            >
-                              <CloseIcon size={10} />
-                            </button>
-                          </div>
-                        ) : (
+                          )
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            </CollapsibleSection>
+          )}
+        </div>
+      )}
+
+          {activeSection === 'background' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <input
+                type="file"
+                ref={bgFileInputRef}
+                style={{ display: 'none' }}
+                accept="image/png,image/jpeg,image/webp"
+                onChange={handleUploadBackgroundFile}
+              />
+              <input
+                type="file"
+                ref={flowFileInputRef}
+                style={{ display: 'none' }}
+                accept="image/png,image/jpeg,image/webp"
+                onChange={handleUploadFlowBackgroundFile}
+              />
+
+              {/* 1. Stage Background & Active Plate */}
+              <CollapsibleSection
+                id="bg-plate"
+                title="Stage Background & Active Plate"
+                icon={<ImageIcon size={14} color="#8b5cf6" />}
+                badge={
+                  currentBgUrl ? (
+                    <span className="ed-bg-badge-fit">
+                      {currentBgFit.toUpperCase()} &bull; {(scene.animationData as any)?.background?.aspectRatio || '16:9'}
+                    </span>
+                  ) : (
+                    <span style={{ fontSize: '10px', color: '#94a3b8' }}>Default Stage</span>
+                  )
+                }
+                isOpen={isSectionOpen('bg-plate', true)}
+                onToggle={() => toggleSection('bg-plate', true)}
+                variant="card"
+              >
+                {bgError && (
+                  <div style={{ fontSize: '11px', color: '#ef4444', backgroundColor: 'rgba(239, 68, 68, 0.1)', padding: '6px 8px', borderRadius: '4px', marginBottom: '8px' }}>
+                    {bgError}
+                  </div>
+                )}
+
+                {/* Active Background Plate */}
+                {currentBgUrl ? (
+                  <div style={{ marginBottom: '4px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                      <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--ed-text)' }}>Active Background</span>
+                      <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                        <span
+                          style={{
+                            fontSize: '9px',
+                            fontWeight: 600,
+                            padding: '1px 6px',
+                            borderRadius: '4px',
+                            background: ((scene.animationData as any)?.background?.source === 'google_flow_manual')
+                              ? 'rgba(16, 185, 129, 0.15)'
+                              : ((scene.animationData as any)?.background?.source === 'imported')
+                              ? 'rgba(245, 158, 11, 0.15)'
+                              : 'rgba(59, 130, 246, 0.15)',
+                            color: ((scene.animationData as any)?.background?.source === 'google_flow_manual')
+                              ? '#059669'
+                              : ((scene.animationData as any)?.background?.source === 'imported')
+                              ? '#d97706'
+                              : '#2563eb',
+                            border: ((scene.animationData as any)?.background?.source === 'google_flow_manual')
+                              ? '1px solid rgba(16, 185, 129, 0.3)'
+                              : ((scene.animationData as any)?.background?.source === 'imported')
+                              ? '1px solid rgba(245, 158, 11, 0.3)'
+                              : '1px solid rgba(59, 130, 246, 0.3)',
+                          }}
+                        >
+                          {(scene.animationData as any)?.background?.source === 'google_flow_manual'
+                            ? 'Google Flow'
+                            : (scene.animationData as any)?.background?.source === 'imported'
+                            ? 'Imported'
+                            : 'AI Generated'}
+                        </span>
+                        <span style={{ fontSize: '9px', color: '#94a3b8' }}>
+                          {(scene.animationData as any)?.background?.aspectRatio || '16:9'}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="ed-bg-preview-box">
+                      <img
+                        src={resolveAssetUrl(currentBgUrl)}
+                        onError={() => setBgImgLoadError(true)}
+                        alt="Scene Background"
+                        className={currentBgFit === 'contain' ? 'fit-contain' : 'fit-cover'}
+                      />
+                    </div>
+
+                    {/* Fit Mode Toggle */}
+                    <div style={{ marginTop: '8px' }}>
+                      <label className="ed-field-label" style={{ fontSize: '11px', marginBottom: '4px' }}>Fit Mode</label>
+                      <div className="ed-bg-fit-toggles">
+                        <button
+                          type="button"
+                          className={`ed-bg-fit-btn ${currentBgFit === 'cover' ? 'active' : ''}`}
+                          onClick={() => handleToggleFit('cover')}
+                          title="Fill 16:9 frame (crops edges if needed)"
+                        >
+                          Cover (Fill)
+                        </button>
+                        <button
+                          type="button"
+                          className={`ed-bg-fit-btn ${currentBgFit === 'contain' ? 'active' : ''}`}
+                          onClick={() => handleToggleFit('contain')}
+                          title="Preserve aspect ratio (letterbox / pillarbox with dark stage backdrop)"
+                        >
+                          Contain (Fit)
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Actions row */}
+                    <div className="ed-bg-actions-row">
+                      <button
+                        type="button"
+                        className="ed-btn-action"
+                        disabled={isUploadingBg}
+                        onClick={() => bgFileInputRef.current?.click()}
+                        title="Upload a new background image from your computer (PNG/JPEG/WebP)"
+                      >
+                        <UploadIcon size={12} />
+                        <span>{isUploadingBg ? 'Uploading...' : 'Replace'}</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="ed-btn-action"
+                        onClick={handleOpenStoryBackgroundsModal}
+                        title="Choose from images already used in this story"
+                      >
+                        <ImageIcon size={12} />
+                        <span>From Story</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="ed-btn-action danger"
+                        onClick={() => setShowRemoveBgConfirm(true)}
+                        title="Remove background and restore default stage"
+                      >
+                        <TrashIcon size={12} />
+                        <span>Remove</span>
+                      </button>
+                    </div>
+
+                    {showRemoveBgConfirm && (
+                      <div style={{ marginTop: '8px', padding: '8px', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '6px' }}>
+                        <p style={{ fontSize: '11px', color: '#f87171', margin: '0 0 6px 0' }}>
+                          Remove custom background and restore default stylized stage?
+                        </p>
+                        <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
                           <button
                             type="button"
                             className="ed-tool-btn"
-                            style={{ fontSize: '10px', color: '#f87171', padding: '2px 6px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-                            onClick={() => setShowRemoveVoiceConfirm(true)}
-                            title="Remove narration audio from this scene"
+                            style={{ fontSize: '10px', padding: '2px 8px' }}
+                            onClick={() => setShowRemoveBgConfirm(false)}
                           >
-                            <TrashIcon size={12} />
+                            Cancel
                           </button>
-                        )
-                      )}
+                          <button
+                            type="button"
+                            className="ed-tool-btn"
+                            style={{ fontSize: '10px', padding: '2px 8px', background: '#ef4444', color: 'white', borderColor: '#ef4444' }}
+                            onClick={handleRemoveBackground}
+                          >
+                            Confirm
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div style={{ marginBottom: '4px' }}>
+                    <div
+                      style={{
+                        border: '1px dashed #cbd5e1',
+                        borderRadius: '6px',
+                        padding: '16px 10px',
+                        textAlign: 'center',
+                        background: 'rgba(248, 250, 252, 0.5)',
+                        marginBottom: '8px',
+                      }}
+                    >
+                      <div style={{ color: '#94a3b8', marginBottom: '6px' }}>
+                        <ImageIcon size={24} />
+                      </div>
+                      <p style={{ fontSize: '12px', fontWeight: 500, color: '#475569', margin: '0 0 2px 0' }}>
+                        No custom background
+                      </p>
+                      <p style={{ fontSize: '10px', color: '#94a3b8', margin: 0 }}>
+                        Using default vector stage backdrop
+                      </p>
+                    </div>
+
+                    <div className="ed-bg-actions-row">
+                      <button
+                        type="button"
+                        className="ed-btn-action primary"
+                        disabled={isUploadingBg}
+                        onClick={() => bgFileInputRef.current?.click()}
+                        style={{ flex: 1 }}
+                      >
+                        <UploadIcon size={13} />
+                        <span>{isUploadingBg ? 'Uploading...' : 'Import Image (PNG/JPEG/WebP)'}</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="ed-btn-action"
+                        onClick={handleOpenStoryBackgroundsModal}
+                        title="Choose from images already used in this story"
+                      >
+                        <ImageIcon size={13} />
+                        <span>From Story</span>
+                      </button>
                     </div>
                   </div>
-                </>
-              )}
-            </div>
-          )}
-              </div>
-            </div>
-          )}
+                )}
 
-          {activeSection === 'background' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <div className="ed-field-group ed-background-card">
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <label className="ed-field-label" style={{ margin: 0, fontWeight: 600 }}>Scene Background</label>
-                    <span
-                      style={{
-                        fontSize: '10px',
-                        color: '#8b5cf6',
-                        background: 'rgba(139, 92, 246, 0.1)',
-                        border: '1px solid rgba(139, 92, 246, 0.3)',
-                        padding: '1px 6px',
-                        borderRadius: '10px',
-                        fontWeight: 600,
-                      }}
-                      title="Project Look DNA and style tokens are active"
-                    >
-                      ✨ Look DNA Applied
-                    </span>
-                  </div>
-                  {currentBgUrl ? (
-                    <span className="ed-bg-badge-fit">{currentBgFit.toUpperCase()}</span>
-                  ) : (
-                    <span style={{ fontSize: '11px', color: '#94a3b8' }}>Default Stage</span>
-                  )}
-                </div>
-
-
-          <p style={{ fontSize: '11px', color: '#64748b', margin: '0 0 8px 0', lineHeight: 1.4 }}>
-            Upload or select a scenic background. Reusable characters animate independently on top.
-          </p>
-
-          <input
-            type="file"
-            ref={bgFileInputRef}
-            style={{ display: 'none' }}
-            accept="image/png,image/jpeg,image/webp"
-            onChange={handleUploadBackgroundFile}
-          />
-
-          {bgError && (
-            <div style={{ fontSize: '11px', color: '#ef4444', backgroundColor: 'rgba(239, 68, 68, 0.1)', padding: '6px 8px', borderRadius: '4px', marginBottom: '8px' }}>
-              {bgError}
-            </div>
-          )}
-
-          {/* Dual Action Cards */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '12px' }}>
-            <div
-              style={{
-                border: '1px solid var(--ed-border)',
-                borderRadius: '8px',
-                padding: '10px',
-                background: 'var(--ed-surface-elevated, #f8fafc)',
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'space-between',
-                gap: '8px',
-              }}
-            >
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
-                  <UploadIcon size={14} color="#3b82f6" />
-                  <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--ed-text)' }}>Import Image</span>
-                </div>
-                <p style={{ fontSize: '10px', color: '#64748b', margin: 0, lineHeight: 1.3 }}>
-                  Local disk (PNG, JPEG, WebP &bull; Max 15MB)
-                </p>
-              </div>
-              <button
-                type="button"
-                className="ed-btn-action"
-                style={{ width: '100%', fontSize: '11px', padding: '5px 8px' }}
-                disabled={isUploadingBg}
-                onClick={() => bgFileInputRef.current?.click()}
-              >
-                {isUploadingBg ? 'Importing...' : 'Choose Image'}
-              </button>
-            </div>
-
-            <div
-              style={{
-                border: '1px solid rgba(139, 92, 246, 0.3)',
-                borderRadius: '8px',
-                padding: '10px',
-                background: 'rgba(139, 92, 246, 0.04)',
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'space-between',
-                gap: '8px',
-              }}
-            >
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
-                  <SparklesIcon size={14} color="#8b5cf6" />
-                  <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--ed-text)' }}>Generate with AI</span>
-                </div>
-                <p style={{ fontSize: '10px', color: '#64748b', margin: 0, lineHeight: 1.3 }}>
-                  Camera angle, style & scene prompt
-                </p>
-              </div>
-              <button
-                type="button"
-                className="ed-btn-action primary"
-                style={{ width: '100%', fontSize: '11px', padding: '5px 8px', background: '#7c3aed', borderColor: '#7c3aed' }}
-                disabled={isGeneratingBg}
-                onClick={handleGenerateBackground}
-              >
-                {isGeneratingBg ? 'Generating...' : 'Generate Image'}
-              </button>
-            </div>
-          </div>
-
-          {/* Generated Preview (Review Before Apply) */}
-          {generatedPreview && (
-            <div
-              style={{
-                border: '1px solid #7c3aed',
-                borderRadius: '8px',
-                padding: '10px',
-                background: 'rgba(124, 58, 237, 0.06)',
-                marginBottom: '12px',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                <span style={{ fontSize: '11px', fontWeight: 600, color: '#7c3aed', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <SparklesIcon size={12} /> Generated Preview (Review Before Apply)
-                </span>
-                <span style={{ fontSize: '10px', color: '#64748b' }}>Unsaved</span>
-              </div>
-              <div style={{ position: 'relative', width: '100%', aspectRatio: '16/9', borderRadius: '6px', overflow: 'hidden', background: '#000', marginBottom: '8px' }}>
-                {!previewImgError ? (
-                  <img
-                    src={resolveAssetUrl(generatedPreview.url)}
-                    alt="AI Generated Background Preview"
-                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                    onError={() => setPreviewImgError(true)}
-                  />
-                ) : (
-                  <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#f87171', fontSize: '11px', padding: '8px', textAlign: 'center' }}>
-                    Preview image failed to load.
+                {/* Generated Preview (Review Before Apply) */}
+                {generatedPreview && (
+                  <div
+                    style={{
+                      border: '1px solid #7c3aed',
+                      borderRadius: '8px',
+                      padding: '10px',
+                      background: 'rgba(124, 58, 237, 0.06)',
+                      marginBottom: '8px',
+                      marginTop: '8px',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                      <span style={{ fontSize: '11px', fontWeight: 600, color: '#7c3aed', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <SparklesIcon size={12} /> Generated Preview (Review Before Apply)
+                      </span>
+                      <span style={{ fontSize: '10px', color: '#64748b' }}>Unsaved</span>
+                    </div>
+                    <div style={{ position: 'relative', width: '100%', aspectRatio: '16/9', borderRadius: '6px', overflow: 'hidden', background: '#000', marginBottom: '8px' }}>
+                      {!previewImgError ? (
+                        <img
+                          src={resolveAssetUrl(generatedPreview.url)}
+                          alt="AI Generated Background Preview"
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          onError={() => setPreviewImgError(true)}
+                        />
+                      ) : (
+                        <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#f87171', fontSize: '11px', padding: '8px', textAlign: 'center' }}>
+                          Preview image failed to load.
+                        </div>
+                      )}
+                    </div>
+                    {generatedPreview.prompt && (
+                      <div style={{ fontSize: '10px', color: '#64748b', background: 'rgba(0,0,0,0.03)', padding: '6px 8px', borderRadius: '4px', marginBottom: '8px', maxHeight: '50px', overflowY: 'auto' }}>
+                        <strong style={{ color: '#475569' }}>Prompt:</strong> {generatedPreview.prompt}
+                      </div>
+                    )}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                      <button
+                        type="button"
+                        className="ed-btn-action primary"
+                        style={{ fontSize: '11px', padding: '6px 8px', background: '#059669', borderColor: '#059669' }}
+                        onClick={handleApplyGeneratedBackground}
+                      >
+                        Apply to Scene
+                      </button>
+                      <button
+                        type="button"
+                        className="ed-btn-action"
+                        style={{ fontSize: '11px', padding: '6px 8px' }}
+                        onClick={handleCancelGeneratedBackground}
+                      >
+                        Cancel
+                      </button>
+                    </div>
                   </div>
                 )}
-              </div>
-              {generatedPreview.prompt && (
-                <div style={{ fontSize: '10px', color: '#64748b', background: 'rgba(0,0,0,0.03)', padding: '6px 8px', borderRadius: '4px', marginBottom: '8px', maxHeight: '50px', overflowY: 'auto' }}>
-                  <strong style={{ color: '#475569' }}>Prompt:</strong> {generatedPreview.prompt}
-                </div>
-              )}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                <button
-                  type="button"
-                  className="ed-btn-action primary"
-                  style={{ fontSize: '11px', padding: '6px 8px', background: '#059669', borderColor: '#059669' }}
-                  onClick={handleApplyGeneratedBackground}
-                >
-                  Apply to Scene
-                </button>
-                <button
-                  type="button"
-                  className="ed-btn-action"
-                  style={{ fontSize: '11px', padding: '6px 8px' }}
-                  onClick={handleCancelGeneratedBackground}
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          )}
+              </CollapsibleSection>
 
-          {currentBgUrl ? (
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-                <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--ed-text)' }}>Active Background</span>
-                <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+              {/* 2. Story Visual Bible Context */}
+              <CollapsibleSection
+                id="bg-bible"
+                title="Story Visual Bible Context"
+                icon={<SparklesIcon size={14} color="#8b5cf6" />}
+                badge={
                   <span
                     style={{
                       fontSize: '9px',
                       fontWeight: 600,
                       padding: '1px 6px',
-                      borderRadius: '4px',
-                      background: ((scene.animationData as any)?.background?.source === 'imported') ? 'rgba(245, 158, 11, 0.15)' : 'rgba(59, 130, 246, 0.15)',
-                      color: ((scene.animationData as any)?.background?.source === 'imported') ? '#d97706' : '#2563eb',
-                      border: ((scene.animationData as any)?.background?.source === 'imported') ? '1px solid rgba(245, 158, 11, 0.3)' : '1px solid rgba(59, 130, 246, 0.3)',
+                      borderRadius: '10px',
+                      background: 'rgba(139, 92, 246, 0.15)',
+                      color: '#7c3aed',
+                      border: '1px solid rgba(139, 92, 246, 0.3)',
                     }}
                   >
-                    {(scene.animationData as any)?.background?.source === 'imported' ? 'Imported' : 'AI Generated'}
+                    v{visualBible?.version || 1} Active
                   </span>
-                  <span style={{ fontSize: '9px', color: '#94a3b8' }}>
-                    {(scene.animationData as any)?.background?.aspectRatio || '16:9'}
+                }
+                isOpen={isSectionOpen('bg-bible', false)}
+                onToggle={() => toggleSection('bg-bible', false)}
+                variant="card"
+              >
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', fontSize: '10px', color: '#64748b' }}>
+                  <span style={{ background: 'var(--ed-surface, #fff)', border: '1px solid var(--ed-border)', padding: '2px 6px', borderRadius: '4px' }}>
+                    <strong style={{ color: '#475569' }}>Style:</strong> {visualBible?.artDirection?.primaryStyle || localVisualStyle}
+                  </span>
+                  <span style={{ background: 'var(--ed-surface, #fff)', border: '1px solid var(--ed-border)', padding: '2px 6px', borderRadius: '4px' }}>
+                    <strong style={{ color: '#475569' }}>Setting:</strong> {visualBible?.worldIdentity?.settingType || 'Story World'}
+                  </span>
+                  <span style={{ background: 'var(--ed-surface, #fff)', border: '1px solid var(--ed-border)', padding: '2px 6px', borderRadius: '4px' }}>
+                    <strong style={{ color: '#475569' }}>Mood:</strong> {visualBible?.lightingAndColorIdentity?.dominantMood || 'Warm & Storybook'}
                   </span>
                 </div>
-              </div>
-              <div className="ed-bg-preview-box">
-                <img
-                  src={resolveAssetUrl(currentBgUrl)}
-                  onError={() => setBgImgLoadError(true)}
-                  alt="Scene Background"
-                  className={currentBgFit === 'contain' ? 'fit-contain' : 'fit-cover'}
-                />
-              </div>
+              </CollapsibleSection>
 
-              {/* Fit Mode Toggle */}
-              <div style={{ marginTop: '8px' }}>
-                <label className="ed-field-label" style={{ fontSize: '11px', marginBottom: '4px' }}>Fit Mode</label>
-                <div className="ed-bg-fit-toggles">
-                  <button
-                    type="button"
-                    className={`ed-bg-fit-btn ${currentBgFit === 'cover' ? 'active' : ''}`}
-                    onClick={() => handleToggleFit('cover')}
-                    title="Fill 16:9 frame (crops edges if needed)"
-                  >
-                    Cover (Fill)
-                  </button>
-                  <button
-                    type="button"
-                    className={`ed-bg-fit-btn ${currentBgFit === 'contain' ? 'active' : ''}`}
-                    onClick={() => handleToggleFit('contain')}
-                    title="Preserve aspect ratio (letterbox / pillarbox with dark stage backdrop)"
-                  >
-                    Contain (Fit)
-                  </button>
+        {/* WORKFLOW A: Google Flow Manual Workflow (Zero API Cost) */}
+        <CollapsibleSection
+          id="bg-flow"
+          title="Google Flow Manual Workflow (Workflow A)"
+          subtitle="Character-Free Environment Prompts & Import"
+          icon={<SparklesIcon size={14} color="#059669" />}
+          badge={
+            <span
+              style={{
+                fontSize: '9px',
+                fontWeight: 700,
+                color: '#047857',
+                background: 'rgba(16, 185, 129, 0.15)',
+                border: '1px solid rgba(16, 185, 129, 0.3)',
+                padding: '2px 6px',
+                borderRadius: '8px',
+              }}
+            >
+              Zero Cost &bull; Jio Google AI Pro
+            </span>
+          }
+          isOpen={isSectionOpen('bg-flow', true)}
+          onToggle={() => toggleSection('bg-flow', true)}
+          variant="workflow-a"
+        >
+          <p style={{ fontSize: '11px', color: '#475569', margin: 0, lineHeight: 1.4 }}>
+            Generate character-free environment prompts, copy to Google Flow, and import the generated background image back into this scene.
+          </p>
+
+          {/* Stepper Guide */}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(4, 1fr)',
+              gap: '4px',
+              fontSize: '9px',
+              fontWeight: 600,
+              color: '#065f46',
+              textAlign: 'center',
+            }}
+          >
+            <div style={{ background: 'rgba(16, 185, 129, 0.08)', padding: '4px 2px', borderRadius: '4px' }}>1. Generate Prompt</div>
+            <div style={{ background: 'rgba(16, 185, 129, 0.08)', padding: '4px 2px', borderRadius: '4px' }}>2. Copy Prompt</div>
+            <div style={{ background: 'rgba(16, 185, 129, 0.08)', padding: '4px 2px', borderRadius: '4px' }}>3. Open Flow</div>
+            <div style={{ background: 'rgba(16, 185, 129, 0.08)', padding: '4px 2px', borderRadius: '4px' }}>4. Import Back</div>
+          </div>
+
+          {/* Perspective & Aspect Ratio */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+            <div className="ed-field-group" style={{ margin: 0 }}>
+              <label className="ed-field-label" style={{ fontSize: '11px' }}>Camera Perspective (Still Image)</label>
+              <select className="ed-select" value={localCamera} onChange={handleCameraChange}>
+                <option value="Eye-level wide shot">Eye-level wide shot</option>
+                <option value="Medium shot">Medium shot</option>
+                <option value="Close-up">Close-up</option>
+                <option value="High angle / Bird's eye view">High angle / Bird's eye view</option>
+                <option value="Bird's-eye view">Bird's-eye view</option>
+                <option value="Low-angle shot">Low-angle shot</option>
+                <option value="Wide establishing shot">Wide establishing shot</option>
+              </select>
+            </div>
+
+            <div className="ed-field-group" style={{ margin: 0 }}>
+              <label className="ed-field-label" style={{ fontSize: '11px' }}>Aspect Ratio</label>
+              <select className="ed-select" value={localAspectRatio} onChange={handleAspectRatioChange}>
+                <option value="16:9">16:9 (Landscape)</option>
+                <option value="9:16">9:16 (Portrait / Reels)</option>
+                <option value="1:1">1:1 (Square)</option>
+                <option value="4:5">4:5 (Social)</option>
+              </select>
+            </div>
+          </div>
+
+          {/* V2 Scene Background Prompt Textarea */}
+          <div className="ed-field-group" style={{ margin: 0 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+              <label className="ed-field-label" style={{ margin: 0, fontWeight: 600 }}>
+                Visual Scene Prompt (Environment Plate Only)
+              </label>
+              <span style={{ fontSize: '10px', color: '#059669', fontWeight: 600 }}>
+                Characters Excluded
+              </span>
+            </div>
+            <textarea
+              className="ed-textarea"
+              rows={4}
+              value={localPrompt}
+              onChange={(e) => setLocalPrompt(e.target.value)}
+              onBlur={handlePromptBlur}
+              placeholder="Click 'Generate Scene Prompt' below to synthesize a rich, character-free environment prompt using the Story Visual Bible..."
+              style={{ fontSize: '11px', lineHeight: 1.45, fontFamily: 'monospace' }}
+            />
+          </div>
+
+          {/* Validation & Negative Directives Pills */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', fontSize: '10px' }}>
+            <span style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#047857', padding: '2px 6px', borderRadius: '4px', border: '1px solid rgba(16, 185, 129, 0.25)' }}>
+              ✓ Character-Free Plate
+            </span>
+            <span style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#047857', padding: '2px 6px', borderRadius: '4px', border: '1px solid rgba(16, 185, 129, 0.25)' }}>
+              ✓ Middleground Reserved for Rigs
+            </span>
+            <span style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#047857', padding: '2px 6px', borderRadius: '4px', border: '1px solid rgba(16, 185, 129, 0.25)' }}>
+              ✓ Aspect Ratio: {localAspectRatio}
+            </span>
+          </div>
+
+          {/* Workflow A Action Buttons */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px' }}>
+            <button
+              type="button"
+              className="ed-btn-action primary"
+              style={{ fontSize: '11px', padding: '7px 10px', background: '#059669', borderColor: '#059669' }}
+              disabled={isGeneratingV2Prompt}
+              onClick={handleGenerateV2Prompt}
+              title="Generate a character-free prompt aligned with Story Visual Bible"
+            >
+              <SparklesIcon size={13} />
+              <span>{isGeneratingV2Prompt ? 'Generating...' : (localPrompt ? 'Regenerate Prompt' : 'Generate Scene Prompt')}</span>
+            </button>
+
+            <button
+              type="button"
+              className="ed-btn-action"
+              style={{
+                fontSize: '11px',
+                padding: '7px 10px',
+                background: copiedPromptToast ? '#10b981' : undefined,
+                color: copiedPromptToast ? '#fff' : undefined,
+                borderColor: copiedPromptToast ? '#10b981' : undefined,
+              }}
+              disabled={!localPrompt}
+              onClick={handleCopyV2Prompt}
+              title="Copy prompt text to clipboard for Google Flow"
+            >
+              {copiedPromptToast ? <CheckIcon size={13} /> : <CopyIcon size={13} />}
+              <span>{copiedPromptToast ? 'Copied to Clipboard!' : 'Copy Prompt'}</span>
+            </button>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+            <button
+              type="button"
+              className="ed-btn-action"
+              style={{ fontSize: '11px', padding: '7px 10px' }}
+              onClick={handleOpenGoogleFlow}
+              title="Open Google Flow in a new tab (https://labs.google/fx/tools/flow)"
+            >
+              <span>Open Google Flow</span>
+              <span style={{ fontSize: '10px' }}>↗</span>
+            </button>
+
+            <button
+              type="button"
+              className="ed-btn-action primary"
+              style={{ fontSize: '11px', padding: '7px 10px', background: '#2563eb', borderColor: '#2563eb' }}
+              disabled={isUploadingFlowBg}
+              onClick={() => flowFileInputRef.current?.click()}
+              title="Import image downloaded from Google Flow"
+            >
+              <UploadIcon size={13} />
+              <span>{isUploadingFlowBg ? 'Importing...' : 'Import from Flow'}</span>
+            </button>
+          </div>
+
+          {/* Prompt History Toggle */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '2px' }}>
+            <button
+              type="button"
+              className="ed-tool-btn"
+              style={{ fontSize: '11px', padding: '3px 8px', color: '#64748b' }}
+              onClick={() => setShowPromptHistory(!showPromptHistory)}
+            >
+              <span>Prompt History ({promptHistory.length})</span>
+              <span style={{ fontSize: '9px', marginLeft: '4px' }}>{showPromptHistory ? '▲' : '▼'}</span>
+            </button>
+            <span style={{ fontSize: '10px', color: '#94a3b8' }}>Auto-saved on edit</span>
+          </div>
+
+          {/* Prompt History List */}
+          {showPromptHistory && (
+            <div
+              style={{
+                border: '1px solid var(--ed-border)',
+                borderRadius: '6px',
+                padding: '8px',
+                background: 'var(--ed-surface, #fff)',
+                maxHeight: '140px',
+                overflowY: 'auto',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '6px',
+              }}
+            >
+              {promptHistory.length === 0 ? (
+                <div style={{ fontSize: '11px', color: '#94a3b8', textAlign: 'center', padding: '8px 0' }}>
+                  No previous prompt versions recorded yet.
                 </div>
-              </div>
-
-              {/* Actions row */}
-              <div className="ed-bg-actions-row">
-                <button
-                  type="button"
-                  className="ed-btn-action"
-                  disabled={isUploadingBg}
-                  onClick={() => bgFileInputRef.current?.click()}
-                  title="Upload a new background image from your computer (PNG/JPEG)"
-                >
-                  <UploadIcon size={12} />
-                  <span>{isUploadingBg ? 'Uploading...' : 'Replace'}</span>
-                </button>
-                <button
-                  type="button"
-                  className="ed-btn-action"
-                  onClick={handleOpenStoryBackgroundsModal}
-                  title="Choose from images already used in this story"
-                >
-                  <ImageIcon size={12} />
-                  <span>From Story</span>
-                </button>
-                <button
-                  type="button"
-                  className="ed-btn-action danger"
-                  onClick={() => setShowRemoveBgConfirm(true)}
-                  title="Remove background and restore default stage"
-                >
-                  <TrashIcon size={12} />
-                  <span>Remove</span>
-                </button>
-              </div>
-
-              {showRemoveBgConfirm && (
-                <div style={{ marginTop: '8px', padding: '8px', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '6px' }}>
-                  <p style={{ fontSize: '11px', color: '#f87171', margin: '0 0 6px 0' }}>
-                    Remove custom background and restore default stylized stage?
-                  </p>
-                  <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
+              ) : (
+                promptHistory.map((item) => (
+                  <div
+                    key={item.id}
+                    style={{
+                      borderBottom: '1px solid var(--ed-border-subtle, #f1f5f9)',
+                      paddingBottom: '6px',
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      justifyContent: 'space-between',
+                      gap: '8px',
+                    }}
+                  >
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px' }}>
+                        <span style={{ fontSize: '10px', fontWeight: 600, color: '#334155' }}>
+                          v{item.version}
+                        </span>
+                        <span style={{ fontSize: '9px', color: '#94a3b8' }}>
+                          {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                        <span
+                          style={{
+                            fontSize: '8px',
+                            padding: '1px 4px',
+                            borderRadius: '3px',
+                            background: item.source === 'google_flow_manual' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(100, 116, 139, 0.1)',
+                            color: item.source === 'google_flow_manual' ? '#059669' : '#64748b',
+                          }}
+                        >
+                          {item.source === 'google_flow_manual' ? 'Flow' : item.source === 'user_edit' ? 'Edit' : 'Auto'}
+                        </span>
+                      </div>
+                      <p style={{ fontSize: '10px', color: '#64748b', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {item.prompt}
+                      </p>
+                    </div>
                     <button
                       type="button"
                       className="ed-tool-btn"
-                      style={{ fontSize: '10px', padding: '2px 8px' }}
-                      onClick={() => setShowRemoveBgConfirm(false)}
+                      style={{ fontSize: '10px', padding: '2px 6px' }}
+                      onClick={() => handleRestorePrompt(item.id)}
+                      title="Restore this prompt version"
                     >
-                      Cancel
-                    </button>
-                    <button
-                      type="button"
-                      className="ed-tool-btn"
-                      style={{ fontSize: '10px', padding: '2px 8px', background: '#ef4444', color: 'white', borderColor: '#ef4444' }}
-                      onClick={handleRemoveBackground}
-                    >
-                      Confirm
+                      Restore
                     </button>
                   </div>
-                </div>
+                ))
               )}
             </div>
-          ) : (
-            <div>
-              <div
-                style={{
-                  border: '1px dashed #cbd5e1',
-                  borderRadius: '6px',
-                  padding: '16px 10px',
-                  textAlign: 'center',
-                  background: 'rgba(248, 250, 252, 0.5)',
-                  marginBottom: '8px',
-                }}
-              >
-                <div style={{ color: '#94a3b8', marginBottom: '6px' }}>
-                  <ImageIcon size={24} />
-                </div>
-                <p style={{ fontSize: '12px', fontWeight: 500, color: '#475569', margin: '0 0 2px 0' }}>
-                  No custom background
-                </p>
-                <p style={{ fontSize: '10px', color: '#94a3b8', margin: 0 }}>
-                  Using default vector stage backdrop
-                </p>
-              </div>
-
-              <div className="ed-bg-actions-row">
-                <button
-                  type="button"
-                  className="ed-btn-action primary"
-                  disabled={isUploadingBg}
-                  onClick={() => bgFileInputRef.current?.click()}
-                  style={{ flex: 1 }}
-                >
-                  <UploadIcon size={13} />
-                  <span>{isUploadingBg ? 'Uploading...' : 'Upload Image (PNG/JPEG)'}</span>
-                </button>
-                <button
-                  type="button"
-                  className="ed-btn-action"
-                  onClick={handleOpenStoryBackgroundsModal}
-                  title="Choose from images already used in this story"
-                >
-                  <ImageIcon size={13} />
-                  <span>From Story</span>
-                </button>
-              </div>
-            </div>
           )}
-        </div>
 
-              <div className="ed-field-group ed-background-card" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2px' }}>
-                  <label className="ed-field-label" style={{ margin: 0, fontWeight: 600 }}>Camera & Composition Settings</label>
-                  <span style={{ fontSize: '10px', color: '#64748b' }}>Environment Only</span>
-                </div>
+          {/* Continuity Tip for Multi-Scene Storytelling */}
+          <div
+            style={{
+              padding: '8px 10px',
+              borderRadius: '6px',
+              background: 'rgba(245, 158, 11, 0.08)',
+              border: '1px solid rgba(245, 158, 11, 0.25)',
+              fontSize: '10px',
+              color: '#92400e',
+              lineHeight: 1.4,
+            }}
+          >
+            <strong>💡 Continuity Tip for Google Flow:</strong> To keep lighting and terrain locked across scenes, upload your previous scene's generated background as an <em>Image Ingredient / Reference</em> in Google Flow alongside this prompt.
+          </div>
+        </CollapsibleSection>
 
-                {/* Camera Perspective */}
-                <div className="ed-field-group" style={{ margin: 0 }}>
-                  <label className="ed-field-label">Camera Perspective (Still Image)</label>
-                  <select className="ed-select" value={localCamera} onChange={handleCameraChange}>
-                    <option value="Eye-level wide shot">Eye-level wide shot</option>
-                    <option value="Medium shot">Medium shot</option>
-                    <option value="Close-up">Close-up</option>
-                    <option value="High angle / Bird's eye view">High angle / Bird's eye view</option>
-                    <option value="Bird's-eye view">Bird's-eye view</option>
-                    <option value="Low-angle shot">Low-angle shot</option>
-                    <option value="Over-the-shoulder shot">Over-the-shoulder shot</option>
-                    <option value="Wide establishing shot">Wide establishing shot</option>
-                  </select>
-                </div>
+        {/* WORKFLOW B: In-App AI Generation (Pollinations / ComfyUI) */}
+        <CollapsibleSection
+          id="bg-inapp"
+          title="In-App AI Background Generation (Workflow B)"
+          subtitle="Direct Pollinations / ComfyUI API"
+          icon={<SparklesIcon size={14} color="#8b5cf6" />}
+          badge={
+            <span
+              style={{
+                fontSize: '9px',
+                fontWeight: 600,
+                color: '#8b5cf6',
+                background: 'rgba(139, 92, 246, 0.15)',
+                border: '1px solid rgba(139, 92, 246, 0.3)',
+                padding: '2px 6px',
+                borderRadius: '8px',
+              }}
+            >
+              Direct API
+            </span>
+          }
+          isOpen={isSectionOpen('bg-inapp', false)}
+          onToggle={() => toggleSection('bg-inapp', false)}
+          variant="workflow-b"
+        >
+          <p style={{ fontSize: '10px', color: '#64748b', margin: 0 }}>
+            Generate directly in the studio using connected backend image providers.
+          </p>
 
-                {/* Camera Movement */}
-                <div className="ed-field-group" style={{ margin: 0 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <label className="ed-field-label" style={{ margin: 0 }}>Camera Movement (Video Motion)</label>
-                    <span style={{ fontSize: '9px', color: '#94a3b8' }}>FFmpeg / Video</span>
-                  </div>
-                  <select className="ed-select" value={localCameraMovement} onChange={handleCameraMovementChange}>
-                    <option value="Static (no movement)">Static (no movement)</option>
-                    <option value="Slow zoom in">Slow zoom in</option>
-                    <option value="Slow zoom out">Slow zoom out</option>
-                    <option value="Pan left">Pan left</option>
-                    <option value="Pan right">Pan right</option>
-                    <option value="Tilt up">Tilt up</option>
-                    <option value="Tilt down">Tilt down</option>
-                  </select>
-                  <span style={{ fontSize: '9px', color: '#94a3b8', marginTop: '2px', display: 'block' }}>
-                    Applied during video assembly, does not affect still background
-                  </span>
-                </div>
+          {/* Camera Movement (Video Motion) */}
+          <div className="ed-field-group" style={{ margin: 0 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <label className="ed-field-label" style={{ margin: 0 }}>Camera Movement (Video Motion)</label>
+              <span style={{ fontSize: '9px', color: '#94a3b8' }}>FFmpeg / Video</span>
+            </div>
+            <select className="ed-select" value={localCameraMovement} onChange={handleCameraMovementChange}>
+              <option value="Static (no movement)">Static (no movement)</option>
+              <option value="Slow zoom in">Slow zoom in</option>
+              <option value="Slow zoom out">Slow zoom out</option>
+              <option value="Pan left">Pan left</option>
+              <option value="Pan right">Pan right</option>
+              <option value="Tilt up">Tilt up</option>
+              <option value="Tilt down">Tilt down</option>
+            </select>
+          </div>
 
-                {/* Camera Rotation (2D Scene Roll) */}
-                <div className="ed-field-group" style={{ margin: 0 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <label className="ed-field-label" style={{ margin: 0 }}>Camera Rotation (2D Roll)</label>
-                    <span style={{ fontSize: '9px', color: '#94a3b8' }}>Vector Stage</span>
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '8px', marginTop: '4px' }}>
-                    <select className="ed-select" value={localCameraRotation} onChange={handleCameraRotationChange}>
-                      <option value="none">None (0°)</option>
-                      <option value="clockwise">Rotate Clockwise</option>
-                      <option value="anticlockwise">Rotate Anticlockwise</option>
-                    </select>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <input
-                        type="number"
-                        className="ed-input"
-                        style={{ padding: '4px 6px', fontSize: '12px' }}
-                        min={0}
-                        max={45}
-                        step={1}
-                        value={localCameraRotationDegrees}
-                        disabled={localCameraRotation === 'none'}
-                        onChange={(e) => handleCameraRotationDegreesChange(parseFloat(e.target.value) || 0)}
-                        title="Rotation roll amount in degrees (0° - 45°)"
-                      />
-                      <span style={{ fontSize: '11px', color: '#64748b' }}>deg</span>
-                    </div>
-                  </div>
-                  <span style={{ fontSize: '9px', color: '#94a3b8', marginTop: '2px', display: 'block' }}>
-                    2D scene roll applied around center anchor; does not alter 3D perspective of flat backdrop
-                  </span>
-                </div>
-
-                {/* Aspect Ratio & Visual Style */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                  <div className="ed-field-group" style={{ margin: 0 }}>
-                    <label className="ed-field-label">Aspect Ratio</label>
-                    <select className="ed-select" value={localAspectRatio} onChange={handleAspectRatioChange}>
-                      <option value="16:9">16:9 (Landscape)</option>
-                      <option value="9:16">9:16 (Portrait / Reels)</option>
-                      <option value="1:1">1:1 (Square)</option>
-                      <option value="4:5">4:5 (Social)</option>
-                    </select>
-                  </div>
-
-                  <div className="ed-field-group" style={{ margin: 0 }}>
-                    <label className="ed-field-label">Visual Style</label>
-                    <select className="ed-select" value={localVisualStyle} onChange={handleVisualStyleChange}>
-                      <option value="Cinematic Storybook">Cinematic Storybook</option>
-                      <option value="Whimsical Watercolor">Whimsical Watercolor</option>
-                      <option value="3D Pixar Cartoon">3D Pixar Cartoon</option>
-                      <option value="Vector Flat Art">Vector Flat Art</option>
-                      <option value="Retro Comic Book">Retro Comic Book</option>
-                    </select>
-                  </div>
-                </div>
-
-                {/* Visual Scene Prompt */}
-                <div className="ed-field-group" style={{ margin: 0 }}>
-                  <label className="ed-field-label">Visual Scene Prompt</label>
-                  <textarea
-                    className="ed-textarea"
-                    rows={3}
-                    value={localPrompt}
-                    onChange={(e) => setLocalPrompt(e.target.value)}
-                    onBlur={handlePromptBlur}
-                    placeholder="Describe the environment plate (e.g. cozy treehouse in oak tree at sunset)..."
-                  />
-                </div>
-
-                <button
-                  type="button"
-                  className="ed-btn-action primary"
-                  style={{ width: '100%', fontSize: '11px', padding: '6px 8px', background: '#7c3aed', borderColor: '#7c3aed' }}
-                  disabled={isGeneratingBg}
-                  onClick={handleGenerateBackground}
-                >
-                  {isGeneratingBg ? 'Generating Background...' : 'Generate Background Image'}
-                </button>
+          {/* Camera Rotation (2D Scene Roll) */}
+          <div className="ed-field-group" style={{ margin: 0 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <label className="ed-field-label" style={{ margin: 0 }}>Camera Rotation (2D Roll)</label>
+              <span style={{ fontSize: '9px', color: '#94a3b8' }}>Vector Stage</span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '8px', marginTop: '4px' }}>
+              <select className="ed-select" value={localCameraRotation} onChange={handleCameraRotationChange}>
+                <option value="none">None (0°)</option>
+                <option value="clockwise">Rotate Clockwise</option>
+                <option value="anticlockwise">Rotate Anticlockwise</option>
+              </select>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <input
+                  type="number"
+                  className="ed-input"
+                  style={{ padding: '4px 6px', fontSize: '12px' }}
+                  min={0}
+                  max={45}
+                  step={1}
+                  value={localCameraRotationDegrees}
+                  disabled={localCameraRotation === 'none'}
+                  onChange={(e) => handleCameraRotationDegreesChange(parseFloat(e.target.value) || 0)}
+                  title="Rotation roll amount in degrees (0° - 45°)"
+                />
+                <span style={{ fontSize: '11px', color: '#64748b' }}>deg</span>
               </div>
             </div>
+          </div>
+
+          <button
+            type="button"
+            className="ed-btn-action primary"
+            style={{ width: '100%', fontSize: '11px', padding: '7px 8px', background: '#7c3aed', borderColor: '#7c3aed' }}
+            disabled={isGeneratingBg}
+            onClick={handleGenerateBackground}
+          >
+            {isGeneratingBg ? 'Generating In-App Image...' : 'Generate Image In-App'}
+          </button>
+        </CollapsibleSection>
+      </div>
           )}
 
           {activeSection === 'characters' && (
@@ -2540,11 +3066,20 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
             </div>
               ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <div className="ed-field-group">
-                <div className="ed-field-label">
-                  <span>Characters in this Scene ({characterInstances.length})</span>
-                </div>
-
+              {/* Scene Characters List */}
+              <CollapsibleSection
+                id="ch-list"
+                title={`Scene Characters (${characterInstances.length})`}
+                subtitle="Positioned 2D Rigs in current scene"
+                badge={
+                  <span style={{ fontSize: '10px', color: 'var(--ed-text-muted)' }}>
+                    {characterInstances.length} Active
+                  </span>
+                }
+                isOpen={isSectionOpen('ch-list', true)}
+                onToggle={() => toggleSection('ch-list', true)}
+                variant="card"
+              >
                 {characterInstances.length > 0 ? (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     {characterInstances.map((inst) => (
@@ -2614,11 +3149,17 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                     </p>
                   </div>
                 )}
-              </div>
+              </CollapsibleSection>
 
               {/* Add Character Section */}
-              <div className="ed-field-group" style={{ borderTop: '1px solid var(--ed-border)', paddingTop: '12px' }}>
-                <span className="ed-field-label">Add Vector Character Rig</span>
+              <CollapsibleSection
+                id="ch-add"
+                title="Add Vector Character Rig"
+                subtitle="Insert animated modular characters into canvas"
+                isOpen={isSectionOpen('ch-add', true)}
+                onToggle={() => toggleSection('ch-add', true)}
+                variant="card"
+              >
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                   <button
                     type="button"
@@ -2637,31 +3178,43 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                     + Sammy the Kid
                   </button>
                 </div>
-              </div>
-                  {/* Story Character References */}
-                  {characters.length > 0 && (
-                    <div className="ed-field-group" style={{ borderTop: '1px solid var(--ed-border)', paddingTop: '12px' }}>
-                      <label className="ed-field-label">Story Characters in this Scene</label>
-                      <div className="ed-char-chips">
-                        {characters.map((char) => {
-                          const isSelected = scene.characterIds?.includes(char.id);
-                          return (
-                            <button
-                              key={char.id}
-                              type="button"
-                              className={`ed-char-chip ${isSelected ? 'selected' : ''}`}
-                              onClick={() => handleToggleCharacter(char.id)}
-                              style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                            >
-                              <span>{isSelected ? <CheckIcon size={11} /> : <PlusIcon size={11} />}</span>
-                              <span>{char.name}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-                </div>
+              </CollapsibleSection>
+
+              {/* Story Character References */}
+              {characters.length > 0 && (
+                <CollapsibleSection
+                  id="ch-story"
+                  title="Story Characters in this Scene"
+                  subtitle="Characters involved in scene narrative"
+                  badge={
+                    <span style={{ fontSize: '10px', color: 'var(--ed-text-muted)' }}>
+                      {(scene.characterIds?.length || 0)} Selected
+                    </span>
+                  }
+                  isOpen={isSectionOpen('ch-story', false)}
+                  onToggle={() => toggleSection('ch-story', false)}
+                  variant="card"
+                >
+                  <div className="ed-char-chips">
+                    {characters.map((char) => {
+                      const isSelected = scene.characterIds?.includes(char.id);
+                      return (
+                        <button
+                          key={char.id}
+                          type="button"
+                          className={`ed-char-chip ${isSelected ? 'selected' : ''}`}
+                          onClick={() => handleToggleCharacter(char.id)}
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                        >
+                          <span>{isSelected ? <CheckIcon size={11} /> : <PlusIcon size={11} />}</span>
+                          <span>{char.name}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </CollapsibleSection>
+              )}
+            </div>
               )}
             </div>
           )}
@@ -2701,44 +3254,15 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
 
           {activeSection === 'operations' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              {/* Version History */}
-              {versions && versions.length > 0 && (
-                <div className="ed-field-group">
-                  <label className="ed-field-label">Version History ({versions.length})</label>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '120px', overflowY: 'auto' }}>
-                    {versions.map((ver) => (
-                      <div
-                        key={ver.id}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          padding: '6px 8px',
-                          background: 'var(--ed-surface-elevated)',
-                          borderRadius: '4px',
-                          fontSize: '11px',
-                        }}
-                      >
-                        <div>
-                          <strong>v{ver.versionNumber}</strong> • {new Date(ver.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </div>
-                        <button
-                          type="button"
-                          className="ed-tool-btn"
-                          style={{ fontSize: '10px' }}
-                          onClick={() => onRestoreVersion(scene.sceneId, ver.id)}
-                        >
-                          Restore
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
               {/* Scene Operations */}
-              <div className="ed-field-group">
-                <label className="ed-field-label">Timeline & Scene Actions</label>
+              <CollapsibleSection
+                id="op-timeline"
+                title="Timeline & Scene Actions"
+                subtitle="Split, duplicate or delete this scene"
+                isOpen={isSectionOpen('op-timeline', true)}
+                onToggle={() => toggleSection('op-timeline', true)}
+                variant="card"
+              >
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   <button
                     type="button"
@@ -2802,7 +3326,53 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                     </button>
                   )}
                 </div>
-              </div>
+              </CollapsibleSection>
+
+              {/* Version History */}
+              {versions && versions.length > 0 && (
+                <CollapsibleSection
+                  id="op-history"
+                  title="Version History"
+                  subtitle="Restore previous scene edits"
+                  badge={
+                    <span style={{ fontSize: '10px', color: 'var(--ed-text-muted)' }}>
+                      {versions.length} Available
+                    </span>
+                  }
+                  isOpen={isSectionOpen('op-history', true)}
+                  onToggle={() => toggleSection('op-history', true)}
+                  variant="card"
+                >
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '140px', overflowY: 'auto' }}>
+                    {versions.map((ver) => (
+                      <div
+                        key={ver.id}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '6px 8px',
+                          background: 'var(--ed-surface-elevated)',
+                          borderRadius: '4px',
+                          fontSize: '11px',
+                        }}
+                      >
+                        <div>
+                          <strong>v{ver.versionNumber}</strong> • {new Date(ver.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </div>
+                        <button
+                          type="button"
+                          className="ed-tool-btn"
+                          style={{ fontSize: '10px' }}
+                          onClick={() => onRestoreVersion(scene.sceneId, ver.id)}
+                        >
+                          Restore
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </CollapsibleSection>
+              )}
             </div>
           )}
         </div>
