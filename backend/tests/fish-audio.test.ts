@@ -3,9 +3,10 @@ import assert from 'node:assert';
 import 'dotenv/config';
 import {
   FishAudioProvider,
-  FREE_FISH_AUDIO_MODEL,
+  DEFAULT_FISH_MODEL,
   DEFAULT_FISH_VOICES,
-  validateFreeModelPolicy
+  validateFreeModelPolicy,
+  parseApiKeys
 } from '../src/services/audio-generation/providers/fish-audio.provider.js';
 import {
   composeFishAudioText,
@@ -283,5 +284,91 @@ test('TTS Provider Factory - Coexistence of Kokoro-82M and Fish Audio', async ()
   // 4. Provider list includes fish_audio
   assert.ok(catalogue.providers.some(p => p.id === 'fish_audio'), 'Providers array should include fish_audio');
   assert.ok(catalogue.providers.some(p => p.id === 'kokoro'), 'Providers array should include kokoro');
+});
+
+test('Fish Audio - Multi-Key Parsing and Sanitization', () => {
+  const parsed1 = parseApiKeys('key1, key2 , key3');
+  assert.deepStrictEqual(parsed1, ['key1', 'key2', 'key3']);
+
+  const parsed2 = parseApiKeys('keyA\nkeyB;keyC');
+  assert.deepStrictEqual(parsed2, ['keyA', 'keyB', 'keyC']);
+
+  const parsed3 = parseApiKeys(['keyX', 'keyY']);
+  assert.deepStrictEqual(parsed3, ['keyX', 'keyY']);
+
+  const empty = parseApiKeys('');
+  assert.deepStrictEqual(empty, []);
+});
+
+test('Fish Audio - Round-Robin Multi-Key Rotation', () => {
+  const provider = new FishAudioProvider({
+    apiKeys: ['test-key-1', 'test-key-2', 'test-key-3']
+  });
+
+  const keys = provider.getEffectiveApiKeys();
+  assert.strictEqual(keys.length, 3);
+  assert.strictEqual(keys[0], 'test-key-1');
+  assert.strictEqual(keys[1], 'test-key-2');
+  assert.strictEqual(keys[2], 'test-key-3');
+
+  // Verify round-robin sequence
+  assert.strictEqual(provider.getNextApiKey(), 'test-key-1');
+  assert.strictEqual(provider.getNextApiKey(), 'test-key-2');
+  assert.strictEqual(provider.getNextApiKey(), 'test-key-3');
+  assert.strictEqual(provider.getNextApiKey(), 'test-key-1'); // loops back
+});
+
+test('Fish Audio - Automatic Failover on 429 Rate Limit', async () => {
+  const originalFetch = global.fetch;
+  const usedKeys: string[] = [];
+
+  try {
+    const mockAudioBytes = Buffer.from('MULTI-KEY-FAILOVER-MP3-STREAM');
+
+    global.fetch = async (_url: any, init: any) => {
+      const authHeader = init?.headers?.['Authorization'] as string;
+      const key = authHeader.replace('Bearer ', '');
+      usedKeys.push(key);
+
+      // Key 1 hits rate limit (429)
+      if (key === 'key-rate-limited') {
+        return {
+          ok: false,
+          status: 429,
+          text: async () => 'Rate limit exceeded for key-rate-limited'
+        } as any;
+      }
+
+      // Key 2 succeeds (200)
+      if (key === 'key-healthy') {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers({ 'content-type': 'audio/mpeg' }),
+          arrayBuffer: async () => mockAudioBytes.buffer
+        } as any;
+      }
+
+      return {
+        ok: false,
+        status: 500,
+        text: async () => 'Unknown key'
+      } as any;
+    };
+
+    const multiKeyProvider = new FishAudioProvider({
+      apiKeys: ['key-rate-limited', 'key-healthy']
+    });
+
+    const result = await multiKeyProvider.generateSpeech('नमस्ते बच्चों');
+    assert.ok(result.audioBuffer, 'Should successfully generate audio after failover');
+    assert.strictEqual(result.format, 'mp3');
+
+    // Both keys should have been called in sequence
+    assert.ok(usedKeys.includes('key-rate-limited'), 'Should have attempted first key');
+    assert.ok(usedKeys.includes('key-healthy'), 'Should have failed over to second key');
+  } finally {
+    global.fetch = originalFetch;
+  }
 });
 

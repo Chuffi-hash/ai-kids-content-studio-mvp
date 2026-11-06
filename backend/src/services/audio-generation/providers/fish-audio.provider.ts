@@ -107,8 +107,23 @@ export function validateFreeModelPolicy(model?: string): string {
   return targetModel;
 }
 
+/**
+ * Splits and sanitizes API keys from string or array inputs.
+ */
+export function parseApiKeys(source?: string | string[]): string[] {
+  if (!source) return [];
+  if (Array.isArray(source)) {
+    return source.map((k) => k.trim()).filter((k) => k.length > 0);
+  }
+  return source
+    .split(/[,\n;]/)
+    .map((k) => k.trim())
+    .filter((k) => k.length > 0);
+}
+
 export interface FishAudioProviderOptions {
   apiKey?: string;
+  apiKeys?: string[];
   model?: string;
   baseUrl?: string;
   timeoutMs?: number;
@@ -116,14 +131,26 @@ export interface FishAudioProviderOptions {
 
 export class FishAudioProvider implements TTSProvider {
   name = 'fish_audio';
-  private apiKey?: string;
+  private apiKeys: string[] = [];
+  private explicitKeysProvided: boolean = false;
+  private currentKeyIndex = 0;
   private model: string;
   private baseUrl: string;
   private timeoutMs: number;
   private effectsService: AudioEffectsService;
 
   constructor(options?: FishAudioProviderOptions) {
-    this.apiKey = options?.apiKey || process.env.FISH_API_KEY;
+    if (options?.apiKey !== undefined || options?.apiKeys !== undefined) {
+      this.explicitKeysProvided = true;
+      const directKeys = [
+        ...(options?.apiKeys || []),
+        ...parseApiKeys(options?.apiKey),
+      ];
+      this.apiKeys = Array.from(new Set(directKeys));
+    } else {
+      this.explicitKeysProvided = false;
+      this.apiKeys = [];
+    }
     this.model = options?.model || process.env.FISH_AUDIO_MODEL || DEFAULT_FISH_MODEL;
     this.baseUrl = options?.baseUrl || process.env.FISH_AUDIO_BASE_URL || 'https://api.fish.audio';
     this.timeoutMs = options?.timeoutMs || 20000;
@@ -131,11 +158,38 @@ export class FishAudioProvider implements TTSProvider {
   }
 
   /**
+   * Refreshes list of effective API keys from instance and process environment.
+   */
+  getEffectiveApiKeys(): string[] {
+    if (this.explicitKeysProvided) {
+      return [...this.apiKeys];
+    }
+    const envKeys = [
+      ...parseApiKeys(process.env.FISH_API_KEYS),
+      ...parseApiKeys(process.env.FISH_API_KEY),
+    ];
+    return Array.from(new Set(envKeys));
+  }
+
+  /**
+   * Returns the next API key in round-robin order.
+   */
+  getNextApiKey(): string | undefined {
+    const keys = this.getEffectiveApiKeys();
+    if (keys.length === 0) return undefined;
+    const key = keys[this.currentKeyIndex % keys.length];
+    this.currentKeyIndex = (this.currentKeyIndex + 1) % keys.length;
+    return key;
+  }
+
+  /**
    * Refreshes credentials and model configuration from environment.
    */
-  private getEffectiveConfig(): { apiKey: string | undefined; model: string; baseUrl: string } {
+  private getEffectiveConfig(): { apiKey: string | undefined; apiKeys: string[]; model: string; baseUrl: string } {
+    const keys = this.getEffectiveApiKeys();
     return {
-      apiKey: this.apiKey || process.env.FISH_API_KEY,
+      apiKey: keys[0],
+      apiKeys: keys,
       model: (this.model || process.env.FISH_AUDIO_MODEL || DEFAULT_FISH_MODEL).trim(),
       baseUrl: (this.baseUrl || process.env.FISH_AUDIO_BASE_URL || 'https://api.fish.audio').trim(),
     };
@@ -155,8 +209,8 @@ export class FishAudioProvider implements TTSProvider {
    * Checks whether Fish Audio is configured and ready.
    */
   async isAvailable(): Promise<boolean> {
-    const { apiKey } = this.getEffectiveConfig();
-    return Boolean(apiKey && apiKey.trim().length > 0);
+    const keys = this.getEffectiveApiKeys();
+    return keys.length > 0;
   }
 
   /**
@@ -222,12 +276,14 @@ export class FishAudioProvider implements TTSProvider {
       throw new Error('Text is required for Fish Audio speech synthesis');
     }
 
-    const { apiKey, baseUrl } = this.getEffectiveConfig();
-    if (!apiKey || apiKey.trim().length === 0) {
+    const keys = this.getEffectiveApiKeys();
+    if (keys.length === 0) {
       throw new Error(
         'Fish Audio API key is not configured. Please set FISH_API_KEY in your environment or use Kokoro TTS.'
       );
     }
+
+    const { baseUrl } = this.getEffectiveConfig();
 
     // Validate model adheres to free-tier policy
     const model = this.validateFreeModelPolicy();
@@ -262,24 +318,34 @@ export class FishAudioProvider implements TTSProvider {
       payload.reference_id = referenceId;
     }
 
-    console.log(
-      `[FishAudioProvider] Synthesizing speech with model "${model}" (lang: ${effectiveLang}, voice: ${voice}, emotion: ${options?.emotion || 'neutral'}, tag: ${composed.appliedTag || 'none'})`
-    );
-
-    const headers: Record<string, string> = {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-      'model': model,
-    };
+    // Pick starting key via round-robin
+    const startingIndex = this.currentKeyIndex % keys.length;
+    this.currentKeyIndex = (this.currentKeyIndex + 1) % keys.length;
 
     let audioBuffer: Buffer | null = null;
     let attempts = 0;
-    const maxAttempts = 3;
+    const maxAttempts = Math.max(keys.length, 3);
 
     while (attempts < maxAttempts) {
+      const activeKey = keys[(startingIndex + attempts) % keys.length];
+      const maskedKey = activeKey.length > 12 
+        ? `${activeKey.substring(0, 10)}...${activeKey.slice(-4)}`
+        : '***';
+
       attempts++;
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
+
+      const headers: Record<string, string> = {
+        'Authorization': `Bearer ${activeKey}`,
+        'Content-Type': 'application/json',
+        'model': model,
+      };
+
+      console.log(
+        `[FishAudioProvider] Synthesizing speech with model "${model}" using key ${maskedKey} ` +
+        `(attempt ${attempts}/${maxAttempts}, lang: ${effectiveLang}, voice: ${voice}, emotion: ${options?.emotion || 'neutral'}, tag: ${composed.appliedTag || 'none'})`
+      );
 
       try {
         const response = await fetch(`${baseUrl}/v1/tts`, {
@@ -304,12 +370,20 @@ export class FishAudioProvider implements TTSProvider {
         } catch {}
 
         if (statusCode === 401 || statusCode === 403) {
+          if (attempts < maxAttempts && keys.length > 1) {
+            console.warn(`[FishAudioProvider] Key ${maskedKey} failed authentication (401/403). Rotating to next API key...`);
+            continue;
+          }
           throw new Error(
             'Fish Audio authentication failed (401/403). Please verify that your FISH_API_KEY is valid.'
           );
         }
 
         if (statusCode === 429) {
+          if (attempts < maxAttempts && keys.length > 1) {
+            console.warn(`[FishAudioProvider] Key ${maskedKey} rate-limited (429). Rotating to next API key...`);
+            continue;
+          }
           throw new Error(
             'Fish Audio rate limit exceeded (429). Please wait a moment before generating more audio.'
           );
