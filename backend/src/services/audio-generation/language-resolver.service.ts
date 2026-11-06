@@ -99,9 +99,15 @@ export function resolveEffectiveLanguage(input?: LanguageResolutionInput | strin
 /**
  * Normalizes language into standardized locale code for TTS providers.
  */
-export function toTTSLanguageCode(lang: SupportedLanguage, provider: 'kokoro' | 'google' = 'kokoro'): string {
+export function toTTSLanguageCode(
+  lang: SupportedLanguage,
+  provider: 'kokoro' | 'google' | 'fish_audio' | 'fish' | string = 'kokoro'
+): string {
   if (provider === 'google') {
     return lang === 'hi' ? 'hi-IN' : 'en-US';
+  }
+  if (provider === 'fish_audio' || provider === 'fish' || provider === 'fishaudio') {
+    return lang;
   }
   return lang === 'hi' ? 'hi' : 'en-us';
 }
@@ -116,6 +122,16 @@ export function toTTSLanguageCode(lang: SupportedLanguage, provider: 'kokoro' | 
 export const KOKORO_HINDI_VOICES = ['hf_alpha', 'hf_beta', 'hm_psi', 'hm_omega'] as const;
 
 /**
+ * Known Fish Audio curated Hindi voice IDs:
+ */
+export const FISH_AUDIO_HINDI_VOICES = [
+  'fish_hi_aditi',
+  'fish_hi_kabir',
+  'fish_hi_ananya',
+  'fish_hi_aarav',
+] as const;
+
+/**
  * Checks whether a voice ID is valid for the specified language.
  */
 export function isVoiceCompatibleWithLanguage(voiceId?: string | null, lang: SupportedLanguage = 'hi'): boolean {
@@ -124,6 +140,18 @@ export function isVoiceCompatibleWithLanguage(voiceId?: string | null, lang: Sup
   }
 
   const v = voiceId.toLowerCase().trim();
+
+  // Fish Audio voice conventions
+  if (v.startsWith('fish_hi_') || v.startsWith('hindi_')) {
+    return lang === 'hi';
+  }
+  if (v.startsWith('fish_en_') || v.startsWith('english_')) {
+    return lang === 'en';
+  }
+  // Generic custom reference ID (e.g. 24-36 hex characters) from Fish Audio model library
+  if (/^[a-f0-9]{24,36}$/.test(v)) {
+    return true;
+  }
 
   if (lang === 'hi') {
     // Valid Hindi voices: starts with 'h' (Kokoro hf_*/hm_*) or 'hi' (Google hi-IN-*)
@@ -238,6 +266,28 @@ export function resolveEffectiveVoice(options: {
       return requestedVoice;
     }
     return lang === 'hi' ? 'hi-IN-Standard' : 'en-US-Standard';
+  }
+
+  if (provider === 'fish_audio' || provider === 'fish' || provider === 'fishaudio') {
+    if (requestedVoice && requestedVoice !== 'default') {
+      if (isVoiceCompatibleWithLanguage(requestedVoice, lang)) {
+        return requestedVoice;
+      }
+      console.warn(
+        `[LanguageResolver] Fish Audio voice "${requestedVoice}" is incompatible with target language "${lang}". Substituting canonical Fish Audio voice.`
+      );
+    }
+    const norm = (characterName || species || '').toLowerCase().trim();
+    if (norm.includes('pip') || norm.includes('bear') || norm.includes('भालू') || norm.includes('sammy') || norm.includes('boy')) {
+      return lang === 'hi' ? 'fish_hi_aarav' : 'fish_en_leo';
+    }
+    if (norm.includes('maya') || norm.includes('girl')) {
+      return lang === 'hi' ? 'fish_hi_ananya' : 'fish_en_lily';
+    }
+    if (norm.includes('sparky') || norm.includes('robot')) {
+      return lang === 'hi' ? 'fish_hi_kabir' : 'fish_en_oliver';
+    }
+    return lang === 'hi' ? 'fish_hi_aditi' : 'fish_en_clara';
   }
 
   // If a voice was requested, check compatibility

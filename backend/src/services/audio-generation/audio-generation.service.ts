@@ -37,13 +37,16 @@ export class AudioGenerationService {
   /**
    * Retrieves available voices catalogue and system capabilities.
    */
-  async getVoices(): Promise<{
+  async getVoices(provider?: string): Promise<{
     activeProvider: string;
     isKokoroAvailable: boolean;
+    isFishAudioAvailable: boolean;
     voices: SupportedVoice[];
+    fishAudioVoices: SupportedVoice[];
     effects: Array<{ id: string; name: string; description: string }>;
+    providers: Array<{ id: string; name: string; available: boolean; model?: string; isFree?: boolean }>;
   }> {
-    return await TTSProviderFactory.getAllVoices();
+    return await TTSProviderFactory.getAllVoices(provider);
   }
 
   /**
@@ -75,15 +78,19 @@ export class AudioGenerationService {
       lang: effectiveLang,
       provider: options.provider,
     });
-    const lang = toTTSLanguageCode(effectiveLang, providerInstance.name === 'google' ? 'google' : 'kokoro');
+    const lang = toTTSLanguageCode(effectiveLang, providerInstance.name);
     const effect = options.effect || 'normal';
     const speed = options.speed || 1.0;
     const emotion = (options.emotion || 'neutral') as SpeakingEmotion;
 
     // Delivery calculation with emotion intensity
+    // Default intensity for Fish Audio is 0.15 (15%) when not explicitly overridden
+    const defaultIntensity = providerInstance.name === 'fish_audio' ? 15 : undefined;
+    const resolvedIntensity = options.emotionIntensity !== undefined ? options.emotionIntensity : defaultIntensity;
+
     const delivery = calculateEmotionDelivery({
       emotion,
-      intensity: options.emotionIntensity,
+      intensity: resolvedIntensity,
       baseSpeed: speed,
       baseEffect: effect,
     });
@@ -92,9 +99,10 @@ export class AudioGenerationService {
     const defaultEnglishSample = "Hello! I am ready to tell a wonderful story for you.";
     const previewText = (options.sampleText || (lang === 'hi' ? defaultHindiSample : defaultEnglishSample)).trim();
 
-    // Deterministic cache key incorporating text, lang, voice, emotion, intensity, speed, effect, pitch, presence
+    // Deterministic cache key incorporating provider, text, lang, voice, emotion, intensity, speed, effect, pitch, presence
     const cacheKey = createHash('sha256')
       .update(JSON.stringify({
+        provider: providerInstance.name,
         text: previewText,
         lang,
         voice,
@@ -108,7 +116,8 @@ export class AudioGenerationService {
       .digest('hex')
       .substring(0, 16);
 
-    const cachedFilename = `preview-${voice}-${cacheKey}.wav`;
+    const ext = providerInstance.name === 'fish_audio' ? 'mp3' : 'wav';
+    const cachedFilename = `preview-${providerInstance.name}-${voice}-${cacheKey}.${ext}`;
     const cachedFilePath = path.join(this.audioDir, cachedFilename);
 
     // Reuse existing cached preview if file exists and has valid size
@@ -135,6 +144,8 @@ export class AudioGenerationService {
       speed: delivery.calibratedSpeed,
       effect: delivery.effectiveEffect,
       lang,
+      emotion,
+      emotionIntensity: delivery.intensity,
       sentencePause: delivery.sentencePause,
       clausePause: delivery.clausePause,
       pitchShiftSemitones: delivery.pitchShiftSemitones,
@@ -235,6 +246,8 @@ export class AudioGenerationService {
         speed: delivery.calibratedSpeed,
         effect: delivery.effectiveEffect,
         lang: effectiveLang,
+        emotion,
+        emotionIntensity: delivery.intensity,
         sentencePause: delivery.sentencePause,
         clausePause: delivery.clausePause,
         pitchShiftSemitones: delivery.pitchShiftSemitones,
@@ -242,6 +255,10 @@ export class AudioGenerationService {
       });
     } catch (err: any) {
       console.warn(`[AudioGeneration] TTS generation with provider "${providerInstance.name}" failed:`, err);
+      // For Fish Audio: do NOT silently fallback to Google or paid models. Throw clear descriptive error.
+      if (providerInstance.name === 'fish_audio') {
+        throw new Error(`Fish Audio narration speech generation failed: ${err.message || String(err)}`);
+      }
       // Graceful fallback to Google TTS if Kokoro fails
       if (providerInstance.name !== 'google') {
         console.log('[AudioGeneration] Attempting fallback to Google TTS...');
@@ -387,6 +404,8 @@ export class AudioGenerationService {
     let charEmotion: string | undefined;
     let charIntensity: number | undefined;
     let charEffect: AudioEffectType | undefined;
+    let charProvider: string | undefined;
+    let charModel: string | undefined;
 
     let fetchedChar: any = null;
     try {
@@ -402,6 +421,8 @@ export class AudioGenerationService {
         charEmotion = voiceConfig.emotion || voiceConfig.style;
         charIntensity = voiceConfig.emotionIntensity;
         charEffect = voiceConfig.effect;
+        charProvider = voiceConfig.provider;
+        charModel = voiceConfig.model;
       }
     } catch (err) {
       console.warn(`[AudioGeneration] Could not fetch character ${characterId || characterName} for voiceConfig:`, err);
@@ -449,6 +470,7 @@ export class AudioGenerationService {
     const sceneSpeed = scenePerf?.speed;
     const sceneEmotion = scenePerf?.emotion;
     const sceneIntensity = scenePerf?.emotionIntensity;
+    const sceneProvider = scenePerf?.provider;
 
     // D. Dialogue-line overrides
     const lineLang = options.lang;
@@ -457,6 +479,7 @@ export class AudioGenerationService {
     const lineEmotion = emotion || speakingDirection;
     const lineIntensity = emotionIntensity;
     const lineEffect = (effect && effect !== 'normal') ? effect : undefined;
+    const effectiveProvider = provider || sceneProvider || charProvider || undefined;
 
     // Effective language resolution: Line override -> Scene override -> Character setting -> Text content -> Story project -> Default Hindi
     const effectiveLang = resolveEffectiveLanguage({
@@ -472,19 +495,23 @@ export class AudioGenerationService {
       characterName: characterName || (fetchedChar as any)?.name,
       species: (fetchedChar as any)?.species,
       lang: effectiveLang,
-      provider,
+      provider: effectiveProvider,
     });
 
     const effectiveEmotion = ((lineEmotion || sceneEmotion || charEmotion || 'neutral') as string).toLowerCase() as SpeakingEmotion;
     const baseSpeed = lineSpeed ?? sceneSpeed ?? charSpeed ?? 1.0;
     const baseEffect = lineEffect || charEffect || 'normal';
 
-    // Effective intensity according to strict precedence
-    const effectiveIntensity = lineIntensity !== undefined
+    // Effective intensity according to strict precedence (default 15% for Fish Audio)
+    let effectiveIntensity = lineIntensity !== undefined
       ? lineIntensity
       : (sceneIntensity !== undefined
         ? sceneIntensity
         : (charIntensity !== undefined ? charIntensity : undefined));
+
+    if (effectiveIntensity === undefined && (effectiveProvider === 'fish_audio' || effectiveProvider === 'fish')) {
+      effectiveIntensity = 15;
+    }
 
     // Calculate emotion delivery with intensity
     const delivery = calculateEmotionDelivery({
@@ -495,11 +522,11 @@ export class AudioGenerationService {
     });
 
     console.log(
-      `[AudioGeneration] Generating dialogue for character "${characterName}": "${textToSpeak.slice(0, 40)}..." (lang: ${effectiveLang}, voice: ${effectiveVoice}, speed: ${delivery.calibratedSpeed}, effect: ${delivery.effectiveEffect}, emotion: ${effectiveEmotion}, intensity: ${delivery.intensity}%)`
+      `[AudioGeneration] Generating dialogue for character "${characterName}": "${textToSpeak.slice(0, 40)}..." (lang: ${effectiveLang}, voice: ${effectiveVoice}, provider: ${effectiveProvider || 'default'}, speed: ${delivery.calibratedSpeed}, effect: ${delivery.effectiveEffect}, emotion: ${effectiveEmotion}, intensity: ${delivery.intensity}%)`
     );
 
-    // 2. Synthesize speech using TTS provider (Kokoro-82M by default)
-    const providerInstance = await TTSProviderFactory.getProvider(provider);
+    // 2. Synthesize speech using TTS provider (Kokoro-82M by default or Fish Audio)
+    const providerInstance = await TTSProviderFactory.getProvider(effectiveProvider);
     let ttsResult;
     try {
       ttsResult = await providerInstance.generateSpeech(textToSpeak, {
@@ -507,6 +534,8 @@ export class AudioGenerationService {
         speed: delivery.calibratedSpeed,
         effect: delivery.effectiveEffect,
         lang: effectiveLang,
+        emotion: effectiveEmotion,
+        emotionIntensity: delivery.intensity,
         sentencePause: delivery.sentencePause,
         clausePause: delivery.clausePause,
         pitchShiftSemitones: delivery.pitchShiftSemitones,
@@ -514,6 +543,10 @@ export class AudioGenerationService {
       });
     } catch (err: any) {
       console.warn(`[AudioGeneration] Dialogue TTS with provider "${providerInstance.name}" failed:`, err);
+      // For Fish Audio: do NOT silently fallback to Google or paid models. Throw clear error.
+      if (providerInstance.name === 'fish_audio') {
+        throw new Error(`Fish Audio dialogue speech generation failed: ${err.message || String(err)}`);
+      }
       if (providerInstance.name !== 'google') {
         console.log('[AudioGeneration] Falling back to Google TTS for dialogue...');
         const fallback = await TTSProviderFactory.getProvider('google');
@@ -572,6 +605,7 @@ export class AudioGenerationService {
         text: textToSpeak,
         lang: effectiveLang,
         voice: ttsResult.voice || effectiveVoice,
+        provider: ttsResult.provider,
         emotion: effectiveEmotion,
         emotionIntensity: delivery.intensity,
         speed: baseSpeed,
@@ -664,6 +698,7 @@ export class AudioGenerationService {
           meta.text === line.text.trim() &&
           meta.lang === targetLang &&
           meta.voice === targetVoice &&
+          (!options.provider || !meta.provider || meta.provider === options.provider) &&
           meta.emotion === targetEmotion &&
           meta.emotionIntensity === targetIntensity &&
           meta.speed === targetSpeed &&

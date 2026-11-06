@@ -1109,9 +1109,10 @@ contentRouter.post("/scenes/:sceneId/versions/:versionId/restore", async (req, r
 });
 
 // Get available TTS voices, provider status, and effects
-contentRouter.get("/tts/voices", async (_req, res) => {
+contentRouter.get("/tts/voices", async (req, res) => {
   try {
-    const info = await audioGenerationService.getVoices();
+    const provider = req.query.provider as string | undefined;
+    const info = await audioGenerationService.getVoices(provider);
     return res.json(info);
   } catch (err: any) {
     console.error("[Content] Failed to fetch voices catalogue:", err);

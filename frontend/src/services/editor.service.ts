@@ -285,12 +285,18 @@ export interface SupportedVoice {
 export interface TTSVoicesResponse {
   activeProvider: string;
   isKokoroAvailable: boolean;
+  isFishAudioAvailable?: boolean;
   voices: SupportedVoice[];
+  fishAudioVoices?: SupportedVoice[];
   effects: Array<{ id: string; name: string; description: string }>;
+  providers?: Array<{ id: string; name: string; available: boolean; model?: string; isFree?: boolean }>;
 }
 
-export async function getTTSVoices(): Promise<TTSVoicesResponse> {
-  const res = await fetch(`${API_URL}/api/content/tts/voices`);
+export async function getTTSVoices(provider?: string): Promise<TTSVoicesResponse> {
+  const url = provider
+    ? `${API_URL}/api/content/tts/voices?provider=${encodeURIComponent(provider)}`
+    : `${API_URL}/api/content/tts/voices`;
+  const res = await fetch(url);
   if (!res.ok) throw new Error('Failed to load voices catalogue');
   return res.json();
 }
@@ -685,6 +691,8 @@ export async function generateSceneDialogueAudio(
     effect?: string;
     lang?: string;
     volume?: number;
+    provider?: string;
+    model?: string;
   }
 ): Promise<{ success: boolean; sceneId: string; dialogue: SceneDialogue }> {
   const res = await fetch(`${API_URL}/api/content/scenes/${sceneId}/dialogue/generate`, {

@@ -14,7 +14,9 @@ export type SpeakingEmotion =
   | 'angry'
   | 'surprised'
   | 'whispering'
-  | 'shouting';
+  | 'shouting'
+  | 'reassuring'
+  | 'fearful';
 
 export interface EmotionSuggestion {
   emotion: SpeakingEmotion;
@@ -148,6 +150,22 @@ export const EMOTION_DELIVERY_MAP: Record<SpeakingEmotion, EmotionDeliveryConfig
     presenceGainDb: 2.5,
     audioEffect: 'shout',
   },
+  reassuring: {
+    speedMultiplier: 0.95,
+    sentencePause: 0.30,
+    clausePause: 0.12,
+    pitchShiftSemitones: 0.0,
+    presenceGainDb: 0.5,
+    audioEffect: 'normal',
+  },
+  fearful: {
+    speedMultiplier: 1.05,
+    sentencePause: 0.22,
+    clausePause: 0.12,
+    pitchShiftSemitones: 0.4,
+    presenceGainDb: 0.8,
+    audioEffect: 'normal',
+  },
 };
 
 /**
@@ -171,6 +189,8 @@ export const DEFAULT_EMOTION_INTENSITY: Record<SpeakingEmotion, number> = {
   surprised: 50,
   whispering: 50,
   shouting: 50,
+  reassuring: 15,
+  fearful: 15,
 };
 
 /**
@@ -294,6 +314,8 @@ export const EMOTION_TO_FACIAL_EXPRESSION: Record<SpeakingEmotion, FacialExpress
   surprised: 'surprised',
   whispering: 'curious',
   shouting: 'angry',
+  reassuring: 'neutral',
+  fearful: 'scared',
 };
 
 /**
@@ -311,6 +333,29 @@ export function suggestEmotionForText(text: string): EmotionSuggestion {
 
   const raw = text.trim();
   const lower = raw.toLowerCase();
+
+  // 0. Reassuring: don't worry, we will find, it's ok, चिंता मत करो, परेशान मत हो, ढूँढ लेंगे, ठीक हो जाएगा
+  if (
+    /\b(don't worry|do not worry|no worries|we'll find|we will find|it'll be okay|it will be alright|safe with me|i'm here)\b/i.test(lower) ||
+    /चिंता मत करो|घबराओ मत|परेशान मत|सब ठीक|ढूँढ लेंगे|डरो मत|हम साथ हैं/.test(lower)
+  ) {
+    return {
+      emotion: 'reassuring',
+      facialExpression: 'neutral',
+      confidence: 0.90,
+      rationale: 'Reassuring, comforting, or protective speech',
+    };
+  }
+
+  // 0b. Fearful: terrified, horrified, fearful, बहुत डर, खौफ, कांप
+  if (/\b(terrified|horrified|fearful|trembling with fear|petrified)\b/i.test(lower) || /बहुत डर|कांप|खौफ|भयानक डर/.test(lower)) {
+    return {
+      emotion: 'fearful',
+      facialExpression: 'scared',
+      confidence: 0.88,
+      rationale: 'Intense fear or panic detected',
+    };
+  }
 
   // 1. Shouting: All Caps with multiple exclamation marks or loud exclamation
   if ((raw === raw.toUpperCase() && raw.length > 5 && /[A-Z]/.test(raw)) || /!!+/.test(raw) || /बचो|भागो|रुको/.test(raw)) {

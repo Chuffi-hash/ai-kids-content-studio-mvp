@@ -120,6 +120,29 @@ export const KOKORO_VOICES = [
   },
 ];
 
+export const FISH_AUDIO_VOICES = [
+  {
+    group: 'Hindi Storytelling (Fish Audio • Free s2.1-pro-free)',
+    lang: 'hi',
+    voices: [
+      { id: 'fish_hi_aditi', name: 'Aditi (Female • Warm Storyteller)' },
+      { id: 'fish_hi_kabir', name: 'Kabir (Male • Gentle Narrator)' },
+      { id: 'fish_hi_ananya', name: 'Ananya (Girl • Curious & Sweet)' },
+      { id: 'fish_hi_aarav', name: 'Aarav (Boy • Playful Explorer)' },
+    ],
+  },
+  {
+    group: 'English Storytelling (Fish Audio • Free s2.1-pro-free)',
+    lang: 'en',
+    voices: [
+      { id: 'fish_en_clara', name: 'Clara (Female • Warm Storyteller)' },
+      { id: 'fish_en_oliver', name: 'Oliver (Male • Calm Narrator)' },
+      { id: 'fish_en_lily', name: 'Lily (Girl • Cheerful & Gentle)' },
+      { id: 'fish_en_leo', name: 'Leo (Boy • Playful Explorer)' },
+    ],
+  },
+];
+
 const SPEAKING_DIRECTIONS: Array<{ id: SpeakingDirection; label: string; emoji: string }> = [
   { id: 'cheerful', label: 'Cheerful', emoji: '😄' },
   { id: 'excited', label: 'Excited', emoji: '🤩' },
@@ -279,6 +302,9 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
   const initialLang: 'hi' | 'en' =
     (scenePerformance?.lang === 'en' || initialVoiceConfig.lang === 'en') ? 'en' : 'hi';
 
+  const [voiceProvider, setVoiceProvider] = useState<'kokoro' | 'fish_audio'>(
+    ((scenePerformance as any)?.provider || initialVoiceConfig.provider === 'fish_audio') ? 'fish_audio' : 'kokoro'
+  );
   const [voiceLang, setVoiceLang] = useState<'hi' | 'en'>(initialLang);
   const [voiceId, setVoiceId] = useState<string>(scenePerformance?.voiceId || initialVoiceConfig.voiceId || 'hf_alpha');
   const [voiceEmotion, setVoiceEmotion] = useState<SpeakingEmotion>(scenePerformance?.emotion || initialVoiceConfig.emotion || 'neutral');
@@ -309,6 +335,8 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
     const effSpeed = override?.speed ?? config?.speed ?? 1.0;
     const effEffect = override?.effect || config?.effect || 'normal';
 
+    const effProvider: 'kokoro' | 'fish_audio' = (override as any)?.provider || config?.provider === 'fish_audio' ? 'fish_audio' : 'kokoro';
+    setVoiceProvider(effProvider);
     setVoiceLang(effLang);
     setVoiceId(effVoice);
     setVoiceEmotion(effEmotion);
@@ -372,6 +400,7 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
 
       const res = await previewVoice({
         voice: voiceId,
+        provider: voiceProvider,
         lang: voiceLang,
         emotion: voiceEmotion,
         emotionIntensity: voiceEmotionIntensity,
@@ -399,6 +428,8 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
     setVoiceSavedMsg(null);
 
     const newConfig: CharacterVoiceConfig = {
+      provider: voiceProvider,
+      model: voiceProvider === 'fish_audio' ? 's2.1-pro-free' : undefined,
       lang: voiceLang,
       voiceId,
       emotion: voiceEmotion,
@@ -802,16 +833,60 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
               fontWeight: 700,
               padding: '2px 5px',
               borderRadius: '3px',
-              background: '#047857',
+              background: voiceProvider === 'fish_audio' ? '#2563eb' : '#047857',
               color: '#ecfdf5',
               letterSpacing: '0.04em',
             }}
           >
-            KOKORO-82M
+            {voiceProvider === 'fish_audio' ? 'FISH AUDIO (s2.1-pro-free)' : 'KOKORO-82M'}
           </span>
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '10px' }}>
+          {/* TTS Provider Toggle */}
+          <div>
+            <span style={{ fontSize: '11px', color: 'var(--ed-text-muted)' }}>TTS Engine / Provider</span>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', marginTop: '3px' }}>
+              <button
+                type="button"
+                className={`ed-tool-btn ${voiceProvider === 'kokoro' ? 'primary' : ''}`}
+                style={{
+                  fontSize: '11px',
+                  fontWeight: voiceProvider === 'kokoro' ? 700 : 400,
+                  background: voiceProvider === 'kokoro' ? '#047857' : undefined,
+                  borderColor: voiceProvider === 'kokoro' ? '#059669' : undefined,
+                }}
+                onClick={() => {
+                  setVoiceProvider('kokoro');
+                  const nextVoice = voiceLang === 'hi' ? 'hf_alpha' : 'af_heart';
+                  setVoiceId(nextVoice);
+                  handleUpdateSceneVoice({ provider: 'kokoro' as any, voiceId: nextVoice });
+                }}
+              >
+                Kokoro-82M (Local)
+              </button>
+              <button
+                type="button"
+                className={`ed-tool-btn ${voiceProvider === 'fish_audio' ? 'primary' : ''}`}
+                style={{
+                  fontSize: '11px',
+                  fontWeight: voiceProvider === 'fish_audio' ? 700 : 400,
+                  background: voiceProvider === 'fish_audio' ? '#2563eb' : undefined,
+                  borderColor: voiceProvider === 'fish_audio' ? '#3b82f6' : undefined,
+                }}
+                onClick={() => {
+                  setVoiceProvider('fish_audio');
+                  const nextVoice = voiceLang === 'hi' ? 'fish_hi_aditi' : 'fish_en_clara';
+                  setVoiceId(nextVoice);
+                  setVoiceEmotionIntensity(15);
+                  handleUpdateSceneVoice({ provider: 'fish_audio' as any, voiceId: nextVoice, emotionIntensity: 15 });
+                }}
+              >
+                Fish Audio (Cloud Free)
+              </button>
+            </div>
+          </div>
+
           {/* Language Selector */}
           <div>
             <span style={{ fontSize: '11px', color: 'var(--ed-text-muted)' }}>Language</span>
@@ -852,7 +927,7 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
           {/* Assigned Voice Dropdown */}
           <div>
             <span style={{ fontSize: '11px', color: 'var(--ed-text-muted)' }}>
-              Assigned Voice ({voiceLang === 'hi' ? '4 Hindi' : '28 English'} Styles)
+              Assigned Voice ({voiceProvider === 'fish_audio' ? (voiceLang === 'hi' ? '4 Hindi' : '4 English') : (voiceLang === 'hi' ? '4 Hindi' : '28 English')} Styles)
             </span>
             <select
               className="ed-select"
@@ -867,7 +942,7 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
               }}
               style={{ width: '100%', fontSize: '11px', marginTop: '2px' }}
             >
-              {KOKORO_VOICES
+              {(voiceProvider === 'fish_audio' ? FISH_AUDIO_VOICES : KOKORO_VOICES)
                 .filter((grp) => (voiceLang === 'hi' ? grp.lang === 'hi' : grp.lang === 'en'))
                 .map((grp) => (
                   <optgroup key={grp.group} label={grp.group}>

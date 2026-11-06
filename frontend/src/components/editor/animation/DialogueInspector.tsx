@@ -121,12 +121,12 @@ export const DialogueInspector: React.FC<DialogueInspectorProps> = ({
   const filteredVoices = useMemo(() => {
     if (currentLang === 'hi') {
       const hi = ttsVoices.filter(
-        (v) => v.lang === 'hi' || v.lang === 'Hindi' || v.id.startsWith('h')
+        (v) => v.lang === 'hi' || v.lang === 'Hindi' || v.id.startsWith('h') || v.id.startsWith('fish_hi')
       );
       return hi.length > 0 ? hi : ttsVoices;
     } else {
       const en = ttsVoices.filter(
-        (v) => v.lang === 'en' || v.lang === 'English' || v.id.startsWith('a') || v.id.startsWith('b')
+        (v) => v.lang === 'en' || v.lang === 'en-us' || v.lang === 'English' || v.id.startsWith('a') || v.id.startsWith('b') || v.id.startsWith('fish_en')
       );
       return en.length > 0 ? en : ttsVoices;
     }
@@ -175,6 +175,7 @@ export const DialogueInspector: React.FC<DialogueInspectorProps> = ({
         : (selectedDialogue?.text?.slice(0, 30) || 'Hello! This is how my voice sounds.');
       const res = await previewVoice({
         voice: voiceId,
+        provider: (voiceId.startsWith('fish_') || (selectedDialogue as any)?.provider === 'fish_audio') ? 'fish_audio' : undefined,
         sampleText,
         lang: currentLang,
       });
@@ -221,6 +222,8 @@ export const DialogueInspector: React.FC<DialogueInspectorProps> = ({
       const intensity = typeof selectedDialogue.emotionIntensity === 'number' ? selectedDialogue.emotionIntensity : 60;
       const speed = selectedDialogue.speed || 1.0;
       const volume = typeof selectedDialogue.volume === 'number' ? selectedDialogue.volume : 1.0;
+      const isFish = voice.startsWith('fish_') || (selectedDialogue as any).provider === 'fish_audio' || selectedDialogue.audioMeta?.provider === 'fish_audio';
+      const provider = isFish ? 'fish_audio' : undefined;
 
       const res = await generateSceneDialogueAudio(scene.sceneId, {
         characterId: selectedDialogue.characterId,
@@ -228,6 +231,7 @@ export const DialogueInspector: React.FC<DialogueInspectorProps> = ({
         characterName: selectedDialogue.characterName,
         text: selectedDialogue.text,
         voice,
+        provider,
         emotion,
         emotionIntensity: intensity,
         facialExpression: selectedDialogue.facialExpression,
