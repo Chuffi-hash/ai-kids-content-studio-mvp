@@ -5,10 +5,9 @@ import { getImageGenerationProvider, getVideoGenerationProvider } from '../servi
 import { CharacterService } from '../services/production/characters/character.service.js';
 import { CharacterPromptService } from '../services/production/characters/character-prompt.service.js';
 import { LocalStorageService } from '../services/storage/local-storage.service.js';
-import { createScene, createImage, createStory, getSceneBySceneId, updateScene, createSceneVersion, getImagesBySceneId } from '../services/database/database.service.js';
+import { createScene, createImage, createStory, getSceneBySceneId, updateScene, createSceneVersion, getImagesBySceneId, getStoryByStoryId, getScenesByStoryId } from '../services/database/database.service.js';
 import { VideoAssemblyService } from '../services/video-assembly/video-assembly.service.js';
 import { AudioGenerationService } from '../services/audio-generation/audio-generation.service.js';
-import { getStoryByStoryId, getScenesByStoryId } from '../services/database/database.service.js';
 import { RemotionManifestAdapter } from '../services/video-assembly/remotion-manifest.adapter.js';
 import { randomUUID } from 'crypto';
 
