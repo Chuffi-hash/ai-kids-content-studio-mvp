@@ -30,6 +30,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   const normalizedInitial = initialFormat && initialFormat !== 'custom' ? initialFormat : '16:9';
   const [resolution, setResolution] = useState<'1080p' | '720p'>('720p');
   const [renderer, setRenderer] = useState<'ffmpeg' | 'remotion'>('ffmpeg');
+  const [templateId, setTemplateId] = useState<'kids-story' | 'moral-story' | 'educational' | 'nursery-learning' | 'intro-outro'>('kids-story');
+  const [subtitleTheme, setSubtitleTheme] = useState<'classic' | 'karaoke' | 'speech-bubble' | 'minimal'>('speech-bubble');
   const [format, setFormat] = useState<'16:9' | '9:16' | '1:1' | '4:5'>(normalizedInitial);
   const [sceneScope, setSceneScope] = useState<'all' | 'single'>('all');
   const [selectedSceneId, setSelectedSceneId] = useState<string>(story.scenes[0]?.sceneId || '');
@@ -76,6 +78,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({
         musicVolume,
         format,
         renderer,
+        templateId,
+        subtitleTheme,
         selectedSceneIds: sceneScope === 'single' && selectedSceneId ? [selectedSceneId] : undefined,
       });
       setJob(startedJob);
@@ -152,18 +156,30 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                 </select>
               </div>
 
-              <div className="ed-field-group">
-                <label className="ed-field-label">Rendering Engine</label>
-                <select className="ed-select" value={renderer} onChange={(e) => setRenderer(e.target.value as 'ffmpeg' | 'remotion')}>
-                  <option value="ffmpeg">FFmpeg — Existing renderer (default)</option>
-                  <option value="remotion">Remotion — React-based renderer (experimental)</option>
-                </select>
-                {renderer === 'remotion' && (
-                  <small style={{ color: 'var(--ed-text-muted)', lineHeight: 1.5 }}>
-                    Experimental. Uses the existing vector animation engine to render character frames, then Remotion for timeline composition and MP4 encoding. Requires the Remotion package dependencies to be installed on the backend host.
-                  </small>
-                )}
-              </div>
+              {renderer === 'remotion' && (
+                <>
+                  <div className="ed-field-group">
+                    <label className="ed-field-label">Video Template</label>
+                    <select className="ed-select" value={templateId} onChange={(e) => setTemplateId(e.target.value as typeof templateId)}>
+                      <option value="kids-story">Kids Story</option>
+                      <option value="moral-story">Moral Story</option>
+                      <option value="educational">Educational Explainer</option>
+                      <option value="nursery-learning">Nursery Learning</option>
+                      <option value="intro-outro">Intro / Outro</option>
+                    </select>
+                  </div>
+                  <div className="ed-field-group">
+                    <label className="ed-field-label">Subtitle Style</label>
+                    <select className="ed-select" value={subtitleTheme} onChange={(e) => setSubtitleTheme(e.target.value as typeof subtitleTheme)}>
+                      <option value="speech-bubble">Character Speech Bubble</option>
+                      <option value="karaoke">Word Highlight (Karaoke)</option>
+                      <option value="classic">Classic Captions</option>
+                      <option value="minimal">Minimal</option>
+                    </select>
+                    <small style={{ color: 'var(--ed-text-muted)' }}>Word highlighting uses estimated word timings until provider-level forced alignment is connected.</small>
+                  </div>
+                </>
+              )}
 
               <div className="ed-field-group">
                 <label className="ed-field-label">Export Scope</label>
