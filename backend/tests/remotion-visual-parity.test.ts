@@ -686,3 +686,4 @@ test('Remotion Visual Parity & 10 Core Test Cases Verification', async (t) => {
     await fs.promises.rm(testTempDir, { recursive: true, force: true });
   } catch {}
 });
+
