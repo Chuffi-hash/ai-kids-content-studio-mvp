@@ -72,6 +72,7 @@ export interface RemotionScene {
       shape: 'rest' | 'open' | 'wide' | 'round' | 'closed';
       durationMs: number;
     }>;
+    wordTimings?: Array<{ text: string; startMs: number; endMs: number }>;
   }>;
   characterInstances?: Array<{
     instanceId: string;
