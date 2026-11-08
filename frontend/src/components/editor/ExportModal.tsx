@@ -30,6 +30,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   const normalizedInitial = initialFormat && initialFormat !== 'custom' ? initialFormat : '16:9';
   const [resolution, setResolution] = useState<'1080p' | '720p'>('720p');
   const [format, setFormat] = useState<'16:9' | '9:16' | '1:1' | '4:5'>(normalizedInitial);
+  const [renderer, setRenderer] = useState<'ffmpeg' | 'remotion'>('ffmpeg');
   const [sceneScope, setSceneScope] = useState<'all' | 'single'>('all');
   const [selectedSceneId, setSelectedSceneId] = useState<string>(story.scenes[0]?.sceneId || '');
   const [job, setJob] = useState<ExportJobStatus | null>(null);
@@ -74,6 +75,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
         backgroundMusic: selectedMusic,
         musicVolume,
         format,
+        renderer,
         selectedSceneIds: sceneScope === 'single' && selectedSceneId ? [selectedSceneId] : undefined,
       });
       setJob(startedJob);
@@ -107,6 +109,23 @@ export const ExportModal: React.FC<ExportModalProps> = ({
 
           {!job ? (
             <>
+              <div className="ed-field-group">
+                <label className="ed-field-label">Rendering Engine</label>
+                <select
+                  className="ed-select"
+                  value={renderer}
+                  onChange={(e) => setRenderer(e.target.value as any)}
+                >
+                  <option value="ffmpeg">FFmpeg (Standard Local Stitcher — Default)</option>
+                  <option value="remotion">Remotion (React Frame Renderer — High Fidelity Vectors & Visemes)</option>
+                </select>
+                <div style={{ fontSize: '11px', color: 'var(--ed-text-muted)', marginTop: '4px' }}>
+                  {renderer === 'remotion'
+                    ? '⚡ Remotion renders crisp SVG vector characters, kinematics, viseme lip-sync, and overlays frame-by-frame via React.'
+                    : '🎥 FFmpeg rasterizes and stitches clips quickly using local libx264 encoding.'}
+                </div>
+              </div>
+
               <div className="ed-field-group">
                 <label className="ed-field-label">Format & Aspect Ratio</label>
                 <select
@@ -183,7 +202,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                   <strong>Soundtrack:</strong> {selectedMusic || 'Voice narration only'}
                 </div>
                 <div>
-                  <strong>Assembly Pipeline:</strong> Real FFmpeg H.264 video rendering with AAC synchronized audio
+                  <strong>Assembly Pipeline:</strong> {renderer === 'remotion' ? 'Remotion React Frame Renderer (High Fidelity H.264/AAC)' : 'Standard FFmpeg Video Assembler (H.264/AAC)'}
                 </div>
               </div>
             </>
