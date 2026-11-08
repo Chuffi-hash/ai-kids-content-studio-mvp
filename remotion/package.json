@@ -4,19 +4,22 @@
   "type": "module",
   "scripts": {
     "render": "tsx src/render.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test src/manifest.test.ts",
+    "ensure-browser": "remotion browser ensure"
   },
   "dependencies": {
     "@remotion/bundler": "^4.0.0",
     "@remotion/renderer": "^4.0.0",
     "remotion": "^4.0.0",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "react-dom": "^19.2.0",
+    "tsx": "^4.23.0"
   },
   "devDependencies": {
     "@types/node": "^22.15.0",
     "@types/react": "^19.2.0",
     "typescript": "^5.8.3",
-    "tsx": "^4.23.0"
+    "@types/react-dom": "^19.2.0"
   }
 }

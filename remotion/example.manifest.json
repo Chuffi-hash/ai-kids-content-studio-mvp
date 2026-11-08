@@ -1,30 +1,24 @@
 {
+  "version": 1,
   "fps": 30,
-  "resolution": "720p",
-  "format": "9:16",
+  "width": 1280,
+  "height": 720,
+  "silentAudioSrc": "silent.wav",
   "scenes": [
     {
-      "id": "intro",
-      "durationMs": 3000,
+      "id": "opening",
       "title": "A Magical Forest",
-      "caption": "एक जादुई जंगल",
-      "camera": "zoom-in",
-      "overlays": [
-        {
-          "text": "✨",
-          "startMs": 500,
-          "durationMs": 1500,
-          "x": 50,
-          "y": 42
-        }
-      ]
+      "caption": "Welcome to the adventure!",
+      "durationMs": 3000,
+      "audioTracks": []
     },
     {
-      "id": "scene-2",
-      "durationMs": 3500,
+      "id": "adventure",
       "title": "Our Adventure Begins",
-      "caption": "The adventure begins!",
-      "camera": "pan-left"
+      "caption": "A story made in AI Kids Content Studio",
+      "durationMs": 3500,
+      "cameraMovement": "zoom in",
+      "audioTracks": []
     }
   ]
 }
