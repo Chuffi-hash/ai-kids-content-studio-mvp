@@ -29,6 +29,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
 }) => {
   const normalizedInitial = initialFormat && initialFormat !== 'custom' ? initialFormat : '16:9';
   const [resolution, setResolution] = useState<'1080p' | '720p'>('720p');
+  const [renderer, setRenderer] = useState<'ffmpeg' | 'remotion'>('ffmpeg');
   const [format, setFormat] = useState<'16:9' | '9:16' | '1:1' | '4:5'>(normalizedInitial);
   const [sceneScope, setSceneScope] = useState<'all' | 'single'>('all');
   const [selectedSceneId, setSelectedSceneId] = useState<string>(story.scenes[0]?.sceneId || '');
@@ -74,6 +75,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
         backgroundMusic: selectedMusic,
         musicVolume,
         format,
+        renderer,
         selectedSceneIds: sceneScope === 'single' && selectedSceneId ? [selectedSceneId] : undefined,
       });
       setJob(startedJob);
@@ -134,6 +136,19 @@ export const ExportModal: React.FC<ExportModalProps> = ({
               </div>
 
               <div className="ed-field-group">
+                <label className="ed-field-label">Rendering Engine</label>
+                <select className="ed-select" value={renderer} onChange={(e) => setRenderer(e.target.value as 'ffmpeg' | 'remotion')}>
+                  <option value="ffmpeg">FFmpeg — Existing renderer (default)</option>
+                  <option value="remotion">Remotion — React-based renderer (experimental)</option>
+                </select>
+                {renderer === 'remotion' && (
+                  <small style={{ color: 'var(--ed-text-muted)', lineHeight: 1.5 }}>
+                    Experimental. Uses the existing vector animation engine to render character frames, then Remotion for timeline composition and MP4 encoding. Requires the Remotion package dependencies to be installed on the backend host.
+                  </small>
+                )}
+              </div>
+
+              <div className="ed-field-group">
                 <label className="ed-field-label">Export Scope</label>
                 <select
                   className="ed-select"
@@ -183,7 +198,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                   <strong>Soundtrack:</strong> {selectedMusic || 'Voice narration only'}
                 </div>
                 <div>
-                  <strong>Assembly Pipeline:</strong> Real FFmpeg H.264 video rendering with AAC synchronized audio
+                  <strong>Assembly Pipeline:</strong> {renderer === 'remotion' ? 'Remotion composition with H.264 MP4 encoding; FFmpeg retains final audio mastering' : 'Existing FFmpeg H.264 rendering with AAC synchronized audio'}
                 </div>
               </div>
             </>
@@ -202,7 +217,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                       <span>Video Assembly Failed</span>
                     </>
                   ) : (
-                    <span>Assembling Video Timeline...</span>
+                    <span>Rendering Video Timeline...</span>
                   )}
                 </span>
                 <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '13px' }}>
