@@ -20,6 +20,7 @@ import { evaluateCharacterPose } from './characters/animation-evaluator';
 import { getVectorRig } from './characters/rigs';
 import { VectorCharacter } from './characters/VectorCharacter';
 import { EducationalOverlayRenderer } from './overlays/EducationalOverlay';
+import { getVideoTemplate, SubtitleTheme } from './templates';
 
 const defaultManifest: VideoManifest = {
   fps: 30,
@@ -99,9 +100,11 @@ function computeCameraTransform(opts: {
 function SceneView({
   scene,
   format,
+  subtitleTheme = 'classic',
 }: {
   scene: Scene;
   format: AspectRatio;
+  subtitleTheme?: SubtitleTheme;
 }) {
   const frame = useCurrentFrame();
   const { fps, width, height } = useVideoConfig();
@@ -245,6 +248,10 @@ function SceneView({
   );
 
   const narrationUrl = scene.narration?.url || scene.narrationUrl;
+  const activeWordIndex = activeDialogue?.wordTimings?.findIndex(
+    (word) => sceneRelativeMs - (activeDialogue?.startMs || 0) >= word.startMs
+      && sceneRelativeMs - (activeDialogue?.startMs || 0) < word.endMs
+  ) ?? -1;
 
   return (
     <AbsoluteFill style={{ backgroundColor: '#101726', overflow: 'hidden' }}>
@@ -378,10 +385,11 @@ function SceneView({
         >
           <div
             style={{
-              backgroundColor: 'rgba(15, 23, 42, 0.88)',
-              border: '1.5px solid rgba(255, 255, 255, 0.2)',
-              borderRadius: 16,
-              padding: '12px 24px',
+              backgroundColor: subtitleTheme === 'speech-bubble' ? '#fffdf5' : (subtitleTheme === 'minimal' ? 'rgba(0,0,0,0.72)' : 'rgba(15, 23, 42, 0.88)'),
+              border: subtitleTheme === 'speech-bubble' ? '2px solid rgba(15,23,42,0.14)' : '1.5px solid rgba(255, 255, 255, 0.2)',
+              color: subtitleTheme === 'speech-bubble' ? '#172033' : '#ffffff',
+              borderRadius: subtitleTheme === 'speech-bubble' ? '22px 22px 22px 6px' : (subtitleTheme === 'minimal' ? 8 : 16),
+              padding: subtitleTheme === 'minimal' ? '8px 16px' : '12px 24px',
               maxWidth: '85%',
               textAlign: 'center',
               boxShadow: '0 8px 32px rgba(0, 0, 0, 0.6)',
@@ -393,7 +401,7 @@ function SceneView({
                 style={{
                   fontSize: Math.max(14, Math.round(width * 0.02)),
                   fontWeight: 700,
-                  color: '#38bdf8',
+                  color: subtitleTheme === 'speech-bubble' ? '#2563eb' : '#38bdf8',
                   marginBottom: 4,
                   textTransform: 'uppercase',
                   letterSpacing: 1,
@@ -407,12 +415,22 @@ function SceneView({
               style={{
                 fontSize: Math.max(20, Math.round(width * 0.028)),
                 fontWeight: 600,
-                color: '#ffffff',
+                color: subtitleTheme === 'speech-bubble' ? '#172033' : '#ffffff',
                 lineHeight: 1.35,
                 fontFamily: 'system-ui, -apple-system, "Noto Sans Devanagari", sans-serif',
               }}
             >
-              {activeDialogue ? activeDialogue.text : scene.caption}
+              {activeDialogue?.wordTimings?.length ? activeDialogue.wordTimings.map((word, index) => (
+                <React.Fragment key={`${activeDialogue.id}-word-${index}`}>
+                  <span style={{
+                    color: subtitleTheme === 'karaoke' && index === activeWordIndex ? '#fde047' : 'inherit',
+                    background: subtitleTheme === 'speech-bubble' && index === activeWordIndex ? 'rgba(59,130,246,0.12)' : 'transparent',
+                    borderRadius: 4,
+                    fontWeight: index === activeWordIndex ? 800 : 600,
+                    textDecoration: subtitleTheme === 'karaoke' && index === activeWordIndex ? 'underline' : 'none',
+                  }}>{word.text}</span>{' '}
+                </React.Fragment>
+              )) : (activeDialogue ? activeDialogue.text : scene.caption)}
             </div>
           </div>
         </div>
@@ -452,6 +470,8 @@ function SceneView({
 export function StoryVideo({ manifest }: { manifest: VideoManifest }) {
   const fps = manifest.fps ?? 30;
   const format = manifest.format ?? '16:9';
+  const template = getVideoTemplate(manifest.templateId);
+  const activeSubtitleTheme = manifest.subtitleTheme || template.subtitleTheme;
 
   let offset = 0;
 
@@ -481,6 +501,7 @@ export function StoryVideo({ manifest }: { manifest: VideoManifest }) {
             <SceneView
               scene={scene}
               format={format}
+              subtitleTheme={activeSubtitleTheme}
             />
           </Sequence>
         );
