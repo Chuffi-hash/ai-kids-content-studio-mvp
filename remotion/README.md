@@ -48,6 +48,14 @@ npm run render -- example.manifest.json output/pilot.mp4 public
 
 The example is a simple title-card timeline. Runtime rendering also creates the one-second silent WAV used to guarantee an audio stream. The project export route supplies real scene assets and real dialogue/narration tracks.
 
+## Editor preview, templates and AI Director
+
+- The React editor now has a **Remotion Player** preview mode backed by the read-only `/api/production/story/:storyId/remotion-preview` manifest endpoint.
+- Reusable presentation presets are available: Kids Story, Moral Story, Educational Explainer, Nursery Learning, and Intro / Outro. Subtitle themes include speech bubble, karaoke word emphasis, classic, and minimal.
+- Dialogue word timing is estimated proportionally from each line's duration when no provider-supplied alignment exists. This is a visual timing approximation, not forced alignment; connect a real word aligner for production-grade karaoke synchronization.
+- `POST /api/content/story/director` starts the prompt-to-story pipeline. It creates a structured story, generates missing scene backgrounds, and queues the Remotion export. Poll the returned `statusUrl`; its `exportJob` reports the actual video render status.
+- `POST /api/production/story/:storyId/export-variations` queues multiple aspect-ratio exports from the same story. Existing `formatVariants` position overrides are applied where present.
+
 ## Current scope and limitations
 
 - Existing vector character animation is rasterized to deterministic PNG frames by the current animation engine; Remotion handles timeline composition/encoding. This preserves visual behavior but does not yet make character rigs editable as native Remotion React layers.
@@ -55,7 +63,9 @@ The example is a simple title-card timeline. Runtime rendering also creates the 
 - Dialogue/narration timing and per-line volume are transferred to the Remotion timeline. Volume is capped at 1.0 in this first adapter to match Remotion's standard audio gain range.
 - Existing background music, ducking and final loudness mastering remain in FFmpeg.
 - Pre-rendered video clips are muted in Remotion and placed as visual scene assets; they are not looped if the source clip is shorter than the scene duration.
-- Scene transitions are currently hard cuts. Dedicated Remotion transition presets, subtitle styling, render cancellation UI and pixel-diff preview tests are not implemented yet.
+- Scene transitions are currently hard cuts. Render cancellation UI and pixel-diff preview tests are not implemented yet.
+- Batch aspect-ratio variations are supported. Automatic Hindi/English audio regeneration and short/long story recuts are not yet part of the variation endpoint.
+- Word highlighting currently uses estimated timing unless actual word-level timestamps are supplied.
 - Rendering creates PNG frame assets for vector scenes and can be disk-intensive. The adapter defaults to a maximum of 36,000 timeline frames and a 30-minute worker timeout. Configure `REMOTION_MAX_TOTAL_FRAMES` and `REMOTION_RENDER_TIMEOUT_MS` only after measuring host capacity.
 
 ## Licensing
