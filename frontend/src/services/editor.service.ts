@@ -411,6 +411,7 @@ export async function startExport(
     format?: '16:9' | '9:16' | '1:1' | '4:5' | 'custom';
     selectedSceneIds?: string[];
     targetDurationSec?: number;
+    renderer?: 'ffmpeg' | 'remotion';
   }
 ): Promise<{ job: ExportJobStatus }> {
   const res = await fetch(`${API_URL}/api/production/story/${storyId}/export`, {
