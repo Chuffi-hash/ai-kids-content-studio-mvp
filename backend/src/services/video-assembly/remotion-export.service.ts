@@ -326,11 +326,12 @@ export class RemotionExportService {
       });
       const timeoutMs = Number(process.env.REMOTION_RENDER_TIMEOUT_MS) || 30 * 60 * 1000;
       let timedOut = false;
+      let forceKill: ReturnType<typeof setTimeout> | undefined;
       const timeout = setTimeout(() => {
         timedOut = true;
         child.kill('SIGTERM');
+        forceKill = setTimeout(() => child.kill('SIGKILL'), 10000);
       }, timeoutMs);
-      let forceKill: ReturnType<typeof setTimeout> | undefined;
       let stderr = '';
       let pending = '';
       child.stdout.on('data', (chunk: Buffer) => {
@@ -361,16 +362,6 @@ export class RemotionExportService {
           reject(new Error(`Remotion renderer exited with code ${code}. ${stderr || pending}`));
         }
       });
-      const scheduleForceKill = () => {
-        if (timedOut && !forceKill) forceKill = setTimeout(() => child.kill('SIGKILL'), 10000);
-      };
-      // The timeout callback signals first, then escalates if Chromium does not exit.
-      const originalKill = child.kill.bind(child);
-      child.kill = ((signal?: NodeJS.Signals | number) => {
-        const result = originalKill(signal);
-        scheduleForceKill();
-        return result;
-      }) as typeof child.kill;
     });
   }
 }
