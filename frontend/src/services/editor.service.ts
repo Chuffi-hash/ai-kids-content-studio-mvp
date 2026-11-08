@@ -401,6 +401,24 @@ export async function generateSceneVideo(
 }
 
 
+
+export async function fetchRemotionPreviewManifest(
+  storyId: string,
+  options: { format?: string; resolution?: string; fps?: number; templateId?: string; subtitleTheme?: string } = {}
+): Promise<any> {
+  const query = new URLSearchParams();
+  Object.entries(options).forEach(([key, value]) => {
+    if (value !== undefined && value !== null) query.set(key, String(value));
+  });
+  const response = await fetch(`${API_URL}/api/production/story/${storyId}/remotion-preview?${query.toString()}`);
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.message || 'Failed to load Remotion preview');
+  }
+  const data = await response.json();
+  return data.manifest;
+}
+
 export async function startExport(
   storyId: string,
   options?: {
