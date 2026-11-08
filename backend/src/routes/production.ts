@@ -422,6 +422,47 @@ productionRouter.post('/story/:storyId/export', async (req, res) => {
   }
 });
 
+
+/**
+ * Queue multiple aspect-ratio exports from the same editable story.
+ * Format-specific character/overlay positions are read from animationData.formatVariants.
+ */
+productionRouter.post('/story/:storyId/export-variations', async (req, res) => {
+  try {
+    const { storyId } = req.params;
+    const formats = Array.isArray(req.body.formats) ? [...new Set(req.body.formats)] : [];
+    if (!formats.length || formats.some((format: string) => !['16:9', '9:16', '1:1', '4:5'].includes(format))) {
+      return res.status(400).json({ message: 'formats must contain one or more of 16:9, 9:16, 1:1, 4:5' });
+    }
+    const resolution = req.body.resolution || '720p';
+    const fps = req.body.fps || 30;
+    if (!['720p', '1080p'].includes(resolution) || !Number.isInteger(fps) || fps < 1 || fps > 60) {
+      return res.status(400).json({ message: 'Invalid resolution or FPS' });
+    }
+    const renderer = req.body.renderer || 'remotion';
+    if (renderer !== 'remotion' && renderer !== 'ffmpeg') {
+      return res.status(400).json({ message: 'renderer must be remotion or ffmpeg' });
+    }
+    const jobs = formats.map((format: '16:9' | '9:16' | '1:1' | '4:5') =>
+      videoAssemblyService.startExportJob({
+        storyId,
+        resolution,
+        fps,
+        format,
+        renderer,
+        backgroundMusic: req.body.backgroundMusic,
+        musicVolume: req.body.musicVolume,
+        templateId: req.body.templateId || 'kids-story',
+        subtitleTheme: req.body.subtitleTheme || 'speech-bubble',
+      })
+    );
+    return res.status(202).json({ success: true, jobs });
+  } catch (error: any) {
+    console.error('[Production] Failed to queue video variations:', error);
+    return res.status(500).json({ message: error?.message || 'Failed to queue video variations' });
+  }
+});
+
 productionRouter.get('/export/:jobId', (req, res) => {
   const { jobId } = req.params;
   const job = videoAssemblyService.getJob(jobId);
