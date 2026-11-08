@@ -1,0 +1,30 @@
+{
+  "fps": 30,
+  "resolution": "720p",
+  "format": "9:16",
+  "scenes": [
+    {
+      "id": "intro",
+      "durationMs": 3000,
+      "title": "A Magical Forest",
+      "caption": "एक जादुई जंगल",
+      "camera": "zoom-in",
+      "overlays": [
+        {
+          "text": "✨",
+          "startMs": 500,
+          "durationMs": 1500,
+          "x": 50,
+          "y": 42
+        }
+      ]
+    },
+    {
+      "id": "scene-2",
+      "durationMs": 3500,
+      "title": "Our Adventure Begins",
+      "caption": "The adventure begins!",
+      "camera": "pan-left"
+    }
+  ]
+}
