@@ -393,7 +393,7 @@ export class RemotionManifestAdapter {
         audioUrl: line.audioUrl ? this.resolveAssetUrl(line.audioUrl) : undefined,
         startMs: line.startMs || 0,
         durationMs: line.durationMs || 2000,
-        volume: typeof line.volume === 'number' ? line.volume : 1.0,
+        volume: typeof line.volume === 'number' ? Math.max(0, Math.min(1, line.volume)) : 1.0,
         facialExpression: line.facialExpression,
         emotion: line.emotion,
         speakingDirection: line.speakingDirection,
