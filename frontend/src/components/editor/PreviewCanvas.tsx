@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useState } from "react";
 import { EditorScene } from "../../types/editor";
 import { CharacterInstance, VectorSceneData, AspectRatioType } from "../../types/animation";
 import { VectorSceneCanvas } from "./animation/VectorSceneCanvas";
+import { RemotionPlayerPreview } from "./RemotionPlayerPreview";
 import { formatTimeMs } from "../../utils/timingEngine";
 import { resolveAssetUrl } from "../../utils/urlHelper";
 import {
@@ -17,6 +18,7 @@ import {
 } from "../common/Icons";
 
 interface PreviewCanvasProps {
+  storyId: string;
   activeScene: EditorScene | null;
   isPlaying: boolean;
   currentTimeMs: number;
@@ -30,9 +32,9 @@ interface PreviewCanvasProps {
   onGenerateImage?: () => void;
   isGeneratingImage?: boolean;
   isGeneratingVideo?: boolean;
-  previewMode?: "scene" | "export";
+  previewMode?: "scene" | "export" | "remotion";
   exportVideoUrl?: string | null;
-  onTogglePreviewMode?: (mode: "scene" | "export") => void;
+  onTogglePreviewMode?: (mode: "scene" | "export" | "remotion") => void;
   selectedMusic?: string | null;
   musicVolume?: number;
   selectedInstanceId?: string | null;
@@ -50,6 +52,7 @@ interface PreviewCanvasProps {
 }
 
 export const PreviewCanvas: React.FC<PreviewCanvasProps> = ({
+  storyId,
   activeScene,
   isPlaying,
   currentTimeMs,
@@ -231,10 +234,9 @@ export const PreviewCanvas: React.FC<PreviewCanvasProps> = ({
             style={{ display: "inline-flex", alignItems: "center", gap: "5px" }}
           >
             {previewMode === "export" ? (
-              <>
-                <FilmIcon size={12} />
-                <span>Full Movie Export</span>
-              </>
+              <><FilmIcon size={12} /><span>Full Movie Export</span></>
+            ) : previewMode === "remotion" ? (
+              <><SparklesIcon size={12} /><span>Remotion Composition Preview</span></>
             ) : (
               <span>Scene {activeScene?.number ?? 1}</span>
             )}
@@ -285,6 +287,26 @@ export const PreviewCanvas: React.FC<PreviewCanvasProps> = ({
               }
             >
               Switch to {previewMode === "scene" ? "Full Movie" : "Scene"}
+            </button>
+          )}
+
+          {onTogglePreviewMode && previewMode !== "remotion" && (
+            <button
+              type="button"
+              style={{ marginLeft: "6px", background: "rgba(139,92,246,0.25)", border: "1px solid rgba(167,139,250,0.6)", color: "white", fontSize: "10px", borderRadius: "3px", padding: "2px 6px", cursor: "pointer" }}
+              onClick={() => onTogglePreviewMode("remotion")}
+              title="Preview the complete story using the Remotion composition"
+            >
+              Remotion Player
+            </button>
+          )}
+          {onTogglePreviewMode && previewMode === "remotion" && (
+            <button
+              type="button"
+              style={{ marginLeft: "6px", background: "rgba(255,255,255,0.1)", border: "none", color: "white", fontSize: "10px", borderRadius: "3px", padding: "2px 6px", cursor: "pointer" }}
+              onClick={() => onTogglePreviewMode("scene")}
+            >
+              Back to Scene Editor
             </button>
           )}
 
@@ -455,6 +477,8 @@ export const PreviewCanvas: React.FC<PreviewCanvasProps> = ({
               Retry Video Playback
             </button>
           </div>
+        ) : previewMode === "remotion" ? (
+          <RemotionPlayerPreview storyId={storyId} format={activeFormat} />
         ) : previewMode === "export" && exportVideoUrl ? (
           <video
             ref={videoRef}

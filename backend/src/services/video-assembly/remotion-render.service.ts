@@ -19,6 +19,8 @@ export interface RemotionRenderJobOptions {
   musicVolume?: number;
   selectedSceneIds?: string[];
   targetDurationSec?: number;
+  templateId?: string;
+  subtitleTheme?: 'classic' | 'karaoke' | 'speech-bubble' | 'minimal';
   finalOutputPath: string;
   onProgress?: (progress: number, stage: string) => void;
 }
@@ -69,6 +71,8 @@ export class RemotionRenderService {
       musicVolume = 0.2,
       selectedSceneIds,
       targetDurationSec,
+      templateId,
+      subtitleTheme,
       finalOutputPath,
       onProgress,
     } = options;
@@ -87,6 +91,8 @@ export class RemotionRenderService {
         musicVolume,
         selectedSceneIds,
         targetDurationSec,
+        templateId,
+        subtitleTheme,
         embedBase64Images: true,
       }
     );

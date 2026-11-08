@@ -5,9 +5,10 @@ import { getImageGenerationProvider, getVideoGenerationProvider } from '../servi
 import { CharacterService } from '../services/production/characters/character.service.js';
 import { CharacterPromptService } from '../services/production/characters/character-prompt.service.js';
 import { LocalStorageService } from '../services/storage/local-storage.service.js';
-import { createScene, createImage, createStory, getSceneBySceneId, updateScene, createSceneVersion, getImagesBySceneId } from '../services/database/database.service.js';
+import { createScene, createImage, createStory, getSceneBySceneId, updateScene, createSceneVersion, getImagesBySceneId, getStoryByStoryId, getScenesByStoryId } from '../services/database/database.service.js';
 import { VideoAssemblyService } from '../services/video-assembly/video-assembly.service.js';
 import { AudioGenerationService } from '../services/audio-generation/audio-generation.service.js';
+import { RemotionManifestAdapter } from '../services/video-assembly/remotion-manifest.adapter.js';
 import { randomUUID } from 'crypto';
 
 export const productionRouter = Router();
@@ -308,6 +309,55 @@ productionRouter.post('/scenes/:sceneId/voice', async (req, res) => {
   }
 });
 
+
+/**
+ * Returns a browser-ready Remotion composition manifest for the editor Player.
+ * This is a read-only preview endpoint; it does not create or mutate story data.
+ */
+productionRouter.get('/story/:storyId/remotion-preview', async (req, res) => {
+  try {
+    const { storyId } = req.params;
+    const story = await getStoryByStoryId(storyId);
+    if (!story) return res.status(404).json({ message: 'Story not found' });
+    const scenes = await getScenesByStoryId(storyId, false);
+    if (!scenes?.length) return res.status(400).json({ message: 'This story has no scenes to preview' });
+
+    const format = String(req.query.format || '16:9');
+    const resolution = String(req.query.resolution || '720p');
+    const fps = Number(req.query.fps || 30);
+    const templateId = String(req.query.templateId || 'kids-story');
+    const subtitleTheme = req.query.subtitleTheme ? String(req.query.subtitleTheme) : undefined;
+    if (!['16:9', '9:16', '1:1', '4:5'].includes(format)) {
+      return res.status(400).json({ message: 'Unsupported preview aspect ratio' });
+    }
+    if (!['720p', '1080p'].includes(resolution) || !Number.isInteger(fps) || fps < 1 || fps > 60) {
+      return res.status(400).json({ message: 'Invalid preview resolution or FPS' });
+    }
+    if (!['kids-story', 'moral-story', 'educational', 'nursery-learning', 'intro-outro'].includes(templateId)) {
+      return res.status(400).json({ message: 'Unsupported video template' });
+    }
+    if (subtitleTheme && !['classic', 'karaoke', 'speech-bubble', 'minimal'].includes(subtitleTheme)) {
+      return res.status(400).json({ message: 'Unsupported subtitle theme' });
+    }
+
+    const adapter = new RemotionManifestAdapter({
+      serverOrigin: `${req.protocol}://${req.get('host')}`,
+    });
+    const manifest = await adapter.buildManifest(story, scenes, {
+      format: format as any,
+      resolution: resolution as any,
+      fps,
+      templateId,
+      subtitleTheme: subtitleTheme as any,
+      embedBase64Images: true,
+    });
+    return res.json({ success: true, manifest });
+  } catch (error: any) {
+    console.error('[Production] Remotion preview manifest failed:', error);
+    return res.status(500).json({ message: error?.message || 'Failed to prepare Remotion preview' });
+  }
+});
+
 // -------------------------------------------------------------
 // Video Assembly & Export Pipeline
 // -------------------------------------------------------------
@@ -323,6 +373,8 @@ productionRouter.post('/story/:storyId/export', async (req, res) => {
       selectedSceneIds,
       targetDurationSec,
       renderer = 'ffmpeg',
+      templateId = 'kids-story',
+      subtitleTheme,
     } = req.body;
     if (renderer !== 'ffmpeg' && renderer !== 'remotion') {
       return res.status(400).json({ message: 'renderer must be either "ffmpeg" or "remotion"' });
@@ -335,6 +387,12 @@ productionRouter.post('/story/:storyId/export', async (req, res) => {
     }
     if (!['16:9', '9:16', '1:1', '4:5', 'custom'].includes(format)) {
       return res.status(400).json({ message: 'Unsupported export format' });
+    }
+    if (!['kids-story', 'moral-story', 'educational', 'nursery-learning', 'intro-outro'].includes(templateId)) {
+      return res.status(400).json({ message: 'Unsupported video template' });
+    }
+    if (subtitleTheme !== undefined && !['classic', 'karaoke', 'speech-bubble', 'minimal'].includes(subtitleTheme)) {
+      return res.status(400).json({ message: 'Unsupported subtitle theme' });
     }
     if (renderer === 'remotion' && format === 'custom') {
       return res.status(400).json({ message: 'Remotion currently supports 16:9, 9:16, 1:1 and 4:5 formats' });
@@ -350,6 +408,8 @@ productionRouter.post('/story/:storyId/export', async (req, res) => {
       selectedSceneIds,
       targetDurationSec,
       renderer,
+      templateId,
+      subtitleTheme,
     });
 
     return res.json({
@@ -359,6 +419,47 @@ productionRouter.post('/story/:storyId/export', async (req, res) => {
   } catch (error: any) {
     console.error(`[Production] Failed to start export job for story ${req.params.storyId}:`, error);
     return res.status(500).json({ message: error.message || 'Failed to start export job' });
+  }
+});
+
+
+/**
+ * Queue multiple aspect-ratio exports from the same editable story.
+ * Format-specific character/overlay positions are read from animationData.formatVariants.
+ */
+productionRouter.post('/story/:storyId/export-variations', async (req, res) => {
+  try {
+    const { storyId } = req.params;
+    const formats = Array.isArray(req.body.formats) ? [...new Set(req.body.formats)] : [];
+    if (!formats.length || formats.some((format: string) => !['16:9', '9:16', '1:1', '4:5'].includes(format))) {
+      return res.status(400).json({ message: 'formats must contain one or more of 16:9, 9:16, 1:1, 4:5' });
+    }
+    const resolution = req.body.resolution || '720p';
+    const fps = req.body.fps || 30;
+    if (!['720p', '1080p'].includes(resolution) || !Number.isInteger(fps) || fps < 1 || fps > 60) {
+      return res.status(400).json({ message: 'Invalid resolution or FPS' });
+    }
+    const renderer = req.body.renderer || 'remotion';
+    if (renderer !== 'remotion' && renderer !== 'ffmpeg') {
+      return res.status(400).json({ message: 'renderer must be remotion or ffmpeg' });
+    }
+    const jobs = formats.map((format: '16:9' | '9:16' | '1:1' | '4:5') =>
+      videoAssemblyService.startExportJob({
+        storyId,
+        resolution,
+        fps,
+        format,
+        renderer,
+        backgroundMusic: req.body.backgroundMusic,
+        musicVolume: req.body.musicVolume,
+        templateId: req.body.templateId || 'kids-story',
+        subtitleTheme: req.body.subtitleTheme || 'speech-bubble',
+      })
+    );
+    return res.status(202).json({ success: true, jobs });
+  } catch (error: any) {
+    console.error('[Production] Failed to queue video variations:', error);
+    return res.status(500).json({ message: error?.message || 'Failed to queue video variations' });
   }
 });
 

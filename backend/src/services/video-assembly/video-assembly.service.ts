@@ -64,6 +64,8 @@ export class VideoAssemblyService {
     selectedSceneIds?: string[];
     targetDurationSec?: number;
     renderer?: 'ffmpeg' | 'remotion';
+    templateId?: string;
+    subtitleTheme?: 'classic' | 'karaoke' | 'speech-bubble' | 'minimal';
   }): ExportJob {
     const {
       storyId,
@@ -75,6 +77,8 @@ export class VideoAssemblyService {
       selectedSceneIds,
       targetDurationSec,
       renderer = 'ffmpeg',
+      templateId = 'kids-story',
+      subtitleTheme,
     } = options;
     const jobId = randomUUID();
 
@@ -102,6 +106,8 @@ export class VideoAssemblyService {
       selectedSceneIds,
       targetDurationSec,
       renderer,
+      templateId,
+      subtitleTheme,
     }).catch((err) => {
       console.error(`[VideoAssembly] Unhandled error in job ${jobId}:`, err);
       job.status = 'failed';
@@ -133,6 +139,8 @@ export class VideoAssemblyService {
     selectedSceneIds?: string[];
     targetDurationSec?: number;
     renderer?: 'ffmpeg' | 'remotion';
+    templateId?: string;
+    subtitleTheme?: 'classic' | 'karaoke' | 'speech-bubble' | 'minimal';
   }): Promise<void> {
     const {
       jobId,
@@ -145,6 +153,8 @@ export class VideoAssemblyService {
       selectedSceneIds,
       targetDurationSec,
       renderer = 'ffmpeg',
+      templateId = 'kids-story',
+      subtitleTheme,
     } = options;
 
     const job = jobs.get(jobId);
@@ -571,6 +581,8 @@ export class VideoAssemblyService {
       format?: '16:9' | '9:16' | '1:1' | '4:5' | 'custom';
       selectedSceneIds?: string[];
       targetDurationSec?: number;
+      templateId?: string;
+      subtitleTheme?: 'classic' | 'karaoke' | 'speech-bubble' | 'minimal';
     },
     job: ExportJob
   ): Promise<void> {
@@ -584,6 +596,8 @@ export class VideoAssemblyService {
       format = '16:9',
       selectedSceneIds,
       targetDurationSec,
+      templateId = 'kids-story',
+      subtitleTheme,
     } = options;
 
     try {
@@ -674,6 +688,8 @@ export class VideoAssemblyService {
         musicVolume,
         selectedSceneIds,
         targetDurationSec,
+        templateId,
+        subtitleTheme,
         finalOutputPath,
         onProgress: (progress, stage) => {
           job.progress = progress;
@@ -799,6 +815,7 @@ export class VideoAssemblyService {
       };
     }
   }
+
 
   /**
    * Renders an individual scene segment from vector animation data using Resvg and FFmpeg

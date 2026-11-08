@@ -54,7 +54,7 @@ export default function StoryDetailPage() {
   // Playback & timeline state
   const [currentTimeMs, setCurrentTimeMs] = useState<number>(0);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
-  const [previewMode, setPreviewMode] = useState<'scene' | 'export'>('scene');
+  const [previewMode, setPreviewMode] = useState<'scene' | 'export' | 'remotion'>('scene');
   const [exportVideoUrl, setExportVideoUrl] = useState<string | null>(null);
 
   // Master Volume & Audio Manager state
@@ -1825,6 +1825,7 @@ export default function StoryDetailPage() {
         {/* Center 16:9 Canvas & Playback Synchronizer */}
         {scenes.length > 0 ? (
           <PreviewCanvas
+            storyId={storyId || story?.storyId || ''}
             activeScene={activeScene}
             currentTimeMs={currentTimeMs}
             totalDurationMs={totalDurationMs}
