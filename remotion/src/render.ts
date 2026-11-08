@@ -45,7 +45,7 @@ async function main() {
     inputProps: { manifest },
     concurrency: 2,
     onProgress: ({ progress }) => {
-      process.stdout.write(`REMOTION_PROGRESS:${Math.round(progress * 100)}\\n`);
+      process.stdout.write(`REMOTION_PROGRESS:${Math.round(progress * 100)}\n`);
     },
   });
   console.log(`Rendered ${outputLocation} (${manifest.width}x${manifest.height}, ${manifest.fps}fps, ${durationInFrames} frames)`);
