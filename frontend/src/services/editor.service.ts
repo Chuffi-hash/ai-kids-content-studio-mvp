@@ -412,6 +412,8 @@ export async function startExport(
     selectedSceneIds?: string[];
     targetDurationSec?: number;
     renderer?: 'ffmpeg' | 'remotion';
+    templateId?: 'kids-story' | 'moral-story' | 'educational' | 'nursery-learning' | 'intro-outro';
+    subtitleTheme?: 'classic' | 'karaoke' | 'speech-bubble' | 'minimal';
   }
 ): Promise<{ job: ExportJobStatus }> {
   const res = await fetch(`${API_URL}/api/production/story/${storyId}/export`, {
