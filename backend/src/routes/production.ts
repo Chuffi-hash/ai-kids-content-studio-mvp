@@ -322,6 +322,7 @@ productionRouter.post('/story/:storyId/export', async (req, res) => {
       format = '16:9',
       selectedSceneIds,
       targetDurationSec,
+      renderer = 'ffmpeg',
     } = req.body;
 
     const job = videoAssemblyService.startExportJob({
@@ -333,6 +334,7 @@ productionRouter.post('/story/:storyId/export', async (req, res) => {
       format,
       selectedSceneIds,
       targetDurationSec,
+      renderer,
     });
 
     return res.json({

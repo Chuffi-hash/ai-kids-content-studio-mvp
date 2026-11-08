@@ -87,6 +87,7 @@ export interface ExportJobStatus {
   downloadUrl?: string;
   filename?: string;
   error?: string;
+  renderer?: 'ffmpeg' | 'remotion';
   createdAt: string;
   completedAt?: string;
 }

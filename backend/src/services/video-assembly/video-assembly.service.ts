@@ -10,6 +10,7 @@ import ffprobeStatic from '@ffprobe-installer/ffprobe';
 import { getStoryByStoryId, getScenesByStoryId, getImagesBySceneId } from '../database/database.service.js';
 import { VectorAnimationEngine } from '../animation/vector-animation.engine.js';
 import { AudioGenerationService } from '../audio-generation/audio-generation.service.js';
+import { RemotionRenderService } from './remotion-render.service.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -22,6 +23,7 @@ export interface ExportJob {
   downloadUrl?: string;
   filename?: string;
   error?: string;
+  renderer?: 'ffmpeg' | 'remotion';
   createdAt: Date;
   completedAt?: Date;
 }
@@ -34,6 +36,7 @@ export class VideoAssemblyService {
   private exportsDir: string;
   private tempDir: string;
   private audioGenerationService = new AudioGenerationService();
+  private remotionRenderService = new RemotionRenderService();
 
   constructor() {
     this.storageDir = process.env.STORAGE_DIR || './storage';
@@ -60,6 +63,7 @@ export class VideoAssemblyService {
     format?: '16:9' | '9:16' | '1:1' | '4:5' | 'custom';
     selectedSceneIds?: string[];
     targetDurationSec?: number;
+    renderer?: 'ffmpeg' | 'remotion';
   }): ExportJob {
     const {
       storyId,
@@ -70,6 +74,7 @@ export class VideoAssemblyService {
       format = '16:9',
       selectedSceneIds,
       targetDurationSec,
+      renderer = 'ffmpeg',
     } = options;
     const jobId = randomUUID();
 
@@ -79,6 +84,7 @@ export class VideoAssemblyService {
       status: 'queued',
       progress: 0,
       stage: 'Queued for export...',
+      renderer,
       createdAt: new Date(),
     };
 
@@ -95,6 +101,7 @@ export class VideoAssemblyService {
       format,
       selectedSceneIds,
       targetDurationSec,
+      renderer,
     }).catch((err) => {
       console.error(`[VideoAssembly] Unhandled error in job ${jobId}:`, err);
       job.status = 'failed';
@@ -113,7 +120,7 @@ export class VideoAssemblyService {
   }
 
   /**
-   * Executes the full video assembly pipeline using FFmpeg.
+   * Executes the full video assembly pipeline using FFmpeg or Remotion.
    */
   private async processExport(options: {
     jobId: string;
@@ -125,6 +132,7 @@ export class VideoAssemblyService {
     format?: '16:9' | '9:16' | '1:1' | '4:5' | 'custom';
     selectedSceneIds?: string[];
     targetDurationSec?: number;
+    renderer?: 'ffmpeg' | 'remotion';
   }): Promise<void> {
     const {
       jobId,
@@ -135,10 +143,17 @@ export class VideoAssemblyService {
       musicVolume = 0.2,
       format = '16:9',
       selectedSceneIds,
+      targetDurationSec,
+      renderer = 'ffmpeg',
     } = options;
 
     const job = jobs.get(jobId);
     if (!job) return;
+
+    if (renderer === 'remotion') {
+      await this.processRemotionExport(options, job);
+      return;
+    }
 
     job.status = 'processing';
     job.progress = 5;
@@ -539,6 +554,147 @@ export class VideoAssemblyService {
       } catch (cleanupErr) {
         console.warn(`[VideoAssembly] Failed to clean up temp dir ${jobTempDir}:`, cleanupErr);
       }
+    }
+  }
+
+  /**
+   * Executes the video assembly export using the Remotion React frame renderer.
+   */
+  private async processRemotionExport(
+    options: {
+      jobId: string;
+      storyId: string;
+      resolution: '1080p' | '720p';
+      fps: number;
+      backgroundMusic?: string | null;
+      musicVolume?: number;
+      format?: '16:9' | '9:16' | '1:1' | '4:5' | 'custom';
+      selectedSceneIds?: string[];
+      targetDurationSec?: number;
+    },
+    job: ExportJob
+  ): Promise<void> {
+    const {
+      jobId,
+      storyId,
+      resolution,
+      fps,
+      backgroundMusic,
+      musicVolume = 0.2,
+      format = '16:9',
+      selectedSceneIds,
+      targetDurationSec,
+    } = options;
+
+    try {
+      job.status = 'processing';
+      job.progress = 5;
+      job.stage = 'Loading story and scene data for Remotion...';
+
+      const story = await getStoryByStoryId(storyId);
+      if (!story) {
+        throw new Error(`Story not found: ${storyId}`);
+      }
+
+      const allScenes = await getScenesByStoryId(storyId, false);
+      if (!allScenes || allScenes.length === 0) {
+        throw new Error('This story has no scenes to export. Generate scenes first.');
+      }
+
+      let scenes = allScenes;
+      if (Array.isArray(selectedSceneIds) && selectedSceneIds.length > 0) {
+        const filtered = allScenes.filter(
+          (s) => selectedSceneIds.includes(s.sceneId) || selectedSceneIds.includes(s.id)
+        );
+        if (filtered.length > 0) {
+          scenes = filtered;
+        }
+      }
+
+      // Auto-generate missing narration audio and dialogue audio if needed
+      for (let i = 0; i < scenes.length; i++) {
+        const scene = scenes[i];
+        let audioPath = '';
+        if (scene.audioUrl) {
+          audioPath = this.resolveLocalPath(scene.audioUrl);
+        }
+
+        if (scene.narration && (!audioPath || !fs.existsSync(audioPath))) {
+          try {
+            console.log(`[VideoAssembly:Remotion] Auto-generating missing narration audio for scene ${scene.number || i + 1}...`);
+            const narrResult = await this.audioGenerationService.generateNarrationAudio({
+              sceneId: scene.sceneId || scene.id,
+              narration: scene.narration,
+            });
+            if (narrResult?.audioUrl) {
+              scene.audioUrl = narrResult.audioUrl;
+            }
+          } catch (narrErr) {
+            console.warn(`[VideoAssembly:Remotion] Narration audio notice:`, narrErr);
+          }
+        }
+
+        if ((scene.id || scene.sceneId) && Array.isArray((scene as any).animationData?.dialogueLines)) {
+          const hasUnbuiltDialogue = (scene as any).animationData.dialogueLines.some((d: any) => {
+            if (!d.text || !d.text.trim()) return false;
+            if (!d.audioUrl) return true;
+            return !fs.existsSync(this.resolveLocalPath(d.audioUrl));
+          });
+          if (hasUnbuiltDialogue) {
+            try {
+              console.log(`[VideoAssembly:Remotion] Auto-generating missing dialogue audio for scene ${scene.number || i + 1}...`);
+              const genLines = await this.audioGenerationService.generateAllSceneDialogues(scene.sceneId || scene.id);
+              if (genLines && genLines.length > 0) {
+                (scene as any).animationData.dialogueLines = genLines;
+              }
+            } catch (err) {
+              console.warn(`[VideoAssembly:Remotion] Dialogue audio notice:`, err);
+            }
+          }
+        }
+      }
+
+      const timestamp = Date.now();
+      const cleanTitle = (story.title || 'story')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .slice(0, 30);
+      const formatTag = format === '9:16' ? 'reel-9x16' : (format === '1:1' ? 'square-1x1' : (format === '4:5' ? 'portrait-4x5' : 'landscape-16x9'));
+      const finalFilename = `${cleanTitle}-${formatTag}-remotion-${timestamp}.mp4`;
+      const finalOutputPath = path.join(this.exportsDir, finalFilename);
+
+      await this.remotionRenderService.renderStoryExport({
+        jobId,
+        story,
+        scenes,
+        resolution,
+        fps,
+        format,
+        backgroundMusic,
+        musicVolume,
+        selectedSceneIds,
+        targetDurationSec,
+        finalOutputPath,
+        onProgress: (progress, stage) => {
+          job.progress = progress;
+          job.stage = stage;
+        },
+      });
+
+      const downloadUrl = `/storage/exports/${finalFilename}`;
+      job.status = 'completed';
+      job.progress = 100;
+      job.stage = 'Remotion export completed successfully!';
+      job.downloadUrl = downloadUrl;
+      job.filename = finalFilename;
+      job.completedAt = new Date();
+
+      console.log(`[VideoAssembly] Remotion export job ${jobId} completed successfully: ${downloadUrl}`);
+    } catch (error: any) {
+      console.error(`[VideoAssembly] Remotion export job ${jobId} failed:`, error);
+      job.status = 'failed';
+      job.error = error.message || 'Remotion video assembly failed';
+      job.completedAt = new Date();
     }
   }
 

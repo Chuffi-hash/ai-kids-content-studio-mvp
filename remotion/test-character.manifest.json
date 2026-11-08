@@ -1,0 +1,137 @@
+{
+  "fps": 30,
+  "resolution": "720p",
+  "format": "16:9",
+  "scenes": [
+    {
+      "id": "scene-earth-talking",
+      "sceneNumber": 1,
+      "durationMs": 3000,
+      "title": "Scene 1: Talking Earth",
+      "caption": "नमस्ते बच्चों! मैं पृथ्वी हूँ।",
+      "cameraMovement": "Slow Zoom In",
+      "cameraRotation": "none",
+      "characterInstances": [
+        {
+          "instanceId": "earth-inst-1",
+          "characterId": "earth",
+          "name": "Earth",
+          "x": 640,
+          "y": 420,
+          "scale": 1.2,
+          "rotation": 0,
+          "flipX": false,
+          "zIndex": 10,
+          "expression": "happy"
+        }
+      ],
+      "animationClips": [
+        {
+          "clipId": "clip-earth-wave",
+          "instanceId": "earth-inst-1",
+          "action": "wave",
+          "startMs": 0,
+          "durationMs": 3000,
+          "loop": true
+        }
+      ],
+      "dialogues": [
+        {
+          "id": "dlg-earth-1",
+          "characterName": "Earth",
+          "characterInstanceId": "earth-inst-1",
+          "text": "नमस्ते बच्चों! मैं पृथ्वी हूँ।",
+          "startMs": 500,
+          "durationMs": 2200,
+          "facialExpression": "happy",
+          "visemeCues": [
+            { "timeMs": 0, "shape": "open", "durationMs": 400 },
+            { "timeMs": 400, "shape": "wide", "durationMs": 500 },
+            { "timeMs": 900, "shape": "round", "durationMs": 500 },
+            { "timeMs": 1400, "shape": "closed", "durationMs": 300 },
+            { "timeMs": 1700, "shape": "open", "durationMs": 500 }
+          ]
+        }
+      ],
+      "overlays": [
+        {
+          "id": "pin-1",
+          "type": "location_pin",
+          "x": 300,
+          "y": 250,
+          "label": "Himalayas",
+          "startMs": 200,
+          "durationMs": 2500,
+          "layerDepth": "above_characters"
+        }
+      ]
+    },
+    {
+      "id": "scene-bear-walk",
+      "sceneNumber": 2,
+      "durationMs": 3500,
+      "title": "Scene 2: Pip the Bear Walking",
+      "caption": "Pip explores the enchanted forest.",
+      "cameraMovement": "Pan Left",
+      "characterInstances": [
+        {
+          "instanceId": "pip-inst-1",
+          "characterId": "pip_the_bear",
+          "name": "Pip",
+          "x": 300,
+          "y": 480,
+          "scale": 1.0,
+          "rotation": 0,
+          "flipX": false,
+          "zIndex": 10
+        }
+      ],
+      "animationClips": [
+        {
+          "clipId": "clip-pip-walk",
+          "instanceId": "pip-inst-1",
+          "action": "walk",
+          "startMs": 0,
+          "durationMs": 3500,
+          "loop": false,
+          "motionMode": "motion_path",
+          "motionPath": {
+            "startX": 300,
+            "startY": 480,
+            "endX": 950,
+            "endY": 480,
+            "easing": "easeInOut"
+          }
+        }
+      ],
+      "expressionCues": [
+        {
+          "instanceId": "pip-inst-1",
+          "expression": "happy",
+          "startMs": 0,
+          "durationMs": 1800
+        },
+        {
+          "instanceId": "pip-inst-1",
+          "expression": "curious",
+          "startMs": 1800,
+          "durationMs": 1700
+        }
+      ],
+      "overlays": [
+        {
+          "id": "route-1",
+          "type": "route_line",
+          "x": 300,
+          "y": 500,
+          "endX": 950,
+          "endY": 500,
+          "startMs": 500,
+          "durationMs": 2500,
+          "layerDepth": "below_characters"
+        }
+      ]
+    }
+  ]
+}
+
