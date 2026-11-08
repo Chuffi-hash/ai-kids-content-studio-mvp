@@ -64,6 +64,8 @@ export class VideoAssemblyService {
     selectedSceneIds?: string[];
     targetDurationSec?: number;
     renderer?: 'ffmpeg' | 'remotion';
+    templateId?: string;
+    subtitleTheme?: 'classic' | 'karaoke' | 'speech-bubble' | 'minimal';
   }): ExportJob {
     const {
       storyId,
@@ -75,6 +77,8 @@ export class VideoAssemblyService {
       selectedSceneIds,
       targetDurationSec,
       renderer = 'ffmpeg',
+      templateId = 'kids-story',
+      subtitleTheme,
     } = options;
     const jobId = randomUUID();
 
@@ -102,6 +106,8 @@ export class VideoAssemblyService {
       selectedSceneIds,
       targetDurationSec,
       renderer,
+      templateId,
+      subtitleTheme,
     }).catch((err) => {
       console.error(`[VideoAssembly] Unhandled error in job ${jobId}:`, err);
       job.status = 'failed';
@@ -133,6 +139,8 @@ export class VideoAssemblyService {
     selectedSceneIds?: string[];
     targetDurationSec?: number;
     renderer?: 'ffmpeg' | 'remotion';
+    templateId?: string;
+    subtitleTheme?: 'classic' | 'karaoke' | 'speech-bubble' | 'minimal';
   }): Promise<void> {
     const {
       jobId,
@@ -145,6 +153,8 @@ export class VideoAssemblyService {
       selectedSceneIds,
       targetDurationSec,
       renderer = 'ffmpeg',
+      templateId = 'kids-story',
+      subtitleTheme,
     } = options;
 
     const job = jobs.get(jobId);
@@ -861,6 +871,8 @@ export class VideoAssemblyService {
         musicVolume: options.musicVolume,
         selectedSceneIds: options.selectedSceneIds,
         targetDurationSec: options.targetDurationSec,
+        templateId: options.templateId,
+        subtitleTheme: options.subtitleTheme,
         finalOutputPath: renderedPath,
         onProgress: (progress, stage) => {
           job.progress = Math.min(88, Math.max(3, Math.round(3 + progress * 0.82)));
