@@ -127,6 +127,27 @@ export interface RemotionScene {
   formatVariants?: Record<string, any>;
 }
 
+function estimateWordTimings(text: string, durationMs: number) {
+  const tokens = text.match(/\\S+/gu) || [];
+  if (tokens.length === 0) return [];
+  // Proportional timing is a fallback, not forced alignment. Longer words receive
+  // slightly more time; punctuation adds a small pause to improve readability.
+  const weights = tokens.map((token) => {
+    const letters = Math.max(1, token.replace(/[^\\p{L}\\p{N}]/gu, '').length);
+    const pause = /[.!?।,:;]$/.test(token) ? 0.18 : 0;
+    return letters + pause;
+  });
+  const total = weights.reduce((sum, value) => sum + value, 0);
+  let cursor = 0;
+  return tokens.map((token, index) => {
+    const startMs = cursor;
+    cursor = index === tokens.length - 1
+      ? durationMs
+      : cursor + (durationMs * weights[index]) / total;
+    return { text: token, startMs: Math.round(startMs), endMs: Math.round(cursor) };
+  });
+}
+
 export class RemotionManifestAdapter {
   private serverOrigin: string;
   private storageDir: string;
@@ -370,6 +391,9 @@ export class RemotionManifestAdapter {
         emotion: line.emotion,
         speakingDirection: line.speakingDirection,
         visemeCues: line.visemeCues,
+        wordTimings: Array.isArray(line.wordTimings) && line.wordTimings.length > 0
+          ? line.wordTimings
+          : estimateWordTimings(line.text || '', Math.max(250, line.durationMs || 2000)),
       }));
 
       // 8. Educational Overlays
