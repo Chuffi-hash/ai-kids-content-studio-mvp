@@ -75,7 +75,7 @@ export function validateManifest(value: unknown): VideoManifest {
       if (!isSafeAssetPath(track.src)) throw new Error(`Invalid audio asset for scene ${scene.id}`);
       if (!Number.isFinite(track.startMs) || track.startMs < 0
         || !Number.isFinite(track.durationMs) || track.durationMs <= 0
-        || !Number.isFinite(track.volume) || track.volume < 0 || track.volume > 2) {
+        || !Number.isFinite(track.volume) || track.volume < 0 || track.volume > 1) {
         throw new Error(`Invalid audio timing or volume for scene ${scene.id}`);
       }
     }
