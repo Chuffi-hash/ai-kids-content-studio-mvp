@@ -93,6 +93,9 @@ export class RemotionExportService {
         } else {
           const images = await getImagesBySceneId(scene.sceneId);
           if (images.length > 0 && images[0].imageUrl) imagePath = resolveLocalPath(images[0].imageUrl);
+          if (!imagePath && animationData.background?.imageUrl) {
+            imagePath = resolveLocalPath(animationData.background.imageUrl);
+          }
         }
         if (!imagePath || !fs.existsSync(imagePath)) imagePath = '';
       }
