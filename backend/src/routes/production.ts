@@ -8,6 +8,8 @@ import { LocalStorageService } from '../services/storage/local-storage.service.j
 import { createScene, createImage, createStory, getSceneBySceneId, updateScene, createSceneVersion, getImagesBySceneId } from '../services/database/database.service.js';
 import { VideoAssemblyService } from '../services/video-assembly/video-assembly.service.js';
 import { AudioGenerationService } from '../services/audio-generation/audio-generation.service.js';
+import { getStoryByStoryId, getScenesByStoryId } from '../services/database/database.service.js';
+import { RemotionManifestAdapter } from '../services/video-assembly/remotion-manifest.adapter.js';
 import { randomUUID } from 'crypto';
 
 export const productionRouter = Router();
@@ -305,6 +307,55 @@ productionRouter.post('/scenes/:sceneId/voice', async (req, res) => {
   } catch (error: any) {
     console.error(`[Production] Voice generation failed for scene ${req.params.sceneId}:`, error);
     return res.status(500).json({ message: error.message || 'Failed to generate voice narration' });
+  }
+});
+
+
+/**
+ * Returns a browser-ready Remotion composition manifest for the editor Player.
+ * This is a read-only preview endpoint; it does not create or mutate story data.
+ */
+productionRouter.get('/story/:storyId/remotion-preview', async (req, res) => {
+  try {
+    const { storyId } = req.params;
+    const story = await getStoryByStoryId(storyId);
+    if (!story) return res.status(404).json({ message: 'Story not found' });
+    const scenes = await getScenesByStoryId(storyId, false);
+    if (!scenes?.length) return res.status(400).json({ message: 'This story has no scenes to preview' });
+
+    const format = String(req.query.format || '16:9');
+    const resolution = String(req.query.resolution || '720p');
+    const fps = Number(req.query.fps || 30);
+    const templateId = String(req.query.templateId || 'kids-story');
+    const subtitleTheme = req.query.subtitleTheme ? String(req.query.subtitleTheme) : undefined;
+    if (!['16:9', '9:16', '1:1', '4:5'].includes(format)) {
+      return res.status(400).json({ message: 'Unsupported preview aspect ratio' });
+    }
+    if (!['720p', '1080p'].includes(resolution) || !Number.isInteger(fps) || fps < 1 || fps > 60) {
+      return res.status(400).json({ message: 'Invalid preview resolution or FPS' });
+    }
+    if (!['kids-story', 'moral-story', 'educational', 'nursery-learning', 'intro-outro'].includes(templateId)) {
+      return res.status(400).json({ message: 'Unsupported video template' });
+    }
+    if (subtitleTheme && !['classic', 'karaoke', 'speech-bubble', 'minimal'].includes(subtitleTheme)) {
+      return res.status(400).json({ message: 'Unsupported subtitle theme' });
+    }
+
+    const adapter = new RemotionManifestAdapter({
+      serverOrigin: `${req.protocol}://${req.get('host')}`,
+    });
+    const manifest = await adapter.buildManifest(story, scenes, {
+      format: format as any,
+      resolution: resolution as any,
+      fps,
+      templateId,
+      subtitleTheme: subtitleTheme as any,
+      embedBase64Images: true,
+    });
+    return res.json({ success: true, manifest });
+  } catch (error: any) {
+    console.error('[Production] Remotion preview manifest failed:', error);
+    return res.status(500).json({ message: error?.message || 'Failed to prepare Remotion preview' });
   }
 });
 
