@@ -342,8 +342,9 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
       getStoryVisualBible(storyId)
         .then((bible) => {
           setVisualBible(bible);
-          if (bible?.artDirection?.primaryStyle) {
-            setLocalVisualStyle(bible.artDirection.primaryStyle);
+          const bibleStyle = bible?.artDirection?.style || bible?.artDirection?.primaryStyle;
+          if (bibleStyle) {
+            setLocalVisualStyle(bibleStyle);
           }
         })
         .catch((err) => console.warn('Could not load Visual Bible:', err))
@@ -2669,13 +2670,13 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
               >
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', fontSize: '10px', color: '#64748b' }}>
                   <span style={{ background: 'var(--ed-surface, #fff)', border: '1px solid var(--ed-border)', padding: '2px 6px', borderRadius: '4px' }}>
-                    <strong style={{ color: '#475569' }}>Style:</strong> {visualBible?.artDirection?.primaryStyle || localVisualStyle}
+                    <strong style={{ color: '#475569' }}>Style:</strong> {visualBible?.artDirection?.style || visualBible?.artDirection?.primaryStyle || localVisualStyle}
                   </span>
                   <span style={{ background: 'var(--ed-surface, #fff)', border: '1px solid var(--ed-border)', padding: '2px 6px', borderRadius: '4px' }}>
-                    <strong style={{ color: '#475569' }}>Setting:</strong> {visualBible?.worldIdentity?.settingType || 'Story World'}
+                    <strong style={{ color: '#475569' }}>Setting:</strong> {visualBible?.worldIdentity?.settingType || (visualBible?.worldIdentity?.worldDescription ? visualBible.worldIdentity.worldDescription.slice(0, 35) + '...' : 'Story World')}
                   </span>
                   <span style={{ background: 'var(--ed-surface, #fff)', border: '1px solid var(--ed-border)', padding: '2px 6px', borderRadius: '4px' }}>
-                    <strong style={{ color: '#475569' }}>Mood:</strong> {visualBible?.lightingAndColorIdentity?.dominantMood || 'Warm & Storybook'}
+                    <strong style={{ color: '#475569' }}>Lighting/Mood:</strong> {visualBible?.lightingAndColor?.lightingQuality || visualBible?.lightingAndColorIdentity?.dominantMood || 'Warm & Storybook'}
                   </span>
                 </div>
               </CollapsibleSection>

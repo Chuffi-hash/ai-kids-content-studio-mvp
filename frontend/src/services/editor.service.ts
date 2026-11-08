@@ -896,44 +896,73 @@ export interface PromptHistoryEntry {
 export interface StoryVisualBible {
   version: number;
   updatedAt: string;
+  storyId?: string;
+  storyTitle?: string;
+  createdAt?: string;
   artDirection: {
-    primaryStyle: string;
-    styleDescription: string;
-    renderingTechnique: string;
-    medium: string;
-    detailLevel: string;
+    primaryStyle?: string;
+    style?: string;
+    styleDescription?: string;
+    renderingTechnique?: string;
+    medium?: string;
+    detailLevel?: string;
+    levelOfDetail?: 'soft' | 'medium' | 'high' | 'intricate' | string;
     targetAgeGroup?: string;
+    visualQuality?: string;
+    colorPalette?: string;
+    textures?: string;
+    lightingStyle?: string;
+    depthAndPerspective?: string;
+    realismOrStylization?: string;
+    overallTone?: string;
   };
   worldIdentity: {
-    settingType: string;
-    worldDescription: string;
-    recurringLocations: Record<string, {
-      name: string;
-      terrain: string;
-      horizonStructure: string;
-      primaryStructures: string[];
-      vegetationSignature: string;
-      colorPalette: string[];
-      lightingSignature: string;
-      keyLandmarks: string[];
-      clearingDirective: string;
-    }>;
+    settingType?: string;
+    worldDescription?: string;
+    geography?: string;
+    recurringLocations?: string[] | Record<string, any>;
+    recognizableLandmarks?: string[];
+    architecture?: string;
+    terrainAndVegetation?: string;
+    recurringObjects?: string[];
+    environmentalDesignRules?: string[];
   };
-  lightingAndColorIdentity: {
-    baseColorPalette: string[];
-    dominantMood: string;
-    naturalLightingStyle: string;
-    saturationProfile: string;
-    contrastProfile: string;
+  lightingAndColorIdentity?: {
+    baseColorPalette?: string[];
+    dominantMood?: string;
+    naturalLightingStyle?: string;
+    saturationProfile?: string;
+    contrastProfile?: string;
   };
-  compositionRules: {
-    defaultAspectRatio: string;
-    horizonLinePreference: string;
-    depthLayeringMandate: string;
-    framingStyle: string;
-    negativeSpaceDirective: string;
+  lightingAndColor?: {
+    dominantColors?: string[];
+    secondaryColors?: string[];
+    lightingQuality?: string;
+    contrast?: 'low' | 'medium' | 'high' | string;
+    warmth?: 'warm' | 'neutral' | 'cool' | string;
+    shadows?: string;
+    atmosphericDepth?: string;
   };
-  exclusionRules: string[];
+  compositionRules?: {
+    defaultAspectRatio?: string;
+    horizonLinePreference?: string;
+    depthLayeringMandate?: string;
+    framingStyle?: string;
+    negativeSpaceDirective?: string;
+    defaultCameraPerspective?: string;
+    environmentDepth?: string;
+    layers?: {
+      foreground?: string;
+      middleground?: string;
+      background?: string;
+    };
+    characterPlacementZones?: string[];
+    clearingRules?: string;
+  };
+  exclusionRules?: string[] | {
+    negativePrompt?: string;
+    prohibitedElements?: string[];
+  };
 }
 
 export interface V2PromptGenerateResult {
