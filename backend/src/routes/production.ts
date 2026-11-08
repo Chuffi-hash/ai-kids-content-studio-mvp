@@ -322,7 +322,11 @@ productionRouter.post('/story/:storyId/export', async (req, res) => {
       format = '16:9',
       selectedSceneIds,
       targetDurationSec,
+      renderer = 'ffmpeg',
     } = req.body;
+    if (renderer !== 'ffmpeg' && renderer !== 'remotion') {
+      return res.status(400).json({ message: 'renderer must be either "ffmpeg" or "remotion"' });
+    }
 
     const job = videoAssemblyService.startExportJob({
       storyId,
@@ -333,6 +337,7 @@ productionRouter.post('/story/:storyId/export', async (req, res) => {
       format,
       selectedSceneIds,
       targetDurationSec,
+      renderer,
     });
 
     return res.json({
