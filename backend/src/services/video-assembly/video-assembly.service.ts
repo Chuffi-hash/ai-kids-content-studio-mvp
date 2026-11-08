@@ -581,6 +581,8 @@ export class VideoAssemblyService {
       format?: '16:9' | '9:16' | '1:1' | '4:5' | 'custom';
       selectedSceneIds?: string[];
       targetDurationSec?: number;
+      templateId?: string;
+      subtitleTheme?: 'classic' | 'karaoke' | 'speech-bubble' | 'minimal';
     },
     job: ExportJob
   ): Promise<void> {
