@@ -800,6 +800,121 @@ export class VideoAssemblyService {
     }
   }
 
+
+  /**
+   * Native Remotion export path. Remotion owns composition and scene audio;
+   * FFmpeg performs only final loudness normalization and stream validation.
+   */
+  private async processRemotionExport(
+    options: {
+      jobId: string;
+      storyId: string;
+      resolution: '1080p' | '720p';
+      fps: number;
+      backgroundMusic?: string | null;
+      musicVolume?: number;
+      format?: '16:9' | '9:16' | '1:1' | '4:5' | 'custom';
+      selectedSceneIds?: string[];
+      targetDurationSec?: number;
+    },
+    job: ExportJob
+  ): Promise<void> {
+    const jobTempDir = path.join(this.tempDir, `remotion-job-${options.jobId}`);
+    await fs.promises.mkdir(jobTempDir, { recursive: true });
+
+    try {
+      job.status = 'processing';
+      job.progress = 3;
+      job.stage = 'Loading story and scene data for Remotion...';
+
+      const story = await getStoryByStoryId(options.storyId);
+      if (!story) throw new Error(`Story not found: ${options.storyId}`);
+
+      const allScenes = await getScenesByStoryId(options.storyId, false);
+      if (!allScenes?.length) throw new Error('This story has no scenes to export.');
+
+      let scenes = allScenes;
+      if (Array.isArray(options.selectedSceneIds) && options.selectedSceneIds.length > 0) {
+        const selected = allScenes.filter((scene) =>
+          options.selectedSceneIds!.includes(scene.sceneId) || options.selectedSceneIds!.includes(scene.id)
+        );
+        if (!selected.length) throw new Error('None of the selected scenes belong to this story.');
+        scenes = selected;
+      }
+
+      const format = options.format || '16:9';
+      if (format === 'custom') throw new Error('Remotion does not support custom aspect ratios yet.');
+      const formatTag = format === '9:16' ? 'reel-9x16' : format === '1:1' ? 'square-1x1' : format === '4:5' ? 'portrait-4x5' : 'landscape-16x9';
+      const cleanTitle = String(story.title || 'story').toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 30);
+      const finalFilename = `${cleanTitle}-${formatTag}-${Date.now()}.mp4`;
+      const finalOutputPath = path.join(this.exportsDir, finalFilename);
+      const renderedPath = path.join(jobTempDir, 'remotion-rendered.mp4');
+
+      await this.remotionRenderService.renderStoryExport({
+        jobId: options.jobId,
+        story,
+        scenes,
+        resolution: options.resolution,
+        fps: options.fps,
+        format,
+        backgroundMusic: options.backgroundMusic,
+        musicVolume: options.musicVolume,
+        selectedSceneIds: options.selectedSceneIds,
+        targetDurationSec: options.targetDurationSec,
+        finalOutputPath: renderedPath,
+        onProgress: (progress, stage) => {
+          job.progress = Math.min(88, Math.max(3, Math.round(3 + progress * 0.82)));
+          job.stage = stage;
+        },
+      });
+
+      job.progress = 92;
+      job.stage = 'Normalizing final audio and validating MP4...';
+      const ffmpegPath = ffmpegStatic?.path || 'ffmpeg';
+      const ffprobePath = ffprobeStatic?.path || 'ffprobe';
+      await execFileAsync(ffmpegPath, [
+        '-nostdin', '-y', '-i', renderedPath,
+        '-map', '0:v:0', '-map', '0:a:0?',
+        '-c:v', 'copy',
+        '-af', 'aresample=44100,aformat=channel_layouts=stereo,loudnorm=I=-16:TP=-1.5:LRA=11',
+        '-c:a', 'aac', '-b:a', '192k', '-ar', '44100',
+        '-movflags', '+faststart',
+        finalOutputPath,
+      ]);
+
+      const stat = await fs.promises.stat(finalOutputPath).catch(() => null);
+      if (!stat?.isFile() || stat.size === 0) throw new Error('Remotion export did not produce a non-empty MP4.');
+
+      const { stdout } = await execFileAsync(ffprobePath, [
+        '-v', 'error', '-show_entries', 'format=duration:stream=codec_type,codec_name',
+        '-of', 'json', finalOutputPath,
+      ]);
+      const probe = JSON.parse(stdout);
+      const hasVideo = probe.streams?.some((stream: any) => stream.codec_type === 'video' && stream.codec_name === 'h264');
+      const hasAudio = probe.streams?.some((stream: any) => stream.codec_type === 'audio' && stream.codec_name === 'aac');
+      const duration = Number.parseFloat(probe.format?.duration || '0');
+      if (!hasVideo || !hasAudio || !Number.isFinite(duration) || duration <= 0) {
+        throw new Error('Remotion export validation failed: expected playable H.264 video and AAC audio.');
+      }
+
+      job.status = 'completed';
+      job.progress = 100;
+      job.stage = 'Remotion export completed successfully!';
+      job.downloadUrl = `/storage/exports/${finalFilename}`;
+      job.filename = finalFilename;
+      job.completedAt = new Date();
+    } catch (error: any) {
+      console.error(`[VideoAssembly] Remotion export job ${options.jobId} failed:`, error);
+      job.status = 'failed';
+      job.error = error?.message || 'Remotion export failed';
+      job.completedAt = new Date();
+    } finally {
+      await fs.promises.rm(jobTempDir, { recursive: true, force: true }).catch((error) => {
+        console.warn(`[VideoAssembly] Failed to clean Remotion temp directory:`, error);
+      });
+    }
+  }
+
   /**
    * Renders an individual scene segment from vector animation data using Resvg and FFmpeg
    */
