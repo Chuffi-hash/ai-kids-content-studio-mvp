@@ -324,6 +324,21 @@ productionRouter.post('/story/:storyId/export', async (req, res) => {
       targetDurationSec,
       renderer = 'ffmpeg',
     } = req.body;
+    if (renderer !== 'ffmpeg' && renderer !== 'remotion') {
+      return res.status(400).json({ message: 'renderer must be either "ffmpeg" or "remotion"' });
+    }
+    if (!['720p', '1080p'].includes(resolution)) {
+      return res.status(400).json({ message: 'resolution must be 720p or 1080p' });
+    }
+    if (!Number.isInteger(fps) || fps < 1 || fps > 60) {
+      return res.status(400).json({ message: 'fps must be an integer between 1 and 60' });
+    }
+    if (!['16:9', '9:16', '1:1', '4:5', 'custom'].includes(format)) {
+      return res.status(400).json({ message: 'Unsupported export format' });
+    }
+    if (renderer === 'remotion' && format === 'custom') {
+      return res.status(400).json({ message: 'Remotion currently supports 16:9, 9:16, 1:1 and 4:5 formats' });
+    }
 
     const job = videoAssemblyService.startExportJob({
       storyId,

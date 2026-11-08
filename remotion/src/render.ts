@@ -4,11 +4,12 @@ import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { bundle } from '@remotion/bundler';
 import { getCompositions, renderMedia } from '@remotion/renderer';
-import { dimensions, frames, validateManifest, VideoManifest } from './manifest';
+import { dimensions, frames, validateManifest, VideoManifest } from './manifest.js';
 
 export interface RenderRemotionOptions {
   manifest: VideoManifest;
   outputFile: string;
+  publicDir?: string;
   onProgress?: (renderedFrames: number, totalFrames: number, progressPct: number) => void;
   concurrency?: number;
   timeoutMs?: number;
@@ -29,22 +30,53 @@ export interface RenderRemotionResult {
 export async function renderRemotionVideo(
   options: RenderRemotionOptions
 ): Promise<RenderRemotionResult> {
-  const { manifest: rawManifest, outputFile, onProgress, concurrency, timeoutMs = 300000 } = options;
+  const { manifest: rawManifest, outputFile, publicDir, onProgress, concurrency, timeoutMs = 300000 } = options;
   const manifest = validateManifest(rawManifest);
 
   const fps = manifest.fps ?? 30;
-  const { width, height } = dimensions(manifest.format, manifest.resolution);
+  const dims = (manifest.width && manifest.height)
+    ? { width: manifest.width, height: manifest.height }
+    : dimensions(manifest.format, manifest.resolution);
+  const width = dims.width;
+  const height = dims.height;
+
   const durationInFrames = manifest.scenes.reduce(
     (n, s) => n + frames(s.durationMs, fps),
     0
   );
   const durationMs = manifest.scenes.reduce((n, s) => n + s.durationMs, 0);
 
+  // If publicDir is provided and silentAudioSrc is requested, ensure silent audio asset exists
+  if (publicDir && manifest.silentAudioSrc) {
+    await fs.mkdir(publicDir, { recursive: true });
+    const silentPath = path.join(publicDir, manifest.silentAudioSrc);
+    if (!(await fs.stat(silentPath).catch(() => null))?.isFile()) {
+      const sampleRate = 44100;
+      const dataSize = sampleRate * 2;
+      const silence = Buffer.alloc(44 + dataSize);
+      silence.write('RIFF', 0);
+      silence.writeUInt32LE(36 + dataSize, 4);
+      silence.write('WAVE', 8);
+      silence.write('fmt ', 12);
+      silence.writeUInt32LE(16, 16);
+      silence.writeUInt16LE(1, 20);
+      silence.writeUInt16LE(1, 22);
+      silence.writeUInt32LE(sampleRate, 24);
+      silence.writeUInt32LE(sampleRate * 2, 28);
+      silence.writeUInt16LE(2, 32);
+      silence.writeUInt16LE(16, 34);
+      silence.write('data', 36);
+      silence.writeUInt32LE(dataSize, 40);
+      await fs.writeFile(silentPath, silence);
+    }
+  }
+
   const entryPoint = fileURLToPath(new URL('./index.ts', import.meta.url));
 
   // Bundle the Remotion composition
   const serveUrl = await bundle({
     entryPoint,
+    publicDir,
     webpackOverride: (config) => ({
       ...config,
       resolve: {
@@ -85,6 +117,7 @@ export async function renderRemotionVideo(
         durationInFrames,
       },
       codec: 'h264',
+      audioCodec: 'aac',
       outputLocation: absOutput,
       inputProps: { manifest },
       concurrency: safeConcurrency,
@@ -92,8 +125,9 @@ export async function renderRemotionVideo(
         disableWebSecurity: true,
         ignoreCertificateErrors: true,
       },
-      onProgress: ({ renderedFrames }) => {
-        const pct = Math.round((renderedFrames / durationInFrames) * 100);
+      onProgress: ({ renderedFrames, progress }) => {
+        const pct = Math.round((progress ?? (renderedFrames / durationInFrames)) * 100);
+        process.stdout.write(`REMOTION_PROGRESS:${pct}\n`);
         if (onProgress) {
           onProgress(renderedFrames, durationInFrames, pct);
         }
@@ -118,19 +152,21 @@ export async function renderRemotionVideo(
 
 // CLI entrypoint
 async function main() {
-  const [manifestFile, outputFile] = process.argv.slice(2);
+  const [manifestFile, outputFile, publicDirArg] = process.argv.slice(2);
   if (!manifestFile || !outputFile) {
-    console.error('Usage: npm run render -- <manifest.json> <output.mp4>');
+    console.error('Usage: render <manifest.json> <output.mp4> [public-assets-directory]');
     process.exit(1);
   }
 
   const rawJson = await fs.readFile(manifestFile, 'utf8');
   const manifest = JSON.parse(rawJson);
+  const publicDir = publicDirArg ? path.resolve(publicDirArg) : undefined;
 
   console.log(`Starting Remotion render for ${outputFile}...`);
   const result = await renderRemotionVideo({
     manifest,
     outputFile,
+    publicDir,
     onProgress: (rendered, total, pct) => {
       console.log(`[PROGRESS] ${rendered} ${total} ${pct}`);
       if (rendered % 15 === 0 || rendered === total) {
@@ -140,14 +176,11 @@ async function main() {
   });
 
   console.log(
-    `Successfully rendered ${result.outputFile} (${result.width}x${result.height}, ${result.fps}fps, ${result.durationInFrames} frames)`
+    `Rendered ${result.outputFile} (${result.width}x${result.height}, ${result.fps}fps, ${result.durationInFrames} frames)`
   );
 }
 
-// Only execute main if this file is run directly
-if (process.argv[1] && process.argv[1].endsWith('render.ts')) {
-  main().catch((error) => {
-    console.error('Remotion render failed:', error);
-    process.exitCode = 1;
-  });
-}
+main().catch((error) => {
+  console.error('[RemotionRenderer] Render failed:', error);
+  process.exitCode = 1;
+});

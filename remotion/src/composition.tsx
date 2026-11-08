@@ -5,6 +5,7 @@ import {
   Composition,
   Img,
   Sequence,
+  staticFile,
   useCurrentFrame,
   useVideoConfig,
 } from 'remotion';
@@ -484,6 +485,11 @@ export function StoryVideo({ manifest }: { manifest: VideoManifest }) {
           </Sequence>
         );
       })}
+
+      {/* Guarantees an audio stream even when a story has no narration/dialogue. */}
+      {manifest.silentAudioSrc && (
+        <Audio src={staticFile(manifest.silentAudioSrc)} volume={0} loop />
+      )}
     </AbsoluteFill>
   );
 }

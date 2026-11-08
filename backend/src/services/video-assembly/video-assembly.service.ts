@@ -205,6 +205,7 @@ export class VideoAssemblyService {
     const ffmpegPath = ffmpegStatic?.path || 'ffmpeg';
 
     try {
+      const assembledPath = path.join(jobTempDir, 'assembled.mp4');
       const segmentFiles: string[] = [];
 
       for (let i = 0; i < scenes.length; i++) {
@@ -421,7 +422,6 @@ export class VideoAssemblyService {
         .join('\n');
       await fs.promises.writeFile(concatListPath, concatContent, 'utf-8');
 
-      const assembledPath = path.join(jobTempDir, 'assembled.mp4');
 
       // Use concat demuxer to concatenate all scene videos
       await execFileAsync(ffmpegPath, [
