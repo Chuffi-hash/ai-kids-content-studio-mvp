@@ -14,8 +14,26 @@ async function main() {
   const manifest = validateManifest(JSON.parse(await fs.readFile(manifestFile, 'utf8')));
   const publicDir = path.resolve(publicDirArg);
   const outputLocation = path.resolve(outputFile);
-  if (!(await fs.stat(publicDir).catch(() => null))?.isDirectory()) {
-    throw new Error(`Remotion public assets directory does not exist: ${publicDir}`);
+  await fs.mkdir(publicDir, { recursive: true });
+  const silentPath = path.join(publicDir, manifest.silentAudioSrc);
+  if (!(await fs.stat(silentPath).catch(() => null))?.isFile()) {
+    const sampleRate = 44100;
+    const dataSize = sampleRate * 2;
+    const silence = Buffer.alloc(44 + dataSize);
+    silence.write('RIFF', 0);
+    silence.writeUInt32LE(36 + dataSize, 4);
+    silence.write('WAVE', 8);
+    silence.write('fmt ', 12);
+    silence.writeUInt32LE(16, 16);
+    silence.writeUInt16LE(1, 20);
+    silence.writeUInt16LE(1, 22);
+    silence.writeUInt32LE(sampleRate, 24);
+    silence.writeUInt32LE(sampleRate * 2, 28);
+    silence.writeUInt16LE(2, 32);
+    silence.writeUInt16LE(16, 34);
+    silence.write('data', 36);
+    silence.writeUInt32LE(dataSize, 40);
+    await fs.writeFile(silentPath, silence);
   }
   await fs.mkdir(path.dirname(outputLocation), { recursive: true });
 
