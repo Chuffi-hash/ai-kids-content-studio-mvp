@@ -58,9 +58,8 @@ The example is a simple title-card timeline. Runtime rendering also creates the 
 
 ## Current scope and limitations
 
-- Existing vector character animation is rasterized to deterministic PNG frames by the current animation engine; Remotion handles timeline composition/encoding. This preserves visual behavior but does not yet make character rigs editable as native Remotion React layers.
-- Existing vector scene overlays are baked into those rendered frames.
-- Dialogue/narration timing and per-line volume are transferred to the Remotion timeline. Volume is capped at 1.0 in this first adapter to match Remotion's standard audio gain range.
+- The active Remotion renderer draws vector rigs as native React/SVG layers. The existing FFmpeg renderer remains unchanged and uses the established vector-animation pipeline.
+- Dialogue/narration timing and per-line volume are transferred to the Remotion timeline. Dialogue gain is clamped to Remotion's supported 0–1 range.
 - Existing background music, ducking and final loudness mastering remain in FFmpeg.
 - Pre-rendered video clips are muted in Remotion and placed as visual scene assets; they are not looped if the source clip is shorter than the scene duration.
 - Scene transitions are currently hard cuts. Render cancellation UI and pixel-diff preview tests are not implemented yet.
