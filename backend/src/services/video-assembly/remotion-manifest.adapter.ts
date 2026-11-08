@@ -16,6 +16,8 @@ export interface RemotionManifestAdapterOptions {
   targetDurationSec?: number;
   serverOrigin?: string; // e.g. http://localhost:5001
   embedBase64Images?: boolean;
+  templateId?: string;
+  subtitleTheme?: 'classic' | 'karaoke' | 'speech-bubble' | 'minimal';
 }
 
 export interface RemotionManifest {
@@ -27,6 +29,8 @@ export interface RemotionManifest {
   format: AspectRatio;
   backgroundMusic?: string;
   musicVolume?: number;
+  templateId?: string;
+  subtitleTheme?: 'classic' | 'karaoke' | 'speech-bubble' | 'minimal';
   scenes: RemotionScene[];
 }
 
@@ -222,6 +226,8 @@ export class RemotionManifestAdapter {
       musicVolume = 0.2,
       selectedSceneIds,
       embedBase64Images = true,
+      templateId = 'kids-story',
+      subtitleTheme,
     } = options;
 
     const normalizedFormat: AspectRatio =
@@ -467,6 +473,8 @@ export class RemotionManifestAdapter {
       format: normalizedFormat,
       backgroundMusic: resolvedBgm,
       musicVolume,
+      templateId,
+      subtitleTheme,
       scenes: adaptedScenes,
     };
   }
