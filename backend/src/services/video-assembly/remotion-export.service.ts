@@ -59,6 +59,17 @@ export class RemotionExportService {
     const assetsDir = path.join(publicDir, 'assets');
     await fs.promises.mkdir(assetsDir, { recursive: true });
 
+    const totalTimelineFrames = scenes.reduce(
+      (total, scene) => total + Math.max(1, Math.round(this.getSceneDurationMs(scene) * fps / 1000)),
+      0,
+    );
+    const maxTimelineFrames = Number(process.env.REMOTION_MAX_TOTAL_FRAMES) || 36000;
+    if (totalTimelineFrames > maxTimelineFrames) {
+      throw new Error(
+        `Remotion export exceeds the configured frame budget (${totalTimelineFrames} > ${maxTimelineFrames}). Reduce duration/FPS or use FFmpeg.`
+      );
+    }
+
     const engine = new VectorAnimationEngine();
     const manifestScenes: RemotionScene[] = [];
 
@@ -313,6 +324,13 @@ export class RemotionExportService {
         env: { ...process.env, NODE_ENV: process.env.NODE_ENV || 'production' },
         stdio: ['ignore', 'pipe', 'pipe'],
       });
+      const timeoutMs = Number(process.env.REMOTION_RENDER_TIMEOUT_MS) || 30 * 60 * 1000;
+      let timedOut = false;
+      const timeout = setTimeout(() => {
+        timedOut = true;
+        child.kill('SIGTERM');
+      }, timeoutMs);
+      let forceKill: ReturnType<typeof setTimeout> | undefined;
       let stderr = '';
       let pending = '';
       child.stdout.on('data', (chunk: Buffer) => {
@@ -328,11 +346,31 @@ export class RemotionExportService {
       child.stderr.on('data', (chunk: Buffer) => {
         stderr = (stderr + chunk.toString()).slice(-12000);
       });
-      child.once('error', reject);
-      child.once('close', (code) => {
-        if (code === 0) resolve();
-        else reject(new Error(`Remotion renderer exited with code ${code}. ${stderr || pending}`));
+      child.once('error', (error) => {
+        clearTimeout(timeout);
+        reject(error);
       });
+      child.once('close', (code) => {
+        clearTimeout(timeout);
+        if (forceKill) clearTimeout(forceKill);
+        if (timedOut) {
+          reject(new Error(`Remotion renderer exceeded its ${timeoutMs}ms timeout and was terminated.`));
+        } else if (code === 0) {
+          resolve();
+        } else {
+          reject(new Error(`Remotion renderer exited with code ${code}. ${stderr || pending}`));
+        }
+      });
+      const scheduleForceKill = () => {
+        if (timedOut && !forceKill) forceKill = setTimeout(() => child.kill('SIGKILL'), 10000);
+      };
+      // The timeout callback signals first, then escalates if Chromium does not exit.
+      const originalKill = child.kill.bind(child);
+      child.kill = ((signal?: NodeJS.Signals | number) => {
+        const result = originalKill(signal);
+        scheduleForceKill();
+        return result;
+      }) as typeof child.kill;
     });
   }
 }
