@@ -10,6 +10,7 @@ import ffprobeStatic from '@ffprobe-installer/ffprobe';
 import { getStoryByStoryId, getScenesByStoryId, getImagesBySceneId } from '../database/database.service.js';
 import { VectorAnimationEngine } from '../animation/vector-animation.engine.js';
 import { AudioGenerationService } from '../audio-generation/audio-generation.service.js';
+import { RemotionExportService } from './remotion-export.service.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -60,6 +61,7 @@ export class VideoAssemblyService {
     format?: '16:9' | '9:16' | '1:1' | '4:5' | 'custom';
     selectedSceneIds?: string[];
     targetDurationSec?: number;
+    renderer?: 'ffmpeg' | 'remotion';
   }): ExportJob {
     const {
       storyId,
@@ -70,6 +72,7 @@ export class VideoAssemblyService {
       format = '16:9',
       selectedSceneIds,
       targetDurationSec,
+      renderer = 'ffmpeg',
     } = options;
     const jobId = randomUUID();
 
@@ -95,6 +98,7 @@ export class VideoAssemblyService {
       format,
       selectedSceneIds,
       targetDurationSec,
+      renderer,
     }).catch((err) => {
       console.error(`[VideoAssembly] Unhandled error in job ${jobId}:`, err);
       job.status = 'failed';
@@ -125,6 +129,7 @@ export class VideoAssemblyService {
     format?: '16:9' | '9:16' | '1:1' | '4:5' | 'custom';
     selectedSceneIds?: string[];
     targetDurationSec?: number;
+    renderer?: 'ffmpeg' | 'remotion';
   }): Promise<void> {
     const {
       jobId,
@@ -135,6 +140,7 @@ export class VideoAssemblyService {
       musicVolume = 0.2,
       format = '16:9',
       selectedSceneIds,
+      renderer = 'ffmpeg',
     } = options;
 
     const job = jobs.get(jobId);
@@ -190,6 +196,26 @@ export class VideoAssemblyService {
     const ffmpegPath = ffmpegStatic?.path || 'ffmpeg';
 
     try {
+      const assembledPath = path.join(jobTempDir, 'assembled.mp4');
+      if (renderer === 'remotion') {
+        job.progress = 8;
+        job.stage = 'Preparing Remotion composition and existing character animation frames...';
+        const remotionService = new RemotionExportService();
+        await remotionService.render({
+          scenes,
+          fps,
+          width,
+          height,
+          format,
+          jobTempDir,
+          outputPath: assembledPath,
+          resolveLocalPath: (assetUrl: string) => this.resolveLocalPath(assetUrl),
+          onProgress: (progress, stage) => {
+            job.progress = Math.max(8, Math.min(88, progress));
+            job.stage = stage;
+          },
+        });
+      } else {
       const segmentFiles: string[] = [];
 
       for (let i = 0; i < scenes.length; i++) {
@@ -406,7 +432,6 @@ export class VideoAssemblyService {
         .join('\n');
       await fs.promises.writeFile(concatListPath, concatContent, 'utf-8');
 
-      const assembledPath = path.join(jobTempDir, 'assembled.mp4');
 
       // Use concat demuxer to concatenate all scene videos
       await execFileAsync(ffmpegPath, [
@@ -418,6 +443,8 @@ export class VideoAssemblyService {
         '-c', 'copy',
         assembledPath,
       ]);
+
+      }
 
       job.progress = 90;
       job.stage = 'Finalizing export format and master audio...';
