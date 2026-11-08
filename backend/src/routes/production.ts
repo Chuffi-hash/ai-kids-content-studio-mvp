@@ -323,6 +323,8 @@ productionRouter.post('/story/:storyId/export', async (req, res) => {
       selectedSceneIds,
       targetDurationSec,
       renderer = 'ffmpeg',
+      templateId = 'kids-story',
+      subtitleTheme,
     } = req.body;
     if (renderer !== 'ffmpeg' && renderer !== 'remotion') {
       return res.status(400).json({ message: 'renderer must be either "ffmpeg" or "remotion"' });
@@ -335,6 +337,12 @@ productionRouter.post('/story/:storyId/export', async (req, res) => {
     }
     if (!['16:9', '9:16', '1:1', '4:5', 'custom'].includes(format)) {
       return res.status(400).json({ message: 'Unsupported export format' });
+    }
+    if (!['kids-story', 'moral-story', 'educational', 'nursery-learning', 'intro-outro'].includes(templateId)) {
+      return res.status(400).json({ message: 'Unsupported video template' });
+    }
+    if (subtitleTheme !== undefined && !['classic', 'karaoke', 'speech-bubble', 'minimal'].includes(subtitleTheme)) {
+      return res.status(400).json({ message: 'Unsupported subtitle theme' });
     }
     if (renderer === 'remotion' && format === 'custom') {
       return res.status(400).json({ message: 'Remotion currently supports 16:9, 9:16, 1:1 and 4:5 formats' });
@@ -350,6 +358,8 @@ productionRouter.post('/story/:storyId/export', async (req, res) => {
       selectedSceneIds,
       targetDurationSec,
       renderer,
+      templateId,
+      subtitleTheme,
     });
 
     return res.json({
