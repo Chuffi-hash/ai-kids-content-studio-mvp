@@ -1,47 +1,121 @@
 import React from 'react';
-import { AbsoluteFill, Audio, Composition, Img, interpolate, Sequence, useCurrentFrame, useVideoConfig } from 'remotion';
-import { dimensions, frames, type Scene, type VideoManifest } from './manifest.js';
+import {
+  AbsoluteFill,
+  Audio,
+  Composition,
+  Img,
+  OffthreadVideo,
+  Sequence,
+  staticFile,
+  useCurrentFrame,
+  useVideoConfig,
+} from 'remotion';
+import { frames, type Scene, type VideoManifest } from './manifest.js';
 
-const defaultManifest: VideoManifest = { scenes: [{ id: 'preview', durationMs: 3000, title: 'AI Kids Content Studio', caption: 'Remotion rendering pilot' }] };
+const defaultManifest: VideoManifest = {
+  version: 1,
+  fps: 30,
+  width: 1280,
+  height: 720,
+  silentAudioSrc: 'silent.wav',
+  scenes: [{
+    id: 'preview',
+    title: 'AI Kids Content Studio',
+    durationMs: 3000,
+    audioTracks: [],
+  }],
+};
 
 function SceneView({ scene }: { scene: Scene }) {
   const frame = useCurrentFrame();
   const { fps, width, height } = useVideoConfig();
-  const length = frames(scene.durationMs, fps);
-  const progress = Math.min(1, frame / Math.max(1, length - 1));
-  const camera = scene.camera ?? 'static';
-  const scale = camera === 'zoom-in' ? 1 + progress * 0.12 : camera === 'zoom-out' ? 1.12 - progress * 0.12 : 1.06;
-  const translateX = camera === 'pan-left' ? -progress * width * 0.08 : camera === 'pan-right' ? progress * width * 0.08 : 0;
-  return <AbsoluteFill style={{ backgroundColor: '#101827', overflow: 'hidden', color: 'white', fontFamily: 'Arial, sans-serif' }}>
-    {scene.backgroundUrl && <AbsoluteFill style={{ transform: `translateX(${translateX}px) scale(${scale})` }}>
-      <Img src={scene.backgroundUrl} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-    </AbsoluteFill>}
-    {scene.title && <div style={{ position: 'absolute', top: height * 0.07, left: width * 0.06, right: width * 0.06, fontWeight: 800, fontSize: Math.max(28, width * 0.038), textShadow: '0 3px 12px #000' }}>{scene.title}</div>}
-    {scene.caption && <div style={{ position: 'absolute', bottom: height * 0.08, left: width * 0.06, right: width * 0.06, textAlign: 'center', fontWeight: 700, fontSize: Math.max(24, width * 0.033), textShadow: '0 3px 12px #000', background: '#0009', borderRadius: 16, padding: 18 }}>{scene.caption}</div>}
-    {(scene.overlays ?? []).map((o, i) => {
-      const start = frames(o.startMs, fps);
-      const end = start + frames(o.durationMs, fps);
-      if (frame < start || frame >= end) return null;
-      const opacity = interpolate(frame, [start, start + Math.min(8, end - start)], [0, 1], { extrapolateRight: 'clamp' });
-      return <div key={i} style={{ position: 'absolute', left: `${o.x ?? 50}%`, top: `${o.y ?? 50}%`, transform: 'translate(-50%, -50%)', fontSize: Math.max(22, width * 0.035), fontWeight: 800, color: '#fff', background: '#000a', borderRadius: 12, padding: '10px 20px', opacity, whiteSpace: 'pre-wrap', textAlign: 'center' }}>{o.text}</div>;
-    })}
-    {scene.narrationUrl && <Audio src={scene.narrationUrl} />}
-  </AbsoluteFill>;
+  const totalFrames = frames(scene.durationMs, fps);
+  const safeFrame = Math.max(0, Math.min(totalFrames - 1, frame));
+  const progress = totalFrames <= 1 ? 0 : safeFrame / (totalFrames - 1);
+  const movement = (scene.cameraMovement || '').toLowerCase();
+
+  let scale = 1;
+  let translateX = 0;
+  let translateY = 0;
+  let rotation = 0;
+  if (movement.includes('zoom in')) scale = 1 + progress * 0.15;
+  else if (movement.includes('zoom out')) scale = 1.15 - progress * 0.15;
+  else if (movement.includes('pan left')) { scale = 1.12; translateX = (progress - 0.5) * width * 0.08; }
+  else if (movement.includes('pan right')) { scale = 1.12; translateX = (0.5 - progress) * width * 0.08; }
+  else if (movement.includes('tilt up')) { scale = 1.12; translateY = (progress - 0.5) * height * 0.08; }
+  else if (movement.includes('tilt down')) { scale = 1.12; translateY = (0.5 - progress) * height * 0.08; }
+
+  const rotationText = (scene.cameraRotation || '').toLowerCase();
+  const degrees = Math.max(0, Math.min(45, scene.cameraRotationDegrees ?? 10));
+  if (rotationText.includes('clockwise') && !rotationText.includes('counter') && !rotationText.includes('anti')) rotation = progress * degrees;
+  if (rotationText.includes('counter') || rotationText.includes('anti')) rotation = -progress * degrees;
+
+  const cameraStyle: React.CSSProperties = {
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover',
+    transform: `translate(${translateX}px, ${translateY}px) rotate(${rotation}deg) scale(${scale})`,
+  };
+
+  return (
+    <AbsoluteFill style={{ backgroundColor: '#101726', overflow: 'hidden', color: 'white', fontFamily: 'Arial, sans-serif' }}>
+      {scene.frames?.length ? (
+        <Img src={staticFile(scene.frames[Math.min(safeFrame, scene.frames.length - 1)])}
+          style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+      ) : scene.videoSrc ? (
+        <OffthreadVideo src={staticFile(scene.videoSrc)} muted style={cameraStyle} />
+      ) : scene.backgroundSrc ? (
+        <Img src={staticFile(scene.backgroundSrc)} style={cameraStyle} />
+      ) : (
+        <AbsoluteFill style={{ alignItems: 'center', justifyContent: 'center', padding: width * 0.08, textAlign: 'center' }}>
+          <div style={{ fontSize: Math.max(32, width * 0.045), fontWeight: 800 }}>{scene.title}</div>
+          {scene.caption && <div style={{ marginTop: 24, fontSize: Math.max(20, width * 0.026), lineHeight: 1.4 }}>{scene.caption}</div>}
+        </AbsoluteFill>
+      )}
+
+      {scene.audioTracks.map((track, index) => {
+        const from = frames(track.startMs, fps);
+        const durationInFrames = Math.max(1, frames(track.durationMs, fps));
+        return (
+          <Sequence key={`${scene.id}-audio-${index}`} from={from} durationInFrames={durationInFrames}>
+            <Audio src={staticFile(track.src)} volume={track.volume} />
+          </Sequence>
+        );
+      })}
+    </AbsoluteFill>
+  );
 }
+
 export function StoryVideo({ manifest }: { manifest: VideoManifest }) {
-  const fps = manifest.fps ?? 30;
   let offset = 0;
-  return <AbsoluteFill>{manifest.scenes.map((scene) => {
-    const from = offset;
-    const durationInFrames = frames(scene.durationMs, fps);
-    offset += durationInFrames;
-    return <Sequence key={scene.id} from={from} durationInFrames={durationInFrames}>
-      <SceneView scene={scene} />
-    </Sequence>;
-  })}</AbsoluteFill>;
+  return (
+    <AbsoluteFill>
+      {manifest.scenes.map((scene) => {
+        const from = offset;
+        const durationInFrames = frames(scene.durationMs, manifest.fps);
+        offset += durationInFrames;
+        return (
+          <Sequence key={scene.id} from={from} durationInFrames={durationInFrames}>
+            <SceneView scene={scene} />
+          </Sequence>
+        );
+      })}
+      {/* Guarantees an audio stream even when a story has no narration/dialogue. */}
+      <Audio src={staticFile(manifest.silentAudioSrc)} volume={0} loop />
+    </AbsoluteFill>
+  );
 }
+
 export function RemotionRoot() {
-  const fps = defaultManifest.fps ?? 30;
-  const { width, height } = dimensions(defaultManifest.format, defaultManifest.resolution);
-  return <Composition id="StoryVideo" component={StoryVideo} durationInFrames={defaultManifest.scenes.reduce((n, s) => n + frames(s.durationMs, fps), 0)} fps={fps} width={width} height={height} defaultProps={{ manifest: defaultManifest }} />;
+  return (
+    <Composition
+      id="StoryVideo"
+      component={StoryVideo}
+      durationInFrames={defaultManifest.scenes.reduce((total, scene) => total + frames(scene.durationMs, defaultManifest.fps), 0)}
+      fps={defaultManifest.fps}
+      width={defaultManifest.width}
+      height={defaultManifest.height}
+      defaultProps={{ manifest: defaultManifest }}
+    />
+  );
 }
