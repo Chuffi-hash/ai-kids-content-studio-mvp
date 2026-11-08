@@ -40,6 +40,7 @@ import { PromptSynthesizer } from "../services/story-generation/parser/prompt-sy
 import { VisualBibleService } from "../services/story-generation/visual-bible.service.js";
 import { ScenePromptV2Service } from "../services/story-generation/scene-prompt-v2.service.js";
 import { AudioGenerationService } from "../services/audio-generation/audio-generation.service.js";
+import { VideoAssemblyService } from "../services/video-assembly/video-assembly.service.js";
 import { suggestEmotionForText } from "../services/audio-generation/emotion-suggester.service.js";
 import { estimateSpeechDurationMs, formatTimeMs } from "../services/timing/timing.service.js";
 import { randomUUID } from "crypto";
@@ -1509,6 +1510,138 @@ const imageGenerationService = new ImageGenerationService(
 );
 const storageService = new LocalStorageService();
 const providerType = process.env.IMAGE_PROVIDER || "mock";
+
+const videoAssemblyService = new VideoAssemblyService();
+const directorJobs = new Map<string, {
+  id: string;
+  status: 'processing' | 'completed' | 'failed';
+  stage: string;
+  progress: number;
+  storyId?: string;
+  exportJobId?: string;
+  error?: string;
+}>();
+
+/**
+ * AI Director: one prompt -> structured story -> generated scene backgrounds ->
+ * existing dialogue generation -> Remotion export job.
+ * Work runs in the background so image generation does not hold the HTTP request open.
+ */
+contentRouter.post("/story/director", async (req, res) => {
+  const { topic, language = 'Hindi', format = '16:9', resolution = '720p', fps = 30 } = req.body || {};
+  if (!topic || typeof topic !== 'string' || !topic.trim()) {
+    return res.status(400).json({ message: 'topic is required' });
+  }
+  if (!['16:9', '9:16', '1:1', '4:5'].includes(format)) {
+    return res.status(400).json({ message: 'Unsupported video format' });
+  }
+  if (!['720p', '1080p'].includes(resolution) || !Number.isInteger(fps) || fps < 1 || fps > 60) {
+    return res.status(400).json({ message: 'Invalid resolution or FPS' });
+  }
+
+  const directorJobId = randomUUID();
+  directorJobs.set(directorJobId, {
+    id: directorJobId, status: 'processing', stage: 'Generating structured story...', progress: 2,
+  });
+
+  void (async () => {
+    const job = directorJobs.get(directorJobId)!;
+    try {
+      const generated = await StoryGenerationService.generateAndPersistStory({
+        topic: topic.trim(),
+        ageGroup: req.body.ageGroup || req.body.audience || '4-7 years',
+        desiredDurationSeconds: Number(req.body.desiredDurationSeconds || req.body.targetDuration || 60),
+        language,
+        title: req.body.title,
+        genre: req.body.genre || 'Adventure',
+        lesson: req.body.lesson,
+        characterIds: Array.isArray(req.body.characterIds) ? req.body.characterIds : [],
+        newCharacters: Array.isArray(req.body.newCharacters) ? req.body.newCharacters : [],
+        sceneCount: Number.isInteger(req.body.sceneCount) ? req.body.sceneCount : undefined,
+        tone: req.body.tone,
+        contentRestrictions: req.body.contentRestrictions,
+        visualStyle: req.body.visualStyle,
+        audience: req.body.audience,
+        idempotencyKey: req.body.idempotencyKey,
+      });
+
+      job.storyId = generated.storyId;
+      const scenes = generated.scenes || [];
+      for (let index = 0; index < scenes.length; index += 1) {
+        const scene = scenes[index];
+        job.stage = `Generating background ${index + 1} of ${scenes.length}...`;
+        job.progress = 10 + Math.round((index / Math.max(1, scenes.length)) * 65);
+        if (scene.imageUrl || scene.animationData?.background?.imageUrl) continue;
+
+        const rawPrompt = String(scene.visualPrompt || scene.narration || scene.title || '').trim();
+        if (!rawPrompt) continue;
+        const prompt = PromptSynthesizer.synthesizeBackgroundPrompt({
+          explicitPrompt: rawPrompt,
+          sceneTitle: scene.title || `Scene ${index + 1}`,
+          cameraDirection: scene.cameraDirection || 'Eye-level wide shot',
+          aspectRatio: format,
+          visualStyle: generated.story?.visualStyle || req.body.visualStyle,
+        });
+        const size = format === '9:16' ? { width: 576, height: 1024 }
+          : format === '1:1' ? { width: 1024, height: 1024 }
+          : format === '4:5' ? { width: 819, height: 1024 }
+          : { width: 1024, height: 576 };
+        const imageResult = await imageGenerationService.generateSceneImage({ prompt, ...size });
+        const extension = getExtensionFromMimeType(imageResult.mimeType);
+        const filename = `scene-${scene.sceneId}-director-${Date.now()}.${extension}`;
+        const saved = await storageService.saveFile(imageResult.imageBuffer, filename, imageResult.mimeType);
+        await createImage({
+          id: randomUUID(),
+          sceneId: scene.sceneId,
+          provider: providerType,
+          model: 'default',
+          prompt,
+          storageKey: filename,
+          imageUrl: saved.url,
+          width: size.width,
+          height: size.height,
+          status: 'completed',
+        });
+        await updateScene(scene.sceneId, {
+          imageUrl: saved.url,
+          visualPrompt: prompt,
+          generationStatus: 'completed',
+        });
+      }
+
+      job.stage = 'Starting Remotion video render...';
+      job.progress = 82;
+      const exportJob = videoAssemblyService.startExportJob({
+        storyId: generated.storyId,
+        resolution,
+        fps,
+        format,
+        renderer: 'remotion',
+        templateId: req.body.templateId || 'kids-story',
+        subtitleTheme: req.body.subtitleTheme || 'speech-bubble',
+      });
+      job.exportJobId = exportJob.id;
+      job.status = 'completed';
+      job.stage = 'Story assets are ready; video export is running.';
+      job.progress = 100;
+    } catch (error: any) {
+      job.status = 'failed';
+      job.stage = 'AI Director failed';
+      job.error = error?.message || 'AI Director pipeline failed';
+    }
+  })();
+
+  return res.status(202).json({ success: true, directorJobId, statusUrl: `/api/content/story/director/${directorJobId}` });
+});
+
+contentRouter.get("/story/director/:jobId", (req, res) => {
+  const job = directorJobs.get(req.params.jobId);
+  if (!job) return res.status(404).json({ message: 'AI Director job not found' });
+  const exportJob = job.exportJobId ? videoAssemblyService.getJob(job.exportJobId) : undefined;
+  return res.json({ ...job, exportJob });
+});
+
+
 
 contentRouter.get("/scenes/:sceneId/image", async (req, res) => {
   const scene = await getSceneBySceneId(req.params.sceneId);

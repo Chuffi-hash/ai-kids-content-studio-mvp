@@ -129,6 +129,12 @@ export interface VisemeCue {
   durationMs: number;
 }
 
+export interface WordTiming {
+  text: string;
+  startMs: number;
+  endMs: number;
+}
+
 export interface DialogueLine {
   id: string;
   characterName: string;
@@ -144,6 +150,8 @@ export interface DialogueLine {
   emotion?: string;
   speakingDirection?: string;
   visemeCues?: VisemeCue[];
+  /** Estimated from speech duration unless provider word alignment is available. */
+  wordTimings?: WordTiming[];
 }
 
 export type EducationalOverlayType =
@@ -261,6 +269,8 @@ export interface VideoManifest {
   backgroundMusic?: string;
   musicVolume?: number;
   silentAudioSrc?: string;
+  templateId?: string;
+  subtitleTheme?: 'classic' | 'karaoke' | 'speech-bubble' | 'minimal';
   scenes: Scene[];
 }
 

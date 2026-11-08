@@ -401,6 +401,77 @@ export async function generateSceneVideo(
 }
 
 
+
+export async function fetchRemotionPreviewManifest(
+  storyId: string,
+  options: { format?: string; resolution?: string; fps?: number; templateId?: string; subtitleTheme?: string } = {}
+): Promise<any> {
+  const query = new URLSearchParams();
+  Object.entries(options).forEach(([key, value]) => {
+    if (value !== undefined && value !== null) query.set(key, String(value));
+  });
+  const response = await fetch(`${API_URL}/api/production/story/${storyId}/remotion-preview?${query.toString()}`);
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.message || 'Failed to load Remotion preview');
+  }
+  const data = await response.json();
+  return data.manifest;
+}
+
+
+export async function startAIDirector(input: {
+  topic: string;
+  language?: 'Hindi' | 'English';
+  ageGroup?: string;
+  genre?: string;
+  lesson?: string;
+  visualStyle?: string;
+  desiredDurationSeconds?: number;
+  sceneCount?: number;
+  format?: '16:9' | '9:16' | '1:1' | '4:5';
+  resolution?: '720p' | '1080p';
+  templateId?: string;
+  subtitleTheme?: string;
+}): Promise<{ directorJobId: string; statusUrl: string }> {
+  const response = await fetch(`${API_URL}/api/content/story/director`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.message || 'Failed to start AI Director');
+  }
+  return response.json();
+}
+
+export async function pollAIDirector(directorJobId: string): Promise<any> {
+  const response = await fetch(`${API_URL}/api/content/story/director/${directorJobId}`);
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.message || 'Failed to check AI Director status');
+  }
+  return response.json();
+}
+
+export async function startExportVariations(
+  storyId: string,
+  formats: Array<'16:9' | '9:16' | '1:1' | '4:5'>,
+  options: { resolution?: '720p' | '1080p'; fps?: number; renderer?: 'ffmpeg' | 'remotion'; templateId?: string; subtitleTheme?: string } = {}
+): Promise<{ jobs: ExportJobStatus[] }> {
+  const response = await fetch(`${API_URL}/api/production/story/${storyId}/export-variations`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...options, formats }),
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.message || 'Failed to start video variations');
+  }
+  return response.json();
+}
+
 export async function startExport(
   storyId: string,
   options?: {
@@ -412,6 +483,8 @@ export async function startExport(
     selectedSceneIds?: string[];
     targetDurationSec?: number;
     renderer?: 'ffmpeg' | 'remotion';
+    templateId?: 'kids-story' | 'moral-story' | 'educational' | 'nursery-learning' | 'intro-outro';
+    subtitleTheme?: 'classic' | 'karaoke' | 'speech-bubble' | 'minimal';
   }
 ): Promise<{ job: ExportJobStatus }> {
   const res = await fetch(`${API_URL}/api/production/story/${storyId}/export`, {
