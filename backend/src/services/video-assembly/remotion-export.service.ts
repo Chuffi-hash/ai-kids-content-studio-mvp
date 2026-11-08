@@ -7,7 +7,6 @@ import { getImagesBySceneId } from '../database/database.service.js';
 import { AudioGenerationService } from '../audio-generation/audio-generation.service.js';
 import { VectorAnimationEngine } from '../animation/vector-animation.engine.js';
 
-type DialogueAudio = { path: string; startMs: number; durationMs: number; volume: number };
 type TimelineAudio = { src: string; startMs: number; durationMs: number; volume: number };
 type RemotionScene = {
   id: string;
@@ -65,7 +64,7 @@ export class RemotionExportService {
 
     for (let index = 0; index < scenes.length; index += 1) {
       const scene = scenes[index];
-      const animationData = scene.animationData || {};
+      const animationData: any = scene.animationData || {};
       const durationMs = this.getSceneDurationMs(scene);
       const durationSec = durationMs / 1000;
       const sceneKey = this.safeName(scene.sceneId || scene.id || `scene-${index + 1}`);
@@ -144,7 +143,7 @@ export class RemotionExportService {
           src: await this.copyAsset(audioPath, sceneAssetDir, `dialogue-${lineIndex + 1}`),
           startMs,
           durationMs: Math.min(lineDurationMs, durationMs - startMs),
-          volume: Math.max(0, Math.min(2, Number.isFinite(line.volume) ? line.volume : 1)),
+          volume: Math.max(0, Math.min(1, Number.isFinite(line.volume) ? line.volume : 1)),
         });
       }
 
