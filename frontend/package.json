@@ -10,6 +10,8 @@
   },
   "dependencies": {
     "@vitejs/plugin-react": "^4.4.1",
+    "@remotion/player": "4.0.541",
+    "remotion": "4.0.541",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-router-dom": "^7.18.2",
