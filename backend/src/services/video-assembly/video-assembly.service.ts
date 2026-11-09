@@ -17,13 +17,15 @@ const execFileAsync = promisify(execFile);
 export interface ExportJob {
   id: string;
   storyId: string;
-  status: 'queued' | 'processing' | 'completed' | 'failed';
+  status: 'queued' | 'processing' | 'completed' | 'failed' | 'cancelled';
   progress: number; // 0 - 100
   stage: string;
   downloadUrl?: string;
   filename?: string;
   error?: string;
   renderer?: 'ffmpeg' | 'remotion';
+  format?: string;
+  idempotencyKey?: string;
   createdAt: Date;
   completedAt?: Date;
 }
@@ -35,6 +37,8 @@ export class VideoAssemblyService {
   private storageDir: string;
   private exportsDir: string;
   private tempDir: string;
+  private jobsFilePath: string;
+  private activeFfmpegProcesses = new Map<string, { kill: () => void }>();
   private audioGenerationService = new AudioGenerationService();
   private remotionRenderService = new RemotionRenderService();
 
@@ -42,6 +46,7 @@ export class VideoAssemblyService {
     this.storageDir = process.env.STORAGE_DIR || './storage';
     this.exportsDir = path.join(process.cwd(), this.storageDir, 'exports');
     this.tempDir = path.join(process.cwd(), this.storageDir, 'temp');
+    this.jobsFilePath = path.join(this.tempDir, 'export-jobs.json');
 
     if (!fs.existsSync(this.exportsDir)) {
       fs.mkdirSync(this.exportsDir, { recursive: true });
@@ -49,10 +54,49 @@ export class VideoAssemblyService {
     if (!fs.existsSync(this.tempDir)) {
       fs.mkdirSync(this.tempDir, { recursive: true });
     }
+
+    this.loadPersistedJobs();
+  }
+
+  private loadPersistedJobs(): void {
+    try {
+      if (fs.existsSync(this.jobsFilePath)) {
+        const raw = fs.readFileSync(this.jobsFilePath, 'utf-8');
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          for (const item of parsed) {
+            // If the job was interrupted by a server restart, mark as failed rather than hanging indefinitely
+            if (item.status === 'queued' || item.status === 'processing') {
+              item.status = 'failed';
+              item.stage = 'Interrupted: Server restarted during video export';
+              item.error = 'Server restarted while export was processing';
+              item.completedAt = new Date();
+            }
+            jobs.set(item.id, {
+              ...item,
+              createdAt: new Date(item.createdAt),
+              completedAt: item.completedAt ? new Date(item.completedAt) : undefined,
+            });
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[VideoAssembly] Could not load persisted export jobs:', err);
+    }
+  }
+
+  public persistJobs(): void {
+    try {
+      const arr = Array.from(jobs.values()).slice(-100);
+      fs.writeFileSync(this.jobsFilePath, JSON.stringify(arr, null, 2), 'utf-8');
+    } catch (err) {
+      console.warn('[VideoAssembly] Could not persist export jobs to disk:', err);
+    }
   }
 
   /**
    * Starts a background video assembly export job.
+   * Includes duplicate check to avoid spinning up redundant heavy renders.
    */
   startExportJob(options: {
     storyId: string;
@@ -66,6 +110,7 @@ export class VideoAssemblyService {
     renderer?: 'ffmpeg' | 'remotion';
     templateId?: string;
     subtitleTheme?: 'classic' | 'karaoke' | 'speech-bubble' | 'minimal';
+    idempotencyKey?: string;
   }): ExportJob {
     const {
       storyId,
@@ -79,7 +124,22 @@ export class VideoAssemblyService {
       renderer = 'ffmpeg',
       templateId = 'kids-story',
       subtitleTheme,
+      idempotencyKey,
     } = options;
+
+    // Prevent duplicate active export jobs
+    const existingActive = Array.from(jobs.values()).find((j) => {
+      const isRunning = j.status === 'queued' || j.status === 'processing';
+      if (!isRunning) return false;
+      if (idempotencyKey && j.idempotencyKey === idempotencyKey) return true;
+      return j.storyId === storyId && j.renderer === renderer && j.format === format;
+    });
+
+    if (existingActive) {
+      console.log(`[VideoAssembly] Returning existing active job ${existingActive.id} for story ${storyId} (${format})`);
+      return existingActive;
+    }
+
     const jobId = randomUUID();
 
     const job: ExportJob = {
@@ -89,10 +149,13 @@ export class VideoAssemblyService {
       progress: 0,
       stage: 'Queued for export...',
       renderer,
+      format,
+      idempotencyKey,
       createdAt: new Date(),
     };
 
     jobs.set(jobId, job);
+    this.persistJobs();
 
     // Run assembly asynchronously
     this.processExport({
@@ -113,9 +176,48 @@ export class VideoAssemblyService {
       job.status = 'failed';
       job.error = err.message || String(err);
       job.completedAt = new Date();
+      this.persistJobs();
     });
 
     return job;
+  }
+
+  /**
+   * Cancels a queued or processing export job and releases all resources.
+   */
+  public async cancelExportJob(jobId: string): Promise<boolean> {
+    const job = jobs.get(jobId);
+    if (!job) return false;
+    if (job.status === 'completed' || job.status === 'failed' || job.status === 'cancelled') {
+      return false;
+    }
+
+    console.log(`[VideoAssembly] Cancelling export job ${jobId} (status: ${job.status}, renderer: ${job.renderer})...`);
+
+    if (job.renderer === 'remotion') {
+      await this.remotionRenderService.cancelJob(jobId);
+    } else {
+      const ffmpegProc = this.activeFfmpegProcesses.get(jobId);
+      if (ffmpegProc) {
+        ffmpegProc.kill();
+        this.activeFfmpegProcesses.delete(jobId);
+      }
+    }
+
+    job.status = 'cancelled';
+    job.stage = 'Export cancelled by user';
+    job.completedAt = new Date();
+
+    // Clean up temporary job directory
+    const jobTempDir = path.join(this.tempDir, `export-${jobId}`);
+    try {
+      await fs.promises.rm(jobTempDir, { recursive: true, force: true }).catch(() => {});
+    } catch {
+      // ignore
+    }
+
+    this.persistJobs();
+    return true;
   }
 
   /**
@@ -550,6 +652,7 @@ export class VideoAssemblyService {
       job.downloadUrl = downloadUrl;
       job.filename = finalFilename;
       job.completedAt = new Date();
+      this.persistJobs();
 
       console.log(`[VideoAssembly] Export job ${jobId} completed successfully: ${downloadUrl}`);
     } catch (error: any) {
@@ -557,6 +660,7 @@ export class VideoAssemblyService {
       job.status = 'failed';
       job.error = error.message || 'Video assembly failed';
       job.completedAt = new Date();
+      this.persistJobs();
     } finally {
       // Clean up temp directory
       try {
@@ -704,6 +808,7 @@ export class VideoAssemblyService {
       job.downloadUrl = downloadUrl;
       job.filename = finalFilename;
       job.completedAt = new Date();
+      this.persistJobs();
 
       console.log(`[VideoAssembly] Remotion export job ${jobId} completed successfully: ${downloadUrl}`);
     } catch (error: any) {
@@ -711,6 +816,7 @@ export class VideoAssemblyService {
       job.status = 'failed';
       job.error = error.message || 'Remotion video assembly failed';
       job.completedAt = new Date();
+      this.persistJobs();
     }
   }
 

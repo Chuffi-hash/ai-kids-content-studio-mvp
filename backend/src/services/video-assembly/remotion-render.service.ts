@@ -41,6 +41,7 @@ export class RemotionRenderService {
   private tempDir: string;
   private storageDir: string;
   private adapter: RemotionManifestAdapter;
+  private activeProcesses = new Map<string, () => Promise<void>>();
 
   constructor(options?: { remotionDir?: string; tempDir?: string; storageDir?: string }) {
     if (options?.remotionDir) {
@@ -59,6 +60,24 @@ export class RemotionRenderService {
     if (!fs.existsSync(this.tempDir)) {
       fs.mkdirSync(this.tempDir, { recursive: true });
     }
+  }
+
+  /**
+   * Cancels a running Remotion render or removes it from queue if queued.
+   */
+  public async cancelJob(jobId: string): Promise<boolean> {
+    const queueCancelled = RemotionRenderQueue.getInstance().cancel(jobId);
+    const killer = this.activeProcesses.get(jobId);
+    if (killer) {
+      try {
+        await killer();
+      } catch (err) {
+        console.warn(`[RemotionRender] Error cancelling process for job ${jobId}:`, err);
+      }
+      this.activeProcesses.delete(jobId);
+      return true;
+    }
+    return queueCancelled;
   }
 
   private resolveLocalPath(urlOrPath: string): string {
@@ -141,6 +160,7 @@ export class RemotionRenderService {
 
       // 3. Spawn Remotion render process with resource-safe settings and progress streaming
       await this.executeRemotionProcess({
+        jobId,
         manifestPath,
         outputPath: tempOutputPath,
         onProgress: (rendered, total, pct) => {
@@ -327,12 +347,13 @@ export class RemotionRenderService {
    * Enforces process timeout and terminates complete process trees on Windows and Linux.
    */
   private executeRemotionProcess(options: {
+    jobId: string;
     manifestPath: string;
     outputPath: string;
     onProgress?: (rendered: number, total: number, pct: number) => void;
   }): Promise<void> {
     return new Promise((resolve, reject) => {
-      const { manifestPath, outputPath, onProgress } = options;
+      const { jobId, manifestPath, outputPath, onProgress } = options;
       const isWin = process.platform === 'win32';
       const cmd = isWin ? 'npx.cmd' : 'npx';
       const args = ['tsx', 'src/render.ts', manifestPath, outputPath];
@@ -370,9 +391,12 @@ export class RemotionRenderService {
         }
       };
 
+      this.activeProcesses.set(jobId, killProcessTree);
+
       const timer = setTimeout(async () => {
         if (isDone) return;
         isDone = true;
+        this.activeProcesses.delete(jobId);
         console.error(`[RemotionRender] Process timed out after ${timeoutMs}ms. Killing process tree...`);
         await killProcessTree();
         reject(new Error(`Remotion render process timed out after ${timeoutMs}ms`));
@@ -400,6 +424,7 @@ export class RemotionRenderService {
         if (isDone) return;
         isDone = true;
         clearTimeout(timer);
+        this.activeProcesses.delete(jobId);
         await killProcessTree();
         reject(new Error(`Failed to spawn Remotion render process: ${err.message}`));
       });
@@ -408,6 +433,7 @@ export class RemotionRenderService {
         if (isDone) return;
         isDone = true;
         clearTimeout(timer);
+        this.activeProcesses.delete(jobId);
         if (code === 0) {
           resolve();
         } else {

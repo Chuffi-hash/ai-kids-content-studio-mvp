@@ -187,7 +187,7 @@ export interface CameraConfig {
 
 export interface BackgroundConfig {
   imageUrl?: string;
-  fit?: 'cover' | 'contain';
+  fit?: 'cover' | 'contain' | 'fill';
   removed?: boolean;
 }
 
@@ -195,6 +195,8 @@ export interface NarrationConfig {
   url: string;
   durationMs?: number;
   volume?: number;
+  text?: string;
+  wordTimings?: WordTiming[];
 }
 
 export interface TransitionConfig {

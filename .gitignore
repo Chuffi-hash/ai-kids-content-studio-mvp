@@ -12,6 +12,14 @@ dist
 !.env.example
 .DS_Store
 *.tsbuildinfo
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+backend/prisma/*.db
+backend/prisma/*.sqlite
+backend/prisma/*.sqlite3
+backend/prisma/*.db-journal
 
 # Storage and generated media files (never commit to git / GitHub)
 storage/**

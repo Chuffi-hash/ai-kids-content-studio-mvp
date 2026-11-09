@@ -44,6 +44,22 @@ export class RemotionRenderQueue {
   }
 
   /**
+   * Cancels a queued task if it hasn't started running yet.
+   */
+  public cancel(jobId: string): boolean {
+    const idx = this.queue.findIndex((item) => item.jobId === jobId);
+    if (idx !== -1) {
+      const removed = this.queue.splice(idx, 1)[0];
+      removed.reject(new Error(`Render job ${jobId} was cancelled before execution`));
+      this.queue.forEach((item, pos) => {
+        item.onQueuePositionChange?.(pos + 1, this.queue.length);
+      });
+      return true;
+    }
+    return false;
+  }
+
+  /**
    * Enqueues a render task and runs it when a slot is available.
    */
   public enqueue<T>(options: {

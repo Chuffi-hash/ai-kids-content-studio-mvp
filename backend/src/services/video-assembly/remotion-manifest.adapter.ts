@@ -45,7 +45,7 @@ export interface RemotionScene {
   caption?: string;
   background?: {
     imageUrl?: string;
-    fit?: 'cover' | 'contain';
+    fit?: 'cover' | 'contain' | 'fill';
     removed?: boolean;
   };
   cameraMovement?: string;
@@ -55,6 +55,8 @@ export interface RemotionScene {
     url: string;
     durationMs?: number;
     volume?: number;
+    text?: string;
+    wordTimings?: Array<{ text: string; startMs: number; endMs: number }>;
   };
   dialogues?: Array<{
     id: string;
@@ -136,13 +138,14 @@ export interface RemotionScene {
 }
 
 function estimateWordTimings(text: string, durationMs: number) {
-  const tokens = text.match(/\\S+/gu) || [];
+  const tokens = text.match(/\S+/gu) || [];
   if (tokens.length === 0) return [];
-  // Proportional timing is a fallback, not forced alignment. Longer words receive
-  // slightly more time; punctuation adds a small pause to improve readability.
+  // Proportional timing is an explicitly documented fallback, not forced alignment.
+  // Longer words receive slightly more time; punctuation adds a small pause to improve readability.
+  // Handles both Hindi (Devanagari letters + marks) and English words.
   const weights = tokens.map((token) => {
-    const letters = Math.max(1, token.replace(/[^\\p{L}\\p{N}]/gu, '').length);
-    const pause = /[.!?।,:;]$/.test(token) ? 0.18 : 0;
+    const letters = Math.max(1, token.replace(/[^\p{L}\p{M}\p{N}]/gu, '').length);
+    const pause = /[.!?।॥,:;]$/.test(token) ? 0.2 : 0;
     return letters + pause;
   });
   const total = weights.reduce((sum, value) => sum + value, 0);
@@ -419,10 +422,13 @@ export class RemotionManifestAdapter {
         const resolvedAudio = embedBase64Audio
           ? this.convertLocalAudioToDataUri(scene.audioUrl)
           : this.resolveAssetUrl(scene.audioUrl);
+        const narrationDurationMs = scene.actualAudioDurationMs || durationMs;
         narrationConfig = {
           url: resolvedAudio,
-          durationMs: scene.actualAudioDurationMs || durationMs,
+          durationMs: narrationDurationMs,
           volume: 1.0,
+          text: scene.narration,
+          wordTimings: scene.narration ? estimateWordTimings(scene.narration, narrationDurationMs) : undefined,
         };
       }
 

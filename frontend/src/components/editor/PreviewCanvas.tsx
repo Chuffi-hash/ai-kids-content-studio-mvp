@@ -478,7 +478,11 @@ export const PreviewCanvas: React.FC<PreviewCanvasProps> = ({
             </button>
           </div>
         ) : previewMode === "remotion" ? (
-          <RemotionPlayerPreview storyId={storyId} format={activeFormat} />
+          <RemotionPlayerPreview
+            storyId={storyId}
+            format={activeFormat}
+            refreshTrigger={(activeScene as any)?.updatedAt || (activeScene as any)?.id}
+          />
         ) : previewMode === "export" && exportVideoUrl ? (
           <video
             ref={videoRef}

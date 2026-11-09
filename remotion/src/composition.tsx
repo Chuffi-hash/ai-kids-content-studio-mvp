@@ -8,6 +8,7 @@ import {
   staticFile,
   useCurrentFrame,
   useVideoConfig,
+  Video,
 } from 'remotion';
 import {
   AspectRatio,
@@ -20,7 +21,7 @@ import { evaluateCharacterPose } from './characters/animation-evaluator';
 import { getVectorRig } from './characters/rigs';
 import { VectorCharacter } from './characters/VectorCharacter';
 import { EducationalOverlayRenderer } from './overlays/EducationalOverlay';
-import { getVideoTemplate, SubtitleTheme } from './templates';
+import { getVideoTemplate, SubtitleTheme, VideoTemplate } from './templates';
 
 const defaultManifest: VideoManifest = {
   fps: 30,
@@ -101,16 +102,34 @@ function SceneView({
   scene,
   format,
   subtitleTheme = 'classic',
+  template,
+  isFirstScene = false,
+  isLastScene = false,
+  storyTitle,
 }: {
   scene: Scene;
   format: AspectRatio;
   subtitleTheme?: SubtitleTheme;
+  template: VideoTemplate;
+  isFirstScene?: boolean;
+  isLastScene?: boolean;
+  storyTitle?: string;
 }) {
   const frame = useCurrentFrame();
   const { fps, width, height } = useVideoConfig();
   const totalFrames = frames(scene.durationMs, fps);
   const progress = Math.min(1, Math.max(0, frame / Math.max(1, totalFrames - 1)));
   const sceneRelativeMs = (frame / fps) * 1000;
+
+  // Scene transition (cut vs fade)
+  let sceneOpacity = 1.0;
+  if (scene.transition?.type === 'fade') {
+    const fadeDurationMs = Math.max(100, Math.min(2000, scene.transition.durationMs || 500));
+    const fadeFrames = frames(fadeDurationMs, fps);
+    const fadeIn = Math.min(1, frame / Math.max(1, fadeFrames));
+    const fadeOut = Math.min(1, (totalFrames - 1 - frame) / Math.max(1, fadeFrames));
+    sceneOpacity = Math.min(fadeIn, fadeOut);
+  }
 
   // Resolve camera settings
   const rawMovement =
@@ -138,8 +157,11 @@ function SceneView({
   // Background resolution
   const bg = scene.background;
   const isBgRemoved = Boolean(bg?.removed);
-  const bgUrl = isBgRemoved ? '' : bg?.imageUrl || scene.backgroundUrl || '';
-  const bgFit = bg?.fit || 'cover';
+  const bgUrl = isBgRemoved
+    ? ''
+    : bg?.imageUrl || scene.backgroundUrl || (scene.backgroundSrc ? staticFile(scene.backgroundSrc) : '');
+  const rawFit = bg?.fit || 'cover';
+  const objectFit: React.CSSProperties['objectFit'] = rawFit === 'contain' ? 'contain' : (rawFit === 'fill' ? 'fill' : 'cover');
 
   // Format Variant Overrides
   const formatVariant = scene.formatVariants?.[format];
@@ -248,13 +270,43 @@ function SceneView({
   );
 
   const narrationUrl = scene.narration?.url || scene.narrationUrl;
-  const activeWordIndex = activeDialogue?.wordTimings?.findIndex(
+  const isNarrationSpeaking = Boolean(
+    narrationUrl &&
+    sceneRelativeMs >= 0 &&
+    sceneRelativeMs <= (scene.narration?.durationMs || scene.durationMs)
+  );
+
+  const activeDialogueWordIndex = activeDialogue?.wordTimings?.findIndex(
     (word) => sceneRelativeMs - (activeDialogue?.startMs || 0) >= word.startMs
       && sceneRelativeMs - (activeDialogue?.startMs || 0) < word.endMs
   ) ?? -1;
 
+  const narrationWordTimings = scene.narration?.wordTimings;
+  const activeNarrWordIndex = narrationWordTimings?.findIndex(
+    (w) => sceneRelativeMs >= w.startMs && sceneRelativeMs < w.endMs
+  ) ?? -1;
+
+  // Subtitle Payload: Character Dialogue takes priority; Narration is shown when narration speaks or caption exists
+  const activeSubtitle = activeDialogue
+    ? {
+        type: 'dialogue' as const,
+        speaker: activeDialogue.characterName,
+        text: activeDialogue.text,
+        wordTimings: activeDialogue.wordTimings,
+        activeWordIndex: activeDialogueWordIndex,
+      }
+    : (scene.caption || (isNarrationSpeaking && scene.narration?.text))
+    ? {
+        type: 'narration' as const,
+        speaker: undefined,
+        text: scene.narration?.text || scene.caption || '',
+        wordTimings: narrationWordTimings,
+        activeWordIndex: activeNarrWordIndex,
+      }
+    : null;
+
   return (
-    <AbsoluteFill style={{ backgroundColor: '#101726', overflow: 'hidden' }}>
+    <AbsoluteFill style={{ backgroundColor: '#101726', overflow: 'hidden', opacity: sceneOpacity }}>
       {/* Camera 2D Transform Container */}
       <div
         style={{
@@ -265,15 +317,41 @@ function SceneView({
           transformOrigin: '50% 50%',
         }}
       >
-        {/* Background Image / Backdrop */}
-        {bgUrl ? (
+        {/* Background Layer: Video Clip, Image Sequence, Background Image, or Animated SVG Canvas */}
+        {scene.videoSrc ? (
+          <AbsoluteFill>
+            <Video
+              src={scene.videoSrc.startsWith('http') || scene.videoSrc.startsWith('data:') ? scene.videoSrc : staticFile(scene.videoSrc)}
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit,
+              }}
+            />
+          </AbsoluteFill>
+        ) : scene.frames && scene.frames.length > 0 ? (
+          <AbsoluteFill>
+            <Img
+              src={(() => {
+                const idx = Math.min(scene.frames.length - 1, Math.floor(progress * scene.frames.length));
+                const f = scene.frames[idx];
+                return f.startsWith('http') || f.startsWith('data:') ? f : staticFile(f);
+              })()}
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit,
+              }}
+            />
+          </AbsoluteFill>
+        ) : bgUrl ? (
           <AbsoluteFill>
             <Img
               src={bgUrl}
               style={{
                 width: '100%',
                 height: '100%',
-                objectFit: bgFit === 'contain' ? 'contain' : 'cover',
+                objectFit,
               }}
             />
           </AbsoluteFill>
@@ -350,7 +428,7 @@ function SceneView({
         </svg>
       </div>
 
-      {/* Screen-Space Overlays: Scene Title */}
+      {/* Screen-Space Overlays: Scene Title with Template Visual Styling */}
       {scene.title && (
         <div
           style={{
@@ -358,20 +436,141 @@ function SceneView({
             top: height * 0.05,
             left: width * 0.06,
             right: width * 0.06,
-            fontWeight: 800,
-            fontSize: Math.max(26, Math.round(width * 0.034)),
-            color: '#ffffff',
-            textShadow: '0 3px 12px rgba(0,0,0,0.85), 0 1px 3px rgba(0,0,0,0.9)',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'flex-start',
             pointerEvents: 'none',
-            fontFamily: 'system-ui, -apple-system, sans-serif',
           }}
         >
-          {scene.title}
+          {template.tagLabel && (
+            <div
+              style={{
+                fontSize: Math.max(12, Math.round(width * 0.014)),
+                fontWeight: 700,
+                color: template.titleColor || '#ffffff',
+                backgroundColor: template.titleBadgeBg || 'rgba(0,0,0,0.5)',
+                border: `1px solid ${template.titleBadgeBorder || 'rgba(255,255,255,0.2)'}`,
+                borderRadius: 20,
+                padding: '3px 12px',
+                marginBottom: 6,
+                letterSpacing: 1.2,
+                textTransform: 'uppercase',
+                backdropFilter: 'blur(6px)',
+              }}
+            >
+              {template.tagLabel}
+            </div>
+          )}
+          <div
+            style={{
+              fontWeight: 800,
+              fontSize: Math.max(24, Math.round(width * 0.032)),
+              color: template.titleColor || '#ffffff',
+              textShadow: '0 3px 12px rgba(0,0,0,0.85), 0 1px 3px rgba(0,0,0,0.9)',
+              fontFamily: 'system-ui, -apple-system, sans-serif',
+              lineHeight: 1.2,
+            }}
+          >
+            {scene.title}
+          </div>
         </div>
       )}
 
-      {/* Screen-Space Subtitles / Captions (Active Dialogue or Scene Caption) */}
-      {(activeDialogue || scene.caption) && (
+      {/* Template Feature: Intro Card for intro-outro template */}
+      {template.showIntroCard && isFirstScene && progress < 0.45 && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: 'rgba(15, 23, 42, 0.72)',
+            backdropFilter: 'blur(10px)',
+            opacity: progress < 0.35 ? 1 : Math.max(0, (0.45 - progress) / 0.1),
+            transition: 'opacity 0.3s ease',
+            pointerEvents: 'none',
+            zIndex: 50,
+          }}
+        >
+          <div
+            style={{
+              fontSize: Math.max(16, Math.round(width * 0.02)),
+              fontWeight: 700,
+              color: '#38bdf8',
+              letterSpacing: 3,
+              textTransform: 'uppercase',
+              marginBottom: 12,
+            }}
+          >
+            AI Kids Content Studio
+          </div>
+          <div
+            style={{
+              fontSize: Math.max(32, Math.round(width * 0.05)),
+              fontWeight: 900,
+              color: '#ffffff',
+              textAlign: 'center',
+              maxWidth: '80%',
+              lineHeight: 1.2,
+              textShadow: '0 4px 20px rgba(0,0,0,0.8)',
+            }}
+          >
+            {storyTitle || scene.title || 'Adventure Story'}
+          </div>
+        </div>
+      )}
+
+      {/* Template Feature: Outro Card for intro-outro template */}
+      {template.showOutroCard && isLastScene && progress > 0.65 && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: 'rgba(15, 23, 42, 0.75)',
+            backdropFilter: 'blur(12px)',
+            opacity: Math.min(1, (progress - 0.65) / 0.15),
+            pointerEvents: 'none',
+            zIndex: 50,
+          }}
+        >
+          <div
+            style={{
+              fontSize: Math.max(34, Math.round(width * 0.052)),
+              fontWeight: 900,
+              color: '#facc15',
+              letterSpacing: 2,
+              textShadow: '0 4px 20px rgba(0,0,0,0.8)',
+              marginBottom: 10,
+            }}
+          >
+            The End
+          </div>
+          <div
+            style={{
+              fontSize: Math.max(18, Math.round(width * 0.024)),
+              fontWeight: 600,
+              color: '#e2e8f0',
+            }}
+          >
+            Thanks for watching!
+          </div>
+        </div>
+      )}
+
+      {/* Screen-Space Subtitles / Captions (Active Dialogue or Scene Caption / Narration) */}
+      {activeSubtitle && (
         <div
           style={{
             position: 'absolute',
@@ -381,6 +580,7 @@ function SceneView({
             display: 'flex',
             justifyContent: 'center',
             pointerEvents: 'none',
+            zIndex: 40,
           }}
         >
           <div
@@ -396,7 +596,7 @@ function SceneView({
               backdropFilter: 'blur(8px)',
             }}
           >
-            {activeDialogue && activeDialogue.characterName && (
+            {activeSubtitle.speaker && (
               <div
                 style={{
                   fontSize: Math.max(14, Math.round(width * 0.02)),
@@ -408,7 +608,7 @@ function SceneView({
                   fontFamily: 'system-ui, -apple-system, sans-serif',
                 }}
               >
-                {activeDialogue.characterName}
+                {activeSubtitle.speaker}
               </div>
             )}
             <div
@@ -420,17 +620,25 @@ function SceneView({
                 fontFamily: 'system-ui, -apple-system, "Noto Sans Devanagari", sans-serif',
               }}
             >
-              {activeDialogue?.wordTimings?.length ? activeDialogue.wordTimings.map((word, index) => (
-                <React.Fragment key={`${activeDialogue.id}-word-${index}`}>
-                  <span style={{
-                    color: subtitleTheme === 'karaoke' && index === activeWordIndex ? '#fde047' : 'inherit',
-                    background: subtitleTheme === 'speech-bubble' && index === activeWordIndex ? 'rgba(59,130,246,0.12)' : 'transparent',
-                    borderRadius: 4,
-                    fontWeight: index === activeWordIndex ? 800 : 600,
-                    textDecoration: subtitleTheme === 'karaoke' && index === activeWordIndex ? 'underline' : 'none',
-                  }}>{word.text}</span>{' '}
-                </React.Fragment>
-              )) : (activeDialogue ? activeDialogue.text : scene.caption)}
+              {activeSubtitle.wordTimings && activeSubtitle.wordTimings.length > 0 ? (
+                activeSubtitle.wordTimings.map((word, index) => (
+                  <React.Fragment key={`word-${index}`}>
+                    <span
+                      style={{
+                        color: subtitleTheme === 'karaoke' && index === activeSubtitle.activeWordIndex ? '#fde047' : 'inherit',
+                        background: subtitleTheme === 'speech-bubble' && index === activeSubtitle.activeWordIndex ? 'rgba(59,130,246,0.12)' : 'transparent',
+                        borderRadius: 4,
+                        fontWeight: index === activeSubtitle.activeWordIndex ? 800 : 600,
+                        textDecoration: subtitleTheme === 'karaoke' && index === activeSubtitle.activeWordIndex ? 'underline' : 'none',
+                      }}
+                    >
+                      {word.text}
+                    </span>{' '}
+                  </React.Fragment>
+                ))
+              ) : (
+                activeSubtitle.text
+              )}
             </div>
           </div>
         </div>
@@ -463,6 +671,20 @@ function SceneView({
           </Sequence>
         );
       })}
+
+      {/* Pilot Audio Tracks & Additional Sound Effects */}
+      {scene.audioTracks?.map((track, i) => (
+        <Sequence
+          key={`scene-audio-track-${i}`}
+          from={frames(track.startMs, fps)}
+          durationInFrames={frames(track.durationMs, fps)}
+        >
+          <Audio
+            src={track.src.startsWith('http') || track.src.startsWith('data:') ? track.src : staticFile(track.src)}
+            volume={track.volume}
+          />
+        </Sequence>
+      ))}
     </AbsoluteFill>
   );
 }
@@ -487,7 +709,7 @@ export function StoryVideo({ manifest }: { manifest: VideoManifest }) {
       )}
 
       {/* Sequential Scenes */}
-      {manifest.scenes.map((scene) => {
+      {manifest.scenes.map((scene, idx) => {
         const from = offset;
         const durationInFrames = frames(scene.durationMs, fps);
         offset += durationInFrames;
@@ -502,6 +724,10 @@ export function StoryVideo({ manifest }: { manifest: VideoManifest }) {
               scene={scene}
               format={format}
               subtitleTheme={activeSubtitleTheme}
+              template={template}
+              isFirstScene={idx === 0}
+              isLastScene={idx === manifest.scenes.length - 1}
+              storyTitle={manifest.storyTitle}
             />
           </Sequence>
         );
@@ -553,4 +779,3 @@ export function RemotionRoot() {
     />
   );
 }
-

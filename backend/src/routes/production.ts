@@ -340,8 +340,9 @@ productionRouter.get('/story/:storyId/remotion-preview', async (req, res) => {
       return res.status(400).json({ message: 'Unsupported subtitle theme' });
     }
 
+    const serverOrigin = process.env.BACKEND_URL || `${req.protocol}://${req.get('host') || 'localhost:5001'}`;
     const adapter = new RemotionManifestAdapter({
-      serverOrigin: `${req.protocol}://${req.get('host')}`,
+      serverOrigin,
     });
     const manifest = await adapter.buildManifest(story, scenes, {
       format: format as any,
@@ -398,6 +399,8 @@ productionRouter.post('/story/:storyId/export', async (req, res) => {
       return res.status(400).json({ message: 'Remotion currently supports 16:9, 9:16, 1:1 and 4:5 formats' });
     }
 
+    const idempotencyKey = req.body.idempotencyKey || (req.query.idempotencyKey as string) || req.get('Idempotency-Key');
+
     const job = videoAssemblyService.startExportJob({
       storyId,
       resolution,
@@ -410,6 +413,7 @@ productionRouter.post('/story/:storyId/export', async (req, res) => {
       renderer,
       templateId,
       subtitleTheme,
+      idempotencyKey,
     });
 
     return res.json({
@@ -472,4 +476,38 @@ productionRouter.get('/export/:jobId', (req, res) => {
   }
 
   return res.json(job);
+});
+
+productionRouter.post('/export/:jobId/cancel', async (req, res) => {
+  const { jobId } = req.params;
+  const job = videoAssemblyService.getJob(jobId);
+  if (!job) {
+    return res.status(404).json({ message: 'Export job not found' });
+  }
+  const cancelled = await videoAssemblyService.cancelExportJob(jobId);
+  if (!cancelled) {
+    return res.status(400).json({
+      message: `Cannot cancel export job in status "${job.status}"`,
+      job,
+    });
+  }
+  return res.json({
+    success: true,
+    message: 'Export job cancelled successfully',
+    job: videoAssemblyService.getJob(jobId),
+  });
+});
+
+productionRouter.delete('/export/:jobId', async (req, res) => {
+  const { jobId } = req.params;
+  const job = videoAssemblyService.getJob(jobId);
+  if (!job) {
+    return res.status(404).json({ message: 'Export job not found' });
+  }
+  const cancelled = await videoAssemblyService.cancelExportJob(jobId);
+  return res.json({
+    success: true,
+    message: cancelled ? 'Export job cancelled' : 'Export job removed',
+    job: videoAssemblyService.getJob(jobId),
+  });
 });
