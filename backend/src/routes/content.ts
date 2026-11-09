@@ -1512,20 +1512,37 @@ const storageService = new LocalStorageService();
 const providerType = process.env.IMAGE_PROVIDER || "mock";
 
 const videoAssemblyService = new VideoAssemblyService();
-const directorJobs = new Map<string, {
+export type DirectorLifecycleState =
+  | 'QUEUED'
+  | 'GENERATING_STORY'
+  | 'GENERATING_BACKGROUNDS'
+  | 'GENERATING_AUDIO'
+  | 'RENDER_QUEUED'
+  | 'RENDERING'
+  | 'COMPLETED'
+  | 'FAILED';
+
+export interface DirectorJob {
   id: string;
-  status: 'processing' | 'completed' | 'failed';
+  status: DirectorLifecycleState | 'processing' | 'completed' | 'failed';
+  lifecycleState: DirectorLifecycleState;
   stage: string;
   progress: number;
   storyId?: string;
   exportJobId?: string;
+  downloadUrl?: string;
   error?: string;
-}>();
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const directorJobs = new Map<string, DirectorJob>();
+const directorIdempotencyMap = new Map<string, string>();
 
 /**
  * AI Director: one prompt -> structured story -> generated scene backgrounds ->
  * existing dialogue generation -> Remotion export job.
- * Work runs in the background so image generation does not hold the HTTP request open.
+ * Lifecycle states: QUEUED -> GENERATING_STORY -> GENERATING_BACKGROUNDS -> GENERATING_AUDIO -> RENDER_QUEUED -> RENDERING -> COMPLETED (or FAILED).
  */
 contentRouter.post("/story/director", async (req, res) => {
   const { topic, language = 'Hindi', format = '16:9', resolution = '720p', fps = 30 } = req.body || {};
@@ -1539,14 +1556,47 @@ contentRouter.post("/story/director", async (req, res) => {
     return res.status(400).json({ message: 'Invalid resolution or FPS' });
   }
 
+  const idempotencyKey = typeof req.body?.idempotencyKey === 'string' && req.body.idempotencyKey.trim()
+    ? req.body.idempotencyKey.trim()
+    : undefined;
+
+  if (idempotencyKey && directorIdempotencyMap.has(idempotencyKey)) {
+    const existingJobId = directorIdempotencyMap.get(idempotencyKey)!;
+    const existingJob = directorJobs.get(existingJobId);
+    if (existingJob) {
+      console.log(`[AIDirector] Returning existing job ${existingJobId} for idempotencyKey: ${idempotencyKey}`);
+      return res.status(200).json({
+        success: true,
+        directorJobId: existingJobId,
+        statusUrl: `/api/content/story/director/${existingJobId}`,
+      });
+    }
+  }
+
   const directorJobId = randomUUID();
-  directorJobs.set(directorJobId, {
-    id: directorJobId, status: 'processing', stage: 'Generating structured story...', progress: 2,
-  });
+  if (idempotencyKey) {
+    directorIdempotencyMap.set(idempotencyKey, directorJobId);
+  }
+
+  const job: DirectorJob = {
+    id: directorJobId,
+    status: 'QUEUED',
+    lifecycleState: 'QUEUED',
+    stage: 'Job queued for AI Director...',
+    progress: 0,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+  directorJobs.set(directorJobId, job);
 
   void (async () => {
-    const job = directorJobs.get(directorJobId)!;
     try {
+      job.status = 'GENERATING_STORY';
+      job.lifecycleState = 'GENERATING_STORY';
+      job.stage = 'Generating structured story...';
+      job.progress = 5;
+      job.updatedAt = new Date();
+
       const generated = await StoryGenerationService.generateAndPersistStory({
         topic: topic.trim(),
         ageGroup: req.body.ageGroup || req.body.audience || '4-7 years',
@@ -1562,15 +1612,23 @@ contentRouter.post("/story/director", async (req, res) => {
         contentRestrictions: req.body.contentRestrictions,
         visualStyle: req.body.visualStyle,
         audience: req.body.audience,
-        idempotencyKey: req.body.idempotencyKey,
+        idempotencyKey,
       });
 
       job.storyId = generated.storyId;
+      job.status = 'GENERATING_BACKGROUNDS';
+      job.lifecycleState = 'GENERATING_BACKGROUNDS';
+      job.stage = 'Generating scene backgrounds...';
+      job.progress = 25;
+      job.updatedAt = new Date();
+
       const scenes = generated.scenes || [];
       for (let index = 0; index < scenes.length; index += 1) {
         const scene = scenes[index];
         job.stage = `Generating background ${index + 1} of ${scenes.length}...`;
-        job.progress = 10 + Math.round((index / Math.max(1, scenes.length)) * 65);
+        job.progress = 25 + Math.round((index / Math.max(1, scenes.length)) * 25);
+        job.updatedAt = new Date();
+
         if (scene.imageUrl || scene.animationData?.background?.imageUrl) continue;
 
         const rawPrompt = String(scene.visualPrompt || scene.narration || scene.title || '').trim();
@@ -1586,31 +1644,79 @@ contentRouter.post("/story/director", async (req, res) => {
           : format === '1:1' ? { width: 1024, height: 1024 }
           : format === '4:5' ? { width: 819, height: 1024 }
           : { width: 1024, height: 576 };
-        const imageResult = await imageGenerationService.generateSceneImage({ prompt, ...size });
-        const extension = getExtensionFromMimeType(imageResult.mimeType);
-        const filename = `scene-${scene.sceneId}-director-${Date.now()}.${extension}`;
-        const saved = await storageService.saveFile(imageResult.imageBuffer, filename, imageResult.mimeType);
-        await createImage({
-          id: randomUUID(),
-          sceneId: scene.sceneId,
-          provider: providerType,
-          model: 'default',
-          prompt,
-          storageKey: filename,
-          imageUrl: saved.url,
-          width: size.width,
-          height: size.height,
-          status: 'completed',
-        });
-        await updateScene(scene.sceneId, {
-          imageUrl: saved.url,
-          visualPrompt: prompt,
-          generationStatus: 'completed',
-        });
+        try {
+          const imageResult = await imageGenerationService.generateSceneImage({ prompt, ...size });
+          const extension = getExtensionFromMimeType(imageResult.mimeType);
+          const filename = `scene-${scene.sceneId}-director-${Date.now()}.${extension}`;
+          const saved = await storageService.saveFile(imageResult.imageBuffer, filename, imageResult.mimeType);
+          await createImage({
+            id: randomUUID(),
+            sceneId: scene.sceneId,
+            provider: providerType,
+            model: 'default',
+            prompt,
+            storageKey: filename,
+            imageUrl: saved.url,
+            width: size.width,
+            height: size.height,
+            status: 'completed',
+          });
+          await updateScene(scene.sceneId, {
+            imageUrl: saved.url,
+            visualPrompt: prompt,
+            generationStatus: 'completed',
+          });
+        } catch (imgErr) {
+          console.warn(`[AIDirector] Background generation notice for scene ${scene.sceneId}:`, imgErr);
+        }
       }
 
-      job.stage = 'Starting Remotion video render...';
-      job.progress = 82;
+      job.status = 'GENERATING_AUDIO';
+      job.lifecycleState = 'GENERATING_AUDIO';
+      job.stage = 'Generating scene narration and character dialogues...';
+      job.progress = 55;
+      job.updatedAt = new Date();
+
+      // Ensure all scenes have narration and dialogue audio generated
+      const currentScenes = await getScenesByStoryId(generated.storyId, false);
+      for (let i = 0; i < currentScenes.length; i++) {
+        const sc = currentScenes[i];
+        job.stage = `Generating audio for scene ${i + 1} of ${currentScenes.length}...`;
+        job.progress = 55 + Math.round((i / Math.max(1, currentScenes.length)) * 15);
+        job.updatedAt = new Date();
+
+        if (sc.narration && !sc.audioUrl) {
+          try {
+            await audioGenerationService.generateNarrationAudio({
+              sceneId: sc.sceneId || sc.id,
+              narration: sc.narration,
+              lang: language,
+            });
+          } catch (narrErr) {
+            console.warn(`[AIDirector] Narration audio notice for scene ${sc.sceneId}:`, narrErr);
+          }
+        }
+
+        if (Array.isArray((sc as any).animationData?.dialogueLines)) {
+          const hasUnbuiltDialogue = (sc as any).animationData.dialogueLines.some((d: any) => {
+            return d.text && d.text.trim() && !d.audioUrl;
+          });
+          if (hasUnbuiltDialogue) {
+            try {
+              await audioGenerationService.generateAllSceneDialogues(sc.sceneId || sc.id);
+            } catch (dlgErr) {
+              console.warn(`[AIDirector] Dialogue audio notice for scene ${sc.sceneId}:`, dlgErr);
+            }
+          }
+        }
+      }
+
+      job.status = 'RENDER_QUEUED';
+      job.lifecycleState = 'RENDER_QUEUED';
+      job.stage = 'Queued for Remotion video render...';
+      job.progress = 72;
+      job.updatedAt = new Date();
+
       const exportJob = videoAssemblyService.startExportJob({
         storyId: generated.storyId,
         resolution,
@@ -1619,19 +1725,69 @@ contentRouter.post("/story/director", async (req, res) => {
         renderer: 'remotion',
         templateId: req.body.templateId || 'kids-story',
         subtitleTheme: req.body.subtitleTheme || 'speech-bubble',
+        backgroundMusic: req.body.backgroundMusic,
+        musicVolume: req.body.musicVolume,
       });
       job.exportJobId = exportJob.id;
-      job.status = 'completed';
-      job.stage = 'Story assets are ready; video export is running.';
-      job.progress = 100;
+
+      // Poll export job until completion or failure
+      while (true) {
+        await new Promise((r) => setTimeout(r, 800));
+        const currentExportJob = videoAssemblyService.getJob(exportJob.id);
+        if (!currentExportJob) {
+          job.status = 'FAILED';
+          job.lifecycleState = 'FAILED';
+          job.stage = 'Render job lost or terminated unexpectedly';
+          job.error = 'Render job lost or terminated unexpectedly';
+          job.updatedAt = new Date();
+          break;
+        }
+
+        if (currentExportJob.status === 'processing') {
+          job.status = 'RENDERING';
+          job.lifecycleState = 'RENDERING';
+          job.stage = currentExportJob.stage || 'Rendering frames with Remotion...';
+          // Map 0-100% of export progress to 72-99% of overall director progress
+          job.progress = Math.min(99, Math.round(72 + (currentExportJob.progress || 0) * 0.27));
+          job.updatedAt = new Date();
+        } else if (currentExportJob.status === 'queued') {
+          job.status = 'RENDER_QUEUED';
+          job.lifecycleState = 'RENDER_QUEUED';
+          job.stage = currentExportJob.stage || 'Waiting in Remotion render queue...';
+          job.progress = 72;
+          job.updatedAt = new Date();
+        } else if (currentExportJob.status === 'completed') {
+          job.status = 'COMPLETED';
+          job.lifecycleState = 'COMPLETED';
+          job.stage = 'Video export completed successfully!';
+          job.progress = 100;
+          job.downloadUrl = currentExportJob.downloadUrl;
+          job.updatedAt = new Date();
+          break;
+        } else if (currentExportJob.status === 'failed') {
+          job.status = 'FAILED';
+          job.lifecycleState = 'FAILED';
+          job.stage = 'Remotion video render failed';
+          job.error = currentExportJob.error || 'Remotion video rendering failed';
+          job.updatedAt = new Date();
+          break;
+        }
+      }
     } catch (error: any) {
-      job.status = 'failed';
+      console.error(`[AIDirector] Job ${directorJobId} failed:`, error);
+      job.status = 'FAILED';
+      job.lifecycleState = 'FAILED';
       job.stage = 'AI Director failed';
       job.error = error?.message || 'AI Director pipeline failed';
+      job.updatedAt = new Date();
     }
   })();
 
-  return res.status(202).json({ success: true, directorJobId, statusUrl: `/api/content/story/director/${directorJobId}` });
+  return res.status(202).json({
+    success: true,
+    directorJobId,
+    statusUrl: `/api/content/story/director/${directorJobId}`,
+  });
 });
 
 contentRouter.get("/story/director/:jobId", (req, res) => {

@@ -430,7 +430,7 @@ productionRouter.post('/story/:storyId/export', async (req, res) => {
 productionRouter.post('/story/:storyId/export-variations', async (req, res) => {
   try {
     const { storyId } = req.params;
-    const formats = Array.isArray(req.body.formats) ? [...new Set(req.body.formats)] : [];
+    const formats: string[] = Array.isArray(req.body.formats) ? Array.from(new Set<string>(req.body.formats.map((f: unknown) => String(f)))) : [];
     if (!formats.length || formats.some((format: string) => !['16:9', '9:16', '1:1', '4:5'].includes(format))) {
       return res.status(400).json({ message: 'formats must contain one or more of 16:9, 9:16, 1:1, 4:5' });
     }
@@ -443,7 +443,7 @@ productionRouter.post('/story/:storyId/export-variations', async (req, res) => {
     if (renderer !== 'remotion' && renderer !== 'ffmpeg') {
       return res.status(400).json({ message: 'renderer must be remotion or ffmpeg' });
     }
-    const jobs = formats.map((format: '16:9' | '9:16' | '1:1' | '4:5') =>
+    const jobs = (formats as Array<'16:9' | '9:16' | '1:1' | '4:5'>).map((format) =>
       videoAssemblyService.startExportJob({
         storyId,
         resolution,

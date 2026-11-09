@@ -16,8 +16,10 @@ export interface RemotionManifestAdapterOptions {
   targetDurationSec?: number;
   serverOrigin?: string; // e.g. http://localhost:5001
   embedBase64Images?: boolean;
+  embedBase64Audio?: boolean;
   templateId?: string;
   subtitleTheme?: 'classic' | 'karaoke' | 'speech-bubble' | 'minimal';
+  excludeMusicFromRemotion?: boolean;
 }
 
 export interface RemotionManifest {
@@ -29,6 +31,7 @@ export interface RemotionManifest {
   format: AspectRatio;
   backgroundMusic?: string;
   musicVolume?: number;
+  silentAudioSrc?: string;
   templateId?: string;
   subtitleTheme?: 'classic' | 'karaoke' | 'speech-bubble' | 'minimal';
   scenes: RemotionScene[];
@@ -179,12 +182,16 @@ export class RemotionManifestAdapter {
    * Resolves a storage path to a local absolute disk path.
    */
   public resolveLocalPath(urlPath: string): string {
+    if (!urlPath) return '';
     if (urlPath.startsWith('/storage/')) {
-      return path.join(process.cwd(), urlPath.replace(/^\//, ''));
+      return path.resolve(process.cwd(), this.storageDir, urlPath.replace(/^\/storage\//, ''));
+    }
+    if (urlPath.startsWith('storage/')) {
+      return path.resolve(process.cwd(), this.storageDir, urlPath.replace(/^storage\//, ''));
     }
     const match = urlPath.match(/\/storage\/(.+)$/);
     if (match) {
-      return path.join(process.cwd(), this.storageDir, match[1]);
+      return path.resolve(process.cwd(), this.storageDir, match[1]);
     }
     return path.resolve(urlPath);
   }
@@ -194,7 +201,7 @@ export class RemotionManifestAdapter {
    */
   public convertLocalImageToDataUri(imagePathOrUrl?: string | null): string {
     if (!imagePathOrUrl) return '';
-    if (imagePathOrUrl.startsWith('data:') || /^https?:\/\//i.test(imagePathOrUrl)) {
+    if (imagePathOrUrl.startsWith('data:')) {
       return imagePathOrUrl;
     }
     const localPath = this.resolveLocalPath(imagePathOrUrl);
@@ -209,6 +216,96 @@ export class RemotionManifestAdapter {
       }
     }
     return this.resolveAssetUrl(imagePathOrUrl);
+  }
+
+  /**
+   * Converts a local audio file into a base64 Data URI if it exists,
+   * allowing offline Remotion rendering without depending on a running HTTP server.
+   */
+  public convertLocalAudioToDataUri(audioPathOrUrl?: string | null): string {
+    if (!audioPathOrUrl) return '';
+    if (audioPathOrUrl.startsWith('data:')) {
+      return audioPathOrUrl;
+    }
+    const localPath = this.resolveLocalPath(audioPathOrUrl);
+    if (fs.existsSync(localPath)) {
+      try {
+        const ext = path.extname(localPath).toLowerCase().replace('.', '') || 'wav';
+        const mimeType = ext === 'mp3' ? 'mpeg' : (ext === 'ogg' ? 'ogg' : 'wav');
+        const fileBuf = fs.readFileSync(localPath);
+        return `data:audio/${mimeType};base64,${fileBuf.toString('base64')}`;
+      } catch (err) {
+        console.warn(`[RemotionAdapter] Failed to convert audio ${localPath} to data URI:`, err);
+      }
+    }
+    return this.resolveAssetUrl(audioPathOrUrl);
+  }
+
+  /**
+   * Resolves background music into a browser-accessible URL without exposing raw local disk paths.
+   */
+  public resolveMusicUrl(musicSource?: string | null): string | undefined {
+    if (!musicSource || musicSource === 'none') return undefined;
+
+    // Direct HTTP(S) or data URL
+    if (musicSource.startsWith('data:') || /^https?:\/\//i.test(musicSource)) {
+      return musicSource;
+    }
+
+    // Direct /storage/ path
+    if (musicSource.startsWith('/storage/')) {
+      return this.resolveAssetUrl(musicSource);
+    }
+    if (musicSource.startsWith('storage/')) {
+      return this.resolveAssetUrl(`/${musicSource}`);
+    }
+
+    const absStorageDir = path.resolve(process.cwd(), this.storageDir);
+
+    // Named track without extension e.g. "playful"
+    const candidates = [
+      path.join(absStorageDir, 'music', `${musicSource}.mp3`),
+      path.join(absStorageDir, 'music', `${musicSource}.wav`),
+      path.join(absStorageDir, 'music', musicSource),
+    ];
+    for (const cand of candidates) {
+      if (fs.existsSync(cand)) {
+        const relToStorage = path.relative(absStorageDir, cand).replace(/\\/g, '/');
+        return this.resolveAssetUrl(`/storage/${relToStorage}`);
+      }
+    }
+
+    // If it's a local filesystem path within storageDir
+    const absPath = path.resolve(musicSource);
+    if (absPath.startsWith(absStorageDir) && fs.existsSync(absPath)) {
+      const relToStorage = path.relative(absStorageDir, absPath).replace(/\\/g, '/');
+      return this.resolveAssetUrl(`/storage/${relToStorage}`);
+    }
+
+    // If file exists locally outside storageDir, copy it to storage/music
+    if (fs.existsSync(absPath)) {
+      try {
+        const musicStorageDir = path.join(absStorageDir, 'music');
+        if (!fs.existsSync(musicStorageDir)) fs.mkdirSync(musicStorageDir, { recursive: true });
+        const ext = path.extname(absPath) || '.mp3';
+        const targetFilename = `imported-bgm-${path.basename(absPath, ext)}${ext}`;
+        const targetPath = path.join(musicStorageDir, targetFilename);
+        if (!fs.existsSync(targetPath)) {
+          fs.copyFileSync(absPath, targetPath);
+        }
+        return this.resolveAssetUrl(`/storage/music/${targetFilename}`);
+      } catch (err) {
+        console.warn(`[RemotionAdapter] Could not copy local music to storage:`, err);
+      }
+    }
+
+    // Avoid exposing raw filesystem paths to the browser
+    if (/^[a-zA-Z]:[\\/]/.test(musicSource) || musicSource.startsWith('/')) {
+      console.warn(`[RemotionAdapter] Inaccessible music path: ${musicSource}`);
+      return undefined;
+    }
+
+    return this.resolveAssetUrl(`/storage/music/${musicSource}`);
   }
 
   /**
@@ -227,6 +324,7 @@ export class RemotionManifestAdapter {
       musicVolume = 0.2,
       selectedSceneIds,
       embedBase64Images = true,
+      embedBase64Audio = false,
       templateId = 'kids-story',
       subtitleTheme,
     } = options;
@@ -318,8 +416,11 @@ export class RemotionManifestAdapter {
       // 3. Narration Audio resolution
       let narrationConfig: RemotionScene['narration'] = undefined;
       if (scene.audioUrl) {
+        const resolvedAudio = embedBase64Audio
+          ? this.convertLocalAudioToDataUri(scene.audioUrl)
+          : this.resolveAssetUrl(scene.audioUrl);
         narrationConfig = {
-          url: this.resolveAssetUrl(scene.audioUrl),
+          url: resolvedAudio,
           durationMs: scene.actualAudioDurationMs || durationMs,
           volume: 1.0,
         };
@@ -383,25 +484,31 @@ export class RemotionManifestAdapter {
       }));
 
       // 7. Dialogue Lines with audio URL resolution
-      const adaptedDialogues = rawDialogues.map((line: any) => ({
-        id: line.id,
-        characterName: line.characterName || 'Character',
-        characterInstanceId: line.characterInstanceId,
-        characterId: line.characterId,
-        text: line.text || '',
-        url: line.audioUrl ? this.resolveAssetUrl(line.audioUrl) : (line.url ? this.resolveAssetUrl(line.url) : undefined),
-        audioUrl: line.audioUrl ? this.resolveAssetUrl(line.audioUrl) : undefined,
-        startMs: line.startMs || 0,
-        durationMs: line.durationMs || 2000,
-        volume: typeof line.volume === 'number' ? Math.max(0, Math.min(1, line.volume)) : 1.0,
-        facialExpression: line.facialExpression,
-        emotion: line.emotion,
-        speakingDirection: line.speakingDirection,
-        visemeCues: line.visemeCues,
-        wordTimings: Array.isArray(line.wordTimings) && line.wordTimings.length > 0
-          ? line.wordTimings
-          : estimateWordTimings(line.text || '', Math.max(250, line.durationMs || 2000)),
-      }));
+      const adaptedDialogues = rawDialogues.map((line: any) => {
+        const rawAudio = line.audioUrl || line.url;
+        const resolvedAudio = rawAudio
+          ? (embedBase64Audio ? this.convertLocalAudioToDataUri(rawAudio) : this.resolveAssetUrl(rawAudio))
+          : undefined;
+        return {
+          id: line.id,
+          characterName: line.characterName || 'Character',
+          characterInstanceId: line.characterInstanceId,
+          characterId: line.characterId,
+          text: line.text || '',
+          url: resolvedAudio,
+          audioUrl: resolvedAudio,
+          startMs: line.startMs || 0,
+          durationMs: line.durationMs || 2000,
+          volume: typeof line.volume === 'number' ? Math.max(0, Math.min(1, line.volume)) : 1.0,
+          facialExpression: line.facialExpression,
+          emotion: line.emotion,
+          speakingDirection: line.speakingDirection,
+          visemeCues: line.visemeCues,
+          wordTimings: Array.isArray(line.wordTimings) && line.wordTimings.length > 0
+            ? line.wordTimings
+            : estimateWordTimings(line.text || '', Math.max(250, line.durationMs || 2000)),
+        };
+      });
 
       // 8. Educational Overlays
       const adaptedOverlays = (animData.overlays || []).map((o: any) => ({
@@ -448,22 +555,10 @@ export class RemotionManifestAdapter {
       });
     }
 
-    // Resolve background music URL if present
-    let resolvedBgm: string | undefined = undefined;
-    if (backgroundMusic && backgroundMusic !== 'none') {
-      if (backgroundMusic.startsWith('/storage/')) {
-        resolvedBgm = this.resolveAssetUrl(backgroundMusic);
-      } else if (fs.existsSync(backgroundMusic)) {
-        resolvedBgm = backgroundMusic;
-      } else {
-        const candidate = path.join(process.cwd(), this.storageDir, 'music', `${backgroundMusic}.mp3`);
-        if (fs.existsSync(candidate)) {
-          resolvedBgm = this.resolveAssetUrl(`/storage/music/${backgroundMusic}.mp3`);
-        } else {
-          resolvedBgm = this.resolveAssetUrl(backgroundMusic);
-        }
-      }
-    }
+    // Resolve background music URL if present (unless excluded for audio mastering ducking stage)
+    const resolvedBgm = options.excludeMusicFromRemotion
+      ? undefined
+      : this.resolveMusicUrl(backgroundMusic);
 
     return {
       version: '2.0.0',
@@ -474,6 +569,7 @@ export class RemotionManifestAdapter {
       format: normalizedFormat,
       backgroundMusic: resolvedBgm,
       musicVolume,
+      silentAudioSrc: 'silent.wav',
       templateId,
       subtitleTheme,
       scenes: adaptedScenes,

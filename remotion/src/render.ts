@@ -3,7 +3,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { bundle } from '@remotion/bundler';
-import { getCompositions, renderMedia } from '@remotion/renderer';
+import { getCompositions, makeCancelSignal, renderMedia } from '@remotion/renderer';
 import { dimensions, frames, validateManifest, VideoManifest } from './manifest.js';
 
 export interface RenderRemotionOptions {
@@ -46,13 +46,18 @@ export async function renderRemotionVideo(
   );
   const durationMs = manifest.scenes.reduce((n, s) => n + s.durationMs, 0);
 
-  // If publicDir is provided and silentAudioSrc is requested, ensure silent audio asset exists
-  if (publicDir && manifest.silentAudioSrc) {
-    await fs.mkdir(publicDir, { recursive: true });
-    const silentPath = path.join(publicDir, manifest.silentAudioSrc);
+  const entryPoint = fileURLToPath(new URL('./index.ts', import.meta.url));
+  const resolvedPublicDir = publicDir
+    ? path.resolve(publicDir)
+    : path.resolve(path.dirname(entryPoint), '../public');
+
+  // If silentAudioSrc is requested, ensure silent audio asset exists in public directory
+  if (manifest.silentAudioSrc) {
+    await fs.mkdir(resolvedPublicDir, { recursive: true });
+    const silentPath = path.join(resolvedPublicDir, manifest.silentAudioSrc);
     if (!(await fs.stat(silentPath).catch(() => null))?.isFile()) {
       const sampleRate = 44100;
-      const dataSize = sampleRate * 2;
+      const dataSize = sampleRate * 2 * 2;
       const silence = Buffer.alloc(44 + dataSize);
       silence.write('RIFF', 0);
       silence.writeUInt32LE(36 + dataSize, 4);
@@ -60,10 +65,10 @@ export async function renderRemotionVideo(
       silence.write('fmt ', 12);
       silence.writeUInt32LE(16, 16);
       silence.writeUInt16LE(1, 20);
-      silence.writeUInt16LE(1, 22);
+      silence.writeUInt16LE(2, 22);
       silence.writeUInt32LE(sampleRate, 24);
-      silence.writeUInt32LE(sampleRate * 2, 28);
-      silence.writeUInt16LE(2, 32);
+      silence.writeUInt32LE(sampleRate * 4, 28);
+      silence.writeUInt16LE(4, 32);
       silence.writeUInt16LE(16, 34);
       silence.write('data', 36);
       silence.writeUInt32LE(dataSize, 40);
@@ -71,12 +76,10 @@ export async function renderRemotionVideo(
     }
   }
 
-  const entryPoint = fileURLToPath(new URL('./index.ts', import.meta.url));
-
   // Bundle the Remotion composition
   const serveUrl = await bundle({
     entryPoint,
-    publicDir,
+    publicDir: resolvedPublicDir,
     webpackOverride: (config) => ({
       ...config,
       resolve: {
@@ -85,6 +88,8 @@ export async function renderRemotionVideo(
       },
     }),
   });
+
+  const { cancelSignal, cancel } = makeCancelSignal();
 
   try {
     const compositions = await getCompositions(serveUrl, {
@@ -103,6 +108,11 @@ export async function renderRemotionVideo(
     let timer: NodeJS.Timeout | null = null;
     const timeoutPromise = new Promise<never>((_, reject) => {
       timer = setTimeout(() => {
+        try {
+          cancel();
+        } catch {
+          // ignore error on cancel
+        }
         reject(new Error(`Remotion render timed out after ${timeoutMs / 1000}s`));
       }, timeoutMs);
     });
@@ -120,6 +130,7 @@ export async function renderRemotionVideo(
       audioCodec: 'aac',
       outputLocation: absOutput,
       inputProps: { manifest },
+      cancelSignal,
       concurrency: safeConcurrency,
       chromiumOptions: {
         disableWebSecurity: true,
@@ -134,8 +145,18 @@ export async function renderRemotionVideo(
       },
     });
 
-    await Promise.race([renderPromise, timeoutPromise]);
-    if (timer) clearTimeout(timer);
+    try {
+      await Promise.race([renderPromise, timeoutPromise]);
+    } catch (err) {
+      try {
+        cancel();
+      } catch {
+        // ignore
+      }
+      throw err;
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
 
     return {
       outputFile: absOutput,
@@ -147,6 +168,14 @@ export async function renderRemotionVideo(
     };
   } finally {
     // Cleanup temporary bundled directory if bundle was created in temp
+    if (serveUrl && serveUrl.startsWith('file://')) {
+      try {
+        const bundleDir = path.dirname(fileURLToPath(serveUrl));
+        await fs.rm(bundleDir, { recursive: true, force: true }).catch(() => {});
+      } catch {
+        // ignore
+      }
+    }
   }
 }
 

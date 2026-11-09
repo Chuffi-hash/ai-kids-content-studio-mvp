@@ -273,7 +273,7 @@ export default function StoryDetailPage() {
 
   useEffect(() => {
     if (!audioManagerRef.current) return;
-    if (previewMode === 'export') {
+    if (previewMode === 'export' || previewMode === 'remotion') {
       audioManagerRef.current.stopAll();
       return;
     }
