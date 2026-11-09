@@ -273,3 +273,57 @@ The initial animation milestone is complete only when the existing editor can co
 5. Keep browser preview and backend export calculations equivalent.
 6. Validate the real rendering output and audio streams.
 7. Preserve working AI image generation, TTS, Ken Burns clips, and existing CRUD workflows.
+
+## 14. Phase 8 — Remotion Integration & Production Video Rendering
+
+**Status: Complete & Verified.** (Implemented November 2026)
+
+### 1. Dual-Renderer Architecture
+- **FFmpeg Renderer (Default):** Retained as the default, lightweight assembly engine using PNG frame rasterization and FFmpeg filtergraphs.
+- **Remotion Renderer (Optional):** React-based frame evaluation engine (`remotion/`) producing H.264/AAC videos with sub-pixel typography, dynamic karaoke subtitles, SVG character rigs, camera transitions, and visual templates.
+
+### 2. Supported Formats & Aspect Ratios
+- **16:9 Landscape:** 720p ($1280 \times 720$) and 1080p ($1920 \times 1080$)
+- **9:16 Vertical Reel:** 720p ($720 \times 1280$) and 1080p ($1080 \times 1920$)
+- **1:1 Social Square:** 720p ($720 \times 720$) and 1080p ($1080 \times 1080$)
+- **4:5 Social Portrait:** 720p ($720 \times 900$) and 1080p ($1080 \times 1350$)
+
+### 3. Video Templates
+1. **`kids-story` (Default):** Playful storybook aesthetic with translucent rounded dialogue cards, warm shadows, and "STORYBOOK ADVENTURE" pill badge.
+2. **`moral-story`:** Classic serif styling with golden border plaque badge ("INSPIRING TALE") and high-contrast subtitle presentation.
+3. **`educational`:** Clean sans-serif layout with vibrant cyan badge ("DISCOVERY LESSON") optimized for explainer clarity.
+4. **`nursery-learning`:** Cheerful pastel palette with enlarged karaoke word tracking designed for preschool and early readers.
+5. **`intro-outro`:** Includes an automated introductory story title card on Scene 1 and an celebratory "The End" credit card on the final scene.
+
+### 4. Audio Pipeline & Mastering
+- **Dialogue & Narration:** Sequenced at scene-relative offsets with accurate speaker preservation.
+- **Dynamic Word Highlighting:** Unicode-compliant tokenizer handles Hindi Devanagari (including combining vowel marks `\p{M}`) and English with sentence-pause pacing.
+- **Background Music Ducking:** Music volume is automatically attenuated during speech and mastered via FFmpeg with loudness normalization (`-16 LUFS`, `TP -1.5 dB`).
+- **Silent Audio Fallback:** A silent audio stream is automatically synthesized for stories without narration or dialogue to ensure valid AAC stream creation.
+
+### 5. Render Queue, Concurrency & Resilience
+- **Concurrency Management:** `RemotionRenderQueue` enforces bounded concurrency (`maxConcurrency = 1` default) to prevent CPU/memory exhaustion.
+- **Durable Persistence:** In-flight export jobs are tracked in `backend/storage/temp/export-jobs.json`. Jobs interrupted by a server reboot are identified as `failed` for safe user retry.
+- **Cancellation:** `POST /api/production/export/:jobId/cancel` terminates child Chromium process trees across Windows (`taskkill`) and Linux (`SIGKILL`) without orphaned processes.
+- **Idempotency:** Duplicate export requests with matching story and format return the active job instead of spinning up duplicate renders.
+
+### 6. Local Development & Installation
+```bash
+# Remotion package setup
+cd remotion
+npm ci
+npm run ensure-browser # Downloads required headless Chromium binary
+npm run typecheck
+npm test
+
+# Backend setup
+cd ../backend
+npm ci
+npx tsc --noEmit
+
+# Frontend setup
+cd ../frontend
+npm ci
+npm run build
+```
+
