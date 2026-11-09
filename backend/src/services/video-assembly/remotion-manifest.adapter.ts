@@ -20,6 +20,7 @@ export interface RemotionManifestAdapterOptions {
   templateId?: string;
   subtitleTheme?: 'classic' | 'karaoke' | 'speech-bubble' | 'minimal';
   excludeMusicFromRemotion?: boolean;
+  excludeSilentAudio?: boolean;
 }
 
 export interface RemotionManifest {
@@ -575,7 +576,7 @@ export class RemotionManifestAdapter {
       format: normalizedFormat,
       backgroundMusic: resolvedBgm,
       musicVolume,
-      silentAudioSrc: 'silent.wav',
+      silentAudioSrc: options.excludeSilentAudio ? undefined : 'silent.wav',
       templateId,
       subtitleTheme,
       scenes: adaptedScenes,

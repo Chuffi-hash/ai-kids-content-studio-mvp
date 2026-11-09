@@ -735,7 +735,15 @@ export function StoryVideo({ manifest }: { manifest: VideoManifest }) {
 
       {/* Guarantees an audio stream even when a story has no narration/dialogue. */}
       {manifest.silentAudioSrc && (
-        <Audio src={staticFile(manifest.silentAudioSrc)} volume={0} loop />
+        <Audio
+          src={
+            manifest.silentAudioSrc.startsWith('data:') || manifest.silentAudioSrc.startsWith('http')
+              ? manifest.silentAudioSrc
+              : staticFile(manifest.silentAudioSrc)
+          }
+          volume={0}
+          loop
+        />
       )}
     </AbsoluteFill>
   );

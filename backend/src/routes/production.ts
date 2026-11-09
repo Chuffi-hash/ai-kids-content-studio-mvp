@@ -351,6 +351,7 @@ productionRouter.get('/story/:storyId/remotion-preview', async (req, res) => {
       templateId,
       subtitleTheme: subtitleTheme as any,
       embedBase64Images: true,
+      excludeSilentAudio: true,
     });
     return res.json({ success: true, manifest });
   } catch (error: any) {

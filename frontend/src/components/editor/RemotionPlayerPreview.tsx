@@ -178,6 +178,24 @@ export const RemotionPlayerPreview: React.FC<RemotionPlayerPreviewProps> = ({
           clickToPlay
           doubleClickToFullscreen
           style={{ width: '100%', height: '100%' }}
+          errorFallback={(err: Error) => (
+            <div style={{ padding: 24, textAlign: 'center', color: '#f87171', background: '#0f172a', width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+              <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 8, color: '#fca5a5' }}>
+                Remotion Composition Error
+              </div>
+              <div style={{ fontSize: 13, color: '#cbd5e1', maxWidth: 460, lineHeight: 1.4, marginBottom: 12 }}>
+                {err.message}
+              </div>
+              <button
+                type="button"
+                className="ed-btn-action"
+                onClick={handleRefresh}
+                style={{ padding: '6px 14px', borderRadius: 6, background: '#2563eb', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 12 }}
+              >
+                Reload Preview
+              </button>
+            </div>
+          )}
         />
       </div>
     </div>
