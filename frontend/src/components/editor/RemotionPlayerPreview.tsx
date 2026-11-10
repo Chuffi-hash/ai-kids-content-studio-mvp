@@ -8,6 +8,10 @@ interface RemotionPlayerPreviewProps {
   storyId: string;
   format: string;
   refreshTrigger?: string | number;
+  currentTimeMs?: number;
+  isPlaying?: boolean;
+  onTimeUpdate?: (timeMs: number) => void;
+  onPlayStateChange?: (playing: boolean) => void;
   onPlayStart?: () => void;
 }
 
@@ -15,6 +19,10 @@ export const RemotionPlayerPreview: React.FC<RemotionPlayerPreviewProps> = ({
   storyId,
   format,
   refreshTrigger,
+  currentTimeMs = 0,
+  isPlaying = false,
+  onTimeUpdate,
+  onPlayStateChange,
   onPlayStart,
 }) => {
   const [manifest, setManifest] = useState<VideoManifest | null>(null);
@@ -22,6 +30,7 @@ export const RemotionPlayerPreview: React.FC<RemotionPlayerPreviewProps> = ({
   const [loading, setLoading] = useState(true);
   const [manualRefreshKey, setManualRefreshKey] = useState(0);
   const playerRef = useRef<PlayerRef>(null);
+  const lastEmittedFrameRef = useRef<number>(-1);
 
   const handleRefresh = () => {
     setManualRefreshKey((k) => k + 1);
@@ -39,23 +48,6 @@ export const RemotionPlayerPreview: React.FC<RemotionPlayerPreviewProps> = ({
       }
     };
   }, []);
-
-  // Sync with parent when Remotion starts playing so scene editor audio/RAF loop stops
-  useEffect(() => {
-    const player = playerRef.current;
-    if (!player) return;
-    const handlePlay = () => {
-      onPlayStart?.();
-    };
-    player.addEventListener('play', handlePlay);
-    return () => {
-      try {
-        player.removeEventListener('play', handlePlay);
-      } catch {
-        // Ignore removal edge cases
-      }
-    };
-  }, [onPlayStart, manifest]);
 
   useEffect(() => {
     let active = true;
@@ -87,6 +79,110 @@ export const RemotionPlayerPreview: React.FC<RemotionPlayerPreviewProps> = ({
     const totalDurationSec = (durationInFrames / fps).toFixed(1);
     return { fps, ...size, durationInFrames: Math.max(1, durationInFrames), totalDurationSec };
   }, [manifest]);
+
+  // Synchronize external timeline seeks, clicks, and playhead scrubs into Remotion Player
+  useEffect(() => {
+    const player = playerRef.current;
+    if (!player || !config) return;
+
+    const targetFrame = Math.max(
+      0,
+      Math.min(config.durationInFrames - 1, Math.round(((currentTimeMs ?? 0) / 1000) * config.fps))
+    );
+
+    let currentFrame = 0;
+    try {
+      currentFrame = player.getCurrentFrame();
+    } catch {
+      return;
+    }
+
+    // Skip if already matching target frame
+    if (currentFrame === targetFrame) return;
+
+    // If player is actively playing and difference is natural playback advance (<= 2 frames), skip seekTo
+    if (player.isPlaying()) {
+      if (Math.abs(currentFrame - targetFrame) > 2) {
+        player.seekTo(targetFrame);
+      }
+    } else {
+      // When paused or stopped, always seek immediately so timeline click/scrub is instantaneous
+      player.seekTo(targetFrame);
+    }
+  }, [currentTimeMs, config]);
+
+  // Synchronize Play/Pause state from toolbar, timeline controls, or keyboard shortcuts
+  useEffect(() => {
+    const player = playerRef.current;
+    if (!player) return;
+
+    try {
+      if (isPlaying && !player.isPlaying()) {
+        player.play();
+      } else if (!isPlaying && player.isPlaying()) {
+        player.pause();
+      }
+    } catch {
+      // Safe transition handling
+    }
+  }, [isPlaying]);
+
+  // Listen to Remotion Player events to notify parent (timeline playhead, isPlaying)
+  useEffect(() => {
+    const player = playerRef.current;
+    if (!player || !config) return;
+
+    const handlePlay = () => {
+      onPlayStart?.();
+      onPlayStateChange?.(true);
+    };
+
+    const handlePause = () => {
+      onPlayStateChange?.(false);
+    };
+
+    const handleFrameUpdate = (e: { detail: { frame: number } }) => {
+      const f = e.detail?.frame ?? 0;
+      lastEmittedFrameRef.current = f;
+      const ms = Math.round((f / config.fps) * 1000);
+      onTimeUpdate?.(ms);
+    };
+
+    const handleSeeked = (e: { detail: { frame: number } }) => {
+      const f = e.detail?.frame ?? 0;
+      lastEmittedFrameRef.current = f;
+      const ms = Math.round((f / config.fps) * 1000);
+      onTimeUpdate?.(ms);
+    };
+
+    const handleEnded = () => {
+      onPlayStateChange?.(false);
+      onTimeUpdate?.(0);
+      try {
+        player.seekTo(0);
+      } catch {
+        // Safe ended handling
+      }
+    };
+
+    player.addEventListener('play', handlePlay);
+    player.addEventListener('pause', handlePause);
+    player.addEventListener('frameupdate', handleFrameUpdate);
+    player.addEventListener('seeked', handleSeeked);
+    player.addEventListener('ended', handleEnded);
+
+    return () => {
+      try {
+        player.removeEventListener('play', handlePlay);
+        player.removeEventListener('pause', handlePause);
+        player.removeEventListener('frameupdate', handleFrameUpdate);
+        player.removeEventListener('seeked', handleSeeked);
+        player.removeEventListener('ended', handleEnded);
+      } catch {
+        // Safe unmount handling
+      }
+    };
+  }, [onPlayStart, onPlayStateChange, onTimeUpdate, config]);
 
   if (loading) {
     return (
@@ -212,9 +308,21 @@ export const RemotionPlayerPreview: React.FC<RemotionPlayerPreviewProps> = ({
           compositionWidth={config.width}
           compositionHeight={config.height}
           fps={config.fps}
+          initialFrame={
+            config
+              ? Math.max(
+                  0,
+                  Math.min(
+                    config.durationInFrames - 1,
+                    Math.round(((currentTimeMs || 0) / 1000) * config.fps)
+                  )
+                )
+              : 0
+          }
           controls
           clickToPlay
           doubleClickToFullscreen
+          spaceKeyToPlayOrPause={false}
           style={{ width: '100%', height: '100%' }}
           errorFallback={({ error }: { error: Error }) => {
             const errorMsg =

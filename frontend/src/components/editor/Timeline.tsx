@@ -491,6 +491,15 @@ export const Timeline: React.FC<TimelineProps> = ({
     window.addEventListener('mouseup', onMouseUp);
   };
 
+  // Click anywhere on timeline tracks/canvas to seek playhead & control video renderers
+  const handleTrackRowClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!rulerRef.current) return;
+    const rect = rulerRef.current.getBoundingClientRect();
+    const clickPx = e.clientX - rect.left;
+    const targetMs = Math.max(0, Math.min(totalDurationMs, pxToMs(clickPx)));
+    onSeek(targetMs);
+  };
+
   // Drag-to-resize right edge of a scene clip
   const handleResizeRightMouseDown = (
     e: React.MouseEvent,
@@ -1053,6 +1062,7 @@ export const Timeline: React.FC<TimelineProps> = ({
           {/* Track 1: Visuals (Scene Clips) */}
           <div
             className="ed-track-row track-visuals"
+            onClick={handleTrackRowClick}
             onContextMenu={(e) => handleTrackContextMenu(e, 'track-visuals')}
           >
             {scenes.map((scene) => {
@@ -1074,7 +1084,15 @@ export const Timeline: React.FC<TimelineProps> = ({
                   onDragStart={(e) => handleDragStart(e, scene.sceneId)}
                   onDragOver={handleDragOver}
                   onDrop={(e) => handleDrop(e, scene.sceneId)}
-                  onClick={() => onSelectScene(scene.sceneId)}
+                  onClick={(e) => {
+                    onSelectScene(scene.sceneId);
+                    if (rulerRef.current) {
+                      const rect = rulerRef.current.getBoundingClientRect();
+                      const clickPx = e.clientX - rect.left;
+                      const targetMs = Math.max(0, Math.min(totalDurationMs, pxToMs(clickPx)));
+                      onSeek(targetMs);
+                    }
+                  }}
                   onContextMenu={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
@@ -1114,6 +1132,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                   <div
                     className="ed-clip-handle right"
                     onMouseDown={(e) => handleResizeRightMouseDown(e, scene)}
+                    onClick={(e) => e.stopPropagation()}
                     title="Drag to resize scene duration"
                   />
                 </div>
@@ -1124,6 +1143,7 @@ export const Timeline: React.FC<TimelineProps> = ({
           {/* Track 2: 2D Characters & Animation Clips */}
           <div
             className="ed-track-row track-rig"
+            onClick={handleTrackRowClick}
             onContextMenu={(e) => handleTrackContextMenu(e, 'track-rig')}
           >
             {scenes.map((scene) => {
@@ -1176,9 +1196,15 @@ export const Timeline: React.FC<TimelineProps> = ({
                       boxShadow: isSelected ? '0 0 10px rgba(139, 92, 246, 0.5)' : undefined,
                       zIndex: isSelected ? 5 : 2,
                     }}
-                    onClick={() => {
+                    onClick={(e) => {
                       onSelectScene(scene.sceneId);
                       if (onSelectInstance) onSelectInstance(inst.instanceId);
+                      if (rulerRef.current) {
+                        const rect = rulerRef.current.getBoundingClientRect();
+                        const clickPx = e.clientX - rect.left;
+                        const targetMs = Math.max(0, Math.min(totalDurationMs, pxToMs(clickPx)));
+                        onSeek(targetMs);
+                      }
                     }}
                     onContextMenu={(e) => {
                       e.preventDefault();
@@ -1244,6 +1270,7 @@ export const Timeline: React.FC<TimelineProps> = ({
           <div
             className="ed-track-row track-dialogue"
             style={{ height: `${dialogueTrackHeight}px`, minHeight: `${dialogueTrackHeight}px`, position: 'relative' }}
+            onClick={handleTrackRowClick}
             onContextMenu={(e) => handleTrackContextMenu(e, 'track-dialogue')}
           >
             {packedDialogues.items.map(({ item: dlg, scene, startMs, durationMs, lane }) => {
@@ -1295,6 +1322,12 @@ export const Timeline: React.FC<TimelineProps> = ({
                     e.stopPropagation();
                     onSelectScene(scene.sceneId);
                     if (onSelectDialogue) onSelectDialogue(dlg.id);
+                    if (rulerRef.current) {
+                      const rect = rulerRef.current.getBoundingClientRect();
+                      const clickPx = e.clientX - rect.left;
+                      const targetMs = Math.max(0, Math.min(totalDurationMs, pxToMs(clickPx)));
+                      onSeek(targetMs);
+                    }
                   }}
                   onContextMenu={(e) => {
                     e.preventDefault();
@@ -1394,6 +1427,7 @@ export const Timeline: React.FC<TimelineProps> = ({
           <div
             className="ed-track-row track-overlays"
             style={{ height: `${overlayTrackHeight}px`, minHeight: `${overlayTrackHeight}px`, position: 'relative' }}
+            onClick={handleTrackRowClick}
             onContextMenu={(e) => handleTrackContextMenu(e, 'track-overlays')}
           >
             {overlayClusters.map((cluster) => {
@@ -1483,6 +1517,12 @@ export const Timeline: React.FC<TimelineProps> = ({
                     e.stopPropagation();
                     onSelectScene(scene.sceneId);
                     if (onSelectOverlay) onSelectOverlay(ov.id);
+                    if (rulerRef.current) {
+                      const rect = rulerRef.current.getBoundingClientRect();
+                      const clickPx = e.clientX - rect.left;
+                      const targetMs = Math.max(0, Math.min(totalDurationMs, pxToMs(clickPx)));
+                      onSeek(targetMs);
+                    }
                   }}
                   onContextMenu={(e) => {
                     e.preventDefault();
@@ -1545,6 +1585,7 @@ export const Timeline: React.FC<TimelineProps> = ({
           {/* Track 4: Narration Voice */}
           <div
             className="ed-track-row track-narration"
+            onClick={handleTrackRowClick}
             onContextMenu={(e) => {
               if (activeSceneId && onSelectNarration) onSelectNarration(activeSceneId);
               handleTrackContextMenu(e, 'track-narration');
@@ -1571,6 +1612,12 @@ export const Timeline: React.FC<TimelineProps> = ({
                     e.stopPropagation();
                     onSelectScene(scene.sceneId);
                     if (onSelectNarration) onSelectNarration(scene.sceneId);
+                    if (rulerRef.current) {
+                      const rect = rulerRef.current.getBoundingClientRect();
+                      const clickPx = e.clientX - rect.left;
+                      const targetMs = Math.max(0, Math.min(totalDurationMs, pxToMs(clickPx)));
+                      onSeek(targetMs);
+                    }
                   }}
                   onContextMenu={(e) => {
                     e.preventDefault();
@@ -1610,6 +1657,7 @@ export const Timeline: React.FC<TimelineProps> = ({
           {/* Track 3: Soundtrack */}
           <div
             className="ed-track-row track-soundtrack"
+            onClick={handleTrackRowClick}
             onContextMenu={(e) => handleTrackContextMenu(e, 'track-soundtrack')}
           >
             {selectedMusic && selectedMusic !== 'none' && totalDurationMs > 0 && (

@@ -294,7 +294,7 @@ export default function StoryDetailPage() {
   // High-Precision Playback Loop
   // ----------------------------------------------------
   useEffect(() => {
-    if (!isPlaying) {
+    if (!isPlaying || previewMode === 'remotion') {
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
       }
@@ -327,7 +327,7 @@ export default function StoryDetailPage() {
         cancelAnimationFrame(animationFrameRef.current);
       }
     };
-  }, [isPlaying, totalDurationMs]);
+  }, [isPlaying, totalDurationMs, previewMode]);
 
   // ----------------------------------------------------
   // Playhead & Transport Controls
@@ -344,10 +344,6 @@ export default function StoryDetailPage() {
   };
 
   const handleTogglePlay = () => {
-    if (previewMode === 'remotion') {
-      // Remotion Player manages its own timeline transport
-      return;
-    }
     if (!isPlaying && currentTimeMs >= totalDurationMs - 100) {
       setCurrentTimeMs(0);
     }
@@ -466,10 +462,6 @@ export default function StoryDetailPage() {
       }
 
       if (e.code === 'Space') {
-        if (previewMode === 'remotion') {
-          // Remotion Player natively handles spacebar play/pause
-          return;
-        }
         e.preventDefault();
         handleTogglePlay();
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !e.shiftKey) {
@@ -1885,6 +1877,8 @@ export default function StoryDetailPage() {
             isPlaying={isPlaying}
             onTogglePlay={handleTogglePlay}
             onSeek={handleSeek}
+            onTimeUpdate={handleSeek}
+            onPlayStateChange={(playing) => setIsPlaying(playing)}
             masterVolume={masterVolume}
             isMuted={isMuted}
             onVolumeChange={setMasterVolume}

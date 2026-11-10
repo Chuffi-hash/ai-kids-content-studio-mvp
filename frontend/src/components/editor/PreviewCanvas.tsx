@@ -49,6 +49,8 @@ interface PreviewCanvasProps {
   onUpdateAnimationData?: (newData: VectorSceneData) => void;
   activeFormat?: AspectRatioType;
   onFormatChange?: (format: AspectRatioType) => void;
+  onTimeUpdate?: (timeMs: number) => void;
+  onPlayStateChange?: (playing: boolean) => void;
 }
 
 export const PreviewCanvas: React.FC<PreviewCanvasProps> = ({
@@ -80,6 +82,8 @@ export const PreviewCanvas: React.FC<PreviewCanvasProps> = ({
   onUpdateAnimationData,
   activeFormat: propsActiveFormat,
   onFormatChange,
+  onTimeUpdate,
+  onPlayStateChange,
 }) => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -507,9 +511,13 @@ export const PreviewCanvas: React.FC<PreviewCanvasProps> = ({
             storyId={storyId}
             format={activeFormat}
             refreshTrigger={(activeScene as any)?.updatedAt || (activeScene as any)?.id}
+            currentTimeMs={currentTimeMs}
+            isPlaying={isPlaying}
+            onTimeUpdate={onTimeUpdate || onSeek}
+            onPlayStateChange={onPlayStateChange}
             onPlayStart={() => {
-              if (isPlaying) {
-                onTogglePlay();
+              if (!isPlaying) {
+                onPlayStateChange?.(true);
               }
             }}
           />
