@@ -617,6 +617,41 @@
   font-weight: 500;
 }
 
+.char-stage-snip-btn {
+  background: #1e293b;
+  border: 1px solid #334155;
+  color: #e2e8f0;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 3px 10px;
+  border-radius: 5px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: all 0.15s ease;
+}
+
+.char-stage-snip-btn:hover {
+  background: rgba(139, 92, 246, 0.25);
+  border-color: #8b5cf6;
+  color: #c4b5fd;
+}
+
+[data-theme="light"] .char-stage-snip-btn,
+body.theme-light .char-stage-snip-btn {
+  background: #ffffff;
+  border-color: #cbd5e1;
+  color: #334155;
+}
+
+[data-theme="light"] .char-stage-snip-btn:hover,
+body.theme-light .char-stage-snip-btn:hover {
+  background: #f5f3ff;
+  border-color: #7c3aed;
+  color: #6d28d9;
+}
+
 .char-stage-zoom {
   display: flex;
   align-items: center;

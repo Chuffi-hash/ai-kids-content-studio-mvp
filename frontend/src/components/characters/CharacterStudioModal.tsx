@@ -430,7 +430,7 @@ export default function CharacterStudioModal({
   };
 
   return (
-    <div className="char-builder-overlay" onClick={onClose}>
+    <div className="char-studio-overlay" onClick={onClose}>
       <div className="char-studio-modal" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="char-studio-header">

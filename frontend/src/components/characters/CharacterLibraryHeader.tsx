@@ -22,16 +22,8 @@ export default function CharacterLibraryHeader({
         {onOpenStudio && (
           <button
             type="button"
-            className="btn btn-secondary"
+            className="btn btn-secondary btn-ai-studio"
             onClick={onOpenStudio}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.2), rgba(99, 102, 241, 0.2))',
-              borderColor: 'rgba(139, 92, 246, 0.5)',
-              color: '#c4b5fd',
-            }}
           >
             <SparklesIcon size={15} />
             <span>AI Character Studio</span>

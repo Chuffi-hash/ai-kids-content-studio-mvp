@@ -8,6 +8,37 @@
 }
 
 /* ---------------------- Toolbar (search + filters in one row) ---------------------- */
+.btn-ai-studio {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(139, 92, 246, 0.15);
+  border: 1px solid rgba(139, 92, 246, 0.4);
+  color: #a78bfa;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.btn-ai-studio:hover {
+  background: #7c3aed;
+  border-color: #7c3aed;
+  color: #ffffff;
+}
+
+[data-theme="light"] .btn-ai-studio,
+body.theme-light .btn-ai-studio {
+  background: #f5f3ff;
+  border-color: #8b5cf6;
+  color: #6d28d9;
+}
+
+[data-theme="light"] .btn-ai-studio:hover,
+body.theme-light .btn-ai-studio:hover {
+  background: #7c3aed;
+  border-color: #7c3aed;
+  color: #ffffff;
+}
+
 .character-toolbar {
   display: flex;
   align-items: center;

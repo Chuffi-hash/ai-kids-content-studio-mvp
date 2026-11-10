@@ -231,6 +231,57 @@ export const CharacterBuilderModal: React.FC<CharacterBuilderModalProps> = ({
   const [isDuplicating, setIsDuplicating] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  // Snip / Snapshot state
+  const stageSvgRef = useRef<SVGSVGElement | null>(null);
+  const [snipSuccess, setSnipSuccess] = useState<boolean>(false);
+
+  const handleSnipCharacter = () => {
+    if (!stageSvgRef.current) return;
+    try {
+      const svgClone = stageSvgRef.current.cloneNode(true) as SVGSVGElement;
+      // Remove canvas background and grid so the exported PNG is a clean transparent character asset
+      const bgRects = svgClone.querySelectorAll('rect');
+      bgRects.forEach((r) => {
+        const fill = r.getAttribute('fill') || '';
+        if (fill === '#0b101b' || fill.includes('grid')) {
+          r.remove();
+        }
+      });
+      const gridLines = svgClone.querySelectorAll('line');
+      gridLines.forEach((l) => l.remove());
+
+      const svgData = new XMLSerializer().serializeToString(svgClone);
+      const canvas = document.createElement('canvas');
+      canvas.width = 1000;
+      canvas.height = 1000;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      const img = new Image();
+      const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+      const url = URL.createObjectURL(svgBlob);
+
+      img.onload = () => {
+        ctx.clearRect(0, 0, 1000, 1000);
+        ctx.drawImage(img, 0, 0, 1000, 1000);
+        URL.revokeObjectURL(url);
+        const pngUrl = canvas.toDataURL('image/png');
+
+        const a = document.createElement('a');
+        const safeName = (name || character?.name || 'character').toLowerCase().replace(/\s+/g, '-');
+        a.download = `${safeName}-${activeAction}-snip.png`;
+        a.href = pngUrl;
+        a.click();
+
+        setSnipSuccess(true);
+        setTimeout(() => setSnipSuccess(false), 2500);
+      };
+      img.src = url;
+    } catch (err) {
+      console.error('Failed to capture character snip:', err);
+    }
+  };
+
   // Voice audition preview state
   const [isPreviewingVoice, setIsPreviewingVoice] = useState<boolean>(false);
   const [previewAudioUrl, setPreviewAudioUrl] = useState<string | null>(null);
@@ -2659,6 +2710,7 @@ export const CharacterBuilderModal: React.FC<CharacterBuilderModalProps> = ({
           <div className="char-builder-stage-panel">
             <div className="char-builder-stage-wrapper">
               <svg
+                ref={stageSvgRef}
                 viewBox="0 0 500 500"
                 className="char-builder-stage-svg"
                 style={{ width: '100%', height: '100%' }}
@@ -2742,8 +2794,18 @@ export const CharacterBuilderModal: React.FC<CharacterBuilderModalProps> = ({
 
               {/* Zoom & Rig Info Bar */}
               <div className="char-builder-stage-footer">
-                <div className="char-stage-rig-badge">
-                  <CheckIcon size={12} /> 7 Articulated Joints • Export Ready
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div className="char-stage-rig-badge">
+                    <CheckIcon size={12} /> 7 Articulated Joints • Export Ready
+                  </div>
+                  <button
+                    type="button"
+                    className="char-stage-snip-btn"
+                    onClick={handleSnipCharacter}
+                    title="Snip / capture this animated character pose to a high-res PNG"
+                  >
+                    {snipSuccess ? '✓ Snip Saved!' : '📸 Snip Pose (PNG)'}
+                  </button>
                 </div>
                 <div className="char-stage-zoom">
                   <button

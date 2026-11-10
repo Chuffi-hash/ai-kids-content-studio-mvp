@@ -1,9 +1,9 @@
 /* Character Studio 2.0 Modal Styling */
-.char-builder-overlay {
+.char-studio-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.75);
-  backdrop-filter: blur(6px);
+  background: rgba(4, 7, 15, 0.85);
+  backdrop-filter: blur(8px);
   display: flex;
   align-items: center;
   justify-content: center;
