@@ -98,6 +98,115 @@ function computeCameraTransform(opts: {
   return { scale, dx, dy, rotationDeg };
 }
 
+interface SubtitleWordItem {
+  text: string;
+  startMs?: number;
+  endMs?: number;
+  originalIndex: number;
+}
+
+interface DisplaySubtitleChunk {
+  words?: SubtitleWordItem[];
+  text?: string;
+}
+
+/**
+ * Breaks long subtitle paragraphs into digestible 1-2 line sentence/phrase chunks
+ * that naturally sync with dialogue/narration timing instead of flooding the video canvas.
+ */
+function getSubtitleDisplayChunk(opts: {
+  text: string;
+  wordTimings?: Array<{ text: string; startMs: number; endMs: number }>;
+  relativeMs: number;
+  totalDurationMs: number;
+  activeWordIndex: number;
+}): DisplaySubtitleChunk {
+  const { text, wordTimings, relativeMs, totalDurationMs, activeWordIndex } = opts;
+
+  // Case 1: Word-level timings available
+  if (wordTimings && wordTimings.length > 0) {
+    const chunks: Array<Array<SubtitleWordItem>> = [];
+    let currentChunk: Array<SubtitleWordItem> = [];
+
+    for (let i = 0; i < wordTimings.length; i++) {
+      const item = wordTimings[i];
+      currentChunk.push({
+        text: item.text,
+        startMs: item.startMs,
+        endMs: item.endMs,
+        originalIndex: i,
+      });
+
+      const isTerminalPunct = /[.!?।॥]$/.test(item.text);
+      const isSoftPunct = /[,:;]$/.test(item.text);
+      const isChunkFull = currentChunk.length >= 9;
+      const isNaturalSplit = isTerminalPunct || (isSoftPunct && currentChunk.length >= 5);
+
+      if ((isNaturalSplit || isChunkFull || i === wordTimings.length - 1) && currentChunk.length > 0) {
+        chunks.push(currentChunk);
+        currentChunk = [];
+      }
+    }
+
+    if (chunks.length === 0) {
+      return { text };
+    }
+
+    let activeChunk = chunks.find((c) => {
+      const start = c[0].startMs ?? 0;
+      const end = c[c.length - 1].endMs ?? start + 1000;
+      return relativeMs >= start && relativeMs <= end;
+    });
+
+    if (!activeChunk && activeWordIndex >= 0) {
+      activeChunk = chunks.find((c) => c.some((w) => w.originalIndex === activeWordIndex));
+    }
+
+    if (!activeChunk) {
+      if (relativeMs <= (chunks[0][0].startMs ?? 0)) {
+        activeChunk = chunks[0];
+      } else {
+        activeChunk =
+          [...chunks].reverse().find((c) => (c[0].startMs ?? 0) <= relativeMs) ||
+          chunks[chunks.length - 1];
+      }
+    }
+
+    return { words: activeChunk };
+  }
+
+  // Case 2: Plain text string without word-level timings
+  const tokens = text.match(/\S+/gu) || [];
+  if (tokens.length === 0) {
+    return { text: '' };
+  }
+
+  const textChunks: string[][] = [];
+  let currentTokens: string[] = [];
+
+  for (let i = 0; i < tokens.length; i++) {
+    const tok = tokens[i];
+    currentTokens.push(tok);
+    const isTerminalPunct = /[.!?।॥]$/.test(tok);
+    const isSoftPunct = /[,:;]$/.test(tok);
+    const isFull = currentTokens.length >= 9;
+    if ((isTerminalPunct || (isSoftPunct && currentTokens.length >= 5) || isFull || i === tokens.length - 1) && currentTokens.length > 0) {
+      textChunks.push(currentTokens);
+      currentTokens = [];
+    }
+  }
+
+  if (textChunks.length <= 1) {
+    return { text };
+  }
+
+  const progress = Math.max(0, Math.min(1, relativeMs / Math.max(1, totalDurationMs)));
+  const chunkIdx = Math.min(textChunks.length - 1, Math.floor(progress * textChunks.length));
+  return {
+    text: textChunks[chunkIdx].join(' '),
+  };
+}
+
 function SceneView({
   scene,
   format,
@@ -296,15 +405,16 @@ function SceneView({
   );
 
   const narrationUrl = scene.narration?.url || scene.narrationUrl;
+  const narrationDurationMs = scene.narration?.durationMs || scene.durationMs;
   const isNarrationSpeaking = Boolean(
     narrationUrl &&
     sceneRelativeMs >= 0 &&
-    sceneRelativeMs <= (scene.narration?.durationMs || scene.durationMs)
+    sceneRelativeMs <= narrationDurationMs
   );
 
+  const dialogueRelativeMs = activeDialogue ? sceneRelativeMs - activeDialogue.startMs : 0;
   const activeDialogueWordIndex = activeDialogue?.wordTimings?.findIndex(
-    (word) => sceneRelativeMs - (activeDialogue?.startMs || 0) >= word.startMs
-      && sceneRelativeMs - (activeDialogue?.startMs || 0) < word.endMs
+    (word) => dialogueRelativeMs >= word.startMs && dialogueRelativeMs < word.endMs
   ) ?? -1;
 
   const narrationWordTimings = scene.narration?.wordTimings;
@@ -317,16 +427,26 @@ function SceneView({
     ? {
         type: 'dialogue' as const,
         speaker: activeDialogue.characterName,
-        text: activeDialogue.text,
-        wordTimings: activeDialogue.wordTimings,
+        chunk: getSubtitleDisplayChunk({
+          text: activeDialogue.text,
+          wordTimings: activeDialogue.wordTimings,
+          relativeMs: dialogueRelativeMs,
+          totalDurationMs: activeDialogue.durationMs,
+          activeWordIndex: activeDialogueWordIndex,
+        }),
         activeWordIndex: activeDialogueWordIndex,
       }
     : (scene.caption || (isNarrationSpeaking && scene.narration?.text))
     ? {
         type: 'narration' as const,
         speaker: undefined,
-        text: scene.narration?.text || scene.caption || '',
-        wordTimings: narrationWordTimings,
+        chunk: getSubtitleDisplayChunk({
+          text: scene.narration?.text || scene.caption || '',
+          wordTimings: narrationWordTimings,
+          relativeMs: sceneRelativeMs,
+          totalDurationMs: narrationDurationMs,
+          activeWordIndex: activeNarrWordIndex,
+        }),
         activeWordIndex: activeNarrWordIndex,
       }
     : null;
@@ -600,7 +720,7 @@ function SceneView({
         <div
           style={{
             position: 'absolute',
-            bottom: height * 0.07,
+            bottom: Math.max(16, Math.round(height * 0.045)),
             left: width * 0.08,
             right: width * 0.08,
             display: 'flex',
@@ -611,26 +731,28 @@ function SceneView({
         >
           <div
             style={{
-              backgroundColor: subtitleTheme === 'speech-bubble' ? '#fffdf5' : (subtitleTheme === 'minimal' ? 'rgba(0,0,0,0.72)' : 'rgba(15, 23, 42, 0.88)'),
-              border: subtitleTheme === 'speech-bubble' ? '2px solid rgba(15,23,42,0.14)' : '1.5px solid rgba(255, 255, 255, 0.2)',
-              color: subtitleTheme === 'speech-bubble' ? '#172033' : '#ffffff',
-              borderRadius: subtitleTheme === 'speech-bubble' ? '22px 22px 22px 6px' : (subtitleTheme === 'minimal' ? 8 : 16),
-              padding: subtitleTheme === 'minimal' ? '8px 16px' : '12px 24px',
-              maxWidth: '85%',
+              backgroundColor: subtitleTheme === 'speech-bubble' ? '#ffffff' : (subtitleTheme === 'minimal' ? 'rgba(0,0,0,0.78)' : 'rgba(15, 23, 42, 0.90)'),
+              border: subtitleTheme === 'speech-bubble' ? '1.5px solid rgba(15,23,42,0.12)' : '1px solid rgba(255, 255, 255, 0.2)',
+              color: subtitleTheme === 'speech-bubble' ? '#0f172a' : '#ffffff',
+              borderRadius: subtitleTheme === 'speech-bubble' ? '18px 18px 18px 4px' : (subtitleTheme === 'minimal' ? 6 : 12),
+              padding: subtitleTheme === 'minimal' ? '6px 14px' : '8px 20px',
+              maxWidth: width < height ? '90%' : '75%',
+              maxHeight: Math.round(height * 0.22),
+              overflow: 'hidden',
               textAlign: 'center',
-              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.6)',
+              boxShadow: '0 8px 28px rgba(0, 0, 0, 0.55)',
               backdropFilter: 'blur(8px)',
             }}
           >
             {activeSubtitle.speaker && (
               <div
                 style={{
-                  fontSize: Math.max(14, Math.round(width * 0.02)),
+                  fontSize: Math.max(11, Math.min(13, Math.round(width * 0.011))),
                   fontWeight: 700,
                   color: subtitleTheme === 'speech-bubble' ? '#2563eb' : '#38bdf8',
-                  marginBottom: 4,
+                  marginBottom: 3,
                   textTransform: 'uppercase',
-                  letterSpacing: 1,
+                  letterSpacing: 0.8,
                   fontFamily: 'system-ui, -apple-system, sans-serif',
                 }}
               >
@@ -639,23 +761,27 @@ function SceneView({
             )}
             <div
               style={{
-                fontSize: Math.max(20, Math.round(width * 0.028)),
+                fontSize: Math.max(15, Math.min(22, Math.round((width < height ? height : width) * 0.016))),
                 fontWeight: 600,
-                color: subtitleTheme === 'speech-bubble' ? '#172033' : '#ffffff',
+                color: subtitleTheme === 'speech-bubble' ? '#0f172a' : '#ffffff',
                 lineHeight: 1.35,
                 fontFamily: 'system-ui, -apple-system, "Noto Sans Devanagari", sans-serif',
+                display: '-webkit-box',
+                WebkitLineClamp: 2,
+                WebkitBoxOrient: 'vertical',
+                overflow: 'hidden',
               }}
             >
-              {activeSubtitle.wordTimings && activeSubtitle.wordTimings.length > 0 ? (
-                activeSubtitle.wordTimings.map((word, index) => (
-                  <React.Fragment key={`word-${index}`}>
+              {activeSubtitle.chunk.words && activeSubtitle.chunk.words.length > 0 ? (
+                activeSubtitle.chunk.words.map((word, index) => (
+                  <React.Fragment key={`w-${word.originalIndex ?? index}`}>
                     <span
                       style={{
-                        color: subtitleTheme === 'karaoke' && index === activeSubtitle.activeWordIndex ? '#fde047' : 'inherit',
-                        background: subtitleTheme === 'speech-bubble' && index === activeSubtitle.activeWordIndex ? 'rgba(59,130,246,0.12)' : 'transparent',
-                        borderRadius: 4,
-                        fontWeight: index === activeSubtitle.activeWordIndex ? 800 : 600,
-                        textDecoration: subtitleTheme === 'karaoke' && index === activeSubtitle.activeWordIndex ? 'underline' : 'none',
+                        color: subtitleTheme === 'karaoke' && word.originalIndex === activeSubtitle.activeWordIndex ? '#fde047' : 'inherit',
+                        background: subtitleTheme === 'speech-bubble' && word.originalIndex === activeSubtitle.activeWordIndex ? 'rgba(59,130,246,0.14)' : 'transparent',
+                        borderRadius: 3,
+                        fontWeight: word.originalIndex === activeSubtitle.activeWordIndex ? 800 : 600,
+                        textDecoration: subtitleTheme === 'karaoke' && word.originalIndex === activeSubtitle.activeWordIndex ? 'underline' : 'none',
                       }}
                     >
                       {word.text}
@@ -663,7 +789,7 @@ function SceneView({
                   </React.Fragment>
                 ))
               ) : (
-                activeSubtitle.text
+                activeSubtitle.chunk.text
               )}
             </div>
           </div>

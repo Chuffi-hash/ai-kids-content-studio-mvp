@@ -330,7 +330,22 @@ export default function StoryDetailPage() {
   // ----------------------------------------------------
   // Playhead & Transport Controls
   // ----------------------------------------------------
+  const handleTogglePreviewMode = (mode: 'scene' | 'export' | 'remotion') => {
+    // 1. Immediately stop any active editor playback loop
+    setIsPlaying(false);
+    // 2. Silence all scene editor audio tracks
+    if (audioManagerRef.current) {
+      audioManagerRef.current.stopAll();
+    }
+    // 3. Switch preview mode
+    setPreviewMode(mode);
+  };
+
   const handleTogglePlay = () => {
+    if (previewMode === 'remotion') {
+      // Remotion Player manages its own timeline transport
+      return;
+    }
     if (!isPlaying && currentTimeMs >= totalDurationMs - 100) {
       setCurrentTimeMs(0);
     }
@@ -449,6 +464,10 @@ export default function StoryDetailPage() {
       }
 
       if (e.code === 'Space') {
+        if (previewMode === 'remotion') {
+          // Remotion Player natively handles spacebar play/pause
+          return;
+        }
         e.preventDefault();
         handleTogglePlay();
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !e.shiftKey) {
@@ -465,7 +484,7 @@ export default function StoryDetailPage() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleTogglePlay, handleUndo, handleRedo]);
+  }, [handleTogglePlay, handleUndo, handleRedo, previewMode]);
 
   // ----------------------------------------------------
   // Title & Target Duration Updates
@@ -1841,7 +1860,7 @@ export default function StoryDetailPage() {
             isGeneratingVideo={generatingVideoForScene === activeSceneId}
             exportVideoUrl={exportVideoUrl}
             previewMode={previewMode}
-            onTogglePreviewMode={setPreviewMode}
+            onTogglePreviewMode={handleTogglePreviewMode}
             selectedMusic={selectedMusic}
             musicVolume={musicVolume}
             selectedInstanceId={selectedInstanceId}
@@ -2008,7 +2027,7 @@ export default function StoryDetailPage() {
         initialFormat={previewFormat}
         onExportSuccess={(downloadUrl) => {
           setExportVideoUrl(downloadUrl);
-          setPreviewMode('export');
+          handleTogglePreviewMode('export');
         }}
       />
 

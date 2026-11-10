@@ -130,6 +130,17 @@ export const PreviewCanvas: React.FC<PreviewCanvasProps> = ({
     }
   }, [isPlaying]);
 
+  // Immediately pause HTML5 video asset when switching to Remotion preview
+  useEffect(() => {
+    if (previewMode === "remotion" && videoRef.current) {
+      try {
+        videoRef.current.pause();
+      } catch {
+        // Safe pause fallback
+      }
+    }
+  }, [previewMode]);
+
   // Sync video volume with master volume and mute state
   useEffect(() => {
     if (videoRef.current) {
@@ -496,6 +507,11 @@ export const PreviewCanvas: React.FC<PreviewCanvasProps> = ({
             storyId={storyId}
             format={activeFormat}
             refreshTrigger={(activeScene as any)?.updatedAt || (activeScene as any)?.id}
+            onPlayStart={() => {
+              if (isPlaying) {
+                onTogglePlay();
+              }
+            }}
           />
         ) : previewMode === "export" && exportVideoUrl ? (
           <video
@@ -579,151 +595,153 @@ export const PreviewCanvas: React.FC<PreviewCanvasProps> = ({
         )}
       </div>
 
-      {/* Preview Transport Scrubber Bar */}
-      <div className="ed-preview-controls-bar">
-        <button
-          type="button"
-          className="ed-play-btn"
-          style={{
-            width: "28px",
-            height: "28px",
-            display: "inline-flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-          onClick={onTogglePlay}
-          title={isPlaying ? "Pause (Space)" : "Play (Space)"}
-        >
-          {isPlaying ? (
-            <PauseIcon size={12} color="#ffffff" />
-          ) : (
-            <PlayIcon size={12} color="#ffffff" />
-          )}
-        </button>
+      {/* Preview Transport Scrubber Bar - only displayed for scene/export modes; Remotion Player renders its own transport bar */}
+      {previewMode !== "remotion" && (
+        <div className="ed-preview-controls-bar">
+          <button
+            type="button"
+            className="ed-play-btn"
+            style={{
+              width: "28px",
+              height: "28px",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+            onClick={onTogglePlay}
+            title={isPlaying ? "Pause (Space)" : "Play (Space)"}
+          >
+            {isPlaying ? (
+              <PauseIcon size={12} color="#ffffff" />
+            ) : (
+              <PlayIcon size={12} color="#ffffff" />
+            )}
+          </button>
 
-        <input
-          type="range"
-          className="ed-scrubber"
-          min="0"
-          max={Math.max(1, totalDurationMs)}
-          step="1"
-          value={isScrubbing ? scrubValue : currentTimeMs}
-          onPointerDown={() => setIsScrubbing(true)}
-          onPointerUp={() => {
-            setIsScrubbing(false);
-            onSeek(scrubValue);
-          }}
-          onChange={(e) => {
-            const val = Number(e.target.value);
-            setScrubValue(val);
-            onSeek(val);
-          }}
-          onKeyDown={(e) => {
-            const stepMs = e.shiftKey ? 2000 : 500;
-            if (e.key === "ArrowLeft") {
-              e.preventDefault();
-              onSeek(Math.max(0, currentTimeMs - stepMs));
-            } else if (e.key === "ArrowRight") {
-              e.preventDefault();
-              onSeek(Math.min(totalDurationMs, currentTimeMs + stepMs));
-            } else if (e.key === "Home") {
-              e.preventDefault();
-              onSeek(0);
-            } else if (e.key === "End") {
-              e.preventDefault();
-              onSeek(totalDurationMs);
-            }
-          }}
-          title={`Playhead: ${formatTimeMs(currentTimeMs)} (Drag or click to seek)`}
-        />
+          <input
+            type="range"
+            className="ed-scrubber"
+            min="0"
+            max={Math.max(1, totalDurationMs)}
+            step="1"
+            value={isScrubbing ? scrubValue : currentTimeMs}
+            onPointerDown={() => setIsScrubbing(true)}
+            onPointerUp={() => {
+              setIsScrubbing(false);
+              onSeek(scrubValue);
+            }}
+            onChange={(e) => {
+              const val = Number(e.target.value);
+              setScrubValue(val);
+              onSeek(val);
+            }}
+            onKeyDown={(e) => {
+              const stepMs = e.shiftKey ? 2000 : 500;
+              if (e.key === "ArrowLeft") {
+                e.preventDefault();
+                onSeek(Math.max(0, currentTimeMs - stepMs));
+              } else if (e.key === "ArrowRight") {
+                e.preventDefault();
+                onSeek(Math.min(totalDurationMs, currentTimeMs + stepMs));
+              } else if (e.key === "Home") {
+                e.preventDefault();
+                onSeek(0);
+              } else if (e.key === "End") {
+                e.preventDefault();
+                onSeek(totalDurationMs);
+              }
+            }}
+            title={`Playhead: ${formatTimeMs(currentTimeMs)} (Drag or click to seek)`}
+          />
 
-        <div
-          style={{
-            fontFamily: "monospace",
-            fontSize: "12px",
-            minWidth: "120px",
-            textAlign: "right",
-          }}
-        >
-          <span>{formatTimeMs(currentTimeMs)}</span>
-          <span style={{ color: "var(--ed-text-faint)" }}>
-            {" "}
-            / {formatTimeMs(totalDurationMs)}
-          </span>
-        </div>
+          <div
+            style={{
+              fontFamily: "monospace",
+              fontSize: "12px",
+              minWidth: "120px",
+              textAlign: "right",
+            }}
+          >
+            <span>{formatTimeMs(currentTimeMs)}</span>
+            <span style={{ color: "var(--ed-text-faint)" }}>
+              {" "}
+              / {formatTimeMs(totalDurationMs)}
+            </span>
+          </div>
 
-        {/* Master volume control slider */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "5px",
-            marginLeft: "6px",
-          }}
-        >
+          {/* Master volume control slider */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "5px",
+              marginLeft: "6px",
+            }}
+          >
+            <button
+              type="button"
+              className="ed-icon-btn"
+              style={{
+                width: "26px",
+                height: "26px",
+                border: "none",
+                background: "transparent",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                cursor: "pointer",
+              }}
+              onClick={onToggleMute || (() => {})}
+              title={isMuted || masterVolume === 0 ? "Unmute" : "Mute"}
+            >
+              {isMuted || masterVolume === 0 ? (
+                <VolumeMuteIcon size={15} color="#f87171" />
+              ) : (
+                <VolumeHighIcon size={15} color="#c4b5fd" />
+              )}
+            </button>
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.01"
+              value={isMuted ? 0 : masterVolume}
+              onChange={(e) => {
+                const val = parseFloat(e.target.value);
+                if (onVolumeChange) onVolumeChange(val);
+              }}
+              className="ed-volume-slider"
+              title={`Master Volume: ${Math.round((isMuted ? 0 : masterVolume) * 100)}%`}
+            />
+            <span
+              style={{
+                fontSize: "11px",
+                color: "var(--ed-text-muted)",
+                fontFamily: "monospace",
+                minWidth: "28px",
+              }}
+            >
+              {Math.round((isMuted ? 0 : masterVolume) * 100)}%
+            </span>
+          </div>
+
           <button
             type="button"
             className="ed-icon-btn"
             style={{
-              width: "26px",
-              height: "26px",
-              border: "none",
-              background: "transparent",
+              width: "28px",
+              height: "28px",
               display: "inline-flex",
               alignItems: "center",
               justifyContent: "center",
-              cursor: "pointer",
             }}
-            onClick={onToggleMute || (() => {})}
-            title={isMuted || masterVolume === 0 ? "Unmute" : "Mute"}
+            onClick={handleToggleFullscreen}
+            title="Toggle Fullscreen Canvas"
           >
-            {isMuted || masterVolume === 0 ? (
-              <VolumeMuteIcon size={15} color="#f87171" />
-            ) : (
-              <VolumeHighIcon size={15} color="#c4b5fd" />
-            )}
+            <MaximizeIcon size={14} />
           </button>
-          <input
-            type="range"
-            min="0"
-            max="1"
-            step="0.01"
-            value={isMuted ? 0 : masterVolume}
-            onChange={(e) => {
-              const val = parseFloat(e.target.value);
-              if (onVolumeChange) onVolumeChange(val);
-            }}
-            className="ed-volume-slider"
-            title={`Master Volume: ${Math.round((isMuted ? 0 : masterVolume) * 100)}%`}
-          />
-          <span
-            style={{
-              fontSize: "11px",
-              color: "var(--ed-text-muted)",
-              fontFamily: "monospace",
-              minWidth: "28px",
-            }}
-          >
-            {Math.round((isMuted ? 0 : masterVolume) * 100)}%
-          </span>
         </div>
-
-        <button
-          type="button"
-          className="ed-icon-btn"
-          style={{
-            width: "28px",
-            height: "28px",
-            display: "inline-flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-          onClick={handleToggleFullscreen}
-          title="Toggle Fullscreen Canvas"
-        >
-          <MaximizeIcon size={14} />
-        </button>
-      </div>
+      )}
 
       <style>{`
         @keyframes spin {

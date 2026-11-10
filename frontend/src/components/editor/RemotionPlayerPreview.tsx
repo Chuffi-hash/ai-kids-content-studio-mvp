@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Player } from '@remotion/player';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Player, PlayerRef } from '@remotion/player';
 import { StoryVideo } from '../../../../remotion/src/composition';
 import { dimensions, frames, VideoManifest } from '../../../../remotion/src/manifest';
 import { fetchRemotionPreviewManifest } from '../../services/editor.service';
@@ -8,21 +8,54 @@ interface RemotionPlayerPreviewProps {
   storyId: string;
   format: string;
   refreshTrigger?: string | number;
+  onPlayStart?: () => void;
 }
 
 export const RemotionPlayerPreview: React.FC<RemotionPlayerPreviewProps> = ({
   storyId,
   format,
   refreshTrigger,
+  onPlayStart,
 }) => {
   const [manifest, setManifest] = useState<VideoManifest | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [manualRefreshKey, setManualRefreshKey] = useState(0);
+  const playerRef = useRef<PlayerRef>(null);
 
   const handleRefresh = () => {
     setManualRefreshKey((k) => k + 1);
   };
+
+  // Pause Remotion Player when unmounting or navigating away from Remotion preview
+  useEffect(() => {
+    return () => {
+      try {
+        if (playerRef.current) {
+          playerRef.current.pause();
+        }
+      } catch {
+        // Safe unmount handling
+      }
+    };
+  }, []);
+
+  // Sync with parent when Remotion starts playing so scene editor audio/RAF loop stops
+  useEffect(() => {
+    const player = playerRef.current;
+    if (!player) return;
+    const handlePlay = () => {
+      onPlayStart?.();
+    };
+    player.addEventListener('play', handlePlay);
+    return () => {
+      try {
+        player.removeEventListener('play', handlePlay);
+      } catch {
+        // Ignore removal edge cases
+      }
+    };
+  }, [onPlayStart, manifest]);
 
   useEffect(() => {
     let active = true;
@@ -172,6 +205,7 @@ export const RemotionPlayerPreview: React.FC<RemotionPlayerPreviewProps> = ({
         }}
       >
         <Player
+          ref={playerRef}
           component={StoryVideo}
           inputProps={{ manifest }}
           durationInFrames={config.durationInFrames}
