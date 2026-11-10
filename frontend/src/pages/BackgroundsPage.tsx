@@ -255,7 +255,7 @@ export default function BackgroundsPage() {
                   width: '100%',
                   aspectRatio: bg.aspectRatio === '9:16' ? '9/16' : '16/9',
                   maxHeight: 220,
-                  backgroundColor: '#0f172a',
+                  backgroundColor: 'var(--color-surface-muted)',
                   position: 'relative',
                   overflow: 'hidden',
                 }}

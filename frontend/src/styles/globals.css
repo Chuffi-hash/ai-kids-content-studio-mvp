@@ -36,6 +36,20 @@
   --color-danger-soft: rgba(239, 68, 68, 0.15);
   --color-danger-text: #f87171;
 
+  /* Compatibility & Semantic Aliases (Asset Library & Studio) */
+  --text-primary: var(--color-text);
+  --text-secondary: var(--color-text-secondary);
+  --text-muted: var(--color-text-muted);
+  --text-faint: var(--color-text-faint);
+  --bg-primary: var(--color-bg);
+  --bg-secondary: var(--color-surface);
+  --bg-tertiary: var(--color-surface-muted);
+  --bg-elevated: var(--color-surface-elevated);
+  --border-color: var(--color-border);
+  --border-color-strong: var(--color-border-strong);
+  --primary-color: var(--color-accent);
+  --primary-strong: var(--color-accent-strong);
+
   /* Radii */
   --radius: 12px;
   --radius-sm: 8px;
@@ -94,6 +108,20 @@ body.theme-light {
   --color-danger: #dc2626;
   --color-danger-soft: rgba(220, 38, 38, 0.12);
   --color-danger-text: #b91c1c;
+
+  /* Compatibility & Semantic Aliases (Asset Library & Studio) */
+  --text-primary: var(--color-text);
+  --text-secondary: var(--color-text-secondary);
+  --text-muted: var(--color-text-muted);
+  --text-faint: var(--color-text-faint);
+  --bg-primary: var(--color-bg);
+  --bg-secondary: var(--color-surface);
+  --bg-tertiary: var(--color-surface-muted);
+  --bg-elevated: var(--color-surface-elevated);
+  --border-color: var(--color-border);
+  --border-color-strong: var(--color-border-strong);
+  --primary-color: var(--color-accent);
+  --primary-strong: var(--color-accent-strong);
 
   /* Shadows */
   --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);

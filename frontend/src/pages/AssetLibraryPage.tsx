@@ -39,13 +39,14 @@ export default function AssetLibraryPage() {
   );
 
   return (
-    <div style={{ padding: '28px 36px', maxWidth: 1400, margin: '0 auto', color: 'var(--text-primary)' }}>
+    <div style={{ padding: '28px 36px', maxWidth: 1400, margin: '0 auto', color: 'var(--color-text)' }}>
+      {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
         <div>
-          <h1 style={{ fontSize: 28, fontWeight: 800, margin: 0, letterSpacing: -0.5 }}>
+          <h1 style={{ fontSize: 28, fontWeight: 800, margin: 0, letterSpacing: -0.5, color: 'var(--color-text)' }}>
             Production Asset Library
           </h1>
-          <p style={{ margin: '6px 0 0 0', color: 'var(--text-secondary)', fontSize: 14 }}>
+          <p style={{ margin: '6px 0 0 0', color: 'var(--color-text-secondary)', fontSize: 14 }}>
             Central repository of reusable characters, environment backgrounds, and audio profiles across all story projects.
           </p>
         </div>
@@ -71,28 +72,46 @@ export default function AssetLibraryPage() {
       </div>
 
       {/* Tabs and Search */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, gap: 16 }}>
-        <div style={{ display: 'flex', gap: 6, backgroundColor: 'var(--bg-secondary)', padding: 4, borderRadius: 8 }}>
-          {(['all', 'characters', 'backgrounds'] as const).map((tab) => (
-            <button
-              key={tab}
-              type="button"
-              onClick={() => setActiveTab(tab)}
-              style={{
-                border: 'none',
-                backgroundColor: activeTab === tab ? 'var(--primary-color)' : 'transparent',
-                color: activeTab === tab ? '#ffffff' : 'var(--text-secondary)',
-                padding: '7px 16px',
-                borderRadius: 6,
-                fontSize: 13,
-                fontWeight: 600,
-                cursor: 'pointer',
-                textTransform: 'capitalize',
-              }}
-            >
-              {tab === 'all' ? `All Assets (${characters.length + backgrounds.length})` : tab === 'characters' ? `Characters (${characters.length})` : `Backgrounds (${backgrounds.length})`}
-            </button>
-          ))}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, gap: 16, flexWrap: 'wrap' }}>
+        <div
+          style={{
+            display: 'flex',
+            gap: 6,
+            backgroundColor: 'var(--color-surface-muted)',
+            border: '1px solid var(--color-border)',
+            padding: 4,
+            borderRadius: 8,
+          }}
+        >
+          {(['all', 'characters', 'backgrounds'] as const).map((tab) => {
+            const isTabActive = activeTab === tab;
+            return (
+              <button
+                key={tab}
+                type="button"
+                onClick={() => setActiveTab(tab)}
+                style={{
+                  border: 'none',
+                  backgroundColor: isTabActive ? 'var(--color-accent-strong)' : 'transparent',
+                  color: isTabActive ? '#ffffff' : 'var(--color-text-secondary)',
+                  padding: '7px 16px',
+                  borderRadius: 6,
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  textTransform: 'capitalize',
+                  boxShadow: isTabActive ? '0 1px 3px rgba(0, 0, 0, 0.2)' : 'none',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                {tab === 'all'
+                  ? `All Assets (${characters.length + backgrounds.length})`
+                  : tab === 'characters'
+                  ? `Characters (${characters.length})`
+                  : `Backgrounds (${backgrounds.length})`}
+              </button>
+            );
+          })}
         </div>
 
         <input
@@ -101,12 +120,12 @@ export default function AssetLibraryPage() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search assets by name or type..."
-          style={{ maxWidth: 300 }}
+          style={{ maxWidth: 320 }}
         />
       </div>
 
       {loading ? (
-        <div style={{ padding: 60, textAlign: 'center', color: 'var(--text-secondary)' }}>
+        <div style={{ padding: 60, textAlign: 'center', color: 'var(--color-text-muted)' }}>
           Loading asset repository...
         </div>
       ) : (
@@ -115,21 +134,38 @@ export default function AssetLibraryPage() {
           {(activeTab === 'all' || activeTab === 'characters') && (
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>
+                <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0, color: 'var(--color-text)' }}>
                   Characters ({filteredChars.length})
                 </h2>
                 <button
                   type="button"
                   className="btn-link"
                   onClick={() => navigate('/characters')}
-                  style={{ fontSize: 13, color: 'var(--primary-color)', cursor: 'pointer', background: 'none', border: 'none' }}
+                  style={{
+                    fontSize: 13,
+                    color: 'var(--color-accent)',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    background: 'none',
+                    border: 'none',
+                  }}
                 >
                   Manage Characters →
                 </button>
               </div>
 
               {filteredChars.length === 0 ? (
-                <div style={{ padding: 24, textAlign: 'center', backgroundColor: 'var(--bg-secondary)', borderRadius: 10, color: 'var(--text-secondary)', fontSize: 13 }}>
+                <div
+                  style={{
+                    padding: 24,
+                    textAlign: 'center',
+                    backgroundColor: 'var(--color-surface-muted)',
+                    border: '1px dashed var(--color-border)',
+                    borderRadius: 10,
+                    color: 'var(--color-text-muted)',
+                    fontSize: 13,
+                  }}
+                >
                   No characters found.
                 </div>
               ) : (
@@ -141,13 +177,22 @@ export default function AssetLibraryPage() {
                       style={{
                         padding: 16,
                         borderRadius: 12,
-                        backgroundColor: 'var(--bg-secondary)',
-                        border: '1px solid var(--border-color)',
+                        backgroundColor: 'var(--color-surface)',
+                        border: '1px solid var(--color-border)',
+                        boxShadow: 'var(--shadow-card)',
                         cursor: 'pointer',
                         display: 'flex',
                         alignItems: 'center',
                         gap: 14,
-                        transition: 'transform 0.15s ease',
+                        transition: 'all 0.15s ease',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.borderColor = 'var(--color-accent)';
+                        e.currentTarget.style.transform = 'translateY(-2px)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.borderColor = 'var(--color-border)';
+                        e.currentTarget.style.transform = 'translateY(0)';
                       }}
                     >
                       <div
@@ -155,7 +200,8 @@ export default function AssetLibraryPage() {
                           width: 56,
                           height: 56,
                           borderRadius: 28,
-                          backgroundColor: 'var(--bg-tertiary)',
+                          backgroundColor: 'var(--color-surface-muted)',
+                          border: '1px solid var(--color-border)',
                           overflow: 'hidden',
                           display: 'flex',
                           alignItems: 'center',
@@ -170,10 +216,19 @@ export default function AssetLibraryPage() {
                         )}
                       </div>
                       <div style={{ overflow: 'hidden' }}>
-                        <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-primary)', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+                        <div
+                          style={{
+                            fontWeight: 700,
+                            fontSize: 15,
+                            color: 'var(--color-text)',
+                            whiteSpace: 'nowrap',
+                            textOverflow: 'ellipsis',
+                            overflow: 'hidden',
+                          }}
+                        >
                           {c.name}
                         </div>
-                        <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                        <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 2 }}>
                           {c.species} • {c.personality}
                         </div>
                       </div>
@@ -188,21 +243,38 @@ export default function AssetLibraryPage() {
           {(activeTab === 'all' || activeTab === 'backgrounds') && (
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>
+                <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0, color: 'var(--color-text)' }}>
                   Backgrounds & Environments ({filteredBgs.length})
                 </h2>
                 <button
                   type="button"
                   className="btn-link"
                   onClick={() => navigate('/backgrounds')}
-                  style={{ fontSize: 13, color: 'var(--primary-color)', cursor: 'pointer', background: 'none', border: 'none' }}
+                  style={{
+                    fontSize: 13,
+                    color: 'var(--color-accent)',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    background: 'none',
+                    border: 'none',
+                  }}
                 >
                   Manage Backgrounds →
                 </button>
               </div>
 
               {filteredBgs.length === 0 ? (
-                <div style={{ padding: 24, textAlign: 'center', backgroundColor: 'var(--bg-secondary)', borderRadius: 10, color: 'var(--text-secondary)', fontSize: 13 }}>
+                <div
+                  style={{
+                    padding: 24,
+                    textAlign: 'center',
+                    backgroundColor: 'var(--color-surface-muted)',
+                    border: '1px dashed var(--color-border)',
+                    borderRadius: 10,
+                    color: 'var(--color-text-muted)',
+                    fontSize: 13,
+                  }}
+                >
                   No backgrounds found.
                 </div>
               ) : (
@@ -214,19 +286,29 @@ export default function AssetLibraryPage() {
                       style={{
                         borderRadius: 12,
                         overflow: 'hidden',
-                        backgroundColor: 'var(--bg-secondary)',
-                        border: '1px solid var(--border-color)',
+                        backgroundColor: 'var(--color-surface)',
+                        border: '1px solid var(--color-border)',
+                        boxShadow: 'var(--shadow-card)',
                         cursor: 'pointer',
+                        transition: 'all 0.15s ease',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.borderColor = 'var(--color-accent)';
+                        e.currentTarget.style.transform = 'translateY(-2px)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.borderColor = 'var(--color-border)';
+                        e.currentTarget.style.transform = 'translateY(0)';
                       }}
                     >
-                      <div style={{ width: '100%', height: 140, backgroundColor: '#0f172a' }}>
+                      <div style={{ width: '100%', height: 140, backgroundColor: 'var(--color-surface-muted)' }}>
                         <img src={b.imageUrl} alt={b.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                       </div>
                       <div style={{ padding: 12 }}>
-                        <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>
+                        <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--color-text)' }}>
                           {b.name}
                         </div>
-                        <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
+                        <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 2 }}>
                           {b.environmentType} • {b.aspectRatio}
                         </div>
                       </div>
