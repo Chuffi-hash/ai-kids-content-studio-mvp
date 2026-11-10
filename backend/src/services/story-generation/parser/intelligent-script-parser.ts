@@ -397,6 +397,81 @@ export class IntelligentScriptParser {
           } else if (pi.key === 'dialogue_inline') {
             const meta = pi.metadata || {};
             let speaker = (meta.speaker || pi.actor || '').trim();
+            const lowerSpeaker = speaker.toLowerCase();
+            const isDisallowed = [
+              'narrator',
+              'voiceover',
+              'vo',
+              'suggested',
+              'facial expression',
+              'facial expressions',
+              'character action',
+              'character actions',
+              'visual prompt',
+              'camera direction',
+              'opening caption',
+              'closing caption',
+              'notes',
+              'director note',
+            ].some((d) => lowerSpeaker === d || lowerSpeaker.includes(d));
+
+            if (!isDisallowed) {
+              if (!speaker) {
+                if (dialogueLines.length > 0) {
+                  speaker = dialogueLines[dialogueLines.length - 1].characterName;
+                } else {
+                  speaker = 'Narrator';
+                  warnings.push({
+                    code: 'UNRESOLVED_SPEAKER',
+                    message: 'Dialogue line has no character name specified. Defaulting to Narrator.',
+                    line: node.range.start.line,
+                    severity: 'warning',
+                    suggestion: 'Specify character name before dialogue line.',
+                  });
+                }
+              }
+              if (speaker.toLowerCase() !== 'narrator') {
+                allDetectedCharacters.add(speaker);
+              }
+
+              const emo = meta.emotion || pendingEmotion || 'cheerful';
+              const expr = pendingExpression;
+              pendingEmotion = undefined;
+              pendingExpression = undefined;
+
+              dialogueLines.push({
+                id: randomUUID(),
+                characterName: speaker,
+                text: meta.speech || pi.value,
+                emotion: emo,
+                expression: expr,
+                voice: IntelligentScriptParser.resolveDefaultVoice(speaker, language),
+                sourceRange: node.range,
+              });
+            }
+          }
+        } else if (node.type === 'dialogue') {
+          const dNode = node as any;
+          let speaker = (dNode.characterName || '').trim();
+          const lowerSpeaker = speaker.toLowerCase();
+          const isDisallowed = [
+            'narrator',
+            'voiceover',
+            'vo',
+            'suggested',
+            'facial expression',
+            'facial expressions',
+            'character action',
+            'character actions',
+            'visual prompt',
+            'camera direction',
+            'opening caption',
+            'closing caption',
+            'notes',
+            'director note',
+          ].some((d) => lowerSpeaker === d || lowerSpeaker.includes(d));
+
+          if (!isDisallowed) {
             if (!speaker) {
               if (dialogueLines.length > 0) {
                 speaker = dialogueLines[dialogueLines.length - 1].characterName;
@@ -415,7 +490,7 @@ export class IntelligentScriptParser {
               allDetectedCharacters.add(speaker);
             }
 
-            const emo = meta.emotion || pendingEmotion || 'cheerful';
+            const emo = dNode.emotion || pendingEmotion || 'cheerful';
             const expr = pendingExpression;
             pendingEmotion = undefined;
             pendingExpression = undefined;
@@ -423,48 +498,13 @@ export class IntelligentScriptParser {
             dialogueLines.push({
               id: randomUUID(),
               characterName: speaker,
-              text: meta.speech || pi.value,
+              text: dNode.speech,
               emotion: emo,
               expression: expr,
               voice: IntelligentScriptParser.resolveDefaultVoice(speaker, language),
               sourceRange: node.range,
             });
           }
-        } else if (node.type === 'dialogue') {
-          const dNode = node as any;
-          let speaker = (dNode.characterName || '').trim();
-          if (!speaker) {
-            if (dialogueLines.length > 0) {
-              speaker = dialogueLines[dialogueLines.length - 1].characterName;
-            } else {
-              speaker = 'Narrator';
-              warnings.push({
-                code: 'UNRESOLVED_SPEAKER',
-                message: 'Dialogue line has no character name specified. Defaulting to Narrator.',
-                line: node.range.start.line,
-                severity: 'warning',
-                suggestion: 'Specify character name before dialogue line.',
-              });
-            }
-          }
-          if (speaker.toLowerCase() !== 'narrator') {
-            allDetectedCharacters.add(speaker);
-          }
-
-          const emo = dNode.emotion || pendingEmotion || 'cheerful';
-          const expr = pendingExpression;
-          pendingEmotion = undefined;
-          pendingExpression = undefined;
-
-          dialogueLines.push({
-            id: randomUUID(),
-            characterName: speaker,
-            text: dNode.speech,
-            emotion: emo,
-            expression: expr,
-            voice: IntelligentScriptParser.resolveDefaultVoice(speaker, language),
-            sourceRange: node.range,
-          });
         } else if (node.type === 'action') {
           // If no narration yet, and this looks like a narration line
           if (!narration && !node.raw.startsWith('Effects:') && !node.raw.startsWith('Visual:') && !node.raw.startsWith('Action:') && !node.raw.startsWith('Character Action:')) {

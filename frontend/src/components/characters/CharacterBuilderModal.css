@@ -807,6 +807,12 @@ body.theme-light .char-stage-snip-btn:hover {
 /* ============================================================
    Light Mode Overrides for Character Builder Studio Modal
    ============================================================ */
+[data-theme="light"] .char-builder-overlay,
+body.theme-light .char-builder-overlay {
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(6px);
+}
+
 [data-theme="light"] .char-builder-modal,
 body.theme-light .char-builder-modal {
   background: #ffffff;
@@ -1128,11 +1134,40 @@ body.theme-light .char-trait-chip.active {
   box-shadow: 0 1px 4px rgba(124, 58, 237, 0.3);
 }
 
+/* SVG Viewport Theming */
+.char-builder-stage-bg {
+  fill: #0b101b;
+  transition: fill 0.2s ease;
+}
+
+.char-builder-grid-line {
+  stroke: #1e293b;
+}
+
+.char-builder-ground-line {
+  stroke: #334155;
+}
+
 /* Light Theme Stage Panel & Viewport Controls */
 [data-theme="light"] .char-builder-stage-panel,
 body.theme-light .char-builder-stage-panel {
-  background: #0b101b;
+  background: #f8fafc;
   border-left: 1.5px solid #e2e8f0;
+}
+
+[data-theme="light"] .char-builder-stage-bg,
+body.theme-light .char-builder-stage-bg {
+  fill: #f8fafc;
+}
+
+[data-theme="light"] .char-builder-grid-line,
+body.theme-light .char-builder-grid-line {
+  stroke: #e2e8f0;
+}
+
+[data-theme="light"] .char-builder-ground-line,
+body.theme-light .char-builder-ground-line {
+  stroke: #cbd5e1;
 }
 
 [data-theme="light"] .char-builder-stage-actions,

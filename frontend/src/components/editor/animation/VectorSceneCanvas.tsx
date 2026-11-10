@@ -354,6 +354,26 @@ export const VectorSceneCanvas: React.FC<VectorSceneCanvasProps> = ({
           <stop offset="0%" stopColor="rgba(0,0,0,0.35)" />
           <stop offset="100%" stopColor="rgba(0,0,0,0)" />
         </radialGradient>
+
+        {/* Storybook Procedural Landscape Gradients (matches Remotion Renderer) */}
+        <linearGradient id="editorSkyGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#60a5fa" />
+          <stop offset="65%" stopColor="#bae6fd" />
+          <stop offset="100%" stopColor="#d9f99d" />
+        </linearGradient>
+        <radialGradient id="editorSunGlow" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stopColor="#fef08a" stopOpacity="0.8" />
+          <stop offset="40%" stopColor="#fde047" stopOpacity="0.4" />
+          <stop offset="100%" stopColor="#fde047" stopOpacity="0" />
+        </radialGradient>
+        <linearGradient id="editorHillBackGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#86efac" />
+          <stop offset="100%" stopColor="#15803d" />
+        </linearGradient>
+        <linearGradient id="editorGroundGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#4ade80" />
+          <stop offset="100%" stopColor="#166534" />
+        </linearGradient>
       </defs>
 
       {/* Scene Camera Root (Syncs camera motion and 2D roll across all stage elements) */}
@@ -382,7 +402,52 @@ export const VectorSceneCanvas: React.FC<VectorSceneCanvasProps> = ({
             }
           />
         </g>
+      ) : !isBgRemoved ? (
+        /* Storybook Procedural Backdrop (Exact Parity with Remotion Renderer) */
+        <g id="default-storybook-background">
+          <rect width={canvasWidth} height={canvasHeight} fill="url(#editorSkyGrad)" />
+          {/* Glowing Sun */}
+          <circle
+            cx={Math.round(canvasWidth * 0.82)}
+            cy={Math.round(canvasHeight * 0.22)}
+            r={Math.round(Math.min(canvasWidth, canvasHeight) * 0.18)}
+            fill="url(#editorSunGlow)"
+          />
+          <circle
+            cx={Math.round(canvasWidth * 0.82)}
+            cy={Math.round(canvasHeight * 0.22)}
+            r={Math.round(Math.min(canvasWidth, canvasHeight) * 0.08)}
+            fill="#fde047"
+            opacity={0.95}
+          />
+          {/* Fluffy Storybook Clouds */}
+          <g opacity={0.75} fill="#ffffff">
+            <ellipse cx={Math.round(canvasWidth * 0.25)} cy={Math.round(canvasHeight * 0.20)} rx={Math.round(canvasWidth * 0.09)} ry={Math.round(canvasHeight * 0.045)} />
+            <ellipse cx={Math.round(canvasWidth * 0.29)} cy={Math.round(canvasHeight * 0.17)} rx={Math.round(canvasWidth * 0.06)} ry={Math.round(canvasHeight * 0.04)} />
+            <ellipse cx={Math.round(canvasWidth * 0.21)} cy={Math.round(canvasHeight * 0.19)} rx={Math.round(canvasWidth * 0.05)} ry={Math.round(canvasHeight * 0.035)} />
+            <ellipse cx={Math.round(canvasWidth * 0.62)} cy={Math.round(canvasHeight * 0.28)} rx={Math.round(canvasWidth * 0.075)} ry={Math.round(canvasHeight * 0.038)} />
+            <ellipse cx={Math.round(canvasWidth * 0.66)} cy={Math.round(canvasHeight * 0.26)} rx={Math.round(canvasWidth * 0.05)} ry={Math.round(canvasHeight * 0.032)} />
+          </g>
+          {/* Back Green Hill */}
+          <path
+            d={`M 0 ${Math.round(canvasHeight * 0.68)} Q ${Math.round(canvasWidth * 0.3)} ${Math.round(canvasHeight * 0.58)} ${Math.round(canvasWidth * 0.65)} ${Math.round(canvasHeight * 0.65)} T ${canvasWidth} ${Math.round(canvasHeight * 0.62)} L ${canvasWidth} ${canvasHeight} L 0 ${canvasHeight} Z`}
+            fill="url(#editorHillBackGrad)"
+            opacity={0.85}
+          />
+          {/* Front Rolling Green Ground */}
+          <path
+            d={`M 0 ${Math.round(canvasHeight * 0.72)} Q ${Math.round(canvasWidth * 0.45)} ${Math.round(canvasHeight * 0.68)} ${canvasWidth} ${Math.round(canvasHeight * 0.72)} L ${canvasWidth} ${canvasHeight} L 0 ${canvasHeight} Z`}
+            fill="url(#editorGroundGrad)"
+          />
+          {/* Flowers on the grass */}
+          <circle cx={Math.round(canvasWidth * 0.12)} cy={Math.round(canvasHeight * 0.72 + 12)} r={4} fill="#fde047" opacity={0.9} />
+          <circle cx={Math.round(canvasWidth * 0.28)} cy={Math.round(canvasHeight * 0.72 + 18)} r={3.5} fill="#f43f5e" opacity={0.85} />
+          <circle cx={Math.round(canvasWidth * 0.52)} cy={Math.round(canvasHeight * 0.72 + 14)} r={4} fill="#ffffff" opacity={0.9} />
+          <circle cx={Math.round(canvasWidth * 0.74)} cy={Math.round(canvasHeight * 0.72 + 20)} r={3.5} fill="#fbbf24" opacity={0.85} />
+          <circle cx={Math.round(canvasWidth * 0.88)} cy={Math.round(canvasHeight * 0.72 + 15)} r={4} fill="#ec4899" opacity={0.9} />
+        </g>
       ) : (
+        /* Neutral Studio Stage (When background is explicitly removed) */
         <g id="default-stylized-background">
           <rect
             id="scene-background-rect"

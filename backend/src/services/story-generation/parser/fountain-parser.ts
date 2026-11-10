@@ -383,11 +383,11 @@ export class FountainParser {
     // - "**Earth Character Action:** waves happily"
     // - "कृष्ण क्रिया: बांसुरी बजाते हैं"
     // - "क्रिया (राधा): नृत्य करती है"
-    const actionPattern = /^(?:\*{1,2})?(?:([A-Za-z0-9\u0900-\u097F\s\-_]+?)\s+)?(?:character\s+)?(?:action|क्रिया|अभिनय)(?:\s*[\(—–-]\s*([A-Za-z0-9\u0900-\u097F\s\-_]+?)\s*[\)])?(?::\*{1,2}|\*{1,2}:|:)\s*(.*)$/i;
+    const actionPattern = /^(?:\*{1,2})?(?:([A-Za-z0-9\u0900-\u097F\s\-_]+?)\s+)?(?:suggested\s+)?(?:character\s+)?(?:action(?:s)?|क्रिया|अभिनय)(?:\s*[\(—–-]\s*([A-Za-z0-9\u0900-\u097F\s\-_]+?)\s*[\)])?(?::\*{1,2}|\*{1,2}:|:)\s*(.*)$/i;
     const actionMatch = trimmed.match(actionPattern);
     if (actionMatch) {
       let actor = (actionMatch[1] || actionMatch[2] || '').replace(/^\*{1,2}|\*{1,2}$/g, '').trim();
-      if (/^(?:character|पात्र|char|action|क्रिया)$/i.test(actor)) {
+      if (/^(?:character|पात्र|char|action|actions|क्रिया|suggested)$/i.test(actor)) {
         actor = '';
       }
       let actionValue = (actionMatch[3] || '').trim();
@@ -409,11 +409,11 @@ export class FountainParser {
     }
 
     // 2. Speaking Emotion
-    const emotionPattern = /^(?:\*{1,2})?(?:([A-Za-z0-9\u0900-\u097F\s\-_]+?)\s+)?(?:speaking\s+)?(?:emotion|भाव|बोलने का भाव)(?:\s*[\(—–-]\s*([A-Za-z0-9\u0900-\u097F\s\-_]+?)\s*[\)])?(?::\*{1,2}|\*{1,2}:|:)\s*(.*)$/i;
+    const emotionPattern = /^(?:\*{1,2})?(?:([A-Za-z0-9\u0900-\u097F\s\-_]+?)\s+)?(?:suggested\s+)?(?:speaking\s+)?(?:emotion(?:s)?|भाव|बोलने का भाव)(?:\s*[\(—–-]\s*([A-Za-z0-9\u0900-\u097F\s\-_]+?)\s*[\)])?(?::\*{1,2}|\*{1,2}:|:)\s*(.*)$/i;
     const emotionMatch = trimmed.match(emotionPattern);
     if (emotionMatch) {
       let actor = (emotionMatch[1] || emotionMatch[2] || '').replace(/^\*{1,2}|\*{1,2}$/g, '').trim();
-      if (/^(?:character|speaking|पात्र|बोलने का भाव|भाव)$/i.test(actor)) {
+      if (/^(?:character|speaking|पात्र|बोलने का भाव|भाव|suggested)$/i.test(actor)) {
         actor = '';
       }
       const val = (emotionMatch[3] || '').trim();
@@ -434,11 +434,11 @@ export class FountainParser {
     }
 
     // 3. Facial Expression
-    const expressionPattern = /^(?:\*{1,2})?(?:([A-Za-z0-9\u0900-\u097F\s\-_]+?)\s+)?(?:facial\s+)?(?:expression|चेहरे के भाव|अभिव्यक्ति)(?:\s*[\(—–-]\s*([A-Za-z0-9\u0900-\u097F\s\-_]+?)\s*[\)])?(?::\*{1,2}|\*{1,2}:|:)\s*(.*)$/i;
+    const expressionPattern = /^(?:\*{1,2})?(?:([A-Za-z0-9\u0900-\u097F\s\-_]+?)\s+)?(?:suggested\s+)?(?:facial\s+)?(?:expression(?:s)?|चेहरे के भाव|अभिव्यक्ति)(?:\s*[\(—–-]\s*([A-Za-z0-9\u0900-\u097F\s\-_]+?)\s*[\)])?(?::\*{1,2}|\*{1,2}:|:)\s*(.*)$/i;
     const exprMatch = trimmed.match(expressionPattern);
     if (exprMatch) {
       let actor = (exprMatch[1] || exprMatch[2] || '').replace(/^\*{1,2}|\*{1,2}$/g, '').trim();
-      if (/^(?:character|facial|पात्र|चेहरे के भाव|अभिव्यक्ति)$/i.test(actor)) {
+      if (/^(?:character|facial|पात्र|चेहरे के भाव|अभिव्यक्ति|suggested)$/i.test(actor)) {
         actor = '';
       }
       const val = (exprMatch[3] || '').trim();
@@ -509,11 +509,14 @@ export class FountainParser {
         speech = speech.replace(/\s*\((?:Emotion|Tone|भाव|बोलने का भाव):\s*(.*?)\)\s*$/i, '').trim();
       }
 
-      const lowerSpeaker = rawSpeaker.toLowerCase();
-      // Ensure it is not a reserved instruction like "Narration", "Background Prompt", "Effects", "Character Action", "Opening Caption"
+      const lowerSpeaker = rawSpeaker.toLowerCase().trim();
+      // Ensure it is not a reserved instruction like "Narration", "Background Prompt", "Effects", "Character Action", "Suggested Facial Expressions", "Opening Caption"
       const isReserved = [
         'background',
         'visual',
+        'visual prompt',
+        'visual scene prompt',
+        'scene prompt',
         'image',
         'narration',
         'narrator',
@@ -521,15 +524,32 @@ export class FountainParser {
         'vo',
         'effects',
         'overlay',
+        'overlays',
         'action',
+        'actions',
         'character action',
+        'character actions',
+        'suggested action',
+        'suggested actions',
+        'suggested character action',
+        'suggested character actions',
         'facial expression',
+        'facial expressions',
+        'suggested facial expression',
+        'suggested facial expressions',
+        'suggested expression',
+        'suggested expressions',
         'facial',
         'expression',
+        'expressions',
         'speaking emotion',
+        'speaking emotions',
+        'suggested speaking emotion',
+        'suggested speaking emotions',
         'speaking style',
         'speaking',
         'emotion',
+        'emotions',
         'tone',
         'style',
         'duration',
@@ -545,8 +565,17 @@ export class FountainParser {
         'setting',
         'location',
         'shot',
+        'shot type',
         'camera',
+        'camera direction',
         'pose',
+        'poses',
+        'note',
+        'notes',
+        'scene note',
+        'scene notes',
+        'director note',
+        'director notes',
         'दृश्य',
         'पृष्ठभूमि',
         'सूत्रधार',
@@ -557,7 +586,7 @@ export class FountainParser {
         'भाव',
         'चेहरे के भाव',
         'बोलने का भाव',
-      ].some((k) => lowerSpeaker === k || lowerSpeaker.startsWith(k + ' ') || lowerSpeaker.endsWith(' ' + k));
+      ].some((k) => lowerSpeaker === k || lowerSpeaker.startsWith(k + ' ') || lowerSpeaker.endsWith(' ' + k) || lowerSpeaker.includes(k));
 
       let cleanSpeaker = rawSpeaker;
       const genericModifiers = ['closing', 'opening', 'final', 'intro', 'outro', 'अंतिम', 'प्रारंभिक', 'dialogue', 'speech', 'संवाद', 'लाइन', 'unspecified', 'unknown'];

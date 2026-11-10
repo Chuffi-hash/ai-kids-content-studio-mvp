@@ -243,7 +243,12 @@ export const CharacterBuilderModal: React.FC<CharacterBuilderModalProps> = ({
       const bgRects = svgClone.querySelectorAll('rect');
       bgRects.forEach((r) => {
         const fill = r.getAttribute('fill') || '';
-        if (fill === '#0b101b' || fill.includes('grid')) {
+        if (
+          fill === '#0b101b' ||
+          fill === '#f8fafc' ||
+          fill.includes('grid') ||
+          r.classList.contains('char-builder-stage-bg')
+        ) {
           r.remove();
         }
       });
@@ -2723,14 +2728,14 @@ export const CharacterBuilderModal: React.FC<CharacterBuilderModalProps> = ({
                   </radialGradient>
                   {/* Soft grid background */}
                   <pattern id="builder-grid" width="25" height="25" patternUnits="userSpaceOnUse">
-                    <path d="M 25 0 L 0 0 0 25" fill="none" stroke="#1e293b" strokeWidth="1" strokeOpacity="0.5" />
+                    <path d="M 25 0 L 0 0 0 25" fill="none" className="char-builder-grid-line" stroke="#1e293b" strokeWidth="1" strokeOpacity="0.5" />
                   </pattern>
                 </defs>
 
                 {/* Stage Backdrop */}
-                <rect width="500" height="500" fill="#0b101b" />
+                <rect width="500" height="500" className="char-builder-stage-bg" fill="#0b101b" />
                 <rect width="500" height="500" fill="url(#builder-grid)" />
-                <line x1="50" y1="430" x2="450" y2="430" stroke="#334155" strokeWidth="2" strokeDasharray="4 4" />
+                <line x1="50" y1="430" x2="450" y2="430" className="char-builder-ground-line" stroke="#334155" strokeWidth="2" strokeDasharray="4 4" />
 
                 {/* Ground Shadow */}
                 <ellipse

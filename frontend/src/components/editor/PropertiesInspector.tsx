@@ -2481,10 +2481,10 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                 onChange={handleUploadFlowBackgroundFile}
               />
 
-              {/* 1. Stage Background & Active Plate */}
+              {/* 1. Stage Background */}
               <CollapsibleSection
                 id="bg-plate"
-                title="Stage Background & Active Plate"
+                title="Stage Background"
                 icon={<ImageIcon size={14} color="#8b5cf6" />}
                 badge={
                   currentBgUrl ? (
@@ -2492,7 +2492,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                       {currentBgFit.toUpperCase()} &bull; {(scene.animationData as any)?.background?.aspectRatio || '16:9'}
                     </span>
                   ) : (
-                    <span style={{ fontSize: '10px', color: '#94a3b8' }}>Default Stage</span>
+                    <span className="ed-bg-badge-default">Default Stage</span>
                   )
                 }
                 isOpen={isSectionOpen('bg-plate', true)}
@@ -2591,26 +2591,21 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                       </button>
                       <button
                         type="button"
-                        className="ed-btn-action"
+                        className="ed-btn-action studio"
+                        onClick={handleOpenStudioBackgroundsModal}
+                        title="Choose from reusable environments generated in Background Studio"
+                      >
+                        <SparklesIcon size={12} />
+                        <span>From Studio</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="ed-btn-action secondary"
                         onClick={handleOpenStoryBackgroundsModal}
                         title="Choose from images already used in this story"
                       >
                         <ImageIcon size={12} />
                         <span>From Story</span>
-                      </button>
-                      <button
-                        type="button"
-                        className="ed-btn-action"
-                        onClick={handleOpenStudioBackgroundsModal}
-                        title="Choose from reusable environments generated in Background Studio"
-                        style={{
-                          background: 'rgba(139, 92, 246, 0.15)',
-                          borderColor: 'rgba(139, 92, 246, 0.4)',
-                          color: '#c4b5fd',
-                        }}
-                      >
-                        <SparklesIcon size={12} />
-                        <span>From Studio</span>
                       </button>
                       <button
                         type="button"
@@ -2651,60 +2646,46 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                   </div>
                 ) : (
                   <div style={{ marginBottom: '4px' }}>
-                    <div
-                      style={{
-                        border: '1px dashed #cbd5e1',
-                        borderRadius: '6px',
-                        padding: '16px 10px',
-                        textAlign: 'center',
-                        background: 'rgba(248, 250, 252, 0.5)',
-                        marginBottom: '8px',
-                      }}
-                    >
-                      <div style={{ color: '#94a3b8', marginBottom: '6px' }}>
+                    <div className="ed-bg-empty-card">
+                      <div className="ed-bg-empty-icon">
                         <ImageIcon size={24} />
                       </div>
-                      <p style={{ fontSize: '12px', fontWeight: 500, color: '#475569', margin: '0 0 2px 0' }}>
+                      <p className="ed-bg-empty-title">
                         No custom background
                       </p>
-                      <p style={{ fontSize: '10px', color: '#94a3b8', margin: 0 }}>
+                      <p className="ed-bg-empty-desc">
                         Using default vector stage backdrop
                       </p>
                     </div>
 
-                    <div className="ed-bg-actions-row">
+                    <div className="ed-bg-actions-grid">
                       <button
                         type="button"
-                        className="ed-btn-action primary"
+                        className="ed-btn-action primary ed-btn-full"
                         disabled={isUploadingBg}
                         onClick={() => bgFileInputRef.current?.click()}
-                        style={{ flex: 1 }}
+                        title="Upload a new background image from your computer (PNG/JPEG/WebP)"
                       >
                         <UploadIcon size={13} />
                         <span>{isUploadingBg ? 'Uploading...' : 'Import Image (PNG/JPEG/WebP)'}</span>
                       </button>
                       <button
                         type="button"
-                        className="ed-btn-action"
+                        className="ed-btn-action studio"
+                        onClick={handleOpenStudioBackgroundsModal}
+                        title="Choose from reusable environments generated in Background Studio"
+                      >
+                        <SparklesIcon size={13} />
+                        <span>From Studio</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="ed-btn-action secondary"
                         onClick={handleOpenStoryBackgroundsModal}
                         title="Choose from images already used in this story"
                       >
                         <ImageIcon size={13} />
                         <span>From Story</span>
-                      </button>
-                      <button
-                        type="button"
-                        className="ed-btn-action"
-                        onClick={handleOpenStudioBackgroundsModal}
-                        title="Choose from reusable environments generated in Background Studio"
-                        style={{
-                          background: 'rgba(139, 92, 246, 0.15)',
-                          borderColor: 'rgba(139, 92, 246, 0.4)',
-                          color: '#c4b5fd',
-                        }}
-                      >
-                        <SparklesIcon size={13} />
-                        <span>From Studio</span>
                       </button>
                     </div>
                   </div>
@@ -2809,7 +2790,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
         {/* WORKFLOW A: Google Flow Manual Workflow (Zero API Cost) */}
         <CollapsibleSection
           id="bg-flow"
-          title="Google Flow Manual Workflow (Workflow A)"
+          title="Google Flow Workflow"
           subtitle="Character-Free Environment Prompts & Import"
           icon={<SparklesIcon size={14} color="#059669" />}
           badge={
@@ -3507,62 +3488,93 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
         <div className="ed-bg-modal-overlay" onClick={() => setShowBgPicker(false)}>
           <div className="ed-bg-modal-card" onClick={(e) => e.stopPropagation()} style={{ width: '560px', maxWidth: '94vw' }}>
             <div className="ed-bg-modal-header">
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div className="ed-bg-modal-tabs">
                 <button
                   type="button"
-                  className={`ed-tool-btn ${bgPickerTab === 'story' ? 'primary' : ''}`}
+                  className={`ed-bg-tab-btn ${bgPickerTab === 'story' ? 'active' : ''}`}
                   onClick={() => handleOpenStoryBackgroundsModal()}
-                  style={{ fontSize: '12px' }}
                 >
-                  Story Backgrounds
+                  <ImageIcon size={13} />
+                  <span>Story Backgrounds ({storyBackgrounds.length})</span>
                 </button>
                 <button
                   type="button"
-                  className={`ed-tool-btn ${bgPickerTab === 'studio' ? 'primary' : ''}`}
+                  className={`ed-bg-tab-btn ${bgPickerTab === 'studio' ? 'active' : ''}`}
                   onClick={() => handleOpenStudioBackgroundsModal()}
-                  style={{ fontSize: '12px' }}
                 >
-                  Background Studio Library ({studioBackgrounds.length})
+                  <SparklesIcon size={13} />
+                  <span>Background Studio Library ({studioBackgrounds.length})</span>
                 </button>
               </div>
               <button
                 type="button"
-                className="ed-tool-btn"
-                style={{ padding: '2px 8px' }}
+                className="ed-bg-modal-close-btn"
                 onClick={() => setShowBgPicker(false)}
+                title="Close"
               >
                 ✕
               </button>
             </div>
 
-            <div style={{ padding: '14px', maxHeight: '400px', overflowY: 'auto' }}>
+            <div className="ed-bg-modal-body">
               {bgPickerTab === 'studio' ? (
                 isLoadingStudioBackgrounds ? (
-                  <div style={{ textAlign: 'center', padding: '24px 0', color: '#94a3b8', fontSize: '12px' }}>
-                    Loading Background Studio environments...
+                  <div className="ed-bg-picker-empty">
+                    <SparklesIcon size={32} />
+                    <div className="ed-bg-picker-empty-title">Loading Background Studio Environments...</div>
                   </div>
                 ) : studioBackgrounds.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '24px 0', color: '#94a3b8', fontSize: '12px' }}>
-                    No backgrounds generated in Studio yet. Visit Background Studio to generate environment art.
+                  <div className="ed-bg-picker-empty">
+                    <div style={{ color: '#8b5cf6', marginBottom: '8px' }}>
+                      <SparklesIcon size={36} />
+                    </div>
+                    <div className="ed-bg-picker-empty-title">No Backgrounds Generated in Studio Yet</div>
+                    <p className="ed-bg-picker-empty-desc">
+                      Generate reusable storybook forest paths, bedrooms, villages, and skies in Background Studio.
+                    </p>
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                      <button
+                        type="button"
+                        className="ed-btn-action studio"
+                        onClick={() => {
+                          setShowBgPicker(false);
+                          window.open('/backgrounds', '_blank');
+                        }}
+                      >
+                        <SparklesIcon size={13} />
+                        <span>Open Background Studio</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="ed-btn-action secondary"
+                        onClick={() => {
+                          setShowBgPicker(false);
+                          bgFileInputRef.current?.click();
+                        }}
+                      >
+                        <UploadIcon size={13} />
+                        <span>Upload From Computer</span>
+                      </button>
+                    </div>
                   </div>
                 ) : (
-                  <div className="ed-bg-picker-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))' }}>
+                  <div className="ed-bg-picker-grid">
                     {studioBackgrounds.map((bg) => (
                       <div
                         key={bg.id}
                         className="ed-bg-picker-item"
                         onClick={() => handleSelectStudioBackground(bg)}
                         title={`${bg.name || bg.environmentType} (${bg.aspectRatio})`}
-                        style={{ cursor: 'pointer' }}
                       >
                         <img
                           src={resolveAssetUrl(bg.imageUrl)}
                           alt={bg.name || bg.environmentType}
+                          className="ed-bg-picker-thumb"
                           onError={(e) => {
                             (e.target as HTMLElement).style.display = 'none';
                           }}
                         />
-                        <div className="ed-bg-picker-caption" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        <div className="ed-bg-picker-caption">
                           {bg.name || bg.environmentType}
                         </div>
                       </div>
@@ -3570,26 +3582,30 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                   </div>
                 )
               ) : isLoadingStoryBackgrounds ? (
-                <div style={{ textAlign: 'center', padding: '24px 0', color: '#94a3b8', fontSize: '12px' }}>
-                  Loading backgrounds...
+                <div className="ed-bg-picker-empty">
+                  <ImageIcon size={32} />
+                  <div className="ed-bg-picker-empty-title">Loading Story Backgrounds...</div>
                 </div>
               ) : storyBackgrounds.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '24px 0', color: '#94a3b8', fontSize: '12px' }}>
-                  No previous backgrounds found in this story.
-                  <div style={{ marginTop: '8px' }}>
-                    <button
-                      type="button"
-                      className="ed-btn-action primary"
-                      onClick={() => {
-                        setShowBgPicker(false);
-                        bgFileInputRef.current?.click();
-                      }}
-                      style={{ margin: '0 auto' }}
-                    >
-                      <UploadIcon size={12} />
-                      <span>Upload New Image</span>
-                    </button>
+                <div className="ed-bg-picker-empty">
+                  <div style={{ color: 'var(--ed-text-muted)', marginBottom: '8px' }}>
+                    <ImageIcon size={36} />
                   </div>
+                  <div className="ed-bg-picker-empty-title">No Previous Backgrounds in This Story</div>
+                  <p className="ed-bg-picker-empty-desc">
+                    Upload an image or import from Background Studio to use as the backdrop for this scene.
+                  </p>
+                  <button
+                    type="button"
+                    className="ed-btn-action primary"
+                    onClick={() => {
+                      setShowBgPicker(false);
+                      bgFileInputRef.current?.click();
+                    }}
+                  >
+                    <UploadIcon size={13} />
+                    <span>Upload New Image</span>
+                  </button>
                 </div>
               ) : (
                 <div className="ed-bg-picker-grid">
@@ -3603,6 +3619,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                       <img
                         src={resolveAssetUrl(bg.imageUrl)}
                         alt={`Scene ${bg.sceneNumber}`}
+                        className="ed-bg-picker-thumb"
                         onError={(e) => {
                           (e.target as HTMLElement).style.display = 'none';
                         }}
@@ -3614,23 +3631,21 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
               )}
             </div>
 
-            <div style={{ padding: '8px 12px', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div className="ed-bg-modal-footer">
               <button
                 type="button"
-                className="ed-btn-action"
-                style={{ fontSize: '11px' }}
+                className="ed-btn-action secondary"
                 onClick={() => {
                   setShowBgPicker(false);
                   bgFileInputRef.current?.click();
                 }}
               >
-                <UploadIcon size={11} />
-                <span>Upload New</span>
+                <UploadIcon size={12} />
+                <span>Upload From Computer</span>
               </button>
               <button
                 type="button"
-                className="ed-tool-btn"
-                style={{ fontSize: '11px' }}
+                className="ed-btn-action"
                 onClick={() => setShowBgPicker(false)}
               >
                 Close
