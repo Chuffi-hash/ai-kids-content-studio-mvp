@@ -649,6 +649,7 @@ function SceneView({
         <Audio
           src={narrationUrl}
           volume={scene.narration?.volume ?? 1.0}
+          onError={(e) => console.warn('[Remotion] Narration audio error:', e)}
         />
       )}
 
@@ -667,6 +668,7 @@ function SceneView({
             <Audio
               src={audioSrc}
               volume={d.volume ?? 1.0}
+              onError={(e) => console.warn(`[Remotion] Dialogue audio error for ${d.characterName || (d as any).speaker || 'character'}:`, e)}
             />
           </Sequence>
         );
@@ -682,6 +684,7 @@ function SceneView({
           <Audio
             src={track.src.startsWith('http') || track.src.startsWith('data:') ? track.src : staticFile(track.src)}
             volume={track.volume}
+            onError={(e) => console.warn(`[Remotion] Audio track error:`, e)}
           />
         </Sequence>
       ))}
@@ -689,11 +692,17 @@ function SceneView({
   );
 }
 
-export function StoryVideo({ manifest }: { manifest: VideoManifest }) {
-  const fps = manifest.fps ?? 30;
-  const format = manifest.format ?? '16:9';
-  const template = getVideoTemplate(manifest.templateId);
-  const activeSubtitleTheme = manifest.subtitleTheme || template.subtitleTheme;
+export function StoryVideo(rawProps?: { manifest?: VideoManifest } | VideoManifest) {
+  const manifest: VideoManifest =
+    (rawProps && 'manifest' in rawProps && rawProps.manifest)
+      ? rawProps.manifest
+      : (rawProps && 'scenes' in rawProps && Array.isArray((rawProps as any).scenes))
+        ? (rawProps as VideoManifest)
+        : defaultManifest;
+  const fps = manifest?.fps ?? 30;
+  const format = manifest?.format ?? '16:9';
+  const template = getVideoTemplate(manifest?.templateId);
+  const activeSubtitleTheme = manifest?.subtitleTheme || template.subtitleTheme;
 
   let offset = 0;
 
@@ -705,11 +714,12 @@ export function StoryVideo({ manifest }: { manifest: VideoManifest }) {
           src={manifest.backgroundMusic}
           volume={manifest.musicVolume ?? 0.2}
           loop
+          onError={(e) => console.warn('[Remotion] Background music error:', e)}
         />
       )}
 
       {/* Sequential Scenes */}
-      {manifest.scenes.map((scene, idx) => {
+      {(manifest?.scenes || []).map((scene, idx, arr) => {
         const from = offset;
         const durationInFrames = frames(scene.durationMs, fps);
         offset += durationInFrames;
@@ -726,8 +736,8 @@ export function StoryVideo({ manifest }: { manifest: VideoManifest }) {
               subtitleTheme={activeSubtitleTheme}
               template={template}
               isFirstScene={idx === 0}
-              isLastScene={idx === manifest.scenes.length - 1}
-              storyTitle={manifest.storyTitle}
+              isLastScene={idx === arr.length - 1}
+              storyTitle={manifest?.storyTitle}
             />
           </Sequence>
         );
@@ -743,6 +753,7 @@ export function StoryVideo({ manifest }: { manifest: VideoManifest }) {
           }
           volume={0}
           loop
+          onError={(e) => console.warn('[Remotion] Silent audio track notice:', e)}
         />
       )}
     </AbsoluteFill>

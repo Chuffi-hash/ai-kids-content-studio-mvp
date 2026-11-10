@@ -110,46 +110,48 @@ export const RemotionPlayerPreview: React.FC<RemotionPlayerPreviewProps> = ({
         alignItems: 'center',
         justifyContent: 'center',
         position: 'relative',
-        padding: 12,
+        padding: '52px 14px 14px 14px',
         boxSizing: 'border-box',
       }}
     >
-      {/* Top Preview Controls / Info Bar */}
+      {/* Composition Info Header Strip */}
       <div
         style={{
-          position: 'absolute',
-          top: 16,
-          right: 20,
-          zIndex: 60,
+          width: '100%',
           display: 'flex',
           alignItems: 'center',
-          gap: 10,
-          background: 'rgba(15, 23, 42, 0.75)',
-          backdropFilter: 'blur(8px)',
-          padding: '4px 10px',
-          borderRadius: 8,
-          border: '1px solid rgba(255, 255, 255, 0.1)',
+          justifyContent: 'space-between',
+          marginBottom: 6,
+          padding: '2px 4px',
+          boxSizing: 'border-box',
         }}
       >
-        <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 500 }}>
-          {manifest.scenes.length} {manifest.scenes.length === 1 ? 'scene' : 'scenes'} • {config.totalDurationSec}s • {config.width}×{config.height}
-        </span>
+        <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span>{manifest.scenes.length} {manifest.scenes.length === 1 ? 'scene' : 'scenes'}</span>
+          <span>•</span>
+          <span>{config.totalDurationSec}s</span>
+          <span>•</span>
+          <span>{config.width}×{config.height}</span>
+        </div>
         <button
           type="button"
           onClick={handleRefresh}
-          title="Refresh Remotion manifest from saved scenes"
+          title="Reload Remotion composition manifest from saved scenes"
           style={{
-            background: 'rgba(255, 255, 255, 0.1)',
-            border: 'none',
+            background: 'rgba(56, 189, 248, 0.15)',
+            border: '1px solid rgba(56, 189, 248, 0.3)',
             color: '#38bdf8',
-            fontSize: 12,
+            fontSize: 11,
             fontWeight: 600,
-            padding: '3px 8px',
+            padding: '2px 8px',
             borderRadius: 4,
             cursor: 'pointer',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 4,
           }}
         >
-          ↻ Refresh
+          ↻ Refresh Manifest
         </button>
       </div>
 
@@ -157,7 +159,8 @@ export const RemotionPlayerPreview: React.FC<RemotionPlayerPreviewProps> = ({
       <div
         style={{
           width: '100%',
-          maxHeight: '100%',
+          flex: 1,
+          maxHeight: 'calc(100% - 32px)',
           aspectRatio: `${config.width} / ${config.height}`,
           display: 'flex',
           alignItems: 'center',
@@ -165,6 +168,7 @@ export const RemotionPlayerPreview: React.FC<RemotionPlayerPreviewProps> = ({
           boxShadow: '0 10px 40px rgba(0, 0, 0, 0.7)',
           borderRadius: 8,
           overflow: 'hidden',
+          background: '#090e17',
         }}
       >
         <Player
@@ -178,24 +182,32 @@ export const RemotionPlayerPreview: React.FC<RemotionPlayerPreviewProps> = ({
           clickToPlay
           doubleClickToFullscreen
           style={{ width: '100%', height: '100%' }}
-          errorFallback={(err: Error) => (
-            <div style={{ padding: 24, textAlign: 'center', color: '#f87171', background: '#0f172a', width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-              <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 8, color: '#fca5a5' }}>
-                Remotion Composition Error
+          errorFallback={({ error }: { error: Error }) => {
+            const errorMsg =
+              error?.message ||
+              (error as any)?.name ||
+              (typeof error === 'string' ? error : JSON.stringify(error)) ||
+              'Failed to render Remotion composition';
+            console.error('[RemotionPlayerPreview] Composition error caught:', error);
+            return (
+              <div style={{ padding: 24, textAlign: 'center', color: '#f87171', background: '#0f172a', width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 8, color: '#fca5a5' }}>
+                  Remotion Composition Error
+                </div>
+                <div style={{ fontSize: 13, color: '#cbd5e1', maxWidth: 460, lineHeight: 1.4, marginBottom: 12, wordBreak: 'break-word' }}>
+                  {errorMsg}
+                </div>
+                <button
+                  type="button"
+                  className="ed-btn-action"
+                  onClick={handleRefresh}
+                  style={{ padding: '6px 14px', borderRadius: 6, background: '#2563eb', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 12 }}
+                >
+                  Reload Preview
+                </button>
               </div>
-              <div style={{ fontSize: 13, color: '#cbd5e1', maxWidth: 460, lineHeight: 1.4, marginBottom: 12 }}>
-                {err.message}
-              </div>
-              <button
-                type="button"
-                className="ed-btn-action"
-                onClick={handleRefresh}
-                style={{ padding: '6px 14px', borderRadius: 6, background: '#2563eb', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 12 }}
-              >
-                Reload Preview
-              </button>
-            </div>
-          )}
+            );
+          }}
         />
       </div>
     </div>

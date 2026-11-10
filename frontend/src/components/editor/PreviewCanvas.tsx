@@ -303,10 +303,24 @@ export const PreviewCanvas: React.FC<PreviewCanvasProps> = ({
           {onTogglePreviewMode && previewMode === "remotion" && (
             <button
               type="button"
-              style={{ marginLeft: "6px", background: "rgba(255,255,255,0.1)", border: "none", color: "white", fontSize: "10px", borderRadius: "3px", padding: "2px 6px", cursor: "pointer" }}
+              style={{
+                marginLeft: "8px",
+                background: "rgba(59, 130, 246, 0.25)",
+                border: "1px solid rgba(96, 165, 250, 0.5)",
+                color: "#93c5fd",
+                fontSize: "11px",
+                fontWeight: 600,
+                borderRadius: "4px",
+                padding: "3px 8px",
+                cursor: "pointer",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "4px",
+              }}
               onClick={() => onTogglePreviewMode("scene")}
+              title="Return to interactive 2D canvas editor"
             >
-              Back to Scene Editor
+              ← Back to Scene Editor
             </button>
           )}
 
