@@ -2,35 +2,52 @@ import fs from 'fs';
 import path from 'path';
 import { randomUUID } from 'crypto';
 import {
-  CharacterAssetRecord,
   CharacterProviderType,
-  CharacterReferenceAssets,
+  CharacterGenerationPrompt,
+  GenerateAssetResult,
+  ProviderCapabilities,
 } from './character-studio.types.js';
-import {
-  buildCharacterReferencePrompt,
-  buildCharacterTurnaroundPrompt,
-  buildCharacterExpressionPrompt,
-  buildCharacterPosePrompt,
-  CharacterPromptOptions,
-} from './prompt-templates.js';
+import { CharacterPromptBuilderService } from './character-prompt-builder.service.js';
 import { PollinationsImageProvider } from '../image-generation/providers/pollinations-image.provider.js';
 import { buildRigFromAppearance } from '../animation/templates/custom-character-rig.js';
 import { getVectorRig } from '../animation/templates/default-characters.js';
 
-export interface GenerateAssetResult {
-  url: string;
-  storagePath: string;
-  prompt: string;
-  provider: CharacterProviderType;
-}
-
 export class CharacterGenerationService {
   private storageDir: string;
   private pollinationsProvider: PollinationsImageProvider;
+  private promptBuilder: CharacterPromptBuilderService;
 
   constructor(options?: { storageDir?: string }) {
     this.storageDir = options?.storageDir || process.env.STORAGE_DIR || './storage';
     this.pollinationsProvider = new PollinationsImageProvider();
+    this.promptBuilder = new CharacterPromptBuilderService();
+  }
+
+  /**
+   * Returns provider capabilities and limitations.
+   */
+  public getProviderCapabilities(provider: string): ProviderCapabilities {
+    if (provider === 'gemini') {
+      return {
+        provider: 'gemini',
+        model: 'imagen-3.0-generate-002',
+        supportsReferenceImage: false,
+        supportsNegativePrompt: true,
+        supportsCustomAspectRatio: true,
+        notes:
+          'Official Google Imagen 3 diffusion model. High-fidelity character illustrations using canonical appearance prompt injection. Direct image-to-image conditioning is not supported on this endpoint.',
+      };
+    }
+
+    return {
+      provider: 'pollinations',
+      model: process.env.POLLINATIONS_MODEL || 'flux',
+      supportsReferenceImage: false,
+      supportsNegativePrompt: false,
+      supportsCustomAspectRatio: true,
+      notes:
+        'Pollinations Flux text-to-image generator. Fast, vibrant cartoon and storybook illustrations with prompt-based identity consistency.',
+    };
   }
 
   /**
@@ -45,7 +62,7 @@ export class CharacterGenerationService {
   /**
    * Saves a buffer to local storage under `storage/characters/<characterId>/`.
    */
-  private async saveCharacterFile(
+  public async saveCharacterFile(
     characterId: string,
     filename: string,
     buffer: Buffer
@@ -62,140 +79,152 @@ export class CharacterGenerationService {
   }
 
   /**
-   * Generates a character asset using the specified provider.
+   * Generates a character asset using the specified provider with NO silent fallback.
    */
   public async generateCharacterAsset(options: {
     characterId?: string;
-    type: 'main' | 'turnaround' | 'expression' | 'pose';
-    character: CharacterPromptOptions;
-    provider?: CharacterProviderType;
+    promptData: CharacterGenerationPrompt;
+    provider?: 'gemini' | 'pollinations';
     width?: number;
     height?: number;
+    aspectRatio?: '1:1' | '9:16' | '16:9' | '4:3' | '3:4';
   }): Promise<GenerateAssetResult> {
-    const { type, character, provider = 'pollinations' } = options;
+    const { promptData, provider = 'pollinations', aspectRatio = '1:1' } = options;
     const charId = options.characterId || `char-${Date.now()}-${randomUUID().slice(0, 6)}`;
+    const assetId = `asset-${Date.now()}-${randomUUID().slice(0, 6)}`;
 
-    let prompt = '';
-    switch (type) {
-      case 'main':
-        prompt = buildCharacterReferencePrompt(character);
-        break;
-      case 'turnaround':
-        prompt = buildCharacterTurnaroundPrompt(character);
-        break;
-      case 'expression':
-        prompt = buildCharacterExpressionPrompt(character);
-        break;
-      case 'pose':
-        prompt = buildCharacterPosePrompt(character);
-        break;
-    }
+    // Build the final combined prompt and negative prompt
+    const { prompt, negativePrompt } = this.promptBuilder.buildPrompt(promptData);
 
-    // Provider Execution
+    let imageBuffer: Buffer;
+    let actualModel = '';
+
     if (provider === 'gemini') {
       const apiKey = process.env.GEMINI_API_KEY;
       if (!apiKey) {
-        console.warn('[CharacterStudio] GEMINI_API_KEY not configured, falling back to Pollinations provider.');
-      } else {
-        // Optional Gemini/Imagen endpoint
-        try {
-          const res = await this.generateWithGemini(prompt, apiKey);
-          const saved = await this.saveCharacterFile(charId, `${type}-${Date.now()}.png`, res);
-          return {
-            url: saved.url,
-            storagePath: saved.filePath,
-            prompt,
-            provider: 'gemini',
-          };
-        } catch (geminiErr) {
-          console.warn('[CharacterStudio] Gemini generation error, falling back to Pollinations:', geminiErr);
-        }
+        throw new Error(
+          'Gemini API key is not configured. Please set GEMINI_API_KEY in your environment, or choose Pollinations provider.'
+        );
+      }
+
+      actualModel = 'imagen-3.0-generate-002';
+      // Execute Gemini without silent fallback
+      try {
+        imageBuffer = await this.generateWithGemini({
+          prompt,
+          negativePrompt,
+          aspectRatio,
+          apiKey,
+        });
+      } catch (err: any) {
+        console.error('[CharacterStudio] Gemini generation error:', err);
+        throw new Error(`Gemini Image Generation Error: ${err.message || 'Request failed'}`);
+      }
+    } else {
+      // Pollinations Provider
+      actualModel = process.env.POLLINATIONS_MODEL || 'flux';
+      const w = options.width || (promptData.generationType === 'turnaround' || promptData.generationType === 'pose' ? 1024 : 768);
+      const h = options.height || (promptData.generationType === 'turnaround' || promptData.generationType === 'pose' ? 512 : 768);
+
+      try {
+        const generated = await this.pollinationsProvider.generateImage({
+          prompt,
+          width: w,
+          height: h,
+        });
+        imageBuffer = generated.imageBuffer;
+      } catch (err: any) {
+        console.error('[CharacterStudio] Pollinations generation error:', err);
+        throw new Error(`Pollinations Image Generation Error: ${err.message || 'Request failed'}`);
       }
     }
 
-    // Default high-quality Pollinations Flux generator
-    const w = options.width || (type === 'turnaround' || type === 'pose' ? 1024 : 768);
-    const h = options.height || (type === 'turnaround' || type === 'pose' ? 512 : 768);
-
-    const generated = await this.pollinationsProvider.generateImage({
-      prompt,
-      width: w,
-      height: h,
-    });
-
-    const ext = generated.mimeType.includes('png') ? 'png' : 'jpg';
-    const saved = await this.saveCharacterFile(charId, `${type}-${Date.now()}.${ext}`, generated.imageBuffer);
+    const filename = `${promptData.generationType}-${Date.now()}-${randomUUID().slice(0, 4)}.png`;
+    const saved = await this.saveCharacterFile(charId, filename, imageBuffer);
 
     return {
+      assetId,
       url: saved.url,
       storagePath: saved.filePath,
       prompt,
-      provider: 'pollinations',
+      negativePrompt,
+      provider,
+      model: actualModel,
+      generationType: promptData.generationType,
+      isMasterReference: promptData.generationType === 'main',
+      referenceImageUrl: promptData.referenceImageUrl,
     };
   }
 
   /**
-   * Imports manual Google Flow image assets (reference, turnaround, expression, or pose sheets).
+   * Imports an asset exported from Google Flow.
    */
   public async importFromGoogleFlow(options: {
     characterId?: string;
     characterName: string;
-    assetType: 'main' | 'turnaround' | 'expression' | 'pose';
-    imageBufferOrBase64: Buffer | string;
+    assetType: 'main' | 'turnaround' | 'expression' | 'pose' | 'custom';
+    imageBufferOrBase64: string | Buffer;
     filename?: string;
     notes?: string;
   }): Promise<GenerateAssetResult> {
-    const charId = options.characterId || `flow-${Date.now()}-${randomUUID().slice(0, 6)}`;
+    const { characterName, assetType, imageBufferOrBase64, filename } = options;
+    const characterId = options.characterId || `char-${Date.now()}-${randomUUID().slice(0, 6)}`;
+    const assetId = `asset-flow-${Date.now()}-${randomUUID().slice(0, 6)}`;
+
     let buffer: Buffer;
-
-    if (typeof options.imageBufferOrBase64 === 'string') {
-      const cleanBase64 = options.imageBufferOrBase64.replace(/^data:image\/\w+;base64,/, '');
-      buffer = Buffer.from(cleanBase64, 'base64');
+    if (typeof imageBufferOrBase64 === 'string') {
+      const b64 = imageBufferOrBase64.replace(/^data:image\/\w+;base64,/, '');
+      buffer = Buffer.from(b64, 'base64');
     } else {
-      buffer = options.imageBufferOrBase64;
+      buffer = imageBufferOrBase64;
     }
 
-    if (buffer.length === 0) {
-      throw new Error('GoogleFlowImportProvider: empty image data supplied');
-    }
+    const ext = filename?.split('.').pop() || 'png';
+    const targetFilename = filename || `${assetType}-flow-${Date.now()}.${ext}`;
 
-    const safeFilename = options.filename
-      ? `${options.assetType}-${path.basename(options.filename)}`
-      : `${options.assetType}-flow-${Date.now()}.png`;
-
-    const saved = await this.saveCharacterFile(charId, safeFilename, buffer);
+    const saved = await this.saveCharacterFile(characterId, targetFilename, buffer);
 
     return {
+      assetId,
       url: saved.url,
       storagePath: saved.filePath,
-      prompt: options.notes || `Imported from Google Flow: ${options.assetType} for ${options.characterName}`,
+      prompt: `Imported Google Flow ${assetType} for ${characterName}`,
       provider: 'google_flow',
+      model: 'google_flow_import',
+      generationType: assetType,
+      isMasterReference: assetType === 'main',
     };
   }
 
   /**
-   * Direct upload handler for character references and transparent PNGs.
+   * Uploads an external character image asset.
    */
   public async uploadCharacterAsset(options: {
     characterId: string;
-    assetType: 'main' | 'transparent' | 'turnaround' | 'expression' | 'pose';
+    assetType: 'main' | 'turnaround' | 'expression' | 'pose' | 'custom';
     base64Data: string;
     filename?: string;
   }): Promise<GenerateAssetResult> {
     const { characterId, assetType, base64Data, filename } = options;
-    const cleanBase64 = base64Data.replace(/^data:image\/\w+;base64,/, '');
-    const buffer = Buffer.from(cleanBase64, 'base64');
+    const assetId = `asset-upload-${Date.now()}-${randomUUID().slice(0, 6)}`;
 
-    const ext = base64Data.startsWith('data:image/webp') ? 'webp' : 'png';
+    const b64 = base64Data.replace(/^data:image\/\w+;base64,/, '');
+    const buffer = Buffer.from(b64, 'base64');
+
+    const ext = filename?.split('.').pop() || 'png';
     const targetFilename = filename || `${assetType}-${Date.now()}.${ext}`;
 
     const saved = await this.saveCharacterFile(characterId, targetFilename, buffer);
 
     return {
+      assetId,
       url: saved.url,
       storagePath: saved.filePath,
       prompt: `Uploaded ${assetType} asset`,
       provider: 'upload',
+      model: 'user_upload',
+      generationType: assetType,
+      isMasterReference: assetType === 'main',
     };
   }
 
@@ -210,26 +239,55 @@ export class CharacterGenerationService {
   }
 
   /**
-   * Optional Gemini REST implementation.
+   * Calls Google Generative Language API for Imagen 3.
    */
-  private async generateWithGemini(prompt: string, apiKey: string): Promise<Buffer> {
+  private async generateWithGemini(options: {
+    prompt: string;
+    negativePrompt?: string;
+    aspectRatio?: '1:1' | '9:16' | '16:9' | '4:3' | '3:4';
+    apiKey: string;
+  }): Promise<Buffer> {
+    const { prompt, negativePrompt, aspectRatio = '1:1', apiKey } = options;
     const url = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${apiKey}`;
+
+    const parameters: any = {
+      sampleCount: 1,
+      aspectRatio,
+      outputMimeType: 'image/png',
+    };
+
+    if (negativePrompt && negativePrompt.trim().length > 0) {
+      parameters.negativePrompt = negativePrompt.trim();
+    }
+
     const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         instances: [{ prompt }],
-        parameters: { sampleCount: 1, aspectRatio: '1:1' },
+        parameters,
       }),
+      signal: AbortSignal.timeout(60000),
     });
 
     if (!res.ok) {
-      throw new Error(`Gemini Imagen API error: ${res.status} ${res.statusText}`);
+      const errBody = await res.text();
+      let errorDetail = errBody;
+      try {
+        const parsed = JSON.parse(errBody);
+        errorDetail = parsed.error?.message || errBody;
+      } catch {
+        // use raw text
+      }
+      throw new Error(`HTTP ${res.status}: ${errorDetail}`);
     }
 
     const data = (await res.json()) as any;
     const b64 = data.predictions?.[0]?.bytesBase64Encoded;
-    if (!b64) throw new Error('No image returned from Gemini Imagen');
+    if (!b64) {
+      throw new Error('Gemini Imagen API returned successful status but no image predictions');
+    }
+
     return Buffer.from(b64, 'base64');
   }
 }

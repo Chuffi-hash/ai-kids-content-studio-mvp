@@ -331,8 +331,8 @@ export default function BackgroundsPage() {
 
       {/* Generate Modal */}
       {showGenerateModal && (
-        <div className="modal-overlay">
-          <div className="modal-content" style={{ maxWidth: 540 }}>
+        <div className="modal-overlay" onClick={() => setShowGenerateModal(false)}>
+          <div className="modal modal-content" style={{ maxWidth: 540 }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>Generate Environment Background</h2>
               <button type="button" className="btn-icon" onClick={() => setShowGenerateModal(false)}>
@@ -441,8 +441,8 @@ export default function BackgroundsPage() {
 
       {/* Import from Google Flow Modal */}
       {showImportModal && (
-        <div className="modal-overlay">
-          <div className="modal-content" style={{ maxWidth: 540 }}>
+        <div className="modal-overlay" onClick={() => setShowImportModal(false)}>
+          <div className="modal modal-content" style={{ maxWidth: 540 }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>Import from Google Flow</h2>
               <button type="button" className="btn-icon" onClick={() => setShowImportModal(false)}>

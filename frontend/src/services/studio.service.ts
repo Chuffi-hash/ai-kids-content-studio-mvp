@@ -41,17 +41,105 @@ export interface StructuredSceneDirection {
   }>;
 }
 
+export interface CharacterStudioCapabilities {
+  providers: Array<{
+    provider: 'gemini' | 'pollinations';
+    model: string;
+    supportsReferenceImage: boolean;
+    supportsNegativePrompt: boolean;
+    supportsCustomAspectRatio: boolean;
+    notes: string;
+  }>;
+  directions: Array<{ key: string; label: string; description: string }>;
+  actions: Array<{ key: string; label: string; description: string }>;
+  expressions: Array<{ key: string; label: string; description: string }>;
+  framings: Array<{ key: string; label: string; description: string }>;
+  styles: Array<{ key: string; label: string; description: string }>;
+  defaultNegativePrompt: string;
+}
+
+export interface CharacterAssetRecord {
+  id: string;
+  characterId: string;
+  assetType: 'main' | 'turnaround' | 'expression' | 'pose' | 'custom';
+  direction?: string;
+  action?: string;
+  expression?: string;
+  cameraAngle?: string;
+  framing?: string;
+  prompt: string;
+  negativePrompt?: string;
+  referenceImageUrl?: string;
+  referenceImageId?: string;
+  provider: string;
+  model: string;
+  url: string;
+  storagePath?: string;
+  isMasterReference?: boolean;
+  createdAt: string;
+}
+
+export interface CharacterGenerationPrompt {
+  characterId?: string;
+  characterName: string;
+  characterDescription: string;
+  species?: string;
+  age?: string;
+  gender?: string;
+  direction?: string;
+  action?: string;
+  customAction?: string;
+  expression?: string;
+  customExpression?: string;
+  cameraAngle?: string;
+  framing?: string;
+  clothingInstructions?: string;
+  backgroundInstructions?: string;
+  artStyle?: string;
+  customInstructions?: string;
+  negativePrompt?: string;
+  referenceImageUrl?: string;
+  referenceImageId?: string;
+  generationType: 'main' | 'turnaround' | 'expression' | 'pose' | 'custom';
+  customCombinedPrompt?: string;
+}
+
 // Character Studio API
+export async function getCharacterStudioCapabilities(): Promise<CharacterStudioCapabilities> {
+  const res = await fetch(`${API_BASE}/character-studio/capabilities`);
+  if (!res.ok) throw new Error('Failed to fetch character studio capabilities');
+  return await res.json();
+}
+
 export async function getCharacterStudioTemplates() {
   const res = await fetch(`${API_BASE}/character-studio/templates`);
   if (!res.ok) throw new Error('Failed to fetch character templates');
   return await res.json();
 }
 
+export async function buildCharacterStudioPrompt(promptData: CharacterGenerationPrompt): Promise<{
+  success: boolean;
+  prompt: string;
+  negativePrompt: string;
+  summary: string;
+}> {
+  const res = await fetch(`${API_BASE}/character-studio/build-prompt`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(promptData),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || 'Failed to construct prompt');
+  }
+  return await res.json();
+}
+
 export async function generateCharacterStudioAsset(data: {
   characterId?: string;
-  type: 'main' | 'turnaround' | 'expression' | 'pose';
-  character: {
+  promptData?: CharacterGenerationPrompt;
+  type?: 'main' | 'turnaround' | 'expression' | 'pose' | 'custom';
+  character?: {
     name: string;
     species?: string;
     age?: string;
@@ -64,6 +152,7 @@ export async function generateCharacterStudioAsset(data: {
   provider?: string;
   width?: number;
   height?: number;
+  aspectRatio?: '1:1' | '9:16' | '16:9' | '4:3' | '3:4';
 }) {
   const res = await fetch(`${API_BASE}/character-studio/generate`, {
     method: 'POST',
@@ -77,10 +166,82 @@ export async function generateCharacterStudioAsset(data: {
   return await res.json();
 }
 
+export async function createCharacterFromStudio(data: {
+  name: string;
+  species?: string;
+  personality?: string;
+  visualDescription?: string;
+  clothing?: string;
+  distinctiveFeatures?: string;
+  artStyle?: string;
+  masterReferenceUrl?: string;
+  masterPrompt?: string;
+}) {
+  const res = await fetch(`${API_BASE}/character-studio/characters`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || 'Failed to create character');
+  }
+  return await res.json();
+}
+
+export async function getCharacterStudioAssets(characterId: string): Promise<{ success: boolean; assets: CharacterAssetRecord[] }> {
+  const res = await fetch(`${API_BASE}/character-studio/characters/${characterId}/assets`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || 'Failed to fetch character assets');
+  }
+  return await res.json();
+}
+
+export async function saveCharacterStudioAsset(
+  characterId: string,
+  asset: Partial<CharacterAssetRecord> & { url: string }
+): Promise<{ success: boolean; character: any; asset: CharacterAssetRecord }> {
+  const res = await fetch(`${API_BASE}/character-studio/characters/${characterId}/assets`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(asset),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || 'Failed to save character asset');
+  }
+  return await res.json();
+}
+
+export async function setMasterReferenceAsset(characterId: string, assetId: string) {
+  const res = await fetch(`${API_BASE}/character-studio/characters/${characterId}/master-reference`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ assetId }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || 'Failed to set master reference');
+  }
+  return await res.json();
+}
+
+export async function deleteCharacterStudioAsset(characterId: string, assetId: string, force: boolean = false) {
+  const res = await fetch(`${API_BASE}/character-studio/characters/${characterId}/assets/${assetId}?force=${force}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || 'Failed to delete asset');
+  }
+  return await res.json();
+}
+
 export async function importFlowCharacterAsset(data: {
   characterId?: string;
   characterName: string;
-  assetType: 'main' | 'turnaround' | 'expression' | 'pose';
+  assetType: 'main' | 'turnaround' | 'expression' | 'pose' | 'custom';
   imageBufferOrBase64: string;
   filename?: string;
   notes?: string;
@@ -99,7 +260,7 @@ export async function importFlowCharacterAsset(data: {
 
 export async function uploadCharacterStudioAsset(data: {
   characterId: string;
-  assetType: 'main' | 'transparent' | 'turnaround' | 'expression' | 'pose';
+  assetType: 'main' | 'turnaround' | 'expression' | 'pose' | 'custom';
   base64Data: string;
   filename?: string;
 }) {
@@ -202,6 +363,13 @@ export async function uploadBackgroundAsset(data: {
     throw new Error(err.message || 'Upload failed');
   }
   return await res.json();
+}
+
+export async function deleteBackgroundAsset(id: string): Promise<boolean> {
+  const res = await fetch(`${API_BASE}/background-studio/${id}`, {
+    method: 'DELETE',
+  });
+  return res.ok;
 }
 
 // Scene Director API

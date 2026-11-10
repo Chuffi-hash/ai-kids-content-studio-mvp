@@ -64,6 +64,7 @@ export async function updateCharacter(
     visualDescription?: string;
     distinctiveFeatures?: string;
     canonicalAppearance?: any;
+    referenceImageUrl?: string;
   }
 ): Promise<Character> {
   const API_URL = getApiUrl();

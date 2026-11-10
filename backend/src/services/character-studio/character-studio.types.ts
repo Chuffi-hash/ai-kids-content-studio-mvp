@@ -5,6 +5,140 @@ export type CharacterProviderType =
   | 'pollinations'
   | 'upload';
 
+export type CharacterDirection =
+  | 'front'
+  | 'left'
+  | 'right'
+  | 'back'
+  | 'three_quarter_left'
+  | 'three_quarter_right'
+  | 'looking_over_left_shoulder'
+  | 'looking_over_right_shoulder'
+  | 'looking_upward'
+  | 'looking_downward';
+
+export type BodyPoseAction =
+  | 'standing'
+  | 'walking'
+  | 'running'
+  | 'jumping'
+  | 'sitting'
+  | 'kneeling'
+  | 'dancing'
+  | 'waving'
+  | 'pointing'
+  | 'hands_on_hips'
+  | 'arms_crossed'
+  | 'thinking'
+  | 'sleeping'
+  | 'falling'
+  | 'flying'
+  | 'custom';
+
+export type FacialExpression =
+  | 'neutral'
+  | 'happy'
+  | 'very_happy'
+  | 'laughing'
+  | 'sad'
+  | 'crying'
+  | 'angry'
+  | 'surprised'
+  | 'scared'
+  | 'confused'
+  | 'curious'
+  | 'excited'
+  | 'sleepy'
+  | 'thinking'
+  | 'custom';
+
+export type CameraFraming =
+  | 'full_body'
+  | 'half_body'
+  | 'portrait'
+  | 'close_up'
+  | 'wide_shot'
+  | 'side_profile'
+  | 'character_turnaround'
+  | 'front_view'
+  | 'back_view';
+
+export type GenerationCategory =
+  | 'main'
+  | 'turnaround'
+  | 'expression'
+  | 'pose'
+  | 'custom';
+
+export interface CharacterGenerationPrompt {
+  characterId?: string;
+  characterName: string;
+  characterDescription: string;
+  species?: string;
+  age?: string;
+  gender?: string;
+  direction?: CharacterDirection | string;
+  action?: BodyPoseAction | string;
+  customAction?: string;
+  expression?: FacialExpression | string;
+  customExpression?: string;
+  cameraAngle?: string;
+  framing?: CameraFraming | string;
+  clothingInstructions?: string;
+  backgroundInstructions?: string;
+  artStyle?: string;
+  customInstructions?: string;
+  negativePrompt?: string;
+  referenceImageUrl?: string;
+  referenceImageId?: string;
+  generationType: GenerationCategory;
+  customCombinedPrompt?: string;
+}
+
+export interface CharacterAssetRecord {
+  id: string;
+  characterId: string;
+  assetType: GenerationCategory;
+  direction?: string;
+  action?: string;
+  expression?: string;
+  cameraAngle?: string;
+  framing?: string;
+  prompt: string;
+  negativePrompt?: string;
+  referenceImageUrl?: string;
+  referenceImageId?: string;
+  provider: string;
+  model: string;
+  url: string;
+  storagePath?: string;
+  isMasterReference?: boolean;
+  createdAt: string;
+}
+
+export interface ProviderCapabilities {
+  provider: 'gemini' | 'pollinations';
+  model: string;
+  supportsReferenceImage: boolean;
+  supportsNegativePrompt: boolean;
+  supportsCustomAspectRatio: boolean;
+  notes: string;
+}
+
+export interface GenerateAssetResult {
+  assetId: string;
+  url: string;
+  storagePath: string;
+  prompt: string;
+  negativePrompt?: string;
+  provider: CharacterProviderType;
+  model: string;
+  generationType: GenerationCategory;
+  isMasterReference?: boolean;
+  referenceImageUrl?: string;
+}
+
+// Backward-compatibility interfaces
 export interface CharacterTurnaround {
   front?: string;
   threeQuarterFront?: string;
@@ -52,32 +186,4 @@ export interface CharacterReferenceAssets {
     expression?: string;
     pose?: string;
   };
-}
-
-export interface CharacterVoiceProfile {
-  provider: 'kokoro' | 'fish_audio' | 'google_tts';
-  voiceId: string;
-  lang: string;
-  speed: number;
-  style?: string;
-  effect?: string;
-  emotion?: string;
-  emotionIntensity?: number;
-}
-
-export interface CharacterAssetRecord {
-  id: string;
-  name: string;
-  species: string;
-  personality: string;
-  visualDescription: string;
-  distinctiveFeatures?: string;
-  artStyle?: string;
-  provider: CharacterProviderType;
-  references: CharacterReferenceAssets;
-  rigData?: any; // Vector rig or segmented image rig
-  voiceConfig?: CharacterVoiceProfile;
-  isLocked?: boolean;
-  createdAt: string;
-  updatedAt: string;
 }
