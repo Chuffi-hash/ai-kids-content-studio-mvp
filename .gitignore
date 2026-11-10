@@ -43,3 +43,8 @@ backend/models/**
 remotion/node_modules/
 remotion/output/
 remotion/.cache/
+.venv/
+venv/
+__pycache__/
+*.pyc
+
