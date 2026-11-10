@@ -6,6 +6,66 @@ import { buildRigFromAppearance } from '../animation/templates/custom-character-
 
 export type AspectRatio = '16:9' | '9:16' | '1:1' | '4:5';
 
+export interface AudioSegment {
+  speakerId: string;
+  speakerType: 'narrator' | 'character';
+  text: string;
+  audioSrc: string;
+  startMs: number;
+  endMs: number;
+  durationMs: number;
+  volume: number;
+  language?: string;
+  priority?: number;
+  wordTimings?: Array<{ text: string; startMs: number; endMs: number }>;
+}
+
+export interface AudioTimelineValidationResult {
+  valid: boolean;
+  overlaps: Array<{
+    sceneId: string;
+    sceneNumber: number;
+    speaker1: string;
+    speaker2: string;
+    range: string;
+    overlapMs: number;
+  }>;
+}
+
+export function validateAudioTimeline(scenes: RemotionScene[]): AudioTimelineValidationResult {
+  const overlaps: AudioTimelineValidationResult['overlaps'] = [];
+
+  for (const sc of scenes) {
+    const segments = sc.audioSchedule || [];
+    for (let i = 0; i < segments.length; i++) {
+      for (let j = i + 1; j < segments.length; j++) {
+        const a = segments[i];
+        const b = segments[j];
+        const overlapStart = Math.max(a.startMs, b.startMs);
+        const overlapEnd = Math.min(a.endMs, b.endMs);
+        const overlapMs = overlapEnd - overlapStart;
+
+        // Flags unexpected voice overlaps greater than 50ms
+        if (overlapMs > 50) {
+          overlaps.push({
+            sceneId: sc.id,
+            sceneNumber: sc.sceneNumber,
+            speaker1: a.speakerId,
+            speaker2: b.speakerId,
+            range: `${overlapStart}ms - ${overlapEnd}ms`,
+            overlapMs,
+          });
+        }
+      }
+    }
+  }
+
+  return {
+    valid: overlaps.length === 0,
+    overlaps,
+  };
+}
+
 export interface RemotionManifestAdapterOptions {
   resolution?: '720p' | '1080p';
   fps?: number;
@@ -48,12 +108,14 @@ export interface RemotionScene {
     imageUrl?: string;
     fit?: 'cover' | 'contain' | 'fill';
     removed?: boolean;
+    inheritedFromScene?: number;
   };
   cameraMovement?: string;
   cameraRotation?: string;
   cameraRotationDegrees?: number;
   narration?: {
     url: string;
+    startMs?: number;
     durationMs?: number;
     volume?: number;
     text?: string;
@@ -79,7 +141,9 @@ export interface RemotionScene {
       durationMs: number;
     }>;
     wordTimings?: Array<{ text: string; startMs: number; endMs: number }>;
+    allowSimultaneous?: boolean;
   }>;
+  audioSchedule?: AudioSegment[];
   characterInstances?: Array<{
     instanceId: string;
     characterId: string;
@@ -136,6 +200,10 @@ export interface RemotionScene {
     layerDepth?: 'below_characters' | 'above_characters';
   }>;
   formatVariants?: Record<string, any>;
+  transition?: {
+    type?: 'cut' | 'fade';
+    durationMs?: number;
+  };
 }
 
 function estimateWordTimings(text: string, durationMs: number) {
@@ -357,35 +425,7 @@ export class RemotionManifestAdapter {
       const sceneNum = scene.number || i + 1;
       const animData = scene.animationData || {};
 
-      // 1. Duration calculation (matching VideoAssemblyService logic)
-      let durationSec = 4;
-      if (scene.endMs && scene.startMs && scene.endMs > scene.startMs) {
-        durationSec = (scene.endMs - scene.startMs) / 1000;
-      } else if (scene.estimatedDurationMs && scene.estimatedDurationMs > 0) {
-        durationSec = scene.estimatedDurationMs / 1000;
-      }
-
-      if (scene.actualAudioDurationMs && scene.actualAudioDurationMs > 0) {
-        const audioSec = scene.actualAudioDurationMs / 1000;
-        if (audioSec > durationSec) {
-          durationSec = audioSec;
-        }
-      }
-
-      const rawDialogues = Array.isArray(animData.dialogueLines)
-        ? animData.dialogueLines
-        : (Array.isArray(animData.dialogues) ? animData.dialogues : []);
-
-      for (const line of rawDialogues) {
-        const lineEndSec = ((line.startMs || 0) + (line.durationMs || 0)) / 1000;
-        if (lineEndSec > durationSec) {
-          durationSec = lineEndSec;
-        }
-      }
-      durationSec = Math.max(1.5, Math.min(120, durationSec));
-      const durationMs = Math.round(durationSec * 1000);
-
-      // 2. Background image resolution
+      // 1. Background image resolution with Story Continuity Fallback
       const isBgExplicitlyRemoved = Boolean(animData.background?.removed);
       let backgroundConfig: RemotionScene['background'] = undefined;
 
@@ -398,9 +438,40 @@ export class RemotionManifestAdapter {
       } else {
         let rawBgUrl = animData.background?.imageUrl || scene.imageUrl;
         if (!rawBgUrl) {
-          const images = await getImagesBySceneId(scene.sceneId || scene.id);
-          if (images.length > 0 && images[0].imageUrl) {
-            rawBgUrl = images[0].imageUrl;
+          try {
+            const images = await getImagesBySceneId(scene.sceneId || scene.id);
+            if (images && images.length > 0 && images[0].imageUrl) {
+              rawBgUrl = images[0].imageUrl;
+            }
+          } catch {
+            // DB image query unavailable in offline or standalone test environment
+          }
+        }
+
+        // Story Continuity Fallback:
+        // If this scene has no background image, inherit from the nearest preceding scene in the story
+        let inheritedFromSceneNum: number | undefined = undefined;
+        if (!rawBgUrl) {
+          for (let p = i - 1; p >= 0; p--) {
+            const prevScene = scenes[p];
+            const prevAnim = prevScene.animationData || {};
+            if (prevAnim.background?.removed) continue;
+            let candidateBg = prevAnim.background?.imageUrl || prevScene.imageUrl;
+            if (!candidateBg) {
+              try {
+                const prevImages = await getImagesBySceneId(prevScene.sceneId || prevScene.id);
+                if (prevImages && prevImages.length > 0 && prevImages[0].imageUrl) {
+                  candidateBg = prevImages[0].imageUrl;
+                }
+              } catch {
+                // DB image query unavailable
+              }
+            }
+            if (candidateBg) {
+              rawBgUrl = candidateBg;
+              inheritedFromSceneNum = prevScene.number || p + 1;
+              break;
+            }
           }
         }
 
@@ -413,19 +484,36 @@ export class RemotionManifestAdapter {
             imageUrl: resolvedBg,
             fit: animData.background?.fit || 'cover',
             removed: false,
+            inheritedFromScene: inheritedFromSceneNum,
           };
         }
       }
 
-      // 3. Narration Audio resolution
+      // 2. Audio Scheduling & Overlap Prevention Model
+      const INITIAL_PAUSE_MS = 250;
+      const SPEECH_TURN_GAP_MS = 380;
+      const SCENE_END_BUFFER_MS = 500;
+
       let narrationConfig: RemotionScene['narration'] = undefined;
+      let narrationDurationMs = 0;
+      let narrStartMs = 0;
+      let narrEndMs = 0;
+
       if (scene.audioUrl) {
-        const resolvedAudio = embedBase64Audio
+        const resolvedNarrationAudio = embedBase64Audio
           ? this.convertLocalAudioToDataUri(scene.audioUrl)
           : this.resolveAssetUrl(scene.audioUrl);
-        const narrationDurationMs = scene.actualAudioDurationMs || durationMs;
+
+        narrationDurationMs = scene.actualAudioDurationMs && scene.actualAudioDurationMs > 0
+          ? scene.actualAudioDurationMs
+          : (scene.narration ? Math.max(1500, Math.round(scene.narration.length * 75)) : 2500);
+
+        narrStartMs = typeof scene.narrationStartMs === 'number' ? scene.narrationStartMs : INITIAL_PAUSE_MS;
+        narrEndMs = narrStartMs + narrationDurationMs;
+
         narrationConfig = {
-          url: resolvedAudio,
+          url: resolvedNarrationAudio,
+          startMs: narrStartMs,
           durationMs: narrationDurationMs,
           volume: 1.0,
           text: scene.narration,
@@ -433,9 +521,120 @@ export class RemotionManifestAdapter {
         };
       }
 
-      // 4. Character Instances with self-contained rig embedding
+      // Schedule dialogue lines sequentially after narration (or from INITIAL_PAUSE_MS if no narration)
+      let currentAudioCursorMs = narrEndMs > 0 ? narrEndMs + SPEECH_TURN_GAP_MS : INITIAL_PAUSE_MS;
+      const rawDialogues = Array.isArray(animData.dialogueLines)
+        ? animData.dialogueLines
+        : (Array.isArray(animData.dialogues) ? animData.dialogues : []);
+
+      const adaptedDialogues: NonNullable<RemotionScene['dialogues']> = [];
+      const audioSchedule: AudioSegment[] = [];
+
+      if (narrationConfig) {
+        audioSchedule.push({
+          speakerId: 'narrator',
+          speakerType: 'narrator',
+          text: scene.narration || '',
+          audioSrc: narrationConfig.url,
+          startMs: narrStartMs,
+          endMs: narrEndMs,
+          durationMs: narrationDurationMs,
+          volume: 1.0,
+          language: story.targetLanguage || 'hi',
+          priority: 10,
+          wordTimings: narrationConfig.wordTimings,
+        });
+      }
+
+      for (let dIdx = 0; dIdx < rawDialogues.length; dIdx++) {
+        const line = rawDialogues[dIdx];
+        const rawAudio = line.audioUrl || line.url;
+        const resolvedAudio = rawAudio
+          ? (embedBase64Audio ? this.convertLocalAudioToDataUri(rawAudio) : this.resolveAssetUrl(rawAudio))
+          : undefined;
+
+        const lineDurationMs = line.durationMs && line.durationMs > 0
+          ? line.durationMs
+          : (line.text ? Math.max(1200, Math.round(line.text.length * 70)) : 2000);
+
+        let lineStartMs: number;
+        if (line.allowSimultaneous) {
+          lineStartMs = typeof line.startMs === 'number' ? line.startMs : currentAudioCursorMs;
+        } else {
+          if (typeof line.startMs === 'number' && line.startMs >= currentAudioCursorMs) {
+            lineStartMs = line.startMs;
+          } else {
+            lineStartMs = currentAudioCursorMs;
+          }
+        }
+
+        const lineEndMs = lineStartMs + lineDurationMs;
+        currentAudioCursorMs = lineEndMs + SPEECH_TURN_GAP_MS;
+
+        const adaptedLine = {
+          id: line.id || `dlg-${sceneNum}-${dIdx + 1}`,
+          characterName: line.characterName || 'Character',
+          characterInstanceId: line.characterInstanceId,
+          characterId: line.characterId,
+          text: line.text || '',
+          url: resolvedAudio,
+          audioUrl: resolvedAudio,
+          startMs: lineStartMs,
+          durationMs: lineDurationMs,
+          volume: typeof line.volume === 'number' ? Math.max(0, Math.min(1, line.volume)) : 1.0,
+          facialExpression: line.facialExpression,
+          emotion: line.emotion,
+          speakingDirection: line.speakingDirection,
+          visemeCues: line.visemeCues,
+          wordTimings: Array.isArray(line.wordTimings) && line.wordTimings.length > 0
+            ? line.wordTimings
+            : estimateWordTimings(line.text || '', lineDurationMs),
+          allowSimultaneous: Boolean(line.allowSimultaneous),
+        };
+
+        adaptedDialogues.push(adaptedLine);
+
+        if (resolvedAudio) {
+          audioSchedule.push({
+            speakerId: adaptedLine.characterId || adaptedLine.characterInstanceId || adaptedLine.characterName,
+            speakerType: 'character',
+            text: adaptedLine.text,
+            audioSrc: resolvedAudio,
+            startMs: lineStartMs,
+            endMs: lineEndMs,
+            durationMs: lineDurationMs,
+            volume: adaptedLine.volume,
+            language: story.targetLanguage || 'hi',
+            priority: 5,
+            wordTimings: adaptedLine.wordTimings,
+          });
+        }
+      }
+
+      // Compute final scene duration (ensures audio is never truncated)
+      let durationSec = 4;
+      if (scene.endMs && scene.startMs && scene.endMs > scene.startMs) {
+        durationSec = (scene.endMs - scene.startMs) / 1000;
+      } else if (scene.estimatedDurationMs && scene.estimatedDurationMs > 0) {
+        durationSec = scene.estimatedDurationMs / 1000;
+      }
+
+      const totalAudioEndMs = Math.max(
+        narrEndMs,
+        adaptedDialogues.reduce((max, d) => Math.max(max, d.startMs + d.durationMs), 0)
+      );
+
+      const requiredAudioDurationSec = totalAudioEndMs > 0
+        ? (totalAudioEndMs + SCENE_END_BUFFER_MS) / 1000
+        : 0;
+
+      durationSec = Math.max(durationSec, requiredAudioDurationSec, 2.0);
+      durationSec = Math.min(120, durationSec);
+      const durationMs = Math.round(durationSec * 1000);
+
+      // 3. Character Instances with storybook staging heuristics
       const rawInstances = animData.characterInstances || [];
-      const adaptedInstances: RemotionScene['characterInstances'] = rawInstances.map((inst: any) => {
+      const adaptedInstances: RemotionScene['characterInstances'] = rawInstances.map((inst: any, instIdx: number) => {
         const hasHeadTags = inst.customRig?.parts?.head?.shapes?.some(
           (s: any) => s.tag === 'eyes' || s.tag === 'mouth'
         );
@@ -451,6 +650,17 @@ export class RemotionManifestAdapter {
           rig = getVectorRig(inst.characterId);
         }
 
+        // Two-character conversational staging heuristic:
+        // When two characters are in the scene and positioned left & right,
+        // ensure character on the right faces left toward character on the left.
+        let flipX = Boolean(inst.flipX);
+        if (rawInstances.length === 2 && inst.flipX === undefined) {
+          const other = rawInstances[1 - instIdx];
+          if (other && inst.x > other.x) {
+            flipX = true;
+          }
+        }
+
         return {
           instanceId: inst.instanceId,
           characterId: inst.characterId,
@@ -459,8 +669,8 @@ export class RemotionManifestAdapter {
           y: inst.y,
           scale: inst.scale ?? 1.0,
           rotation: inst.rotation ?? 0,
-          flipX: Boolean(inst.flipX),
-          zIndex: inst.zIndex ?? 1,
+          flipX,
+          zIndex: inst.zIndex ?? (instIdx + 1),
           expression: inst.expression || 'neutral',
           customRig: rig,
         };
@@ -490,34 +700,7 @@ export class RemotionManifestAdapter {
         durationMs: cue.durationMs || 1000,
       }));
 
-      // 7. Dialogue Lines with audio URL resolution
-      const adaptedDialogues = rawDialogues.map((line: any) => {
-        const rawAudio = line.audioUrl || line.url;
-        const resolvedAudio = rawAudio
-          ? (embedBase64Audio ? this.convertLocalAudioToDataUri(rawAudio) : this.resolveAssetUrl(rawAudio))
-          : undefined;
-        return {
-          id: line.id,
-          characterName: line.characterName || 'Character',
-          characterInstanceId: line.characterInstanceId,
-          characterId: line.characterId,
-          text: line.text || '',
-          url: resolvedAudio,
-          audioUrl: resolvedAudio,
-          startMs: line.startMs || 0,
-          durationMs: line.durationMs || 2000,
-          volume: typeof line.volume === 'number' ? Math.max(0, Math.min(1, line.volume)) : 1.0,
-          facialExpression: line.facialExpression,
-          emotion: line.emotion,
-          speakingDirection: line.speakingDirection,
-          visemeCues: line.visemeCues,
-          wordTimings: Array.isArray(line.wordTimings) && line.wordTimings.length > 0
-            ? line.wordTimings
-            : estimateWordTimings(line.text || '', Math.max(250, line.durationMs || 2000)),
-        };
-      });
-
-      // 8. Educational Overlays
+      // 7. Educational Overlays
       const adaptedOverlays = (animData.overlays || []).map((o: any) => ({
         id: o.id,
         type: o.type,
@@ -537,10 +720,11 @@ export class RemotionManifestAdapter {
           : 'above_characters' as const,
       }));
 
-      // 9. Camera settings
+      // 8. Camera settings & transitions
       const cameraMovement = animData.cameraMovement || scene.cameraMovement || 'static';
       const cameraRotation = animData.cameraRotation || 'none';
       const cameraRotationDegrees = animData.cameraRotationDegrees ?? 10;
+      const transition = animData.transition || scene.transition || { type: 'fade', durationMs: 200 };
 
       adaptedScenes.push({
         id: scene.sceneId || scene.id || `scene-${sceneNum}`,
@@ -554,11 +738,13 @@ export class RemotionManifestAdapter {
         cameraRotationDegrees,
         narration: narrationConfig,
         dialogues: adaptedDialogues,
+        audioSchedule,
         characterInstances: adaptedInstances,
         animationClips: adaptedClips,
         expressionCues: adaptedExpCues,
         overlays: adaptedOverlays,
         formatVariants: animData.formatVariants,
+        transition,
       });
     }
 

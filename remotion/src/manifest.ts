@@ -197,6 +197,66 @@ export interface NarrationConfig {
   volume?: number;
   text?: string;
   wordTimings?: WordTiming[];
+  startMs?: number;
+}
+
+export interface AudioSegment {
+  speakerId: string;
+  speakerType: 'narrator' | 'character';
+  text: string;
+  audioSrc: string;
+  startMs: number;
+  endMs: number;
+  durationMs: number;
+  volume: number;
+  language?: string;
+  priority?: number;
+  wordTimings?: WordTiming[];
+}
+
+export interface AudioTimelineValidationResult {
+  valid: boolean;
+  overlaps: Array<{
+    sceneId: string;
+    sceneNumber?: number;
+    speaker1: string;
+    speaker2: string;
+    range: string;
+    overlapMs: number;
+  }>;
+}
+
+export function validateAudioTimeline(scenes: Scene[]): AudioTimelineValidationResult {
+  const overlaps: AudioTimelineValidationResult['overlaps'] = [];
+
+  for (const sc of scenes) {
+    const segments = sc.audioSchedule || [];
+    for (let i = 0; i < segments.length; i++) {
+      for (let j = i + 1; j < segments.length; j++) {
+        const a = segments[i];
+        const b = segments[j];
+        const overlapStart = Math.max(a.startMs, b.startMs);
+        const overlapEnd = Math.min(a.endMs, b.endMs);
+        const overlapMs = overlapEnd - overlapStart;
+
+        if (overlapMs > 50) {
+          overlaps.push({
+            sceneId: sc.id,
+            sceneNumber: sc.sceneNumber,
+            speaker1: a.speakerId,
+            speaker2: b.speakerId,
+            range: `${overlapStart}ms - ${overlapEnd}ms`,
+            overlapMs,
+          });
+        }
+      }
+    }
+  }
+
+  return {
+    valid: overlaps.length === 0,
+    overlaps,
+  };
 }
 
 export interface TransitionConfig {
@@ -241,6 +301,7 @@ export interface Scene {
   cameraRotationDegrees?: number;
   narration?: NarrationConfig;
   dialogues?: DialogueLine[];
+  audioSchedule?: AudioSegment[];
   characterInstances?: CharacterInstance[];
   animationClips?: AnimationClip[];
   expressionCues?: ExpressionCue[];

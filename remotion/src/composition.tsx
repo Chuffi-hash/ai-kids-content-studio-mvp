@@ -207,6 +207,147 @@ function getSubtitleDisplayChunk(opts: {
   };
 }
 
+/**
+ * Renders an intentional, vibrant storybook scenic backdrop (sky, sun, soft hills, grass, flowers)
+ * ensuring that missing scene images never degrade into a dark void.
+ */
+function StorybookScenicBackdrop({
+  width,
+  height,
+  sceneNumber = 1,
+}: {
+  width: number;
+  height: number;
+  sceneNumber?: number;
+}) {
+  const palettes = [
+    {
+      skyTop: '#60a5fa',
+      skyBottom: '#fef08a',
+      hillBack: '#86efac',
+      hillFront: '#4ade80',
+      sunColor: '#fde047',
+      sunGlow: '#fef08a',
+    },
+    {
+      skyTop: '#38bdf8',
+      skyBottom: '#fed7aa',
+      hillBack: '#6ee7b7',
+      hillFront: '#22c55e',
+      sunColor: '#fbbf24',
+      sunGlow: '#fde68a',
+    },
+    {
+      skyTop: '#818cf8',
+      skyBottom: '#fbcfe8',
+      hillBack: '#a7f3d0',
+      hillFront: '#16a34a',
+      sunColor: '#f59e0b',
+      sunGlow: '#fed7aa',
+    },
+  ];
+  const p = palettes[(sceneNumber - 1) % palettes.length];
+  const groundY = Math.round(height * 0.72);
+
+  return (
+    <svg
+      width={width}
+      height={height}
+      viewBox={`0 0 ${width} ${height}`}
+      style={{ position: 'absolute', top: 0, left: 0 }}
+      preserveAspectRatio="none"
+    >
+      <defs>
+        <linearGradient id={`skyGrad-${sceneNumber}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={p.skyTop} />
+          <stop offset="65%" stopColor={p.skyBottom} />
+          <stop offset="100%" stopColor="#d9f99d" />
+        </linearGradient>
+        <radialGradient id={`sunGlow-${sceneNumber}`} cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stopColor={p.sunGlow} stopOpacity="0.8" />
+          <stop offset="40%" stopColor={p.sunColor} stopOpacity="0.4" />
+          <stop offset="100%" stopColor={p.sunColor} stopOpacity="0" />
+        </radialGradient>
+        <linearGradient id={`hillBackGrad-${sceneNumber}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={p.hillBack} />
+          <stop offset="100%" stopColor="#15803d" />
+        </linearGradient>
+        <linearGradient id={`groundGrad-${sceneNumber}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={p.hillFront} />
+          <stop offset="100%" stopColor="#166534" />
+        </linearGradient>
+      </defs>
+
+      <rect width={width} height={height} fill={`url(#skyGrad-${sceneNumber})`} />
+
+      <circle
+        cx={Math.round(width * 0.82)}
+        cy={Math.round(height * 0.22)}
+        r={Math.round(Math.min(width, height) * 0.18)}
+        fill={`url(#sunGlow-${sceneNumber})`}
+      />
+      <circle
+        cx={Math.round(width * 0.82)}
+        cy={Math.round(height * 0.22)}
+        r={Math.round(Math.min(width, height) * 0.08)}
+        fill={p.sunColor}
+        opacity={0.95}
+      />
+
+      <g opacity={0.75} fill="#ffffff">
+        <ellipse
+          cx={Math.round(width * 0.25)}
+          cy={Math.round(height * 0.20)}
+          rx={Math.round(width * 0.09)}
+          ry={Math.round(height * 0.045)}
+        />
+        <ellipse
+          cx={Math.round(width * 0.29)}
+          cy={Math.round(height * 0.17)}
+          rx={Math.round(width * 0.06)}
+          ry={Math.round(height * 0.04)}
+        />
+        <ellipse
+          cx={Math.round(width * 0.21)}
+          cy={Math.round(height * 0.19)}
+          rx={Math.round(width * 0.05)}
+          ry={Math.round(height * 0.035)}
+        />
+
+        <ellipse
+          cx={Math.round(width * 0.62)}
+          cy={Math.round(height * 0.28)}
+          rx={Math.round(width * 0.075)}
+          ry={Math.round(height * 0.038)}
+        />
+        <ellipse
+          cx={Math.round(width * 0.66)}
+          cy={Math.round(height * 0.26)}
+          rx={Math.round(width * 0.05)}
+          ry={Math.round(height * 0.032)}
+        />
+      </g>
+
+      <path
+        d={`M 0 ${Math.round(height * 0.68)} Q ${Math.round(width * 0.3)} ${Math.round(height * 0.58)} ${Math.round(width * 0.65)} ${Math.round(height * 0.65)} T ${width} ${Math.round(height * 0.62)} L ${width} ${height} L 0 ${height} Z`}
+        fill={`url(#hillBackGrad-${sceneNumber})`}
+        opacity={0.85}
+      />
+
+      <path
+        d={`M 0 ${groundY} Q ${Math.round(width * 0.45)} ${Math.round(groundY - height * 0.04)} ${width} ${groundY} L ${width} ${height} L 0 ${height} Z`}
+        fill={`url(#groundGrad-${sceneNumber})`}
+      />
+
+      <circle cx={Math.round(width * 0.12)} cy={Math.round(groundY + 12)} r={4} fill="#fde047" opacity={0.9} />
+      <circle cx={Math.round(width * 0.28)} cy={Math.round(groundY + 18)} r={3.5} fill="#f43f5e" opacity={0.85} />
+      <circle cx={Math.round(width * 0.52)} cy={Math.round(groundY + 14)} r={4} fill="#ffffff" opacity={0.9} />
+      <circle cx={Math.round(width * 0.74)} cy={Math.round(groundY + 20)} r={3.5} fill="#fbbf24" opacity={0.85} />
+      <circle cx={Math.round(width * 0.88)} cy={Math.round(groundY + 15)} r={4} fill="#ec4899" opacity={0.9} />
+    </svg>
+  );
+}
+
 function SceneView({
   scene,
   format,
@@ -303,8 +444,8 @@ function SceneView({
   const charOverrides = formatVariant?.characterOverrides;
   const overlayOverrides = formatVariant?.overlayOverrides;
 
-  // Coordinate adaptation for non-16:9 formats
-  const instances = (scene.characterInstances || []).map((inst) => {
+  // Coordinate adaptation for non-16:9 formats and storybook character scaling
+  const instances = (scene.characterInstances || []).map((inst, instIdx, arr) => {
     const override = charOverrides?.[inst.instanceId];
     if (override) {
       return {
@@ -314,58 +455,98 @@ function SceneView({
         scale: override.scale !== undefined ? override.scale : inst.scale,
       };
     }
-    if (width === 1280 && height === 720) {
-      return inst;
+
+    const rawScale = inst.scale ?? 1.0;
+    const isSingleChar = arr.length === 1;
+
+    let targetFlipX = inst.flipX;
+    if (arr.length === 2 && targetFlipX === undefined) {
+      const other = arr[1 - instIdx];
+      if (other && inst.x > other.x) {
+        targetFlipX = true;
+      }
     }
+
+    if (width === 1280 && height === 720) {
+      // 16:9 standard landscape:
+      // Base character rig is 220px. Boost scale (1.4x for two-shot, 1.65x for single char focus)
+      // so characters fill 35% - 48% of canvas height.
+      const scaleMult = isSingleChar ? 1.65 : 1.40;
+      const boostedScale = Number((rawScale * scaleMult).toFixed(2));
+      const adjustedY = Math.min(height * 0.78, Math.max(height * 0.50, inst.y));
+      return {
+        ...inst,
+        y: Math.round(adjustedY),
+        scale: boostedScale,
+        flipX: targetFlipX ?? inst.flipX,
+      };
+    }
+
     if (format === '16:9') {
       const s = width / 1280;
+      const scaleMult = (isSingleChar ? 1.65 : 1.40) * s;
       return {
         ...inst,
         x: Math.round(inst.x * s),
         y: Math.round(inst.y * s),
-        scale: Number(((inst.scale || 1.0) * s).toFixed(2)),
+        scale: Number((rawScale * scaleMult).toFixed(2)),
+        flipX: targetFlipX ?? inst.flipX,
       };
     }
+
     if (format === '9:16' || width < height) {
-      const xOffset = inst.x - 640;
-      const newX = width / 2 + (xOffset * (width / 1280));
-      const yRatio = inst.y / 720;
-      const newY = yRatio * height;
-      const scaleMult = height / 1280;
-      const baseScale = (inst.scale || 1.0) <= 1.0 ? (inst.scale || 1.0) * 1.15 : (inst.scale || 1.0);
+      // 9:16 Portrait Reel:
+      // Characters must fill ~38% - 50% of the 1280p canvas height (480-640px).
+      // Scale multiplier is ~2.30x (or 2.65x for single character focus).
+      // Characters stand safely anchored above subtitle safe area (Y ~ 63% height).
+      const scaleMult = isSingleChar ? 2.65 : 2.30;
+      const boostedScale = Number((rawScale * scaleMult).toFixed(2));
+
+      let newX = width / 2;
+      if (arr.length === 2) {
+        newX = instIdx === 0 ? Math.round(width * 0.32) : Math.round(width * 0.68);
+      } else if (!isSingleChar) {
+        const xOffset = inst.x - 640;
+        newX = width / 2 + (xOffset * (width / 1280));
+      }
+
+      const newY = Math.round(height * 0.63);
+
       return {
         ...inst,
         x: Math.round(newX),
-        y: Math.round(newY),
-        scale: Number((baseScale * scaleMult).toFixed(2)),
+        y: newY,
+        scale: boostedScale,
+        flipX: targetFlipX ?? inst.flipX,
       };
     }
+
     if (format === '1:1') {
       const xOffset = inst.x - 640;
       const newX = width / 2 + (xOffset * (width / 1280));
-      const yRatio = inst.y / 720;
-      const newY = yRatio * height;
-      const scaleMult = width / 720;
+      const scaleMult = (isSingleChar ? 1.65 : 1.40) * (width / 720);
       return {
         ...inst,
         x: Math.round(newX),
-        y: Math.round(newY),
-        scale: Number(((inst.scale || 1.0) * scaleMult).toFixed(2)),
+        y: Math.round(inst.y * (height / 720)),
+        scale: Number((rawScale * scaleMult).toFixed(2)),
+        flipX: targetFlipX ?? inst.flipX,
       };
     }
+
     if (format === '4:5') {
       const xOffset = inst.x - 640;
       const newX = width / 2 + (xOffset * (width / 1280));
-      const yRatio = inst.y / 720;
-      const newY = yRatio * height;
-      const scaleMult = width / 720;
+      const scaleMult = (isSingleChar ? 1.85 : 1.55) * (width / 720);
       return {
         ...inst,
         x: Math.round(newX),
-        y: Math.round(newY),
-        scale: Number(((inst.scale || 1.0) * 1.08 * scaleMult).toFixed(2)),
+        y: Math.round(inst.y * (height / 900)),
+        scale: Number((rawScale * scaleMult).toFixed(2)),
+        flipX: targetFlipX ?? inst.flipX,
       };
     }
+
     return inst;
   });
 
@@ -405,11 +586,12 @@ function SceneView({
   );
 
   const narrationUrl = scene.narration?.url || scene.narrationUrl;
+  const narrStartMs = scene.narration?.startMs || 0;
   const narrationDurationMs = scene.narration?.durationMs || scene.durationMs;
   const isNarrationSpeaking = Boolean(
     narrationUrl &&
-    sceneRelativeMs >= 0 &&
-    sceneRelativeMs <= narrationDurationMs
+    sceneRelativeMs >= narrStartMs &&
+    sceneRelativeMs <= narrStartMs + narrationDurationMs
   );
 
   const dialogueRelativeMs = activeDialogue ? sceneRelativeMs - activeDialogue.startMs : 0;
@@ -417,9 +599,10 @@ function SceneView({
     (word) => dialogueRelativeMs >= word.startMs && dialogueRelativeMs < word.endMs
   ) ?? -1;
 
+  const narrativeRelativeMs = Math.max(0, sceneRelativeMs - narrStartMs);
   const narrationWordTimings = scene.narration?.wordTimings;
   const activeNarrWordIndex = narrationWordTimings?.findIndex(
-    (w) => sceneRelativeMs >= w.startMs && sceneRelativeMs < w.endMs
+    (w) => narrativeRelativeMs >= w.startMs && narrativeRelativeMs < w.endMs
   ) ?? -1;
 
   // Subtitle Payload: Character Dialogue takes priority; Narration is shown when narration speaks or caption exists
@@ -443,7 +626,7 @@ function SceneView({
         chunk: getSubtitleDisplayChunk({
           text: scene.narration?.text || scene.caption || '',
           wordTimings: narrationWordTimings,
-          relativeMs: sceneRelativeMs,
+          relativeMs: narrativeRelativeMs,
           totalDurationMs: narrationDurationMs,
           activeWordIndex: activeNarrWordIndex,
         }),
@@ -463,7 +646,7 @@ function SceneView({
           transformOrigin: '50% 50%',
         }}
       >
-        {/* Background Layer: Video Clip, Image Sequence, Background Image, or Animated SVG Canvas */}
+        {/* Background Layer: Video Clip, Image Sequence, Background Image, or Storybook Scenic Canvas */}
         {scene.videoSrc ? (
           <AbsoluteFill>
             <Video
@@ -499,33 +682,17 @@ function SceneView({
                 height: '100%',
                 objectFit,
               }}
+              onError={(e) => {
+                console.warn('[Remotion] Scene background image load failed, falling back to storybook scenery:', e);
+              }}
             />
           </AbsoluteFill>
         ) : (
-          <svg
+          <StorybookScenicBackdrop
             width={width}
             height={height}
-            viewBox={`0 0 ${width} ${height}`}
-            style={{ position: 'absolute', top: 0, left: 0 }}
-          >
-            <rect width={width} height={height} fill="#101726" />
-            <line
-              x1={0}
-              y1={Math.round(height * 0.75)}
-              x2={width}
-              y2={Math.round(height * 0.75)}
-              stroke="#1e293b"
-              strokeWidth={2}
-            />
-            <rect
-              x={0}
-              y={Math.round(height * 0.75)}
-              width={width}
-              height={Math.round(height * 0.25)}
-              fill="#0d131f"
-              opacity={0.6}
-            />
-          </svg>
+            sceneNumber={scene.sceneNumber || 1}
+          />
         )}
 
         {/* Vector Characters & Overlays SVG Plane */}
@@ -796,13 +963,18 @@ function SceneView({
         </div>
       )}
 
-      {/* Narration Audio */}
+      {/* Narration Audio: Strictly sequenced to startMs and durationMs */}
       {narrationUrl && (
-        <Audio
-          src={narrationUrl}
-          volume={scene.narration?.volume ?? 1.0}
-          onError={(e) => console.warn('[Remotion] Narration audio error:', e)}
-        />
+        <Sequence
+          from={frames(scene.narration?.startMs || 0, fps)}
+          durationInFrames={frames(scene.narration?.durationMs || scene.durationMs, fps)}
+        >
+          <Audio
+            src={narrationUrl}
+            volume={scene.narration?.volume ?? 1.0}
+            onError={(e) => console.warn('[Remotion] Narration audio error:', e)}
+          />
+        </Sequence>
       )}
 
       {/* Character Dialogue Audio Tracks */}
