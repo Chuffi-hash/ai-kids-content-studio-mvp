@@ -55,6 +55,7 @@ import {
   ChevronUpIcon,
 } from '../common/Icons';
 import { CollapsibleSection } from './CollapsibleSection';
+import { getAllBackgroundAssets, BackgroundAsset, autoDirectStory } from '../../services/studio.service';
 
 
 export type InspectorSection =
@@ -258,14 +259,18 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showRemoveVoiceConfirm, setShowRemoveVoiceConfirm] = useState(false);
 
-  // Scene Background State (Phase 1)
+  // Scene Background State (Phase 1 & Background Studio)
   const bgFileInputRef = useRef<HTMLInputElement | null>(null);
   const [isUploadingBg, setIsUploadingBg] = useState(false);
   const [bgError, setBgError] = useState<string | null>(null);
   const [showBgPicker, setShowBgPicker] = useState(false);
+  const [bgPickerTab, setBgPickerTab] = useState<'story' | 'studio'>('story');
   const [storyBackgrounds, setStoryBackgrounds] = useState<StoryBackgroundImage[]>([]);
   const [isLoadingStoryBackgrounds, setIsLoadingStoryBackgrounds] = useState(false);
+  const [studioBackgrounds, setStudioBackgrounds] = useState<BackgroundAsset[]>([]);
+  const [isLoadingStudioBackgrounds, setIsLoadingStudioBackgrounds] = useState(false);
   const [showRemoveBgConfirm, setShowRemoveBgConfirm] = useState(false);
+  const [isAutoDirectingScene, setIsAutoDirectingScene] = useState(false);
 
   const [bgImgLoadError, setBgImgLoadError] = useState(false);
   const [previewImgError, setPreviewImgError] = useState(false);
@@ -784,6 +789,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
   };
 
   const handleOpenStoryBackgroundsModal = () => {
+    setBgPickerTab('story');
     setShowBgPicker(true);
     if (storyId) {
       setIsLoadingStoryBackgrounds(true);
@@ -794,6 +800,16 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
     }
   };
 
+  const handleOpenStudioBackgroundsModal = () => {
+    setBgPickerTab('studio');
+    setShowBgPicker(true);
+    setIsLoadingStudioBackgrounds(true);
+    getAllBackgroundAssets()
+      .then((assets) => setStudioBackgrounds(assets))
+      .catch((err) => console.warn('Failed to load studio backgrounds:', err))
+      .finally(() => setIsLoadingStudioBackgrounds(false));
+  };
+
   const handleSelectStoryBackground = (imageUrl: string) => {
     setShowBgPicker(false);
     setBgError(null);
@@ -801,6 +817,20 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
       onSetBackground(scene.sceneId, imageUrl, currentBgFit);
     } else {
       setSceneBackground(scene.sceneId, imageUrl, currentBgFit)
+        .then((res) => {
+          if (res.scene) onUpdateScene(scene.sceneId, res.scene);
+        })
+        .catch((err) => setBgError(err.message || 'Failed to set background'));
+    }
+  };
+
+  const handleSelectStudioBackground = (bg: BackgroundAsset) => {
+    setShowBgPicker(false);
+    setBgError(null);
+    if (onSetBackground) {
+      onSetBackground(scene.sceneId, bg.imageUrl, currentBgFit);
+    } else {
+      setSceneBackground(scene.sceneId, bg.imageUrl, currentBgFit)
         .then((res) => {
           if (res.scene) onUpdateScene(scene.sceneId, res.scene);
         })
@@ -819,6 +849,45 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
           if (res.scene) onUpdateScene(scene.sceneId, res.scene);
         })
         .catch((err) => setBgError(err.message || 'Failed to remove background'));
+    }
+  };
+
+  const handleShotTypeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const val = e.target.value;
+    const anim = {
+      ...(scene.animationData || {
+        version: 1,
+        viewport: { width: 1280, height: 720 },
+        characterInstances: [],
+        animationClips: [],
+      }),
+      shotType: val,
+    };
+    if (onUpdateAnimationData) {
+      onUpdateAnimationData(scene.sceneId, anim as any);
+    } else {
+      onUpdateScene(scene.sceneId, { animationData: anim as any });
+    }
+  };
+
+  const handleTransitionChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const val = e.target.value;
+    const anim = {
+      ...(scene.animationData || {
+        version: 1,
+        viewport: { width: 1280, height: 720 },
+        characterInstances: [],
+        animationClips: [],
+      }),
+      transition: {
+        type: val,
+        durationMs: val === 'fade' ? 600 : 0,
+      },
+    };
+    if (onUpdateAnimationData) {
+      onUpdateAnimationData(scene.sceneId, anim as any);
+    } else {
+      onUpdateScene(scene.sceneId, { animationData: anim as any });
     }
   };
 
@@ -1514,6 +1583,34 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                     <option value="Over-the-shoulder shot">Over-the-shoulder shot</option>
                     <option value="Wide establishing shot">Wide establishing shot</option>
                   </select>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                  <div className="ed-field-group">
+                    <label className="ed-field-label">Shot Type (Cinematic Framing)</label>
+                    <select
+                      className="ed-select"
+                      value={(scene.animationData as any)?.shotType || 'wide_establishing'}
+                      onChange={handleShotTypeChange}
+                    >
+                      <option value="wide_establishing">Wide Establishing Shot</option>
+                      <option value="medium_twoshot">Medium Two-Shot</option>
+                      <option value="closeup_speaker">Close-Up (Speaker Focus)</option>
+                      <option value="character_focus">Character Focus</option>
+                    </select>
+                  </div>
+
+                  <div className="ed-field-group">
+                    <label className="ed-field-label">Scene Transition</label>
+                    <select
+                      className="ed-select"
+                      value={(scene.animationData as any)?.transition?.type || 'fade'}
+                      onChange={handleTransitionChange}
+                    >
+                      <option value="fade">Smooth Crossfade (600ms)</option>
+                      <option value="cut">Direct Cinematic Cut</option>
+                    </select>
+                  </div>
                 </div>
               </CollapsibleSection>
 
@@ -2503,6 +2600,20 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                       </button>
                       <button
                         type="button"
+                        className="ed-btn-action"
+                        onClick={handleOpenStudioBackgroundsModal}
+                        title="Choose from reusable environments generated in Background Studio"
+                        style={{
+                          background: 'rgba(139, 92, 246, 0.15)',
+                          borderColor: 'rgba(139, 92, 246, 0.4)',
+                          color: '#c4b5fd',
+                        }}
+                      >
+                        <SparklesIcon size={12} />
+                        <span>From Studio</span>
+                      </button>
+                      <button
+                        type="button"
                         className="ed-btn-action danger"
                         onClick={() => setShowRemoveBgConfirm(true)}
                         title="Remove background and restore default stage"
@@ -2580,6 +2691,20 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                       >
                         <ImageIcon size={13} />
                         <span>From Story</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="ed-btn-action"
+                        onClick={handleOpenStudioBackgroundsModal}
+                        title="Choose from reusable environments generated in Background Studio"
+                        style={{
+                          background: 'rgba(139, 92, 246, 0.15)',
+                          borderColor: 'rgba(139, 92, 246, 0.4)',
+                          color: '#c4b5fd',
+                        }}
+                      >
+                        <SparklesIcon size={13} />
+                        <span>From Studio</span>
                       </button>
                     </div>
                   </div>
@@ -3380,9 +3505,26 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
 
       {showBgPicker && (
         <div className="ed-bg-modal-overlay" onClick={() => setShowBgPicker(false)}>
-          <div className="ed-bg-modal-card" onClick={(e) => e.stopPropagation()}>
+          <div className="ed-bg-modal-card" onClick={(e) => e.stopPropagation()} style={{ width: '560px', maxWidth: '94vw' }}>
             <div className="ed-bg-modal-header">
-              <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 600 }}>Select From Story Backgrounds</h4>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <button
+                  type="button"
+                  className={`ed-tool-btn ${bgPickerTab === 'story' ? 'primary' : ''}`}
+                  onClick={() => handleOpenStoryBackgroundsModal()}
+                  style={{ fontSize: '12px' }}
+                >
+                  Story Backgrounds
+                </button>
+                <button
+                  type="button"
+                  className={`ed-tool-btn ${bgPickerTab === 'studio' ? 'primary' : ''}`}
+                  onClick={() => handleOpenStudioBackgroundsModal()}
+                  style={{ fontSize: '12px' }}
+                >
+                  Background Studio Library ({studioBackgrounds.length})
+                </button>
+              </div>
               <button
                 type="button"
                 className="ed-tool-btn"
@@ -3393,8 +3535,41 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
               </button>
             </div>
 
-            <div style={{ padding: '12px', maxHeight: '360px', overflowY: 'auto' }}>
-              {isLoadingStoryBackgrounds ? (
+            <div style={{ padding: '14px', maxHeight: '400px', overflowY: 'auto' }}>
+              {bgPickerTab === 'studio' ? (
+                isLoadingStudioBackgrounds ? (
+                  <div style={{ textAlign: 'center', padding: '24px 0', color: '#94a3b8', fontSize: '12px' }}>
+                    Loading Background Studio environments...
+                  </div>
+                ) : studioBackgrounds.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '24px 0', color: '#94a3b8', fontSize: '12px' }}>
+                    No backgrounds generated in Studio yet. Visit Background Studio to generate environment art.
+                  </div>
+                ) : (
+                  <div className="ed-bg-picker-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))' }}>
+                    {studioBackgrounds.map((bg) => (
+                      <div
+                        key={bg.id}
+                        className="ed-bg-picker-item"
+                        onClick={() => handleSelectStudioBackground(bg)}
+                        title={`${bg.name || bg.environmentType} (${bg.aspectRatio})`}
+                        style={{ cursor: 'pointer' }}
+                      >
+                        <img
+                          src={resolveAssetUrl(bg.imageUrl)}
+                          alt={bg.name || bg.environmentType}
+                          onError={(e) => {
+                            (e.target as HTMLElement).style.display = 'none';
+                          }}
+                        />
+                        <div className="ed-bg-picker-caption" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {bg.name || bg.environmentType}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )
+              ) : isLoadingStoryBackgrounds ? (
                 <div style={{ textAlign: 'center', padding: '24px 0', color: '#94a3b8', fontSize: '12px' }}>
                   Loading backgrounds...
                 </div>

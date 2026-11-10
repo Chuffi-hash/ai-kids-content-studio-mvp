@@ -4,6 +4,9 @@ import path from "path";
 import { contentRouter } from "./routes/content.js";
 import { productionRouter } from "./routes/production.js";
 import { characterRouter } from "./routes/characters.js";
+import { characterStudioRouter } from "./routes/character-studio.js";
+import { backgroundStudioRouter } from "./routes/background-studio.js";
+import { sceneDirectorRouter } from "./routes/scene-director.js";
 import { initializeDatabase } from "./services/database/database.service.js";
 
 // Initialize database
@@ -48,6 +51,9 @@ app.get("/api/health", (_req, res) => {
 app.use("/api/content", contentRouter);
 app.use("/api/production", productionRouter);
 app.use("/api/characters", characterRouter);
+app.use("/api/character-studio", characterStudioRouter);
+app.use("/api/background-studio", backgroundStudioRouter);
+app.use("/api/scene-director", sceneDirectorRouter);
 
 app.listen(port, () => {
   console.log(`API running on http://localhost:${port}`);

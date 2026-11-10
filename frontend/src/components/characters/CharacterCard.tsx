@@ -1,7 +1,7 @@
 import React from "react";
 import { Character } from "../../services/character.service";
 import { DeleteButton } from '../common/DeleteButton';
-import { UserIcon, EditIcon } from '../common/Icons';
+import { UserIcon, EditIcon, SparklesIcon } from '../common/Icons';
 import { VectorCharacterRenderer } from '../editor/animation/VectorCharacterRenderer';
 import { buildRigFromAppearance } from '../../utils/customCharacterRig';
 
@@ -9,6 +9,7 @@ interface CharacterCardProps {
   character: Character;
   onEdit?: () => void;
   onCustomize?: () => void;
+  onOpenStudio?: () => void;
   onDuplicate?: () => void;
   onDelete?: () => void;
 }
@@ -17,6 +18,7 @@ export default function CharacterCard({
   character,
   onEdit,
   onCustomize,
+  onOpenStudio,
   onDuplicate,
   onDelete,
 }: CharacterCardProps) {
@@ -80,6 +82,27 @@ export default function CharacterCard({
         <div className="character-card-header">
           <h3>{character.name}</h3>
           <div className="character-card-actions">
+            {onOpenStudio && (
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={onOpenStudio}
+                title={`AI Character Studio for ${character.name}`}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  fontSize: '11px',
+                  padding: '3px 8px',
+                  background: 'rgba(139, 92, 246, 0.15)',
+                  borderColor: 'rgba(139, 92, 246, 0.4)',
+                  color: '#c4b5fd',
+                }}
+              >
+                <SparklesIcon size={12} />
+                <span>AI Assets</span>
+              </button>
+            )}
             {onEdit && (
               <button
                 type="button"

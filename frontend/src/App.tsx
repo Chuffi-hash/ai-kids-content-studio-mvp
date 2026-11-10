@@ -6,6 +6,8 @@ import SceneDetailPage from "./pages/SceneDetailPage";
 import CharactersPage from "./pages/CharactersPage";
 import StoriesPage from "./pages/StoriesPage";
 import ProductionPage from "./pages/ProductionPage";
+import BackgroundsPage from "./pages/BackgroundsPage";
+import AssetLibraryPage from "./pages/AssetLibraryPage";
 import StorybookViewer from "./components/storybook/StorybookViewer";
 
 export default function App() {
@@ -17,6 +19,8 @@ export default function App() {
         <Route path="stories/:storyId" element={<StoryDetailPage />} />
         <Route path="stories/:storyId/scenes/:sceneId" element={<SceneDetailPage />} />
         <Route path="characters" element={<CharactersPage />} />
+        <Route path="backgrounds" element={<BackgroundsPage />} />
+        <Route path="assets" element={<AssetLibraryPage />} />
         <Route path="stories" element={<StoriesPage />} />
         <Route path="production" element={<ProductionPage />} />
         <Route path="story/:storyId/read" element={<StorybookViewer />} />

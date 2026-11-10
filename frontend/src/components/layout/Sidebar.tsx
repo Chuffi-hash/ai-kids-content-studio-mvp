@@ -5,6 +5,8 @@ import {
   BookOpenIcon,
   UsersIcon,
   FilmIcon,
+  ImageIcon,
+  LayersIcon,
 } from "../common/Icons";
 import { ThemeSelector } from "../common/ThemeToggle";
 
@@ -33,6 +35,16 @@ export default function Sidebar() {
       label: "Characters",
       icon: <UsersIcon size={17} />,
       path: "/characters",
+    },
+    {
+      label: "Backgrounds",
+      icon: <ImageIcon size={17} />,
+      path: "/backgrounds",
+    },
+    {
+      label: "Asset Library",
+      icon: <LayersIcon size={17} />,
+      path: "/assets",
     },
     {
       label: "Production",

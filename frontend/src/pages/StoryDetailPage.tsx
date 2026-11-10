@@ -11,6 +11,7 @@ import { CharacterInstance, AnimationClip, VectorSceneData, EducationalOverlay }
 import * as editorService from '../services/editor.service';
 import { generateScenes } from '../services/content.service';
 import { generateCharacterReferenceImage } from '../services/character.service';
+import { autoDirectStory } from '../services/studio.service';
 import { recalculateContiguousTimeline, validateSceneTiming, calculateRippleEdit } from '../utils/timingEngine';
 import { EditorAudioManager } from '../utils/editorAudioManager';
 import { TopToolbar } from '../components/editor/TopToolbar';
@@ -76,6 +77,7 @@ export default function StoryDetailPage() {
   const [generatingVoiceForScene, setGeneratingVoiceForScene] = useState<string | null>(null);
   const [generatingVideoForScene, setGeneratingVideoForScene] = useState<string | null>(null);
   const [generatingAllScenes, setGeneratingAllScenes] = useState<boolean>(false);
+  const [isAutoDirecting, setIsAutoDirecting] = useState<boolean>(false);
 
   // Global canvas preview format (preview viewport only, does not mutate scene records)
   const [previewFormat, setPreviewFormat] = useState<AspectRatioType>('16:9');
@@ -485,6 +487,36 @@ export default function StoryDetailPage() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleTogglePlay, handleUndo, handleRedo, previewMode]);
+
+  // ----------------------------------------------------
+  // AI Scene Director
+  // ----------------------------------------------------
+  const handleAutoDirect = async () => {
+    if (!storyId) return;
+    try {
+      setIsAutoDirecting(true);
+      const res = await autoDirectStory(storyId, previewFormat);
+      if (res.scenes && Array.isArray(res.scenes)) {
+        setScenes((prev) =>
+          prev.map((s) => {
+            const directed = res.scenes.find((d: any) => d.sceneId === s.sceneId);
+            if (directed) {
+              return {
+                ...s,
+                cameraDirection: directed.direction?.cameraDirection || s.cameraDirection,
+                animationData: directed.animationData || s.animationData,
+              };
+            }
+            return s;
+          })
+        );
+      }
+    } catch (err) {
+      console.error('Auto direct failed:', err);
+    } finally {
+      setIsAutoDirecting(false);
+    }
+  };
 
   // ----------------------------------------------------
   // Title & Target Duration Updates
@@ -1770,6 +1802,8 @@ export default function StoryDetailPage() {
         onOpenExport={() => setIsExportModalOpen(true)}
         onOpenStoryDetails={() => setIsStoryDetailsOpen(true)}
         onOpenImportScript={() => setIsImportScriptOpen(true)}
+        onAutoDirect={handleAutoDirect}
+        isAutoDirecting={isAutoDirecting}
         hasValidationErrors={hasValidationErrors}
         validationMessage={validationMessage}
       />

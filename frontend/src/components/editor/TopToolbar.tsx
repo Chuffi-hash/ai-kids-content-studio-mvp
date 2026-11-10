@@ -11,6 +11,7 @@ import {
   FilmIcon,
   CheckIcon,
   AlertTriangleIcon,
+  SparklesIcon,
 } from '../common/Icons';
 import { ThemeSelector } from '../common/ThemeToggle';
 
@@ -35,6 +36,8 @@ interface TopToolbarProps {
   onOpenExport: () => void;
   onOpenStoryDetails?: () => void;
   onOpenImportScript?: () => void;
+  onAutoDirect?: () => void;
+  isAutoDirecting?: boolean;
   hasValidationErrors?: boolean;
   validationMessage?: string;
 }
@@ -59,6 +62,8 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
   onOpenExport,
   onOpenStoryDetails,
   onOpenImportScript,
+  onAutoDirect,
+  isAutoDirecting,
   hasValidationErrors,
   validationMessage,
 }) => {
@@ -304,6 +309,28 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
 
       {/* Right: Export Button & 3-way Theme Selector */}
       <div className="ed-toolbar-right">
+        {onAutoDirect && (
+          <button
+            type="button"
+            className="ed-btn-action"
+            onClick={onAutoDirect}
+            disabled={isAutoDirecting}
+            title="Auto-direct camera shots, character framing and smooth transitions across all scenes"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.2), rgba(99, 102, 241, 0.2))',
+              borderColor: 'rgba(139, 92, 246, 0.45)',
+              color: '#c4b5fd',
+              fontSize: '11.5px',
+              padding: '5px 10px',
+            }}
+          >
+            <SparklesIcon size={13} color="#a78bfa" />
+            <span>{isAutoDirecting ? 'Directing...' : 'Auto-Direct Story'}</span>
+          </button>
+        )}
         <ThemeSelector />
         <button
           type="button"

@@ -12,6 +12,7 @@ import CharacterToolbar from "../components/characters/CharacterToolbar";
 import CharacterGrid from "../components/characters/CharacterGrid";
 import CharacterEmptyState from "../components/characters/CharacterEmptyState";
 import CharacterBuilderModal from "../components/characters/CharacterBuilderModal";
+import CharacterStudioModal from "../components/characters/CharacterStudioModal";
 import { ConfirmModal } from "../components/common/ConfirmModal";
 import { CloseIcon } from "../components/common/Icons";
 import "../components/characters/characters.css";
@@ -23,6 +24,8 @@ export default function CharactersPage() {
   const [builderCharacter, setBuilderCharacter] = useState<Character | null>(
     null,
   );
+  const [showStudioModal, setShowStudioModal] = useState(false);
+  const [studioCharacter, setStudioCharacter] = useState<Character | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [speciesFilter, setSpeciesFilter] = useState("");
   const [personalityFilter, setPersonalityFilter] = useState("");
@@ -70,6 +73,11 @@ export default function CharactersPage() {
   function handleOpenBuilder(character?: Character | null) {
     setBuilderCharacter(character || null);
     setShowBuilderModal(true);
+  }
+
+  function handleOpenStudio(character?: Character | null) {
+    setStudioCharacter(character || null);
+    setShowStudioModal(true);
   }
 
   async function handleSaveFromBuilder(data: any) {
@@ -213,6 +221,7 @@ export default function CharactersPage() {
       <CharacterLibraryHeader
         onCreateCharacter={() => handleOpenBuilder(null)}
         onOpenBuilder={() => handleOpenBuilder(null)}
+        onOpenStudio={() => handleOpenStudio(null)}
       />
       <CharacterToolbar
         searchQuery={searchQuery}
@@ -245,10 +254,21 @@ export default function CharactersPage() {
           characters={filteredCharacters}
           onEdit={handleEditCharacter}
           onCustomize={(char) => handleOpenBuilder(char)}
+          onOpenStudio={(char) => handleOpenStudio(char)}
           onDuplicate={(char) => handleDuplicateCharacter(char.id)}
           onDelete={handleDeleteCharacter}
         />
       )}
+
+      <CharacterStudioModal
+        isOpen={showStudioModal}
+        character={studioCharacter}
+        onClose={() => {
+          setShowStudioModal(false);
+          setStudioCharacter(null);
+        }}
+        onSaved={loadCharacters}
+      />
 
       <CharacterBuilderModal
         isOpen={showBuilderModal}

@@ -5,6 +5,7 @@ interface CharacterGridProps {
   characters: Character[];
   onEdit: (character: Character) => void;
   onCustomize?: (character: Character) => void;
+  onOpenStudio?: (character: Character) => void;
   onDuplicate?: (character: Character) => void;
   onDelete: (id: string, name: string) => void;
 }
@@ -13,6 +14,7 @@ export default function CharacterGrid({
   characters,
   onEdit,
   onCustomize,
+  onOpenStudio,
   onDuplicate,
   onDelete,
 }: CharacterGridProps) {
@@ -24,6 +26,7 @@ export default function CharacterGrid({
           character={character}
           onEdit={() => onEdit(character)}
           onCustomize={onCustomize ? () => onCustomize(character) : undefined}
+          onOpenStudio={onOpenStudio ? () => onOpenStudio(character) : undefined}
           onDuplicate={onDuplicate ? () => onDuplicate(character) : undefined}
           onDelete={() => onDelete(character.id, character.name)}
         />
