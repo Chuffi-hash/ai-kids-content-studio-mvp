@@ -106,6 +106,9 @@ function SceneView({
   isFirstScene = false,
   isLastScene = false,
   storyTitle,
+  fps: fallbackFps = 30,
+  width: fallbackWidth = 1280,
+  height: fallbackHeight = 720,
 }: {
   scene: Scene;
   format: AspectRatio;
@@ -114,9 +117,32 @@ function SceneView({
   isFirstScene?: boolean;
   isLastScene?: boolean;
   storyTitle?: string;
+  fps?: number;
+  width?: number;
+  height?: number;
 }) {
-  const frame = useCurrentFrame();
-  const { fps, width, height } = useVideoConfig();
+  let frame = 0;
+  try {
+    frame = useCurrentFrame();
+  } catch {
+    frame = 0;
+  }
+
+  let configFps = fallbackFps;
+  let configWidth = fallbackWidth;
+  let configHeight = fallbackHeight;
+  try {
+    const vc = useVideoConfig();
+    configFps = vc.fps;
+    configWidth = vc.width;
+    configHeight = vc.height;
+  } catch {
+    // Fall back safely to passed props if video context is unavailable
+  }
+
+  const fps = configFps;
+  const width = configWidth;
+  const height = configHeight;
   const totalFrames = frames(scene.durationMs, fps);
   const progress = Math.min(1, Math.max(0, frame / Math.max(1, totalFrames - 1)));
   const sceneRelativeMs = (frame / fps) * 1000;
@@ -703,6 +729,7 @@ export function StoryVideo(rawProps?: { manifest?: VideoManifest } | VideoManife
   const format = manifest?.format ?? '16:9';
   const template = getVideoTemplate(manifest?.templateId);
   const activeSubtitleTheme = manifest?.subtitleTheme || template.subtitleTheme;
+  const dims = dimensions(format, manifest?.resolution || '720p');
 
   let offset = 0;
 
@@ -738,6 +765,9 @@ export function StoryVideo(rawProps?: { manifest?: VideoManifest } | VideoManife
               isFirstScene={idx === 0}
               isLastScene={idx === arr.length - 1}
               storyTitle={manifest?.storyTitle}
+              fps={fps}
+              width={dims.width}
+              height={dims.height}
             />
           </Sequence>
         );
