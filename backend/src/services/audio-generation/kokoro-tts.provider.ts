@@ -42,21 +42,49 @@ export class KokoroTTSProvider implements TTSProvider {
   }
 
   /**
+   * Resolves a working Python executable that has kokoro_onnx and model files available.
+   * Checks explicit PYTHON_PATH, system Python installs, and virtualenvs.
+   */
+  private async resolveWorkingPython(): Promise<string | null> {
+    const candidates = [
+      this.pythonPath,
+      process.env.PYTHON_PATH,
+      'C:\\Users\\chuph\\AppData\\Local\\Programs\\Python\\Python311\\python.exe',
+      'python3',
+      'python',
+      'py',
+      path.join(process.cwd(), '.venv', 'Scripts', 'python.exe'),
+      path.join(process.cwd(), '..', '.venv', 'Scripts', 'python.exe'),
+    ].filter((p): p is string => Boolean(p && typeof p === 'string'));
+
+    const uniqueCandidates = Array.from(new Set(candidates));
+
+    for (const cand of uniqueCandidates) {
+      try {
+        const { stdout } = await execFileAsync(cand, [
+          this.scriptPath,
+          '--check',
+          '--model-dir',
+          this.modelDir,
+        ], { timeout: 8000 });
+        const res = JSON.parse(stdout.trim());
+        if (res.available) {
+          this.pythonPath = cand;
+          return cand;
+        }
+      } catch {
+        // Continue to evaluate next candidate
+      }
+    }
+    return null;
+  }
+
+  /**
    * Checks whether the Python runtime, kokoro-onnx package, and model files are ready.
    */
   async isAvailable(): Promise<boolean> {
-    try {
-      const { stdout } = await execFileAsync(this.pythonPath, [
-        this.scriptPath,
-        '--check',
-        '--model-dir',
-        this.modelDir,
-      ], { timeout: 10000 });
-      const res = JSON.parse(stdout.trim());
-      return Boolean(res.available);
-    } catch (e) {
-      return false;
-    }
+    const working = await this.resolveWorkingPython();
+    return Boolean(working);
   }
 
   /**
@@ -66,6 +94,8 @@ export class KokoroTTSProvider implements TTSProvider {
     if (this.voicesCache) {
       return this.voicesCache;
     }
+
+    await this.resolveWorkingPython();
 
     try {
       const { stdout } = await execFileAsync(this.pythonPath, [
@@ -101,6 +131,11 @@ export class KokoroTTSProvider implements TTSProvider {
   ): Promise<TTSGenerationResult> {
     if (!text || text.trim().length === 0) {
       throw new Error('Text is required for TTS speech synthesis');
+    }
+
+    const hasWorkingPython = await this.resolveWorkingPython();
+    if (!hasWorkingPython) {
+      throw new Error('Kokoro-82M runtime is not available: python packages or models not found');
     }
 
     const effectiveLang = resolveEffectiveLanguage({ lang: options?.lang, text });

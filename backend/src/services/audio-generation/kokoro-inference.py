@@ -24,14 +24,23 @@ def get_default_model_dir():
     return os.path.join(backend_dir, "models", "kokoro")
 
 def check_model_availability(model_dir):
+    try:
+        import kokoro_onnx
+        import soundfile
+        packages_installed = True
+    except Exception:
+        packages_installed = False
+
     model_path = os.path.join(model_dir, "kokoro-v1.0.onnx")
     voices_path = os.path.join(model_dir, "voices-v1.0.bin")
     
     model_exists = os.path.isfile(model_path) and os.path.getsize(model_path) > 1000000
     voices_exists = os.path.isfile(voices_path) and os.path.getsize(voices_path) > 100000
     
+    is_available = packages_installed and model_exists and voices_exists
     return {
-        "available": model_exists and voices_exists,
+        "available": is_available,
+        "packagesInstalled": packages_installed,
         "modelPath": model_path,
         "voicesPath": voices_path,
         "modelExists": model_exists,

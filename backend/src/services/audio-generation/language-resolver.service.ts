@@ -104,7 +104,8 @@ export function toTTSLanguageCode(
   provider: 'kokoro' | 'google' | 'fish_audio' | 'fish' | string = 'kokoro'
 ): string {
   if (provider === 'google') {
-    return lang === 'hi' ? 'hi-IN' : 'en-US';
+    // google-tts-api connects to Google Translate web endpoint which requires ISO 639-1 ('hi', 'en')
+    return lang === 'hi' ? 'hi' : 'en';
   }
   if (provider === 'fish_audio' || provider === 'fish' || provider === 'fishaudio') {
     return lang;
