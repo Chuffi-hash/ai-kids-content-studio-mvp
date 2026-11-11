@@ -446,19 +446,6 @@ function SceneView({
 
   // Coordinate adaptation for non-16:9 formats and storybook character scaling
   const instances = (scene.characterInstances || []).map((inst, instIdx, arr) => {
-    const override = charOverrides?.[inst.instanceId];
-    if (override) {
-      return {
-        ...inst,
-        x: override.x !== undefined ? override.x : inst.x,
-        y: override.y !== undefined ? override.y : inst.y,
-        scale: override.scale !== undefined ? override.scale : inst.scale,
-      };
-    }
-
-    const rawScale = inst.scale ?? 1.0;
-    const isSingleChar = arr.length === 1;
-
     let targetFlipX = inst.flipX;
     if (arr.length === 2 && targetFlipX === undefined) {
       const other = arr[1 - instIdx];
@@ -467,39 +454,41 @@ function SceneView({
       }
     }
 
-    if (width === 1280 && height === 720) {
-      // 16:9 standard landscape:
-      // Base character rig is 220px. Boost scale (1.4x for two-shot, 1.65x for single char focus)
-      // so characters fill 35% - 48% of canvas height.
-      const scaleMult = isSingleChar ? 1.65 : 1.40;
-      const boostedScale = Number((rawScale * scaleMult).toFixed(2));
-      const adjustedY = Math.min(height * 0.78, Math.max(height * 0.50, inst.y));
+    const override = charOverrides?.[inst.instanceId];
+    if (override) {
+      let ox = override.x !== undefined ? override.x : inst.x;
+      let oy = override.y !== undefined ? override.y : inst.y;
+      // Auto-recovery: if a previous drag placed character in the sky in 9:16 (y < 450), anchor safely
+      if (format === '9:16' && oy < 450) {
+        oy = Math.round(height * 0.63);
+      }
       return {
         ...inst,
-        y: Math.round(adjustedY),
-        scale: boostedScale,
+        x: ox,
+        y: oy,
+        scale: override.scale !== undefined ? override.scale : (inst.scale ?? 1.0),
         flipX: targetFlipX ?? inst.flipX,
       };
     }
 
-    if (format === '16:9') {
+    const rawScale = inst.scale ?? 1.0;
+    const isSingleChar = arr.length === 1;
+
+    if (format === '16:9' || (width === 1280 && height === 720)) {
       const s = width / 1280;
-      const scaleMult = (isSingleChar ? 1.65 : 1.40) * s;
       return {
         ...inst,
         x: Math.round(inst.x * s),
         y: Math.round(inst.y * s),
-        scale: Number((rawScale * scaleMult).toFixed(2)),
+        scale: Number((rawScale * s).toFixed(2)),
         flipX: targetFlipX ?? inst.flipX,
       };
     }
 
     if (format === '9:16' || width < height) {
       // 9:16 Portrait Reel:
-      // Characters must fill ~38% - 50% of the 1280p canvas height (480-640px).
-      // Scale multiplier is ~2.30x (or 2.65x for single character focus).
       // Characters stand safely anchored above subtitle safe area (Y ~ 63% height).
-      const scaleMult = isSingleChar ? 2.65 : 2.30;
+      const scaleMult = isSingleChar ? 1.55 : 1.35;
       const boostedScale = Number((rawScale * scaleMult).toFixed(2));
 
       let newX = width / 2;
@@ -524,7 +513,7 @@ function SceneView({
     if (format === '1:1') {
       const xOffset = inst.x - 640;
       const newX = width / 2 + (xOffset * (width / 1280));
-      const scaleMult = (isSingleChar ? 1.65 : 1.40) * (width / 720);
+      const scaleMult = isSingleChar ? 1.25 : 1.15;
       return {
         ...inst,
         x: Math.round(newX),
@@ -537,11 +526,11 @@ function SceneView({
     if (format === '4:5') {
       const xOffset = inst.x - 640;
       const newX = width / 2 + (xOffset * (width / 1280));
-      const scaleMult = (isSingleChar ? 1.85 : 1.55) * (width / 720);
+      const scaleMult = isSingleChar ? 1.35 : 1.22;
       return {
         ...inst,
         x: Math.round(newX),
-        y: Math.round(inst.y * (height / 900)),
+        y: Math.round(inst.y * (height / 720)),
         scale: Number((rawScale * scaleMult).toFixed(2)),
         flipX: targetFlipX ?? inst.flipX,
       };

@@ -79,55 +79,69 @@ export const VectorSceneCanvas: React.FC<VectorSceneCanvasProps> = ({
   const characterOverrides = formatVariant?.characterOverrides;
 
   // Non-destructive format variant mapping
-  const instances = rawInstances.map((inst) => {
+  const instances = rawInstances.map((inst, instIdx, arr) => {
     const override = characterOverrides?.[inst.instanceId];
     if (override) {
+      let ox = override.x !== undefined ? override.x : inst.x;
+      let oy = override.y !== undefined ? override.y : inst.y;
+      // Auto-recovery: if a previous drag placed character in the sky in 9:16 (y < 450), anchor safely
+      if (effectiveFormat === "9:16" && oy < 450) {
+        oy = Math.round(canvasHeight * 0.63);
+      }
       return {
         ...inst,
-        x: override.x !== undefined ? override.x : inst.x,
-        y: override.y !== undefined ? override.y : inst.y,
+        x: ox,
+        y: oy,
         scale: override.scale !== undefined ? override.scale : inst.scale,
       };
     }
+
+    const rawScale = inst.scale || 1.0;
+    const isSingleChar = arr.length === 1;
+
     if (effectiveFormat === "9:16") {
-      const xOffset = inst.x - 640;
-      const newX = canvasWidth / 2 + xOffset * (canvasWidth / 1280);
-      const yRatio = inst.y / 720;
-      const newY = yRatio * canvasHeight;
-      const newScale =
-        (inst.scale || 1.0) <= 1.0
-          ? (inst.scale || 1.0) * 1.15
-          : inst.scale || 1.0;
+      const scaleMult = isSingleChar ? 1.55 : 1.35;
+      const boostedScale = Number((rawScale * scaleMult).toFixed(2));
+
+      let newX = canvasWidth / 2;
+      if (arr.length === 2) {
+        newX = instIdx === 0 ? Math.round(canvasWidth * 0.32) : Math.round(canvasWidth * 0.68);
+      } else if (!isSingleChar) {
+        const xOffset = inst.x - 640;
+        newX = canvasWidth / 2 + xOffset * (canvasWidth / 1280);
+      }
+
+      const newY = Math.round(canvasHeight * 0.63);
+
       return {
         ...inst,
         x: Math.round(newX),
-        y: Math.round(newY),
-        scale: Number(newScale.toFixed(2)),
+        y: newY,
+        scale: boostedScale,
       };
     }
     if (effectiveFormat === "1:1") {
       const xOffset = inst.x - 640;
       const newX = canvasWidth / 2 + xOffset * (canvasWidth / 1280);
-      const yRatio = inst.y / 720;
-      const newY = yRatio * canvasHeight;
+      const newY = Math.round(inst.y * (canvasHeight / 720));
+      const scaleMult = isSingleChar ? 1.25 : 1.15;
       return {
         ...inst,
         x: Math.round(newX),
         y: Math.round(newY),
-        scale: Number((inst.scale || 1.0).toFixed(2)),
+        scale: Number((rawScale * scaleMult).toFixed(2)),
       };
     }
     if (effectiveFormat === "4:5") {
       const xOffset = inst.x - 640;
       const newX = canvasWidth / 2 + xOffset * (canvasWidth / 1280);
-      const yRatio = inst.y / 720;
-      const newY = yRatio * canvasHeight;
-      const newScale = (inst.scale || 1.0) * 1.08;
+      const newY = Math.round(inst.y * (canvasHeight / 720));
+      const scaleMult = isSingleChar ? 1.35 : 1.22;
       return {
         ...inst,
         x: Math.round(newX),
         y: Math.round(newY),
-        scale: Number(newScale.toFixed(2)),
+        scale: Number((rawScale * scaleMult).toFixed(2)),
       };
     }
     return inst;
@@ -239,15 +253,15 @@ export const VectorSceneCanvas: React.FC<VectorSceneCanvasProps> = ({
     instanceId: string,
     updates: Partial<CharacterInstance>,
   ) => {
-    if (effectiveFormat === "9:16") {
+    if (effectiveFormat !== "16:9") {
       const currentVariants = animationData.formatVariants || {};
-      const current9x16 = currentVariants["9:16"] || {
-        aspectRatio: "9:16",
-        width: 720,
-        height: 1280,
+      const currentVariant = currentVariants[effectiveFormat] || {
+        aspectRatio: effectiveFormat,
+        width: canvasWidth,
+        height: canvasHeight,
         characterOverrides: {},
       };
-      const currentOverrides = current9x16.characterOverrides || {};
+      const currentOverrides = currentVariant.characterOverrides || {};
       const updatedOverrides = {
         ...currentOverrides,
         [instanceId]: {
@@ -255,6 +269,8 @@ export const VectorSceneCanvas: React.FC<VectorSceneCanvasProps> = ({
           ...(updates.x !== undefined ? { x: updates.x } : {}),
           ...(updates.y !== undefined ? { y: updates.y } : {}),
           ...(updates.scale !== undefined ? { scale: updates.scale } : {}),
+          ...(updates.flipX !== undefined ? { flipX: updates.flipX } : {}),
+          ...(updates.rotation !== undefined ? { rotation: updates.rotation } : {}),
         },
       };
       if (onUpdateAnimationData) {
@@ -262,8 +278,11 @@ export const VectorSceneCanvas: React.FC<VectorSceneCanvasProps> = ({
           ...animationData,
           formatVariants: {
             ...currentVariants,
-            "9:16": {
-              ...current9x16,
+            [effectiveFormat]: {
+              ...currentVariant,
+              aspectRatio: effectiveFormat,
+              width: canvasWidth,
+              height: canvasHeight,
               characterOverrides: updatedOverrides,
             },
           },
@@ -567,6 +586,8 @@ export const VectorSceneCanvas: React.FC<VectorSceneCanvasProps> = ({
       {selectedInstance && (
         <TransformGizmo
           instance={selectedInstance}
+          viewportWidth={canvasWidth}
+          viewportHeight={canvasHeight}
           rig={(() => {
             const hasHeadTags =
               selectedInstance.customRig?.parts?.head?.shapes?.some(

@@ -99,8 +99,12 @@ export async function updateStoryMetadata(storyId: string, data: {
 }
 
 export async function updateStoryFlowProject(storyId: string, flowProjectId: string | null) {
+  const story = await getStoryByStoryId(storyId);
+  if (!story) {
+    throw new Error(`Story not found: ${storyId}`);
+  }
   return await prisma.story.update({
-    where: { storyId },
+    where: { id: story.id },
     data: {
       flowProjectId,
     },
@@ -132,9 +136,15 @@ export async function getStoryVisualBible(storyId: string) {
 
 export async function getStoryByStoryId(storyId: string) {
   try {
-    return await prisma.story.findUnique({
+    let story = await prisma.story.findUnique({
       where: { storyId },
     });
+    if (!story) {
+      story = await prisma.story.findUnique({
+        where: { id: storyId },
+      });
+    }
+    return story;
   } catch (error) {
     console.error('[Database] Error fetching story by storyId:', storyId, error);
     throw error;

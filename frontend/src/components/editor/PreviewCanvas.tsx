@@ -110,6 +110,20 @@ export const PreviewCanvas: React.FC<PreviewCanvasProps> = ({
     // It does NOT mutate or auto-save per-scene aspect ratios to the database.
   };
 
+  const handleResetFormatFraming = (format: AspectRatioType) => {
+    if (!effectiveAnimationData || !onUpdateAnimationData) return;
+    const variants = { ...(effectiveAnimationData.formatVariants || {}) };
+    if (variants[format]) {
+      const updatedVariant = { ...variants[format] };
+      delete updatedVariant.characterOverrides;
+      variants[format] = updatedVariant;
+    }
+    onUpdateAnimationData({
+      ...effectiveAnimationData,
+      formatVariants: variants,
+    });
+  };
+
   // Scrubber drag management to avoid fighting with the 60fps playback loop
   const [isScrubbing, setIsScrubbing] = useState<boolean>(false);
   const [scrubValue, setScrubValue] = useState<number>(currentTimeMs);
@@ -448,6 +462,24 @@ export const PreviewCanvas: React.FC<PreviewCanvasProps> = ({
                 title="Toggle mobile safe area guidelines"
               >
                 Guides {showSafeGuides ? "On" : "Off"}
+              </button>
+            )}
+            {activeFormat !== "16:9" && hasAnimation && onUpdateAnimationData && (
+              <button
+                type="button"
+                style={{
+                  background: "rgba(255, 255, 255, 0.1)",
+                  border: "1px solid rgba(255, 255, 255, 0.2)",
+                  color: "#e2e8f0",
+                  fontSize: "10px",
+                  borderRadius: "4px",
+                  padding: "2px 6px",
+                  cursor: "pointer",
+                }}
+                onClick={() => handleResetFormatFraming(activeFormat)}
+                title={`Reset ${activeFormat} character positions to auto-framing`}
+              >
+                ↺ Reset Framing
               </button>
             )}
           </div>

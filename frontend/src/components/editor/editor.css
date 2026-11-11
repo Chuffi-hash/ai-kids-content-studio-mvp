@@ -799,23 +799,31 @@ body.theme-light .ed-center-canvas {
 
 .ed-preview-viewport.format-16-9 {
   aspect-ratio: 16 / 9;
+  width: 100%;
   max-width: 960px;
+  max-height: calc(100vh - 280px);
 }
 
 .ed-preview-viewport.format-9-16 {
   aspect-ratio: 9 / 16;
+  width: auto;
+  height: 100%;
   max-width: 420px;
   max-height: calc(100vh - 280px);
 }
 
 .ed-preview-viewport.format-1-1 {
   aspect-ratio: 1 / 1;
+  width: auto;
+  height: 100%;
   max-width: 580px;
   max-height: calc(100vh - 280px);
 }
 
 .ed-preview-viewport.format-4-5 {
   aspect-ratio: 4 / 5;
+  width: auto;
+  height: 100%;
   max-width: 520px;
   max-height: calc(100vh - 280px);
 }

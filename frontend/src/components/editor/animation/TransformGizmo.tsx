@@ -17,6 +17,8 @@ export const TransformGizmo: React.FC<TransformGizmoProps> = ({
   motionPath,
   onUpdateInstance,
   onUpdateMotionPath,
+  viewportWidth = 1280,
+  viewportHeight = 720,
 }) => {
   const [activeDrag, setActiveDrag] = useState<string | null>(null);
   const dragStartRef = useRef<{
@@ -38,7 +40,8 @@ export const TransformGizmo: React.FC<TransformGizmoProps> = ({
     setActiveDrag('move');
     const svgEl = (e.target as Element).closest('svg');
     const svgRect = svgEl?.getBoundingClientRect();
-    const scaleFactor = svgRect && svgRect.width > 0 ? 1280 / svgRect.width : 1;
+    const effectiveW = viewportWidth || 1280;
+    const scaleFactor = svgRect && svgRect.width > 0 ? effectiveW / svgRect.width : 1;
     dragStartRef.current = {
       pointerX: e.clientX,
       pointerY: e.clientY,
@@ -57,7 +60,8 @@ export const TransformGizmo: React.FC<TransformGizmoProps> = ({
     setActiveDrag('path-start');
     const svgEl = (e.target as Element).closest('svg');
     const svgRect = svgEl?.getBoundingClientRect();
-    const scaleFactor = svgRect && svgRect.width > 0 ? 1280 / svgRect.width : 1;
+    const effectiveW = viewportWidth || 1280;
+    const scaleFactor = svgRect && svgRect.width > 0 ? effectiveW / svgRect.width : 1;
     dragStartRef.current = {
       pointerX: e.clientX,
       pointerY: e.clientY,
@@ -76,7 +80,8 @@ export const TransformGizmo: React.FC<TransformGizmoProps> = ({
     setActiveDrag('path-end');
     const svgEl = (e.target as Element).closest('svg');
     const svgRect = svgEl?.getBoundingClientRect();
-    const scaleFactor = svgRect && svgRect.width > 0 ? 1280 / svgRect.width : 1;
+    const effectiveW = viewportWidth || 1280;
+    const scaleFactor = svgRect && svgRect.width > 0 ? effectiveW / svgRect.width : 1;
     dragStartRef.current = {
       pointerX: e.clientX,
       pointerY: e.clientY,
@@ -124,9 +129,13 @@ export const TransformGizmo: React.FC<TransformGizmoProps> = ({
     const scaleFactor = dragStartRef.current.startScale || 1;
 
     if (activeDrag === 'move') {
+      const maxX = viewportWidth || 1280;
+      const maxY = viewportHeight || 720;
+      const nextX = Math.max(30, Math.min(maxX - 30, Math.round(dragStartRef.current.startX + dx * scaleFactor)));
+      const nextY = Math.max(40, Math.min(maxY - 30, Math.round(dragStartRef.current.startY + dy * scaleFactor)));
       onUpdateInstance({
-        x: Math.round(dragStartRef.current.startX + dx * scaleFactor),
-        y: Math.round(dragStartRef.current.startY + dy * scaleFactor),
+        x: nextX,
+        y: nextY,
       });
     } else if (activeDrag === 'path-start' && onUpdateMotionPath && motionPath) {
       onUpdateMotionPath({

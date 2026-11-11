@@ -2109,7 +2109,7 @@ export default function StoryDetailPage() {
         <GoogleFlowProjectModal
           isOpen={isFlowModalOpen}
           onClose={() => setIsFlowModalOpen(false)}
-          storyId={story.id || story.storyId}
+          storyId={story.storyId || story.id || storyId || ''}
           storyTitle={story.title}
           onConnectionChange={(_connected: boolean, newId: string | null) => {
             setStory((prev) => (prev ? { ...prev, flowProjectId: newId } : prev));

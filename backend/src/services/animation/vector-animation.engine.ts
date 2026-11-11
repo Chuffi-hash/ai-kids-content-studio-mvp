@@ -788,16 +788,23 @@ export class VectorAnimationEngine {
     const clips = animationData.animationClips || [];
     const characterOverrides = formatVariant?.characterOverrides;
 
-    const adjustedInstances = instances.map((inst) => {
+    const isSingleChar = instances.length === 1;
+    const adjustedInstances = instances.map((inst, instIdx) => {
       const override = characterOverrides?.[inst.instanceId];
       if (override) {
+        let ox = override.x !== undefined ? override.x : inst.x;
+        let oy = override.y !== undefined ? override.y : inst.y;
+        if (activeFormat === '9:16' && oy < 450) {
+          oy = Math.round(height * 0.63);
+        }
         return {
           ...inst,
-          x: override.x !== undefined ? override.x : inst.x,
-          y: override.y !== undefined ? override.y : inst.y,
+          x: ox,
+          y: oy,
           scale: override.scale !== undefined ? override.scale : inst.scale,
         };
       }
+      const rawScale = inst.scale || 1.0;
       if (width === 1280 && height === 720) {
         return inst;
       }
@@ -807,50 +814,48 @@ export class VectorAnimationEngine {
           ...inst,
           x: Math.round(inst.x * scale),
           y: Math.round(inst.y * scale),
-          scale: Number(((inst.scale || 1.0) * scale).toFixed(2)),
+          scale: Number((rawScale * scale).toFixed(2)),
         };
       }
       if (activeFormat === '9:16' || width < height) {
-        // Adapt 16:9 (1280x720) coordinates to 9:16 vertical (e.g. 720x1280 or 1080x1920)
-        const xOffset = inst.x - 640;
-        const newX = (width / 2) + (xOffset * (width / 1280));
-        const yRatio = inst.y / 720;
-        const newY = yRatio * height;
-        const scaleMult = height / 1280;
-        const baseScale = (inst.scale || 1.0) <= 1.0 ? (inst.scale || 1.0) * 1.15 : (inst.scale || 1.0);
+        const scaleMult = (isSingleChar ? 1.55 : 1.35) * (height / 1280);
+        let newX = width / 2;
+        if (instances.length === 2) {
+          newX = instIdx === 0 ? Math.round(width * 0.32) : Math.round(width * 0.68);
+        } else if (!isSingleChar) {
+          const xOffset = inst.x - 640;
+          newX = (width / 2) + (xOffset * (width / 1280));
+        }
+        const newY = Math.round(height * 0.63);
         return {
           ...inst,
           x: Math.round(newX),
-          y: Math.round(newY),
-          scale: Number((baseScale * scaleMult).toFixed(2)),
+          y: newY,
+          scale: Number((rawScale * scaleMult).toFixed(2)),
         };
       }
       if (activeFormat === '1:1') {
-        // Adapt 16:9 (1280x720) coordinates to 1:1 square (e.g. 720x720 or 1080x1080)
         const xOffset = inst.x - 640;
         const newX = (width / 2) + (xOffset * (width / 1280));
-        const yRatio = inst.y / 720;
-        const newY = yRatio * height;
-        const scaleMult = width / 720;
+        const newY = Math.round(inst.y * (height / 720));
+        const scaleMult = (isSingleChar ? 1.25 : 1.15) * (width / 720);
         return {
           ...inst,
           x: Math.round(newX),
           y: Math.round(newY),
-          scale: Number(((inst.scale || 1.0) * scaleMult).toFixed(2)),
+          scale: Number((rawScale * scaleMult).toFixed(2)),
         };
       }
       if (activeFormat === '4:5') {
-        // Adapt 16:9 (1280x720) coordinates to 4:5 portrait (e.g. 720x900 or 1080x1350)
         const xOffset = inst.x - 640;
         const newX = (width / 2) + (xOffset * (width / 1280));
-        const yRatio = inst.y / 720;
-        const newY = yRatio * height;
-        const scaleMult = width / 720;
+        const newY = Math.round(inst.y * (height / 720));
+        const scaleMult = (isSingleChar ? 1.35 : 1.22) * (width / 720);
         return {
           ...inst,
           x: Math.round(newX),
           y: Math.round(newY),
-          scale: Number(((inst.scale || 1.0) * 1.08 * scaleMult).toFixed(2)),
+          scale: Number((rawScale * scaleMult).toFixed(2)),
         };
       }
       return inst;
