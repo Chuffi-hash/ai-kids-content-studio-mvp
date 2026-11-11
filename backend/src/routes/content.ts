@@ -31,7 +31,9 @@ import {
   restoreSceneVersion,
   unlinkStoryCharacter,
   setStoryCharacters,
+  updateStoryFlowProject,
 } from "../services/database/database.service.js";
+import { validateAndExtractFlowProjectId } from "../services/google-flow/google-flow.validator.js";
 import { ImageGenerationService } from "../services/image-generation/image-generation.service.js";
 import { getImageGenerationProvider } from "../services/image-generation/provider.factory.js";
 import { LocalStorageService } from "../services/storage/local-storage.service.js";
@@ -2592,6 +2594,103 @@ contentRouter.post("/scenes/:sceneId/background-prompt/restore", async (req, res
   } catch (error: any) {
     console.error("[Content] Failed to restore prompt version:", error);
     return res.status(500).json({ message: error.message || "Failed to restore prompt version" });
+  }
+});
+
+// ----------------------------------------------------
+// Google Flow Project Association Endpoints
+// ----------------------------------------------------
+
+// 8. GET Google Flow project for story
+contentRouter.get(["/story/:storyId/flow-project", "/stories/:storyId/flow-project"], async (req, res) => {
+  try {
+    const rawStoryId = req.params.storyId;
+    const storyId = Array.isArray(rawStoryId) ? rawStoryId[0] : rawStoryId;
+    const story = await getStoryByStoryId(storyId);
+    if (!story) {
+      return res.status(404).json({ message: `Story not found: ${storyId}` });
+    }
+
+    const flowProjectId = (story as any).flowProjectId || null;
+    const projectUrl = flowProjectId ? `https://flow.google.com/project/${flowProjectId}` : null;
+
+    return res.json({
+      success: true,
+      storyId,
+      flowProjectId,
+      projectUrl,
+      isConnected: Boolean(flowProjectId),
+    });
+  } catch (error: any) {
+    console.error("[Content] Failed to fetch Google Flow project:", error);
+    return res.status(500).json({ message: error.message || "Failed to fetch Google Flow project" });
+  }
+});
+
+// 9. PUT Connect or Update Google Flow project for story
+contentRouter.put(["/story/:storyId/flow-project", "/stories/:storyId/flow-project"], async (req, res) => {
+  try {
+    const rawStoryId = req.params.storyId;
+    const storyId = Array.isArray(rawStoryId) ? rawStoryId[0] : rawStoryId;
+    const rawInput = req.body.projectUrl || req.body.url || req.body.flowProjectId;
+
+    if (!rawInput) {
+      return res.status(400).json({
+        message: "Google Flow project URL or project ID is required in the request body.",
+      });
+    }
+
+    const validation = validateAndExtractFlowProjectId(String(rawInput));
+    if (!validation.valid || !validation.flowProjectId) {
+      return res.status(400).json({
+        message: validation.error || "Invalid Google Flow project URL or ID.",
+      });
+    }
+
+    const story = await getStoryByStoryId(storyId);
+    if (!story) {
+      return res.status(404).json({ message: `Story not found: ${storyId}` });
+    }
+
+    await updateStoryFlowProject(storyId, validation.flowProjectId);
+
+    return res.json({
+      success: true,
+      storyId,
+      flowProjectId: validation.flowProjectId,
+      projectUrl: validation.projectUrl,
+      isConnected: true,
+      message: "Google Flow project connected successfully.",
+    });
+  } catch (error: any) {
+    console.error("[Content] Failed to update Google Flow project:", error);
+    return res.status(500).json({ message: error.message || "Failed to update Google Flow project" });
+  }
+});
+
+// 10. DELETE Disconnect Google Flow project from story
+contentRouter.delete(["/story/:storyId/flow-project", "/stories/:storyId/flow-project"], async (req, res) => {
+  try {
+    const rawStoryId = req.params.storyId;
+    const storyId = Array.isArray(rawStoryId) ? rawStoryId[0] : rawStoryId;
+    const story = await getStoryByStoryId(storyId);
+    if (!story) {
+      return res.status(404).json({ message: `Story not found: ${storyId}` });
+    }
+
+    await updateStoryFlowProject(storyId, null);
+
+    return res.json({
+      success: true,
+      storyId,
+      flowProjectId: null,
+      projectUrl: null,
+      isConnected: false,
+      message: "Google Flow project disconnected successfully.",
+    });
+  } catch (error: any) {
+    console.error("[Content] Failed to disconnect Google Flow project:", error);
+    return res.status(500).json({ message: error.message || "Failed to disconnect Google Flow project" });
   }
 });
 

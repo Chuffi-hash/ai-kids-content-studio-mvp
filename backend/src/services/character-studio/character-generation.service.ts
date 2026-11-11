@@ -9,6 +9,7 @@ import {
 } from './character-studio.types.js';
 import { CharacterPromptBuilderService } from './character-prompt-builder.service.js';
 import { PollinationsImageProvider } from '../image-generation/providers/pollinations-image.provider.js';
+import { GeminiImageProvider } from '../image-generation/providers/gemini-image.provider.js';
 import { buildRigFromAppearance } from '../animation/templates/custom-character-rig.js';
 import { getVectorRig } from '../animation/templates/default-characters.js';
 
@@ -28,14 +29,15 @@ export class CharacterGenerationService {
    */
   public getProviderCapabilities(provider: string): ProviderCapabilities {
     if (provider === 'gemini') {
+      const model = process.env.GEMINI_IMAGE_MODEL || 'gemini-2.5-flash-image';
       return {
         provider: 'gemini',
-        model: 'imagen-3.0-generate-002',
-        supportsReferenceImage: false,
+        model,
+        supportsReferenceImage: true,
         supportsNegativePrompt: true,
         supportsCustomAspectRatio: true,
         notes:
-          'Official Google Imagen 3 diffusion model. High-fidelity character illustrations using canonical appearance prompt injection. Direct image-to-image conditioning is not supported on this endpoint.',
+          'Official Google Gemini Nano Banana model family (gemini-2.5-flash-image / gemini-3.1-flash-image). Multi-modal image generation with inline reference image conditioning for high consistency character turnaround, expression, and pose sheets.',
       };
     }
 
@@ -96,18 +98,39 @@ export class CharacterGenerationService {
     // Build the final combined prompt and negative prompt
     const { prompt, negativePrompt } = this.promptBuilder.buildPrompt(promptData);
 
+    // Resolve reference image buffer if available
+    let referenceImageBuffer: Buffer | undefined;
+    if (promptData.referenceImageUrl) {
+      try {
+        if (promptData.referenceImageUrl.startsWith('data:image')) {
+          const b64 = promptData.referenceImageUrl.replace(/^data:image\/\w+;base64,/, '');
+          referenceImageBuffer = Buffer.from(b64, 'base64');
+        } else if (promptData.referenceImageUrl.startsWith('http')) {
+          const res = await fetch(promptData.referenceImageUrl);
+          if (res.ok) {
+            const arr = await res.arrayBuffer();
+            referenceImageBuffer = Buffer.from(arr);
+          }
+        } else if (fs.existsSync(promptData.referenceImageUrl)) {
+          referenceImageBuffer = await fs.promises.readFile(promptData.referenceImageUrl);
+        }
+      } catch (refErr) {
+        console.warn('[CharacterStudio] Could not load reference image for conditioning:', refErr);
+      }
+    }
+
     let imageBuffer: Buffer;
     let actualModel = '';
 
     if (provider === 'gemini') {
-      const apiKey = process.env.GEMINI_API_KEY;
+      const apiKey = process.env.GOOGLE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
       if (!apiKey) {
         throw new Error(
           'Gemini API key is not configured. Please set GEMINI_API_KEY in your environment, or choose Pollinations provider.'
         );
       }
 
-      actualModel = 'imagen-3.0-generate-002';
+      actualModel = process.env.GEMINI_IMAGE_MODEL || 'gemini-2.5-flash-image';
       // Execute Gemini without silent fallback
       try {
         imageBuffer = await this.generateWithGemini({
@@ -115,6 +138,7 @@ export class CharacterGenerationService {
           negativePrompt,
           aspectRatio,
           apiKey,
+          referenceImageBuffer,
         });
       } catch (err: any) {
         console.error('[CharacterStudio] Gemini generation error:', err);
@@ -239,55 +263,25 @@ export class CharacterGenerationService {
   }
 
   /**
-   * Calls Google Generative Language API for Imagen 3.
+   * Generates character asset using Gemini Generative Language API.
+   * Supports Nano Banana multi-modal generation with reference image conditioning,
+   * with legacy fallback for Imagen models.
    */
   private async generateWithGemini(options: {
     prompt: string;
     negativePrompt?: string;
     aspectRatio?: '1:1' | '9:16' | '16:9' | '4:3' | '3:4';
     apiKey: string;
+    referenceImageBuffer?: Buffer;
   }): Promise<Buffer> {
-    const { prompt, negativePrompt, aspectRatio = '1:1', apiKey } = options;
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${apiKey}`;
-
-    const parameters: any = {
-      sampleCount: 1,
+    const { prompt, negativePrompt, aspectRatio = '1:1', apiKey, referenceImageBuffer } = options;
+    const provider = new GeminiImageProvider({ apiKey });
+    const result = await provider.generateImage({
+      prompt,
+      negativePrompt,
       aspectRatio,
-      outputMimeType: 'image/png',
-    };
-
-    if (negativePrompt && negativePrompt.trim().length > 0) {
-      parameters.negativePrompt = negativePrompt.trim();
-    }
-
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        instances: [{ prompt }],
-        parameters,
-      }),
-      signal: AbortSignal.timeout(60000),
+      referenceImageBuffer,
     });
-
-    if (!res.ok) {
-      const errBody = await res.text();
-      let errorDetail = errBody;
-      try {
-        const parsed = JSON.parse(errBody);
-        errorDetail = parsed.error?.message || errBody;
-      } catch {
-        // use raw text
-      }
-      throw new Error(`HTTP ${res.status}: ${errorDetail}`);
-    }
-
-    const data = (await res.json()) as any;
-    const b64 = data.predictions?.[0]?.bytesBase64Encoded;
-    if (!b64) {
-      throw new Error('Gemini Imagen API returned successful status but no image predictions');
-    }
-
-    return Buffer.from(b64, 'base64');
+    return result.imageBuffer;
   }
 }

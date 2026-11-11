@@ -90,10 +90,20 @@ export async function updateStoryMetadata(storyId: string, data: {
   visualStyle?: string | null;
   targetDuration?: number | null;
   visualBible?: any;
+  flowProjectId?: string | null;
 }) {
   return await prisma.story.update({
     where: { storyId },
     data,
+  });
+}
+
+export async function updateStoryFlowProject(storyId: string, flowProjectId: string | null) {
+  return await prisma.story.update({
+    where: { storyId },
+    data: {
+      flowProjectId,
+    },
   });
 }
 

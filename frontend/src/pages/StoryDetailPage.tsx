@@ -24,6 +24,7 @@ import { ExportModal } from '../components/editor/ExportModal';
 import { StoryDetailsModal } from '../components/editor/StoryDetailsModal';
 import { ImportScriptModal } from '../components/editor/ImportScriptModal';
 import { CharacterBuilderModal } from '../components/characters/CharacterBuilderModal';
+import GoogleFlowProjectModal from '../components/common/GoogleFlowProjectModal';
 import { buildRigFromAppearance } from '../utils/customCharacterRig';
 import { createCharacter, updateCharacter, updateCharacterVoice } from '../services/character.service';
 import { SceneDialogue, EducationalOverlayType, AspectRatioType } from '../types/animation';
@@ -44,6 +45,7 @@ export default function StoryDetailPage() {
   const [selectedDialogueId, setSelectedDialogueId] = useState<string | null>(null);
   const [isStoryDetailsOpen, setIsStoryDetailsOpen] = useState<boolean>(false);
   const [isCharacterBuilderOpen, setIsCharacterBuilderOpen] = useState<boolean>(false);
+  const [isFlowModalOpen, setIsFlowModalOpen] = useState<boolean>(false);
 
   // Layout & Sidebar states
   const [activeSidebarSection, setActiveSidebarSection] = useState<SidebarSection>('scenes');
@@ -1794,6 +1796,8 @@ export default function StoryDetailPage() {
         onOpenExport={() => setIsExportModalOpen(true)}
         onOpenStoryDetails={() => setIsStoryDetailsOpen(true)}
         onOpenImportScript={() => setIsImportScriptOpen(true)}
+        flowProjectId={story.flowProjectId}
+        onOpenFlowProjectModal={() => setIsFlowModalOpen(true)}
         onAutoDirect={handleAutoDirect}
         isAutoDirecting={isAutoDirecting}
         hasValidationErrors={hasValidationErrors}
@@ -2097,6 +2101,19 @@ export default function StoryDetailPage() {
           storyTitle={story.title}
           existingCharacters={(story.characters || []).map((c) => ({ id: c.id, name: c.name }))}
           onImportSuccess={handleImportSuccess}
+        />
+      )}
+
+      {/* 8. Google Flow Project Connection Modal */}
+      {story && (
+        <GoogleFlowProjectModal
+          isOpen={isFlowModalOpen}
+          onClose={() => setIsFlowModalOpen(false)}
+          storyId={story.id || story.storyId}
+          storyTitle={story.title}
+          onConnectionChange={(_connected: boolean, newId: string | null) => {
+            setStory((prev) => (prev ? { ...prev, flowProjectId: newId } : prev));
+          }}
         />
       )}
     </div>

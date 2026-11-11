@@ -4,18 +4,21 @@ import { randomUUID } from 'crypto';
 import { BackgroundAsset, BackgroundProviderType } from './background-studio.types.js';
 import { buildSceneBackgroundPrompt, BackgroundPromptOptions } from '../character-studio/prompt-templates.js';
 import { PollinationsImageProvider } from '../image-generation/providers/pollinations-image.provider.js';
+import { GeminiImageProvider } from '../image-generation/providers/gemini-image.provider.js';
 
 export class BackgroundStudioService {
   private storageDir: string;
   private backgroundsDir: string;
   private indexFilePath: string;
   private pollinationsProvider: PollinationsImageProvider;
+  private geminiProvider: GeminiImageProvider;
 
   constructor(options?: { storageDir?: string }) {
     this.storageDir = options?.storageDir || process.env.STORAGE_DIR || './storage';
     this.backgroundsDir = path.resolve(process.cwd(), this.storageDir, 'backgrounds');
     this.indexFilePath = path.join(this.backgroundsDir, 'backgrounds-index.json');
     this.pollinationsProvider = new PollinationsImageProvider();
+    this.geminiProvider = new GeminiImageProvider();
   }
 
   private async ensureStorage(): Promise<void> {
@@ -106,17 +109,40 @@ export class BackgroundStudioService {
       height = 900;
     }
 
-    const generated = await this.pollinationsProvider.generateImage({
-      prompt,
-      width,
-      height,
-    });
+    let imageBuffer: Buffer;
+    let mimeType = 'image/png';
+
+    if (provider === 'gemini') {
+      const apiKey = process.env.GOOGLE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
+      if (!apiKey) {
+        throw new Error(
+          'Gemini API key is not configured. Please set GEMINI_API_KEY in your environment, or choose Pollinations provider.'
+        );
+      }
+
+      const generated = await this.geminiProvider.generateImage({
+        prompt,
+        width,
+        height,
+        aspectRatio,
+      });
+      imageBuffer = generated.imageBuffer;
+      mimeType = generated.mimeType;
+    } else {
+      const generated = await this.pollinationsProvider.generateImage({
+        prompt,
+        width,
+        height,
+      });
+      imageBuffer = generated.imageBuffer;
+      mimeType = generated.mimeType;
+    }
 
     const assetId = `bg-${Date.now()}-${randomUUID().slice(0, 6)}`;
-    const filename = `${assetId}.${generated.mimeType.includes('png') ? 'png' : 'jpg'}`;
+    const filename = `${assetId}.${mimeType.includes('png') ? 'png' : 'jpg'}`;
     const filePath = path.join(this.backgroundsDir, filename);
 
-    await fs.promises.writeFile(filePath, generated.imageBuffer);
+    await fs.promises.writeFile(filePath, imageBuffer);
 
     const rel = path.relative(path.resolve(process.cwd(), this.storageDir), filePath);
     const asset: BackgroundAsset = {

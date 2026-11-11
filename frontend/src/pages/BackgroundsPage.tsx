@@ -26,6 +26,7 @@ export default function BackgroundsPage() {
   const [genMood, setGenMood] = useState('cheerful and inviting');
   const [genStyle, setGenStyle] = useState('storybook_illustrated');
   const [genRatio, setGenRatio] = useState<'16:9' | '9:16' | '1:1' | '4:5'>('16:9');
+  const [genProvider, setGenProvider] = useState<'gemini' | 'pollinations'>('gemini');
 
   // Import form state
   const [importName, setImportName] = useState('');
@@ -67,6 +68,7 @@ export default function BackgroundsPage() {
         mood: genMood,
         artStyle: genStyle,
         aspectRatio: genRatio,
+        provider: genProvider,
       });
       setShowGenerateModal(false);
       await loadBackgrounds();
@@ -378,15 +380,16 @@ export default function BackgroundsPage() {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                   <div>
                     <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
-                      Mood & Atmosphere
+                      Generation Provider
                     </label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      value={genMood}
-                      onChange={(e) => setGenMood(e.target.value)}
-                      placeholder="e.g. cheerful and inviting"
-                    />
+                    <select
+                      className="form-select"
+                      value={genProvider}
+                      onChange={(e) => setGenProvider(e.target.value as any)}
+                    >
+                      <option value="gemini">Google Gemini (Nano Banana / gemini-2.5-flash-image)</option>
+                      <option value="pollinations">Pollinations (Flux Diffusion)</option>
+                    </select>
                   </div>
 
                   <div>

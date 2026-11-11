@@ -88,6 +88,7 @@ export const StoryScalarFieldEnum = {
   visualStyle: 'visualStyle',
   targetDuration: 'targetDuration',
   visualBible: 'visualBible',
+  flowProjectId: 'flowProjectId',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 } as const

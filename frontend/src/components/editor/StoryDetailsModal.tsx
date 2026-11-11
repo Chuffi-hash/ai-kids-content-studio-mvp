@@ -7,7 +7,8 @@ import {
   fetchStoryCharacters,
   regenerateStoryContent,
 } from '../../services/editor.service';
-import { CloseIcon, CheckIcon, PlusIcon, SparklesIcon } from '../common/Icons';
+import { CloseIcon, CheckIcon, PlusIcon, SparklesIcon, AlertTriangleIcon } from '../common/Icons';
+import { useGoogleFlowProject } from '../../hooks/useGoogleFlowProject';
 
 interface StoryDetailsModalProps {
   isOpen: boolean;
@@ -47,7 +48,33 @@ export const StoryDetailsModal: React.FC<StoryDetailsModalProps> = ({
   const [isRegenerating, setIsRegenerating] = useState<boolean>(false);
   const [showRegenerateConfirm, setShowRegenerateConfirm] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'details' | 'characters'>('details');
+  const [activeTab, setActiveTab] = useState<'details' | 'characters' | 'flow'>('details');
+
+  // Google Flow project management hook
+  const {
+    flowProjectId,
+    projectUrl: flowProjectUrl,
+    isConnected: isFlowConnected,
+    loading: isFlowLoading,
+    error: flowError,
+    connect: connectFlow,
+    disconnect: disconnectFlow,
+    openFlowProject,
+  } = useGoogleFlowProject(story.storyId);
+  const [flowInputUrl, setFlowInputUrl] = useState('');
+  const [isEditingFlow, setIsEditingFlow] = useState(false);
+  const [flowSuccessMsg, setFlowSuccessMsg] = useState<string | null>(null);
+  const [flowLocalError, setFlowLocalError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (flowProjectUrl) {
+      setFlowInputUrl(flowProjectUrl);
+      setIsEditingFlow(false);
+    } else {
+      setFlowInputUrl('');
+      setIsEditingFlow(true);
+    }
+  }, [flowProjectUrl, isOpen]);
 
   // Load characters on open
   useEffect(() => {
@@ -274,6 +301,19 @@ export const StoryDetailsModal: React.FC<StoryDetailsModalProps> = ({
           >
             👥 Characters ({linkedCharacterIds.length} linked)
           </button>
+          <button
+            type="button"
+            className={`ed-details-tab ${activeTab === 'flow' ? 'active' : ''}`}
+            onClick={() => setActiveTab('flow')}
+          >
+            <SparklesIcon size={12} color="#a78bfa" />
+            <span>Google Flow Project</span>
+            {isFlowConnected && (
+              <span style={{ fontSize: '10px', background: 'rgba(16, 185, 129, 0.2)', color: '#34d399', padding: '1px 6px', borderRadius: '10px' }}>
+                Connected
+              </span>
+            )}
+          </button>
         </div>
 
         {/* Tab Content */}
@@ -475,6 +515,175 @@ export const StoryDetailsModal: React.FC<StoryDetailsModalProps> = ({
                       </div>
                     );
                   })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 3: GOOGLE FLOW PROJECT */}
+          {activeTab === 'flow' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ padding: '12px 14px', background: 'rgba(139, 92, 246, 0.08)', border: '1px solid rgba(139, 92, 246, 0.25)', borderRadius: '8px', fontSize: '13px', lineHeight: 1.4, color: 'var(--ed-text)' }}>
+                <div style={{ fontWeight: 600, color: '#c4b5fd', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <SparklesIcon size={14} color="#8b5cf6" />
+                  <span>Google Flow Workspace Integration</span>
+                </div>
+                <div style={{ color: 'var(--ed-text-muted)', fontSize: '12px' }}>
+                  Optionally link this story to its dedicated Google Flow project to easily organize character sheets, pose references, and storybook backgrounds.
+                </div>
+              </div>
+
+              {/* Status Row */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '12px' }}>
+                <span style={{ color: 'var(--ed-text-muted)', fontWeight: 600 }}>Connection Status:</span>
+                {isFlowConnected ? (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 10px', borderRadius: '12px', background: 'rgba(16, 185, 129, 0.15)', border: '1px solid rgba(16, 185, 129, 0.35)', color: '#34d399', fontWeight: 600 }}>
+                    <CheckIcon size={12} />
+                    <span>Connected</span>
+                  </span>
+                ) : (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', padding: '3px 10px', borderRadius: '12px', background: 'rgba(148, 163, 184, 0.15)', border: '1px solid rgba(148, 163, 184, 0.3)', color: 'var(--ed-text-muted)', fontWeight: 600 }}>
+                    <span>Not Connected</span>
+                  </span>
+                )}
+                {flowProjectId && (
+                  <span style={{ fontFamily: 'monospace', fontSize: '11px', background: 'var(--ed-bg-alt, rgba(0, 0, 0, 0.25))', padding: '3px 8px', borderRadius: '6px', color: 'var(--ed-text-muted)' }}>
+                    ID: {flowProjectId}
+                  </span>
+                )}
+              </div>
+
+              {/* Alerts */}
+              {(flowLocalError || flowError) && (
+                <div style={{ padding: '8px 12px', background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.35)', borderRadius: '6px', color: '#fca5a5', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <AlertTriangleIcon size={13} color="#ef4444" />
+                  <span>{flowLocalError || flowError}</span>
+                </div>
+              )}
+
+              {flowSuccessMsg && (
+                <div style={{ padding: '8px 12px', background: 'rgba(16, 185, 129, 0.15)', border: '1px solid rgba(16, 185, 129, 0.35)', borderRadius: '6px', color: '#6ee7b7', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <CheckIcon size={13} color="#10b981" />
+                  <span>{flowSuccessMsg}</span>
+                </div>
+              )}
+
+              {isFlowConnected && !isEditingFlow ? (
+                <div style={{ background: 'var(--ed-bg-alt, rgba(15, 23, 42, 0.5))', border: '1px solid var(--ed-border, rgba(255, 255, 255, 0.08))', borderRadius: '8px', padding: '14px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  <div>
+                    <div style={{ fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--ed-text-muted)', marginBottom: '4px' }}>
+                      Connected Project URL:
+                    </div>
+                    <a
+                      href={flowProjectUrl || `https://flow.google.com/project/${flowProjectId}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ color: '#38bdf8', textDecoration: 'none', fontSize: '13px', fontWeight: 500, wordBreak: 'break-all', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                    >
+                      {flowProjectUrl || `https://flow.google.com/project/${flowProjectId}`}
+                      <span>↗</span>
+                    </a>
+                  </div>
+
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      onClick={() => openFlowProject()}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                      title="Open in Google Flow in new tab"
+                    >
+                      <span>Open Google Flow</span>
+                      <span>↗</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => setIsEditingFlow(true)}
+                      disabled={isFlowLoading}
+                    >
+                      Update Project
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      onClick={async () => {
+                        if (!window.confirm('Disconnect this Google Flow project from this story?')) return;
+                        setFlowLocalError(null);
+                        try {
+                          await disconnectFlow();
+                          onStoryUpdated({ flowProjectId: null });
+                          setIsEditingFlow(true);
+                          setFlowInputUrl('');
+                          setFlowSuccessMsg('Project disconnected.');
+                          setTimeout(() => setFlowSuccessMsg(null), 3000);
+                        } catch (err: any) {
+                          setFlowLocalError(err.message || 'Failed to disconnect');
+                        }
+                      }}
+                      disabled={isFlowLoading}
+                      style={{ color: '#fca5a5', borderColor: 'rgba(239, 68, 68, 0.35)' }}
+                    >
+                      Disconnect Project
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div className="ed-details-form-group" style={{ marginBottom: 0 }}>
+                    <label className="ed-details-label" htmlFor="story-flow-input">
+                      Google Flow Project URL or ID
+                    </label>
+                    <input
+                      id="story-flow-input"
+                      type="text"
+                      className="ed-details-input"
+                      placeholder="https://flow.google.com/project/1d08d0de-5b98-40fa-b592-632130b536c5"
+                      value={flowInputUrl}
+                      onChange={(e) => setFlowInputUrl(e.target.value)}
+                      disabled={isFlowLoading}
+                      style={{ width: '100%' }}
+                    />
+                    <div style={{ fontSize: '11px', color: 'var(--ed-text-muted)', marginTop: '4px' }}>
+                      Paste the link from your browser address bar when working inside your Google Flow project.
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      disabled={isFlowLoading || !flowInputUrl.trim()}
+                      onClick={async () => {
+                        setFlowLocalError(null);
+                        try {
+                          const res = await connectFlow(flowInputUrl.trim());
+                          onStoryUpdated({ flowProjectId: res.flowProjectId });
+                          setIsEditingFlow(false);
+                          setFlowSuccessMsg('Google Flow project connected successfully!');
+                          setTimeout(() => setFlowSuccessMsg(null), 3500);
+                        } catch (err: any) {
+                          setFlowLocalError(err.message || 'Failed to connect');
+                        }
+                      }}
+                    >
+                      {isFlowLoading ? 'Connecting…' : isFlowConnected ? 'Update Project' : 'Connect Project'}
+                    </button>
+                    {isFlowConnected && (
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => {
+                          setIsEditingFlow(false);
+                          setFlowInputUrl(flowProjectUrl || '');
+                          setFlowLocalError(null);
+                        }}
+                        disabled={isFlowLoading}
+                      >
+                        Cancel
+                      </button>
+                    )}
+                  </div>
                 </div>
               )}
             </div>

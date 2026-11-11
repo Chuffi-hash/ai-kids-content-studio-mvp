@@ -23,6 +23,7 @@ model Story {
   visualStyle    String?
   targetDuration Int?
   visualBible    Json?
+  flowProjectId  String?
   scenes         Scene[]
   storyCharacters StoryCharacter[]
   createdAt      DateTime         @default(now())

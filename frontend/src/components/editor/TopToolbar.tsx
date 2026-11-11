@@ -36,6 +36,8 @@ interface TopToolbarProps {
   onOpenExport: () => void;
   onOpenStoryDetails?: () => void;
   onOpenImportScript?: () => void;
+  flowProjectId?: string | null;
+  onOpenFlowProjectModal?: () => void;
   onAutoDirect?: () => void;
   isAutoDirecting?: boolean;
   hasValidationErrors?: boolean;
@@ -62,6 +64,8 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
   onOpenExport,
   onOpenStoryDetails,
   onOpenImportScript,
+  flowProjectId,
+  onOpenFlowProjectModal,
   onAutoDirect,
   isAutoDirecting,
   hasValidationErrors,
@@ -143,6 +147,29 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
             style={{ fontSize: '11px', padding: '3px 8px', borderColor: '#8b5cf6', color: '#c084fc', background: 'rgba(139, 92, 246, 0.12)' }}
           >
             Story Details & Roles
+          </button>
+        )}
+
+        {onOpenFlowProjectModal && (
+          <button
+            type="button"
+            className="ed-tool-btn"
+            onClick={onOpenFlowProjectModal}
+            title={flowProjectId ? `Google Flow Project Connected (${flowProjectId})` : 'Connect Google Flow Project'}
+            style={{
+              fontSize: '11px',
+              padding: '3px 8px',
+              borderColor: flowProjectId ? '#10b981' : 'rgba(59, 130, 246, 0.4)',
+              color: flowProjectId ? '#34d399' : '#60a5fa',
+              background: flowProjectId ? 'rgba(16, 185, 129, 0.12)' : 'rgba(59, 130, 246, 0.12)',
+              fontWeight: 600,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+            }}
+          >
+            <span>🌊</span>
+            <span>{flowProjectId ? 'Flow Linked' : 'Google Flow'}</span>
           </button>
         )}
 

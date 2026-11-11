@@ -3,10 +3,12 @@ import { MockImageProvider } from "./image-generation/providers/mock-image.provi
 import { HostedImageProvider } from "./image-generation/providers/hosted-image.provider.js";
 import { HuggingFaceImageProvider } from "./image-generation/providers/huggingface-image.provider.js";
 import { PollinationsImageProvider } from "./image-generation/providers/pollinations-image.provider.js";
+import { GeminiImageProvider } from "./image-generation/providers/gemini-image.provider.js";
 import { VideoGenerationProvider } from "./video-generation/video-generation.provider.js";
 import { MockVideoProvider } from "./video-generation/providers/mock-video.provider.js";
 import { FFmpegVideoProvider } from "./video-generation/providers/ffmpeg-video.provider.js";
 import { AIVideoProvider } from "./video-generation/providers/ai-video.provider.js";
+import { GeminiVideoProvider } from "./video-generation/providers/gemini-video.provider.js";
 import { LocalStorageService } from "../storage/local-storage.service.js";
 
 export function getImageGenerationProvider(): ImageGenerationProvider {
@@ -21,25 +23,36 @@ export function getImageGenerationProvider(): ImageGenerationProvider {
       return new HuggingFaceImageProvider(new LocalStorageService());
     case "pollinations":
       return new PollinationsImageProvider(new LocalStorageService());
+    case "gemini":
+      return new GeminiImageProvider(new LocalStorageService());
     case "comfyui":
       throw new Error(
         "ComfyUIProvider is not yet implemented. Set IMAGE_PROVIDER=mock to use the mock provider.",
       );
     default:
       throw new Error(
-        `Unsupported IMAGE_PROVIDER value: "${providerType}". Supported values: mock, hosted, huggingface, pollinations, comfyui`,
+        `Unsupported IMAGE_PROVIDER value: "${providerType}". Supported values: mock, hosted, huggingface, pollinations, comfyui, gemini`,
       );
   }
 }
 
-export function getVideoGenerationProvider(workflow?: 'ffmpeg' | 'ai'): VideoGenerationProvider {
+export function getVideoGenerationProvider(workflow?: 'ffmpeg' | 'ai' | 'gemini'): VideoGenerationProvider {
+  if (workflow === 'gemini') {
+    return new GeminiVideoProvider();
+  }
+
   if (workflow === 'ai') {
+    if (process.env.VIDEO_PROVIDER === 'gemini') {
+      return new GeminiVideoProvider();
+    }
     return new AIVideoProvider();
   }
 
   const providerType = process.env.VIDEO_PROVIDER || "ffmpeg";
 
   switch (providerType) {
+    case "gemini":
+      return new GeminiVideoProvider();
     case "ai":
       return new AIVideoProvider();
     case "ffmpeg":

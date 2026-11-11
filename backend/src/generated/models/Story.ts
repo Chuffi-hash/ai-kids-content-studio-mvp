@@ -46,6 +46,7 @@ export type StoryMinAggregateOutputType = {
   genre: string | null
   visualStyle: string | null
   targetDuration: number | null
+  flowProjectId: string | null
   createdAt: Date | null
   updatedAt: Date | null
 }
@@ -62,6 +63,7 @@ export type StoryMaxAggregateOutputType = {
   genre: string | null
   visualStyle: string | null
   targetDuration: number | null
+  flowProjectId: string | null
   createdAt: Date | null
   updatedAt: Date | null
 }
@@ -79,6 +81,7 @@ export type StoryCountAggregateOutputType = {
   visualStyle: number
   targetDuration: number
   visualBible: number
+  flowProjectId: number
   createdAt: number
   updatedAt: number
   _all: number
@@ -105,6 +108,7 @@ export type StoryMinAggregateInputType = {
   genre?: true
   visualStyle?: true
   targetDuration?: true
+  flowProjectId?: true
   createdAt?: true
   updatedAt?: true
 }
@@ -121,6 +125,7 @@ export type StoryMaxAggregateInputType = {
   genre?: true
   visualStyle?: true
   targetDuration?: true
+  flowProjectId?: true
   createdAt?: true
   updatedAt?: true
 }
@@ -138,6 +143,7 @@ export type StoryCountAggregateInputType = {
   visualStyle?: true
   targetDuration?: true
   visualBible?: true
+  flowProjectId?: true
   createdAt?: true
   updatedAt?: true
   _all?: true
@@ -242,6 +248,7 @@ export type StoryGroupByOutputType = {
   visualStyle: string | null
   targetDuration: number | null
   visualBible: runtime.JsonValue | null
+  flowProjectId: string | null
   createdAt: Date
   updatedAt: Date
   _count: StoryCountAggregateOutputType | null
@@ -282,6 +289,7 @@ export type StoryWhereInput = {
   visualStyle?: Prisma.StringNullableFilter<"Story"> | string | null
   targetDuration?: Prisma.IntNullableFilter<"Story"> | number | null
   visualBible?: Prisma.JsonNullableFilter<"Story">
+  flowProjectId?: Prisma.StringNullableFilter<"Story"> | string | null
   createdAt?: Prisma.DateTimeFilter<"Story"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"Story"> | Date | string
   scenes?: Prisma.SceneListRelationFilter
@@ -301,6 +309,7 @@ export type StoryOrderByWithRelationInput = {
   visualStyle?: Prisma.SortOrderInput | Prisma.SortOrder
   targetDuration?: Prisma.SortOrderInput | Prisma.SortOrder
   visualBible?: Prisma.SortOrderInput | Prisma.SortOrder
+  flowProjectId?: Prisma.SortOrderInput | Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
   scenes?: Prisma.SceneOrderByRelationAggregateInput
@@ -323,6 +332,7 @@ export type StoryWhereUniqueInput = Prisma.AtLeast<{
   visualStyle?: Prisma.StringNullableFilter<"Story"> | string | null
   targetDuration?: Prisma.IntNullableFilter<"Story"> | number | null
   visualBible?: Prisma.JsonNullableFilter<"Story">
+  flowProjectId?: Prisma.StringNullableFilter<"Story"> | string | null
   createdAt?: Prisma.DateTimeFilter<"Story"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"Story"> | Date | string
   scenes?: Prisma.SceneListRelationFilter
@@ -342,6 +352,7 @@ export type StoryOrderByWithAggregationInput = {
   visualStyle?: Prisma.SortOrderInput | Prisma.SortOrder
   targetDuration?: Prisma.SortOrderInput | Prisma.SortOrder
   visualBible?: Prisma.SortOrderInput | Prisma.SortOrder
+  flowProjectId?: Prisma.SortOrderInput | Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
   _count?: Prisma.StoryCountOrderByAggregateInput
@@ -367,6 +378,7 @@ export type StoryScalarWhereWithAggregatesInput = {
   visualStyle?: Prisma.StringNullableWithAggregatesFilter<"Story"> | string | null
   targetDuration?: Prisma.IntNullableWithAggregatesFilter<"Story"> | number | null
   visualBible?: Prisma.JsonNullableWithAggregatesFilter<"Story">
+  flowProjectId?: Prisma.StringNullableWithAggregatesFilter<"Story"> | string | null
   createdAt?: Prisma.DateTimeWithAggregatesFilter<"Story"> | Date | string
   updatedAt?: Prisma.DateTimeWithAggregatesFilter<"Story"> | Date | string
 }
@@ -384,6 +396,7 @@ export type StoryCreateInput = {
   visualStyle?: string | null
   targetDuration?: number | null
   visualBible?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  flowProjectId?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   scenes?: Prisma.SceneCreateNestedManyWithoutStoryInput
@@ -403,6 +416,7 @@ export type StoryUncheckedCreateInput = {
   visualStyle?: string | null
   targetDuration?: number | null
   visualBible?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  flowProjectId?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   scenes?: Prisma.SceneUncheckedCreateNestedManyWithoutStoryInput
@@ -422,6 +436,7 @@ export type StoryUpdateInput = {
   visualStyle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   targetDuration?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   visualBible?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  flowProjectId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   scenes?: Prisma.SceneUpdateManyWithoutStoryNestedInput
@@ -441,6 +456,7 @@ export type StoryUncheckedUpdateInput = {
   visualStyle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   targetDuration?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   visualBible?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  flowProjectId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   scenes?: Prisma.SceneUncheckedUpdateManyWithoutStoryNestedInput
@@ -460,6 +476,7 @@ export type StoryCreateManyInput = {
   visualStyle?: string | null
   targetDuration?: number | null
   visualBible?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  flowProjectId?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
 }
@@ -477,6 +494,7 @@ export type StoryUpdateManyMutationInput = {
   visualStyle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   targetDuration?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   visualBible?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  flowProjectId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -494,6 +512,7 @@ export type StoryUncheckedUpdateManyInput = {
   visualStyle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   targetDuration?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   visualBible?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  flowProjectId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -511,6 +530,7 @@ export type StoryCountOrderByAggregateInput = {
   visualStyle?: Prisma.SortOrder
   targetDuration?: Prisma.SortOrder
   visualBible?: Prisma.SortOrder
+  flowProjectId?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
 }
@@ -531,6 +551,7 @@ export type StoryMaxOrderByAggregateInput = {
   genre?: Prisma.SortOrder
   visualStyle?: Prisma.SortOrder
   targetDuration?: Prisma.SortOrder
+  flowProjectId?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
 }
@@ -547,6 +568,7 @@ export type StoryMinOrderByAggregateInput = {
   genre?: Prisma.SortOrder
   visualStyle?: Prisma.SortOrder
   targetDuration?: Prisma.SortOrder
+  flowProjectId?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
 }
@@ -621,6 +643,7 @@ export type StoryCreateWithoutScenesInput = {
   visualStyle?: string | null
   targetDuration?: number | null
   visualBible?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  flowProjectId?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   storyCharacters?: Prisma.StoryCharacterCreateNestedManyWithoutStoryInput
@@ -639,6 +662,7 @@ export type StoryUncheckedCreateWithoutScenesInput = {
   visualStyle?: string | null
   targetDuration?: number | null
   visualBible?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  flowProjectId?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   storyCharacters?: Prisma.StoryCharacterUncheckedCreateNestedManyWithoutStoryInput
@@ -673,6 +697,7 @@ export type StoryUpdateWithoutScenesInput = {
   visualStyle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   targetDuration?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   visualBible?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  flowProjectId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   storyCharacters?: Prisma.StoryCharacterUpdateManyWithoutStoryNestedInput
@@ -691,6 +716,7 @@ export type StoryUncheckedUpdateWithoutScenesInput = {
   visualStyle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   targetDuration?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   visualBible?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  flowProjectId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   storyCharacters?: Prisma.StoryCharacterUncheckedUpdateManyWithoutStoryNestedInput
@@ -709,6 +735,7 @@ export type StoryCreateWithoutStoryCharactersInput = {
   visualStyle?: string | null
   targetDuration?: number | null
   visualBible?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  flowProjectId?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   scenes?: Prisma.SceneCreateNestedManyWithoutStoryInput
@@ -727,6 +754,7 @@ export type StoryUncheckedCreateWithoutStoryCharactersInput = {
   visualStyle?: string | null
   targetDuration?: number | null
   visualBible?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  flowProjectId?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   scenes?: Prisma.SceneUncheckedCreateNestedManyWithoutStoryInput
@@ -761,6 +789,7 @@ export type StoryUpdateWithoutStoryCharactersInput = {
   visualStyle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   targetDuration?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   visualBible?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  flowProjectId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   scenes?: Prisma.SceneUpdateManyWithoutStoryNestedInput
@@ -779,6 +808,7 @@ export type StoryUncheckedUpdateWithoutStoryCharactersInput = {
   visualStyle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   targetDuration?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   visualBible?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  flowProjectId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   scenes?: Prisma.SceneUncheckedUpdateManyWithoutStoryNestedInput
@@ -837,6 +867,7 @@ export type StorySelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = 
   visualStyle?: boolean
   targetDuration?: boolean
   visualBible?: boolean
+  flowProjectId?: boolean
   createdAt?: boolean
   updatedAt?: boolean
   scenes?: boolean | Prisma.Story$scenesArgs<ExtArgs>
@@ -857,6 +888,7 @@ export type StorySelectCreateManyAndReturn<ExtArgs extends runtime.Types.Extensi
   visualStyle?: boolean
   targetDuration?: boolean
   visualBible?: boolean
+  flowProjectId?: boolean
   createdAt?: boolean
   updatedAt?: boolean
 }, ExtArgs["result"]["story"]>
@@ -874,6 +906,7 @@ export type StorySelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensi
   visualStyle?: boolean
   targetDuration?: boolean
   visualBible?: boolean
+  flowProjectId?: boolean
   createdAt?: boolean
   updatedAt?: boolean
 }, ExtArgs["result"]["story"]>
@@ -891,11 +924,12 @@ export type StorySelectScalar = {
   visualStyle?: boolean
   targetDuration?: boolean
   visualBible?: boolean
+  flowProjectId?: boolean
   createdAt?: boolean
   updatedAt?: boolean
 }
 
-export type StoryOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "storyId" | "title" | "logline" | "lesson" | "topic" | "ageGroup" | "audience" | "genre" | "visualStyle" | "targetDuration" | "visualBible" | "createdAt" | "updatedAt", ExtArgs["result"]["story"]>
+export type StoryOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "storyId" | "title" | "logline" | "lesson" | "topic" | "ageGroup" | "audience" | "genre" | "visualStyle" | "targetDuration" | "visualBible" | "flowProjectId" | "createdAt" | "updatedAt", ExtArgs["result"]["story"]>
 export type StoryInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   scenes?: boolean | Prisma.Story$scenesArgs<ExtArgs>
   storyCharacters?: boolean | Prisma.Story$storyCharactersArgs<ExtArgs>
@@ -923,6 +957,7 @@ export type $StoryPayload<ExtArgs extends runtime.Types.Extensions.InternalArgs 
     visualStyle: string | null
     targetDuration: number | null
     visualBible: runtime.JsonValue | null
+    flowProjectId: string | null
     createdAt: Date
     updatedAt: Date
   }, ExtArgs["result"]["story"]>
@@ -1362,6 +1397,7 @@ export interface StoryFieldRefs {
   readonly visualStyle: Prisma.FieldRef<"Story", 'String'>
   readonly targetDuration: Prisma.FieldRef<"Story", 'Int'>
   readonly visualBible: Prisma.FieldRef<"Story", 'Json'>
+  readonly flowProjectId: Prisma.FieldRef<"Story", 'String'>
   readonly createdAt: Prisma.FieldRef<"Story", 'DateTime'>
   readonly updatedAt: Prisma.FieldRef<"Story", 'DateTime'>
 }

@@ -298,7 +298,7 @@ characterStudioRouter.delete('/characters/:id/assets/:assetId', async (req, res)
   }
 });
 
-// POST import from Google Flow
+// POST import from Google Flow (global endpoint)
 characterStudioRouter.post('/import-flow', async (req, res) => {
   try {
     const { characterId, characterName, assetType, imageBufferOrBase64, filename, notes } = req.body;
@@ -322,6 +322,45 @@ characterStudioRouter.post('/import-flow', async (req, res) => {
     });
   } catch (err: any) {
     console.error('[CharacterStudio] Google Flow import failed:', err);
+    res.status(500).json({ message: err.message || 'Google Flow asset import failed' });
+  }
+});
+
+// POST import from Google Flow (character-scoped endpoint alias)
+characterStudioRouter.post('/characters/:id/import-flow', async (req, res) => {
+  try {
+    const characterId = req.params.id;
+    const { characterName, assetType, imageBufferOrBase64, filename, notes } = req.body;
+
+    let charName = characterName;
+    if (!charName) {
+      try {
+        const char = await getCharacterById(characterId);
+        charName = char?.name || 'Character';
+      } catch {
+        charName = 'Character';
+      }
+    }
+
+    if (!assetType || !imageBufferOrBase64) {
+      return res.status(400).json({ message: 'assetType and imageBufferOrBase64 are required' });
+    }
+
+    const result = await characterGenService.importFromGoogleFlow({
+      characterId,
+      characterName: charName,
+      assetType,
+      imageBufferOrBase64,
+      filename,
+      notes,
+    });
+
+    res.json({
+      success: true,
+      result,
+    });
+  } catch (err: any) {
+    console.error('[CharacterStudio] Google Flow character import failed:', err);
     res.status(500).json({ message: err.message || 'Google Flow asset import failed' });
   }
 });

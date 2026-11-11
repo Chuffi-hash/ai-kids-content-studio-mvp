@@ -74,6 +74,7 @@ export interface EditorStory {
   targetDuration?: number | null;
   characters?: EditorCharacter[];
   scenes: EditorScene[];
+  flowProjectId?: string | null;
 }
 
 export type SaveStatus = 'saved' | 'saving' | 'dirty' | 'error';
