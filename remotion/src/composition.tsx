@@ -123,6 +123,10 @@ function getSubtitleDisplayChunk(opts: {
 }): DisplaySubtitleChunk {
   const { text, wordTimings, relativeMs, totalDurationMs, activeWordIndex } = opts;
 
+  if (totalDurationMs > 0 && relativeMs > totalDurationMs + 250) {
+    return { text: '' };
+  }
+
   // Case 1: Word-level timings available
   if (wordTimings && wordTimings.length > 0) {
     const chunks: Array<Array<SubtitleWordItem>> = [];
@@ -163,13 +167,7 @@ function getSubtitleDisplayChunk(opts: {
     }
 
     if (!activeChunk) {
-      if (relativeMs <= (chunks[0][0].startMs ?? 0)) {
-        activeChunk = chunks[0];
-      } else {
-        activeChunk =
-          [...chunks].reverse().find((c) => (c[0].startMs ?? 0) <= relativeMs) ||
-          chunks[chunks.length - 1];
-      }
+      return { text: '' };
     }
 
     return { words: activeChunk };
@@ -552,15 +550,33 @@ function SceneView({
         scale: override.scale !== undefined ? override.scale : o.scale,
       };
     }
-    if (format === '16:9' && width !== 1280) {
-      const s = width / 1280;
-      return { ...o, x: Math.round(o.x * s), y: Math.round(o.y * s) };
+    // Full-screen atmospheric effects (e.g. rain, snowfall, wind, lightning, rays) dynamically span the canvas
+    const isFullScreenAtmospheric = [
+      'rain',
+      'snowfall',
+      'wind',
+      'falling_leaves',
+      'sunshine_rays',
+      'heat_shimmer',
+      'fog_mist',
+      'lightning',
+    ].includes(o.type);
+
+    if (isFullScreenAtmospheric) {
+      return o;
     }
-    if (format === '9:16' || width < height) {
-      const xOffset = o.x - 640;
-      const newX = width / 2 + (xOffset * (width / 1280));
-      const yRatio = o.y / 720;
-      return { ...o, x: Math.round(newX), y: Math.round(yRatio * height) };
+
+    if (o.x !== undefined && o.y !== undefined) {
+      if (format === '16:9' && width !== 1280) {
+        const s = width / 1280;
+        return { ...o, x: Math.round(o.x * s), y: Math.round(o.y * s) };
+      }
+      if (format === '9:16' || width < height) {
+        const xOffset = o.x - 640;
+        const newX = width / 2 + (xOffset * (width / 1280));
+        const yRatio = o.y / 720;
+        return { ...o, x: Math.round(newX), y: Math.round(yRatio * height) };
+      }
     }
     return o;
   });
@@ -608,7 +624,7 @@ function SceneView({
         }),
         activeWordIndex: activeDialogueWordIndex,
       }
-    : (scene.caption || (isNarrationSpeaking && scene.narration?.text))
+    : (isNarrationSpeaking && (scene.narration?.text || scene.caption))
     ? {
         type: 'narration' as const,
         speaker: undefined,
@@ -697,6 +713,8 @@ function SceneView({
               key={o.id}
               overlay={o}
               sceneRelativeMs={sceneRelativeMs}
+              viewportWidth={width}
+              viewportHeight={height}
             />
           ))}
 
@@ -725,6 +743,8 @@ function SceneView({
               key={o.id}
               overlay={o}
               sceneRelativeMs={sceneRelativeMs}
+              viewportWidth={width}
+              viewportHeight={height}
             />
           ))}
         </svg>

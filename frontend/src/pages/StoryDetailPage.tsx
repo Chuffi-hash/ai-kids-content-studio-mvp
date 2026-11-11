@@ -194,6 +194,41 @@ export default function StoryDetailPage() {
   // ----------------------------------------------------
   // Debounced Autosave Engine
   // ----------------------------------------------------
+  const pendingSaveDataRef = useRef<{ scenes: EditorScene[]; story?: Partial<EditorStory> } | null>(null);
+
+  const flushPendingSave = useCallback(async () => {
+    if (autosaveTimeoutRef.current) {
+      clearTimeout(autosaveTimeoutRef.current);
+      autosaveTimeoutRef.current = null;
+    }
+    if (!pendingSaveDataRef.current || !storyId) return;
+    const { scenes: scenesToSave, story: storyToSave } = pendingSaveDataRef.current;
+    pendingSaveDataRef.current = null;
+    setSaveStatus('saving');
+    try {
+      const promises: Promise<any>[] = [];
+      if (scenesToSave.length > 0) {
+        promises.push(editorService.batchSaveTimeline(storyId, scenesToSave));
+      }
+      if (storyToSave) {
+        promises.push(
+          editorService.saveStoryMetadata(storyId, {
+            title: storyToSave.title,
+            targetDuration: storyToSave.targetDuration,
+            logline: storyToSave.logline,
+            lesson: storyToSave.lesson,
+          })
+        );
+      }
+      await Promise.all(promises);
+      setSaveStatus('saved');
+    } catch (err: any) {
+      console.error('Autosave flush error:', err);
+      setSaveStatus('error');
+      setSaveError(err.message || 'Save failed');
+    }
+  }, [storyId]);
+
   const triggerDebouncedSave = useCallback(
     (updatedScenes: EditorScene[], updatedStory?: Partial<EditorStory>) => {
       if (isInitialMountRef.current) {
@@ -203,6 +238,7 @@ export default function StoryDetailPage() {
 
       setSaveStatus('saving');
       setSaveError(null);
+      pendingSaveDataRef.current = { scenes: updatedScenes, story: updatedStory };
 
       if (autosaveTimeoutRef.current) {
         clearTimeout(autosaveTimeoutRef.current);
@@ -230,6 +266,7 @@ export default function StoryDetailPage() {
           }
 
           await Promise.all(promises);
+          pendingSaveDataRef.current = null;
           setSaveStatus('saved');
         } catch (err: any) {
           console.error('Autosave error:', err);
@@ -334,14 +371,18 @@ export default function StoryDetailPage() {
   // ----------------------------------------------------
   // Playhead & Transport Controls
   // ----------------------------------------------------
-  const handleTogglePreviewMode = (mode: 'scene' | 'export' | 'remotion') => {
+  const handleTogglePreviewMode = async (mode: 'scene' | 'export' | 'remotion') => {
     // 1. Immediately stop any active editor playback loop
     setIsPlaying(false);
     // 2. Silence all scene editor audio tracks
     if (audioManagerRef.current) {
       audioManagerRef.current.stopAll();
     }
-    // 3. Switch preview mode
+    // 3. Flush any pending scene/story changes before loading Remotion or Export
+    if (mode === 'remotion' || mode === 'export') {
+      await flushPendingSave();
+    }
+    // 4. Switch preview mode
     setPreviewMode(mode);
   };
 
@@ -1793,7 +1834,10 @@ export default function StoryDetailPage() {
         isPlaying={isPlaying}
         onTogglePlay={handleTogglePlay}
         onRewind={handleRewind}
-        onOpenExport={() => setIsExportModalOpen(true)}
+        onOpenExport={async () => {
+          await flushPendingSave();
+          setIsExportModalOpen(true);
+        }}
         onOpenStoryDetails={() => setIsStoryDetailsOpen(true)}
         onOpenImportScript={() => setIsImportScriptOpen(true)}
         flowProjectId={story.flowProjectId}

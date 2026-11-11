@@ -185,16 +185,34 @@ export interface RemotionScene {
   }>;
   overlays?: Array<{
     id: string;
-    type: 'location_pin' | 'route_line' | 'highlight_ring' | 'directional_arrow' | 'callout_label';
-    x: number;
-    y: number;
+    type: string;
+    x?: number;
+    y?: number;
     scale?: number;
     rotation?: number;
     color?: string;
+    fillColor?: string;
+    textColor?: string;
+    strokeWidth?: number;
+    fontSize?: number;
     label?: string;
+    title?: string;
     endX?: number;
     endY?: number;
+    targetX?: number;
+    targetY?: number;
     radius?: number;
+    radiusX?: number;
+    radiusY?: number;
+    width?: number;
+    height?: number;
+    icon?: string;
+    style?: string;
+    animationStyle?: string;
+    hasConnectorLine?: boolean;
+    pulseSpeedMs?: number;
+    progressDurationMs?: number;
+    pathD?: string;
     startMs?: number;
     durationMs?: number;
     layerDepth?: 'below_characters' | 'above_characters';
@@ -569,7 +587,7 @@ export class RemotionManifestAdapter {
         }
 
         const lineEndMs = lineStartMs + lineDurationMs;
-        currentAudioCursorMs = lineEndMs + SPEECH_TURN_GAP_MS;
+        currentAudioCursorMs = Math.max(currentAudioCursorMs, lineEndMs + SPEECH_TURN_GAP_MS);
 
         const adaptedLine = {
           id: line.id || `dlg-${sceneNum}-${dIdx + 1}`,
@@ -704,17 +722,35 @@ export class RemotionManifestAdapter {
       const adaptedOverlays = (animData.overlays || []).map((o: any) => ({
         id: o.id,
         type: o.type,
-        x: o.x,
-        y: o.y,
-        scale: o.scale,
-        rotation: o.rotation,
+        x: o.x ?? 640,
+        y: o.y ?? 360,
+        scale: o.scale ?? 1,
+        rotation: o.rotation ?? 0,
         color: o.color,
+        fillColor: o.fillColor,
+        textColor: o.textColor,
+        strokeWidth: o.strokeWidth,
+        fontSize: o.fontSize,
         label: o.label,
-        endX: o.endX,
-        endY: o.endY,
+        title: o.title,
+        endX: o.endX ?? o.targetX,
+        endY: o.endY ?? o.targetY,
+        targetX: o.targetX ?? o.endX,
+        targetY: o.targetY ?? o.endY,
         radius: o.radius,
-        startMs: o.startMs,
-        durationMs: o.durationMs,
+        radiusX: o.radiusX,
+        radiusY: o.radiusY,
+        width: o.width,
+        height: o.height,
+        icon: o.icon,
+        style: o.style,
+        animationStyle: o.animationStyle,
+        hasConnectorLine: o.hasConnectorLine,
+        pulseSpeedMs: o.pulseSpeedMs,
+        progressDurationMs: o.progressDurationMs,
+        pathD: o.pathD,
+        startMs: o.startMs ?? 0,
+        durationMs: o.durationMs ?? durationMs,
         layerDepth: o.layerPosition === 'below_characters' || (o.zIndex !== undefined && o.zIndex < 0)
           ? 'below_characters' as const
           : 'above_characters' as const,
@@ -731,7 +767,7 @@ export class RemotionManifestAdapter {
         sceneNumber: sceneNum,
         durationMs,
         title: scene.title || `Scene ${sceneNum}`,
-        caption: scene.narration || scene.caption || '',
+        caption: scene.caption || '',
         background: backgroundConfig,
         cameraMovement,
         cameraRotation,

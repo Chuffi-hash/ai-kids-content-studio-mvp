@@ -159,23 +159,60 @@ export type EducationalOverlayType =
   | 'route_line'
   | 'highlight_ring'
   | 'directional_arrow'
-  | 'callout_label';
+  | 'arrow_pointer'
+  | 'callout_label'
+  | 'spotlight'
+  | 'glow'
+  | 'sparkles'
+  | 'flying_birds'
+  | 'moving_clouds'
+  | 'title_card'
+  | 'rain'
+  | 'snowfall'
+  | 'wind'
+  | 'falling_leaves'
+  | 'sunshine_rays'
+  | 'heat_shimmer'
+  | 'fog_mist'
+  | 'lightning'
+  | 'water_splashes'
+  | 'butterflies'
+  | string;
 
 export interface EducationalOverlay {
   id: string;
   type: EducationalOverlayType;
-  x: number;
-  y: number;
+  x?: number;
+  y?: number;
   scale?: number;
   rotation?: number;
   color?: string;
+  fillColor?: string;
+  textColor?: string;
+  strokeWidth?: number;
+  fontSize?: number;
   label?: string;
+  title?: string;
   endX?: number;
   endY?: number;
+  targetX?: number;
+  targetY?: number;
   radius?: number;
+  radiusX?: number;
+  radiusY?: number;
+  width?: number;
+  height?: number;
+  icon?: 'pin' | 'flag' | 'star' | 'mountain' | 'city' | string;
+  style?: 'solid' | 'dashed' | 'glow' | 'pulse' | 'radar' | string;
+  animationStyle?: 'fade' | 'pop' | 'drop' | 'draw' | 'pulse' | string;
+  hasConnectorLine?: boolean;
+  pulseSpeedMs?: number;
+  progressDurationMs?: number;
+  pathD?: string;
   startMs?: number;
   durationMs?: number;
   layerDepth?: 'below_characters' | 'above_characters';
+  layerPosition?: 'below_characters' | 'above_characters';
   text?: string; // backwards compatibility with pilot text overlays
 }
 
