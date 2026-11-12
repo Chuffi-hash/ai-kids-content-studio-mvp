@@ -13,6 +13,16 @@ export interface MotionPath {
   easing?: 'linear' | 'easeInOut' | 'easeIn' | 'easeOut';
 }
 
+export type CharacterFacingDirection =
+  | 'front'
+  | 'front-left'
+  | 'front-right'
+  | 'left'
+  | 'right'
+  | 'back-left'
+  | 'back-right'
+  | 'back';
+
 export interface CharacterInstance {
   instanceId: string;
   characterId: string;
@@ -23,10 +33,13 @@ export interface CharacterInstance {
   scale: number;
   rotation: number;
   flipX: boolean;
+  facingDirection?: CharacterFacingDirection;
   zIndex: number;
   customRig?: VectorRigDefinition;
   appearance?: CustomCharacterAppearance;
   expression?: FacialExpression;
+  action?: AnimationActionType;
+  isSpeaker?: boolean;
 }
 
 export type AnimationActionType = 'idle' | 'walk' | 'wave' | 'jump' | 'point';
@@ -35,6 +48,7 @@ export interface AnimationClip {
   clipId: string;
   instanceId: string;
   action: AnimationActionType;
+  facingDirection?: CharacterFacingDirection;
   startMs: number;
   durationMs: number;
   loop: boolean;
@@ -268,9 +282,12 @@ export interface FormatVariantPresentation {
     x?: number;
     y?: number;
     scale?: number;
+    rotation?: number;
+    flipX?: boolean;
+    facingDirection?: CharacterFacingDirection;
   }>;
   background?: {
-    fit?: 'cover' | 'contain';
+    fit?: 'cover' | 'contain' | 'fill';
     focalPoint?: { x: number; y: number };
   };
   overlayOverrides?: Record<string, {
@@ -317,6 +334,7 @@ export interface EvaluatedCharacterPose {
   scale: number;
   rotation: number;
   flipX: boolean;
+  facingDirection?: CharacterFacingDirection;
   torsoBobY: number;
   torsoAngle: number;
   headAngle: number;

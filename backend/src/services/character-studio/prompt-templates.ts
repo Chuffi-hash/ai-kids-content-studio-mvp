@@ -12,6 +12,9 @@ export interface CharacterPromptOptions {
   clothing?: string;
   artStyle?: '2d_cartoon' | '3d_pixar' | 'storybook_illustrated' | 'anime_kids';
   transparentBackground?: boolean;
+  viewDirection?: 'front' | 'front-left' | 'front-right' | 'left' | 'right' | 'back-left' | 'back-right' | 'back';
+  framing?: 'full_body' | 'medium_shot' | 'close_up';
+  canonicalAppearanceReference?: string;
 }
 
 export interface BackgroundPromptOptions {
@@ -19,6 +22,7 @@ export interface BackgroundPromptOptions {
   details?: string;
   mood?: string;
   artStyle?: '2d_cartoon' | '3d_pixar' | 'storybook_illustrated';
+  aspectRatio?: '16:9' | '9:16' | '1:1' | '4:5';
 }
 
 export const PROMPT_STYLE_MODIFIERS: Record<string, string> = {
@@ -29,7 +33,7 @@ export const PROMPT_STYLE_MODIFIERS: Record<string, string> = {
 };
 
 /**
- * 1. Main Character Reference Prompt (Full-Body, Front View)
+ * 1. Main Character Reference Prompt (Full-Body, Configurable View Direction & Framing)
  */
 export function buildCharacterReferencePrompt(opts: CharacterPromptOptions): string {
   const style = PROMPT_STYLE_MODIFIERS[opts.artStyle || '2d_cartoon'];
@@ -39,7 +43,28 @@ export function buildCharacterReferencePrompt(opts: CharacterPromptOptions): str
     ? 'clean white background (or transparent background)'
     : 'clean white background';
 
-  return `Create a cute consistent children's story animation character named '${opts.name}'. A ${ageStr}${speciesStr}character with ${opts.visualDescription}. ${opts.clothing ? `Wearing ${opts.clothing}. ` : ''}Show the complete character from head to toe, full body, standing front view, neutral friendly pose, clearly visible facial features, ${style}, high quality, no text, no watermark, ${bgType}. Do not crop the character.`;
+  let viewInstruction = 'standing front view, neutral friendly pose, clearly visible facial features';
+  if (opts.viewDirection === 'back') {
+    viewInstruction = 'facing directly away from camera, full back view, back of head, hair seen from behind, strictly NO eyes, NO nose, NO mouth visible';
+  } else if (opts.viewDirection === 'back-left' || opts.viewDirection === 'back-right') {
+    viewInstruction = `facing rear three-quarter angle (${opts.viewDirection}), back of head and shoulder prominent, strictly NO front facial features visible`;
+  } else if (opts.viewDirection === 'left' || opts.viewDirection === 'right') {
+    viewInstruction = `true side profile view facing ${opts.viewDirection}, single profile eye, profile nose and mouth, clear silhouette, far eye hidden`;
+  } else if (opts.viewDirection === 'front-left' || opts.viewDirection === 'front-right') {
+    viewInstruction = `three-quarter view facing ${opts.viewDirection}, both eyes visible with natural perspective angle`;
+  }
+
+  const framingStr = opts.framing === 'close_up'
+    ? 'Close-up headshot portrait'
+    : (opts.framing === 'medium_shot'
+        ? 'Medium shot from waist up'
+        : 'Show the complete character from head to toe, full body');
+
+  const refStr = opts.canonicalAppearanceReference
+    ? ` Strictly match canonical character design reference: ${opts.canonicalAppearanceReference}.`
+    : '';
+
+  return `Create a cute consistent children's story animation character named '${opts.name}'. A ${ageStr}${speciesStr}character with ${opts.visualDescription}. ${opts.clothing ? `Wearing ${opts.clothing}. ` : ''}${framingStr}, ${viewInstruction}, ${style}, high quality, no text, no watermark, ${bgType}.${refStr} Do not crop the character.`;
 }
 
 /**
@@ -74,5 +99,14 @@ export function buildSceneBackgroundPrompt(opts: BackgroundPromptOptions): strin
   const mood = opts.mood ? `, with a ${opts.mood} atmosphere` : '';
   const details = opts.details ? `. Details: ${opts.details}` : '';
 
-  return `Create a high-quality illustrated children's story environment: a colorful, detailed ${opts.environmentType}${details}${mood}. Show a complete, visually rich environment with clear depth (foreground, middle ground, background). Leave enough clear space for animated characters to stand and move. ${style}, bright warm lighting. Strictly NO characters, NO people, NO animals, NO text, NO captions, NO logos, NO watermarks.`;
+  let formatInstruction = 'Wide landscape composition (16:9 aspect ratio, 1920x1080), expansive cinematic horizontal framing, wide ground plane for multiple characters.';
+  if (opts.aspectRatio === '9:16') {
+    formatInstruction = 'Vertical portrait composition (9:16 aspect ratio, 1080x1920), tall vertical scenery suitable for reels and shorts, focal elements placed in the vertical safe action area (middle 60%), open space for character placement.';
+  } else if (opts.aspectRatio === '1:1') {
+    formatInstruction = 'Balanced square composition (1:1 aspect ratio, 1080x1080), centered focal scenery with even margins and ground plane.';
+  } else if (opts.aspectRatio === '4:5') {
+    formatInstruction = 'Vertical portrait composition (4:5 aspect ratio, 1080x1350), rich vertical scenery with balanced top and bottom margins.';
+  }
+
+  return `Create a high-quality illustrated children's story environment: a colorful, detailed ${opts.environmentType}${details}${mood}. ${formatInstruction} Show a complete, visually rich environment with clear depth (foreground, middle ground, background). Leave enough clear space for animated characters to stand and move. ${style}, bright warm lighting. Strictly NO characters, NO people, NO animals, NO text, NO captions, NO logos, NO watermarks.`;
 }

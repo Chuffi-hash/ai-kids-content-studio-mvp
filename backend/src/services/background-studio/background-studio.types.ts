@@ -16,6 +16,10 @@ export interface BackgroundAsset {
   aspectRatio: '16:9' | '9:16' | '1:1' | '4:5';
   width: number;
   height: number;
+  originalDimensions?: { width: number; height: number };
+  originalAspectRatio?: '16:9' | '9:16' | '1:1' | '4:5';
+  fitMode?: 'cover' | 'contain' | 'fill';
+  focalPoint?: { x: number; y: number };
   tags?: string[];
   createdAt: string;
 }

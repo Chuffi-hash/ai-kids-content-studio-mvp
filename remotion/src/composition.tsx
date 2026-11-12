@@ -511,13 +511,16 @@ function SceneView({
   const bgUrl = isBgRemoved
     ? ''
     : shotBgUrl || bg?.imageUrl || scene.backgroundUrl || (scene.backgroundSrc ? staticFile(scene.backgroundSrc) : '');
-  const rawFit = bg?.fit || 'cover';
-  const objectFit: React.CSSProperties['objectFit'] = rawFit === 'contain' ? 'contain' : (rawFit === 'fill' ? 'fill' : 'cover');
-
-  // Format Variant Overrides
   const formatVariant = scene.formatVariants?.[format];
   const charOverrides = formatVariant?.characterOverrides;
   const overlayOverrides = formatVariant?.overlayOverrides;
+
+  const rawFit = bg?.fit || 'cover';
+  const objectFit: React.CSSProperties['objectFit'] = rawFit === 'contain' ? 'contain' : (rawFit === 'fill' ? 'fill' : 'cover');
+  const focalPoint = bg?.focalPoint || formatVariant?.background?.focalPoint;
+  const objectPosition: React.CSSProperties['objectPosition'] = focalPoint
+    ? `${focalPoint.x}% ${focalPoint.y}%`
+    : 'center';
 
   // Helper function to adapt any character instance to the active format and dimensions
   const adaptInstanceForFormat = (
@@ -545,6 +548,7 @@ function SceneView({
       scale: rawScaleVal,
       rotation: placement?.rotation ?? inst.rotation ?? 0,
       flipX: placement?.flipX ?? targetFlipX ?? inst.flipX,
+      facingDirection: placement?.facingDirection || inst.facingDirection || 'front',
       action: placement?.action || inst.action || 'idle',
       expression: (placement?.expression || inst.expression) as FacialExpression | undefined,
       zIndex: placement?.zIndex ?? inst.zIndex ?? (instIdx + 1),
@@ -553,22 +557,32 @@ function SceneView({
 
     const override = charOverrides?.[inst.instanceId];
     if (override) {
-      let ox = override.x !== undefined ? override.x : baseInst.x;
-      let oy = override.y !== undefined ? override.y : baseInst.y;
-      // Auto-recovery across all aspect ratios
-      if (format === '9:16' && (oy < 200 || oy > height - 100)) {
+      const variantRefW = formatVariant?.width || (format === '16:9' ? 1280 : 720);
+      const variantRefH = formatVariant?.height || (format === '16:9' ? 720 : (format === '9:16' ? 1280 : format === '4:5' ? 900 : 720));
+      const scaleX = width / variantRefW;
+      const scaleY = height / variantRefH;
+      let ox = override.x !== undefined ? Math.round(override.x * scaleX) : baseInst.x;
+      let oy = override.y !== undefined ? Math.round(override.y * scaleY) : baseInst.y;
+      const oScale = override.scale !== undefined
+        ? Number((override.scale * scaleX).toFixed(2))
+        : Number(((baseInst.scale ?? 1.0) * scaleX).toFixed(2));
+
+      // Auto-recovery safety margin (ensures character stays in visible frame)
+      if (format === '9:16' && (oy < Math.round(height * 0.15) || oy > height - Math.round(height * 0.08))) {
         oy = Math.round(height * 0.65);
-      } else if (format === '1:1' && (oy < 150 || oy > height - 80)) {
+      } else if (format === '1:1' && (oy < Math.round(height * 0.12) || oy > height - Math.round(height * 0.08))) {
         oy = Math.round(height * 0.68);
-      } else if (format === '4:5' && (oy < 180 || oy > height - 90)) {
+      } else if (format === '4:5' && (oy < Math.round(height * 0.15) || oy > height - Math.round(height * 0.08))) {
         oy = Math.round(height * 0.68);
       }
       return {
         ...baseInst,
         x: ox,
         y: oy,
-        scale: override.scale !== undefined ? override.scale : (baseInst.scale ?? 1.0),
-        flipX: targetFlipX ?? baseInst.flipX,
+        scale: oScale,
+        rotation: override.rotation !== undefined ? override.rotation : baseInst.rotation,
+        flipX: override.flipX !== undefined ? override.flipX : baseInst.flipX,
+        facingDirection: override.facingDirection || baseInst.facingDirection || 'front',
       };
     }
 
@@ -583,79 +597,128 @@ function SceneView({
         y: Math.round(baseInst.y * s),
         scale: Number((rawScale * s).toFixed(2)),
         flipX: targetFlipX ?? baseInst.flipX,
+        facingDirection: baseInst.facingDirection || 'front',
       };
     }
 
     if (format === '9:16' || width < height) {
       // 9:16 Portrait Reel:
+      const resFactor = width / 720;
       const scaleMult = isSingleChar ? 1.55 : 1.35;
-      const boostedScale = Number((rawScale * scaleMult).toFixed(2));
-      const xOffset = baseInst.x - 640;
-      let newX = width / 2 + (xOffset * (width / 1280));
-      let newY = Math.round(baseInst.y * (height / 720));
-      if (newY < 200 || newY > height - 100) {
-        newY = Math.round(height * 0.65);
+      const boostedScale = Number((rawScale * scaleMult * resFactor).toFixed(2));
+      let newX: number;
+      let newY = Math.round(height * 0.65);
+
+      if (isSingleChar) {
+        newX = Math.round(width / 2);
+      } else if (arr.length === 2) {
+        newX = instIdx === 0 ? Math.round(width * 0.35) : Math.round(width * 0.65);
+      } else {
+        const span = width * 0.6;
+        const step = span / Math.max(1, arr.length - 1);
+        newX = Math.round(width * 0.2 + instIdx * step);
       }
 
       return {
         ...baseInst,
-        x: Math.round(newX),
+        x: newX,
         y: newY,
         scale: boostedScale,
         flipX: targetFlipX ?? baseInst.flipX,
+        facingDirection: baseInst.facingDirection || 'front',
       };
     }
 
     if (format === '1:1') {
-      const xOffset = baseInst.x - 640;
-      let newX = width / 2 + (xOffset * (width / 1280));
-      let newY = Math.round(baseInst.y * (height / 720));
-      if (newY < 150 || newY > height - 80) {
-        newY = Math.round(height * 0.68);
-      }
+      const resFactor = width / 720;
       const scaleMult = isSingleChar ? 1.25 : 1.15;
+      let newX: number;
+      let newY = Math.round(height * 0.68);
+
+      if (isSingleChar) {
+        newX = Math.round(width / 2);
+      } else if (arr.length === 2) {
+        newX = instIdx === 0 ? Math.round(width * 0.36) : Math.round(width * 0.64);
+      } else {
+        const span = width * 0.65;
+        const step = span / Math.max(1, arr.length - 1);
+        newX = Math.round(width * 0.18 + instIdx * step);
+      }
+
       return {
         ...baseInst,
-        x: Math.round(newX),
+        x: newX,
         y: newY,
-        scale: Number((rawScale * scaleMult).toFixed(2)),
+        scale: Number((rawScale * scaleMult * resFactor).toFixed(2)),
         flipX: targetFlipX ?? baseInst.flipX,
+        facingDirection: baseInst.facingDirection || 'front',
       };
     }
 
     if (format === '4:5') {
-      const xOffset = baseInst.x - 640;
-      let newX = width / 2 + (xOffset * (width / 1280));
-      let newY = Math.round(baseInst.y * (height / 720));
-      if (newY < 180 || newY > height - 90) {
-        newY = Math.round(height * 0.68);
-      }
+      const resFactor = width / 720;
       const scaleMult = isSingleChar ? 1.35 : 1.22;
+      let newX: number;
+      let newY = Math.round(height * 0.68);
+
+      if (isSingleChar) {
+        newX = Math.round(width / 2);
+      } else if (arr.length === 2) {
+        newX = instIdx === 0 ? Math.round(width * 0.35) : Math.round(width * 0.65);
+      } else {
+        const span = width * 0.62;
+        const step = span / Math.max(1, arr.length - 1);
+        newX = Math.round(width * 0.19 + instIdx * step);
+      }
+
       return {
         ...baseInst,
-        x: Math.round(newX),
+        x: newX,
         y: newY,
-        scale: Number((rawScale * scaleMult).toFixed(2)),
+        scale: Number((rawScale * scaleMult * resFactor).toFixed(2)),
         flipX: targetFlipX ?? baseInst.flipX,
+        facingDirection: baseInst.facingDirection || 'front',
       };
     }
 
     return baseInst;
   };
 
+  // Base raw instances: use scene.characterInstances if present, otherwise reconstruct from activeShot.characterPlacements
+  const rawSceneInstances = (scene.characterInstances && scene.characterInstances.length > 0)
+    ? scene.characterInstances
+    : (activeShot?.characterPlacements && activeShot.characterPlacements.length > 0)
+      ? activeShot.characterPlacements.map((cp, idx) => ({
+          instanceId: cp.instanceId || `inst-${idx}`,
+          characterId: cp.characterId || `char-${idx}`,
+          name: cp.name || 'Character',
+          x: cp.x ?? 640,
+          y: cp.y ?? 480,
+          scale: cp.scale ?? 1.0,
+          rotation: cp.rotation ?? 0,
+          flipX: Boolean(cp.flipX),
+          facingDirection: cp.facingDirection || 'front',
+          zIndex: cp.zIndex ?? (idx + 1),
+          action: cp.action || 'idle',
+          expression: cp.expression as FacialExpression | undefined,
+          isSpeaker: Boolean(cp.isSpeaker),
+          customRig: getVectorRig(cp.characterId || cp.name),
+        }))
+      : [];
+
   // Evaluate incoming instances for active shot
-  const instances = (scene.characterInstances || []).map((inst, instIdx, arr) => {
+  const instances = rawSceneInstances.map((inst, instIdx, arr) => {
     const currPlacement = activeShot?.characterPlacements?.find(
-      (cp) => cp.instanceId === inst.instanceId || cp.characterId === inst.characterId
+      (cp) => cp.instanceId === inst.instanceId || cp.characterId === inst.characterId || cp.name === inst.name
     );
     return adaptInstanceForFormat(inst, currPlacement, instIdx, arr);
   });
 
   // Evaluate outgoing instances for previous shot during crossfade
   const outgoingInstances = isCrossfading && prevShot
-    ? (scene.characterInstances || []).map((inst, instIdx, arr) => {
+    ? rawSceneInstances.map((inst, instIdx, arr) => {
         const prevPlacement = prevShot.characterPlacements?.find(
-          (cp) => cp.instanceId === inst.instanceId || cp.characterId === inst.characterId
+          (cp) => cp.instanceId === inst.instanceId || cp.characterId === inst.characterId || cp.name === inst.name
         );
         return adaptInstanceForFormat(inst, prevPlacement, instIdx, arr);
       })
@@ -668,7 +731,7 @@ function SceneView({
     }
     return (scene.animationClips || []).map((clip) => {
       if (clip.motionPath) {
-        const baseInst = (scene.characterInstances || []).find((i) => i.instanceId === clip.instanceId);
+        const baseInst = rawSceneInstances.find((i) => i.instanceId === clip.instanceId);
         const curInst = instances.find((i) => i.instanceId === clip.instanceId);
         if (baseInst && curInst) {
           const deltaStartX = (clip.motionPath.startX - baseInst.x) * (width / 1280);
@@ -701,7 +764,7 @@ function SceneView({
       }
       return clip;
     });
-  }, [scene.animationClips, instances, scene.characterInstances, format, width, height]);
+  }, [scene.animationClips, instances, rawSceneInstances, format, width, height]);
 
   const sortedIncomingInstances = [...instances].sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
   const sortedOutgoingInstances = [...outgoingInstances].sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
@@ -818,95 +881,112 @@ function SceneView({
           transformOrigin: '50% 50%',
         }}
       >
-        {/* Background Layer: Outgoing Shot Background (during crossfade) */}
-        {isCrossfading && prevShot && (
-          <AbsoluteFill style={{ zIndex: 0, opacity: 1 - crossfadeAlpha }}>
-            {prevShot.videoUrl ? (
-              <Video
-                src={prevShot.videoUrl.startsWith('http') || prevShot.videoUrl.startsWith('data:') ? prevShot.videoUrl : staticFile(prevShot.videoUrl)}
-                style={{ width: '100%', height: '100%', objectFit }}
-              />
-            ) : prevShot.backgroundUrl ? (
-              <Img
-                src={prevShot.backgroundUrl}
-                style={{ width: '100%', height: '100%', objectFit }}
-              />
+        {/* Layer 1: Background Container (zIndex: 1) */}
+        <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 1 }}>
+          {/* Outgoing Shot Background (during crossfade) */}
+          {isCrossfading && prevShot && (
+            <AbsoluteFill style={{ zIndex: 1, opacity: 1 - crossfadeAlpha }}>
+              {prevShot.videoUrl ? (
+                <Video
+                  src={prevShot.videoUrl.startsWith('http') || prevShot.videoUrl.startsWith('data:') ? prevShot.videoUrl : staticFile(prevShot.videoUrl)}
+                  style={{ width: '100%', height: '100%', objectFit, objectPosition }}
+                />
+              ) : prevShot.backgroundUrl ? (
+                <Img
+                  src={prevShot.backgroundUrl}
+                  style={{ width: '100%', height: '100%', objectFit, objectPosition }}
+                />
+              ) : (
+                <StorybookScenicBackdrop width={width} height={height} sceneNumber={scene.sceneNumber || 1} />
+              )}
+            </AbsoluteFill>
+          )}
+
+          {/* Active Shot Background */}
+          <AbsoluteFill style={{ zIndex: 2, opacity: isCrossfading ? crossfadeAlpha : 1 }}>
+            {activeShot?.videoUrl || scene.videoSrc ? (
+              <AbsoluteFill>
+                <Video
+                  src={(() => {
+                    const vSrc = activeShot?.videoUrl || scene.videoSrc!;
+                    return vSrc.startsWith('http') || vSrc.startsWith('data:') ? vSrc : staticFile(vSrc);
+                  })()}
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    objectFit,
+                    objectPosition,
+                  }}
+                />
+              </AbsoluteFill>
+            ) : scene.frames && scene.frames.length > 0 ? (
+              <AbsoluteFill>
+                <Img
+                  src={(() => {
+                    const idx = Math.min(scene.frames.length - 1, Math.floor(progress * scene.frames.length));
+                    const f = scene.frames[idx];
+                    return f.startsWith('http') || f.startsWith('data:') ? f : staticFile(f);
+                  })()}
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    objectFit,
+                    objectPosition,
+                  }}
+                />
+              </AbsoluteFill>
+            ) : bgUrl ? (
+              <AbsoluteFill>
+                <Img
+                  src={bgUrl}
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    objectFit,
+                    objectPosition,
+                  }}
+                  onError={(e) => {
+                    console.warn('[Remotion] Scene background image load failed, falling back to storybook scenery:', e);
+                  }}
+                />
+              </AbsoluteFill>
             ) : (
-              <StorybookScenicBackdrop width={width} height={height} sceneNumber={scene.sceneNumber || 1} />
+              <StorybookScenicBackdrop
+                width={width}
+                height={height}
+                sceneNumber={scene.sceneNumber || 1}
+              />
             )}
           </AbsoluteFill>
-        )}
-        <AbsoluteFill style={{ zIndex: 1, opacity: isCrossfading ? crossfadeAlpha : 1 }}>
-          {activeShot?.videoUrl || scene.videoSrc ? (
-            <AbsoluteFill>
-              <Video
-                src={(() => {
-                  const vSrc = activeShot?.videoUrl || scene.videoSrc!;
-                  return vSrc.startsWith('http') || vSrc.startsWith('data:') ? vSrc : staticFile(vSrc);
-                })()}
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  objectFit,
-                }}
-              />
-            </AbsoluteFill>
-          ) : scene.frames && scene.frames.length > 0 ? (
-            <AbsoluteFill>
-              <Img
-                src={(() => {
-                  const idx = Math.min(scene.frames.length - 1, Math.floor(progress * scene.frames.length));
-                  const f = scene.frames[idx];
-                  return f.startsWith('http') || f.startsWith('data:') ? f : staticFile(f);
-                })()}
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  objectFit,
-                }}
-              />
-            </AbsoluteFill>
-          ) : bgUrl ? (
-            <AbsoluteFill>
-              <Img
-                src={bgUrl}
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  objectFit,
-                }}
-                onError={(e) => {
-                  console.warn('[Remotion] Scene background image load failed, falling back to storybook scenery:', e);
-                }}
-              />
-            </AbsoluteFill>
-          ) : (
-            <StorybookScenicBackdrop
-              width={width}
-              height={height}
-              sceneNumber={scene.sceneNumber || 1}
-            />
-          )}
-        </AbsoluteFill>
+        </div>
 
-        {/* Vector Characters & Overlays SVG Plane */}
+        {/* Layer 2: Below-Character Atmospheric Effects / Overlays (zIndex: 5) */}
+        {belowOverlays.length > 0 && (
+          <svg
+            width={width}
+            height={height}
+            viewBox={`0 0 ${width} ${height}`}
+            style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 5, overflow: 'visible', pointerEvents: 'none' }}
+          >
+            {belowOverlays.map((o) => (
+              <EducationalOverlayRenderer
+                key={o.id}
+                overlay={o}
+                sceneRelativeMs={sceneRelativeMs}
+                viewportWidth={width}
+                viewportHeight={height}
+              />
+            ))}
+          </svg>
+        )}
+
+        {/* Layer 3: Articulated Vector Characters & Animations (zIndex: 10) */}
         <svg
           width={width}
           height={height}
           viewBox={`0 0 ${width} ${height}`}
-          style={{ position: 'absolute', top: 0, left: 0, overflow: 'visible' }}
+          style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 10, overflow: 'visible', pointerEvents: 'none' }}
         >
-          {/* Below-Character Overlays */}
-          {belowOverlays.map((o) => (
-            <EducationalOverlayRenderer
-              key={o.id}
-              overlay={o}
-              sceneRelativeMs={sceneRelativeMs}
-              viewportWidth={width}
-              viewportHeight={height}
-            />
-          ))}
-
           {/* Outgoing characters during crossfade */}
           {isCrossfading && prevShot && sortedOutgoingInstances.length > 0 && (
             <g opacity={1 - crossfadeAlpha}>
@@ -950,18 +1030,27 @@ function SceneView({
               );
             })}
           </g>
-
-          {/* Above-Character Overlays */}
-          {aboveOverlays.map((o) => (
-            <EducationalOverlayRenderer
-              key={o.id}
-              overlay={o}
-              sceneRelativeMs={sceneRelativeMs}
-              viewportWidth={width}
-              viewportHeight={height}
-            />
-          ))}
         </svg>
+
+        {/* Layer 4: Foreground Overlays & Effects (zIndex: 20) */}
+        {aboveOverlays.length > 0 && (
+          <svg
+            width={width}
+            height={height}
+            viewBox={`0 0 ${width} ${height}`}
+            style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 20, overflow: 'visible', pointerEvents: 'none' }}
+          >
+            {aboveOverlays.map((o) => (
+              <EducationalOverlayRenderer
+                key={o.id}
+                overlay={o}
+                sceneRelativeMs={sceneRelativeMs}
+                viewportWidth={width}
+                viewportHeight={height}
+              />
+            ))}
+          </svg>
+        )}
       </div>
 
       {/* Screen-Space Overlays: Scene Title with Template Visual Styling */}
@@ -976,6 +1065,7 @@ function SceneView({
             flexDirection: 'column',
             alignItems: 'flex-start',
             pointerEvents: 'none',
+            zIndex: 30,
           }}
         >
           {template.tagLabel && (

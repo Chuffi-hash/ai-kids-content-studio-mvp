@@ -1,5 +1,15 @@
 export type AspectRatio = '16:9' | '9:16' | '1:1' | '4:5';
 
+export type CharacterFacingDirection =
+  | 'front'
+  | 'front-left'
+  | 'front-right'
+  | 'left'
+  | 'right'
+  | 'back-left'
+  | 'back-right'
+  | 'back';
+
 export type FacialExpression =
   | 'neutral'
   | 'happy'
@@ -95,6 +105,7 @@ export interface CharacterInstance {
   scale: number;
   rotation: number;
   flipX: boolean;
+  facingDirection?: CharacterFacingDirection;
   zIndex: number;
   customRig?: VectorRigDefinition;
   appearance?: CustomCharacterAppearance;
@@ -107,6 +118,7 @@ export interface AnimationClip {
   clipId: string;
   instanceId: string;
   action: AnimationAction;
+  facingDirection?: CharacterFacingDirection;
   startMs: number;
   durationMs: number;
   loop: boolean;
@@ -273,6 +285,7 @@ export interface CameraConfig {
 export interface BackgroundConfig {
   imageUrl?: string;
   fit?: 'cover' | 'contain' | 'fill';
+  focalPoint?: { x: number; y: number };
   removed?: boolean;
 }
 
@@ -351,13 +364,19 @@ export interface TransitionConfig {
 
 export interface FormatVariantConfig {
   aspectRatio: AspectRatio;
+  width?: number;
+  height?: number;
   characterOverrides?: Record<string, {
     x?: number;
     y?: number;
     scale?: number;
+    rotation?: number;
+    flipX?: boolean;
+    facingDirection?: CharacterFacingDirection;
   }>;
   background?: {
-    fit?: 'cover' | 'contain';
+    fit?: 'cover' | 'contain' | 'fill';
+    focalPoint?: { x: number; y: number };
   };
   overlayOverrides?: Record<string, {
     x?: number;
@@ -393,6 +412,7 @@ export interface SceneShot {
     scale: number;
     rotation?: number;
     flipX: boolean;
+    facingDirection?: CharacterFacingDirection;
     action?: string;
     expression?: string;
     zIndex?: number;

@@ -254,6 +254,7 @@ export function evaluateCharacterPose(
     scale: currentScale,
     rotation: currentRotation,
     flipX: currentFlipX,
+    facingDirection: activeClip?.facingDirection || instance.facingDirection || 'front',
     torsoBobY: Math.round(torsoBobY * 10) / 10,
     torsoAngle: Math.round(torsoAngle * 10) / 10,
     headAngle: Math.round(headAngle * 10) / 10,

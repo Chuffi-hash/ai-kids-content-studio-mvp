@@ -562,6 +562,7 @@ export class RemotionManifestAdapter {
                 scale: cp.scale,
                 rotation: typeof cp.rotation === 'number' ? cp.rotation : 0,
                 flipX: Boolean(cp.flipX),
+                facingDirection: cp.facingDirection || 'front',
                 action: cp.action,
                 expression: cp.expression,
                 zIndex: cp.zIndex,
@@ -734,7 +735,7 @@ export class RemotionManifestAdapter {
       const durationMs = Math.round(durationSec * 1000);
 
       // 3. Character Instances with storybook staging heuristics
-      const rawInstances = animData.characterInstances || [];
+      const rawInstances = animData.characterInstances || scene.characterInstances || (scene as any).characters || [];
       const adaptedInstances: RemotionScene['characterInstances'] = rawInstances.map((inst: any, instIdx: number) => {
         const hasHeadTags = inst.customRig?.parts?.head?.shapes?.some(
           (s: any) => s.tag === 'eyes' || s.tag === 'mouth'
@@ -771,6 +772,7 @@ export class RemotionManifestAdapter {
           scale: inst.scale ?? 1.0,
           rotation: inst.rotation ?? 0,
           flipX,
+          facingDirection: inst.facingDirection || 'front',
           zIndex: inst.zIndex ?? (instIdx + 1),
           expression: inst.expression || 'neutral',
           isSpeaker: Boolean(inst.isSpeaker),
@@ -779,10 +781,11 @@ export class RemotionManifestAdapter {
       });
 
       // 5. Animation Clips
-      const adaptedClips = (animData.animationClips || []).map((clip: any) => ({
+      const adaptedClips = (animData.animationClips || scene.animationClips || []).map((clip: any) => ({
         clipId: clip.clipId,
         instanceId: clip.instanceId,
         action: clip.action || 'idle',
+        facingDirection: clip.facingDirection,
         startMs: clip.startMs || 0,
         durationMs: clip.durationMs || durationMs,
         loop: clip.loop ?? true,
@@ -865,7 +868,7 @@ export class RemotionManifestAdapter {
         animationClips: adaptedClips,
         expressionCues: adaptedExpCues,
         overlays: adaptedOverlays,
-        formatVariants: animData.formatVariants,
+        formatVariants: animData.formatVariants || scene.formatVariants,
         transition,
       });
     }

@@ -2,6 +2,7 @@ import {
   VectorPartShape,
   VectorRigDefinition,
   FacialExpression,
+  CharacterFacingDirection,
   MouthShape,
 } from '../manifest';
 import { EvaluatedCharacterPose } from './animation-evaluator';
@@ -692,20 +693,173 @@ export function generateDynamicFaceShapes(
 }
 
 /**
+ * Transforms facial feature shapes according to character facing orientation (front, side profile, 3/4 views, or back).
+ */
+export function applyFacingDirectionToFaceShapes(
+  shapes: VectorPartShape[],
+  facing: CharacterFacingDirection,
+  anchors: FaceFeatureAnchors
+): VectorPartShape[] {
+  if (facing === 'front' || !facing) return shapes;
+  // A back-facing character must NOT show front-facing facial shapes
+  if (facing === 'back' || facing === 'back-left' || facing === 'back-right') return [];
+
+  const isLeft = facing === 'left';
+  const isRight = facing === 'right';
+  const isFrontLeft = facing === 'front-left';
+  const isFrontRight = facing === 'front-right';
+
+  if (isLeft) {
+    // Left profile: keep only left-side facial shapes and shift towards profile contour
+    return shapes
+      .filter((s) => {
+        if (s.tag === 'eyebrows' || s.tag === 'eyes') {
+          if (s.cx !== undefined) return s.cx <= 0;
+          if (s.type === 'path' && s.d) {
+            const xs = s.d.match(/-?\d+(\.\d+)?/g)?.map(Number) || [];
+            const avgX = xs.filter((_, i) => i % 2 === 0).reduce((a, b) => a + b, 0) / (xs.length / 2 || 1);
+            return avgX <= 0;
+          }
+        }
+        return true;
+      })
+      .map((s) => {
+        if (s.cx !== undefined) {
+          return { ...s, cx: Math.round(s.cx - 5) };
+        }
+        if (s.type === 'path' && s.d) {
+          return {
+            ...s,
+            transform: `${s.transform || ''} translate(-5, 0)`.trim(),
+          };
+        }
+        return s;
+      });
+  }
+
+  if (isRight) {
+    // Right profile: keep only right-side facial shapes and shift towards profile contour
+    return shapes
+      .filter((s) => {
+        if (s.tag === 'eyebrows' || s.tag === 'eyes') {
+          if (s.cx !== undefined) return s.cx >= 0;
+          if (s.type === 'path' && s.d) {
+            const xs = s.d.match(/-?\d+(\.\d+)?/g)?.map(Number) || [];
+            const avgX = xs.filter((_, i) => i % 2 === 0).reduce((a, b) => a + b, 0) / (xs.length / 2 || 1);
+            return avgX >= 0;
+          }
+        }
+        return true;
+      })
+      .map((s) => {
+        if (s.cx !== undefined) {
+          return { ...s, cx: Math.round(s.cx + 5) };
+        }
+        if (s.type === 'path' && s.d) {
+          return {
+            ...s,
+            transform: `${s.transform || ''} translate(5, 0)`.trim(),
+          };
+        }
+        return s;
+      });
+  }
+
+  if (isFrontLeft) {
+    // 3/4 front-left: subtle perspective shift left, far eye slightly foreshortened
+    return shapes.map((s) => {
+      const isRightSide = s.cx !== undefined && s.cx > 0;
+      const scale = isRightSide ? 0.85 : 1.0;
+      if (s.cx !== undefined) {
+        return {
+          ...s,
+          cx: Math.round(s.cx - 4),
+          r: s.r ? Number((s.r * scale).toFixed(1)) : undefined,
+          rx: s.rx ? Number((s.rx * scale).toFixed(1)) : undefined,
+        };
+      }
+      if (s.type === 'path') {
+        return { ...s, transform: `${s.transform || ''} translate(-4, 0)`.trim() };
+      }
+      return s;
+    });
+  }
+
+  if (isFrontRight) {
+    // 3/4 front-right: subtle perspective shift right, far eye slightly foreshortened
+    return shapes.map((s) => {
+      const isLeftSide = s.cx !== undefined && s.cx < 0;
+      const scale = isLeftSide ? 0.85 : 1.0;
+      if (s.cx !== undefined) {
+        return {
+          ...s,
+          cx: Math.round(s.cx + 4),
+          r: s.r ? Number((s.r * scale).toFixed(1)) : undefined,
+          rx: s.rx ? Number((s.rx * scale).toFixed(1)) : undefined,
+        };
+      }
+      if (s.type === 'path') {
+        return { ...s, transform: `${s.transform || ''} translate(4, 0)`.trim() };
+      }
+      return s;
+    });
+  }
+
+  return shapes;
+}
+
+/**
  * Resolves the final set of shapes to render for a character's head, replacing tagged
- * facial shapes with dynamic expressive ones when an expression or lip-sync state is active.
+ * facial shapes with dynamic expressive ones when an expression, lip-sync, or facing direction is active.
  */
 export function getHeadShapesForPose(
   rig: VectorRigDefinition,
   pose: EvaluatedCharacterPose
 ): VectorPartShape[] {
   const baseShapes: VectorPartShape[] = rig.parts?.head?.shapes || [];
+  const facing = pose.facingDirection || 'front';
+
+  // 1. Back orientations: back, back-left, back-right
+  // A back-facing character must NEVER display front-facing eyes, nose, or mouth.
+  if (facing === 'back' || facing === 'back-left' || facing === 'back-right') {
+    const hasTags = baseShapes.some(
+      (s) => s.tag === 'eyes' || s.tag === 'mouth' || s.tag === 'eyebrows' || s.tag === 'nose'
+    );
+    const anchors = extractFaceAnchors(rig);
+    if (hasTags) {
+      return baseShapes.filter(
+        (s) =>
+          s.tag !== 'eyebrows' &&
+          s.tag !== 'eyes' &&
+          s.tag !== 'mouth' &&
+          s.tag !== 'nose' &&
+          s.tag !== 'cheeks' &&
+          s.tag !== 'viseme'
+      );
+    }
+    return baseShapes.filter((s) => {
+      if ((s.type === 'circle' || s.type === 'ellipse') && s.cy !== undefined) {
+        const radius = s.type === 'circle' ? (s.r ?? 999) : Math.max(s.rx ?? 999, s.ry ?? 999);
+        if (Math.abs(s.cy - anchors.eyeY) <= 12 && radius <= 10) return false;
+      }
+      if (s.type === 'path') {
+        const d = s.d || '';
+        const nums: number[] = d.match(/-?\d+(\.\d+)?/g)?.map(Number) || [];
+        const nearBrow = nums.some((n: number) => Math.abs(n - anchors.browY) <= 6);
+        const nearMouth = nums.some((n: number) => Math.abs(n - anchors.mouthY) <= 7);
+        const nearEye = nums.some((n: number) => Math.abs(n - anchors.eyeY) <= 6);
+        if ((!s.fill || s.fill === 'none') && (nearBrow || nearMouth || nearEye)) return false;
+      }
+      return true;
+    });
+  }
 
   const expr = pose.expression || 'neutral';
   const mouth = pose.mouthState || 'rest';
   const speaking = Boolean(pose.speaking);
 
-  if (expr === 'neutral' && mouth === 'rest' && !speaking) {
+  // If front-facing and rest neutral, return unmodified base shapes
+  if (facing === 'front' && expr === 'neutral' && mouth === 'rest' && !speaking) {
     return baseShapes;
   }
 
@@ -715,7 +869,7 @@ export function getHeadShapesForPose(
   let nonFaceShapes: VectorPartShape[];
   if (hasTags) {
     nonFaceShapes = baseShapes.filter(
-      (s) => s.tag !== 'eyebrows' && s.tag !== 'eyes' && s.tag !== 'mouth'
+      (s) => s.tag !== 'eyebrows' && s.tag !== 'eyes' && s.tag !== 'mouth' && (facing !== 'front' ? s.tag !== 'nose' : true)
     );
   } else {
     nonFaceShapes = baseShapes.filter((s) => {
@@ -743,13 +897,15 @@ export function getHeadShapesForPose(
     });
   }
 
-  const dynamicShapes = generateDynamicFaceShapes(
+  const rawDynamicShapes = generateDynamicFaceShapes(
     expr,
     mouth,
     speaking,
     anchors
   );
 
-  return [...nonFaceShapes, ...dynamicShapes];
+  const orientedShapes = applyFacingDirectionToFaceShapes(rawDynamicShapes, facing, anchors);
+
+  return [...nonFaceShapes, ...orientedShapes];
 }
 

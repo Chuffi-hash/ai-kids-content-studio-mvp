@@ -189,7 +189,7 @@ export default function StoryBuilder({
   const [importDuration, setImportDuration] = useState<number>(0); // 0 = No Limit (Auto / Full Script Length)
   const [isCustomDuration, setIsCustomDuration] = useState<boolean>(false);
   const [customDurationInput, setCustomDurationInput] = useState<string>("120");
-  const [importFormat, setImportFormat] = useState<"16:9" | "9:16">("16:9");
+  const [importFormat, setImportFormat] = useState<"16:9" | "9:16" | "1:1" | "4:5">("16:9");
   const [importGenre, setImportGenre] = useState<string>("Auto"); // Auto = Auto-Detect from Script (No Limit)
   const [isCustomGenre, setIsCustomGenre] = useState<boolean>(false);
   const [customGenreInput, setCustomGenreInput] = useState<string>("");
@@ -403,6 +403,8 @@ Earth: पतझड़ के बाद नया बसंत आता है!
                 <option value="9:16">
                   9:16 Vertical Reel / Short (Instagram / Shorts / TikTok)
                 </option>
+                <option value="1:1">1:1 Square (Instagram / Facebook)</option>
+                <option value="4:5">4:5 Portrait (Instagram / Social)</option>
               </select>
             </div>
 

@@ -120,6 +120,9 @@ export const VectorSceneCanvas: React.FC<VectorSceneCanvasProps> = ({
         x: ox,
         y: oy,
         scale: override.scale !== undefined ? override.scale : inst.scale,
+        rotation: override.rotation !== undefined ? override.rotation : inst.rotation,
+        flipX: override.flipX !== undefined ? override.flipX : inst.flipX,
+        facingDirection: override.facingDirection || inst.facingDirection || 'front',
       };
     }
 
@@ -362,6 +365,7 @@ export const VectorSceneCanvas: React.FC<VectorSceneCanvasProps> = ({
           ...(updates.scale !== undefined ? { scale: updates.scale } : {}),
           ...(updates.flipX !== undefined ? { flipX: updates.flipX } : {}),
           ...(updates.rotation !== undefined ? { rotation: updates.rotation } : {}),
+          ...(updates.facingDirection !== undefined ? { facingDirection: updates.facingDirection } : {}),
         },
       };
       if (onUpdateAnimationData) {

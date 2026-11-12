@@ -2,6 +2,7 @@ import {
   CharacterInstance,
   AnimationClip,
   AnimationAction,
+  CharacterFacingDirection,
   ExpressionCue,
   DialogueLine,
   FacialExpression,
@@ -14,6 +15,7 @@ export interface EvaluatedCharacterPose {
   scale: number;
   rotation: number;
   flipX: boolean;
+  facingDirection?: CharacterFacingDirection;
   torsoBobY: number;
   torsoAngle: number;
   headAngle: number;
@@ -129,7 +131,7 @@ export function evaluateCharacterPose(
   // 1. Explicit user-authored active non-idle timeline animation clip.
   // 2. Shot-level character action (instance.action) when clip is absent or ambient idle.
   // 3. Default ambient idle breathing.
-  const isDefaultIdleClip = activeClip && (activeClip.action === 'idle' || activeClip.clipId.startsWith('default-') || activeClip.clipId.startsWith('auto-'));
+  const isDefaultIdleClip = activeClip && (activeClip.action === 'idle' || (activeClip.clipId || (activeClip as any).id || '').startsWith('default-') || (activeClip.clipId || (activeClip as any).id || '').startsWith('auto-'));
   if (isDefaultIdleClip && fallbackAction !== 'idle') {
     activeAction = fallbackAction;
   } else if (activeClip) {
@@ -391,12 +393,18 @@ export function evaluateCharacterPose(
     })
   );
 
+  const effectiveFacing: CharacterFacingDirection =
+    activeClip?.facingDirection ||
+    (instance as any).facingDirection ||
+    'front';
+
   return {
     x: Math.round(currentX * 10) / 10,
     y: Math.round(currentY * 10) / 10,
     scale: currentScale,
     rotation: currentRotation,
     flipX: currentFlipX,
+    facingDirection: effectiveFacing,
     torsoBobY: Math.round(torsoBobY * 10) / 10,
     torsoAngle: Math.round(torsoAngle * 10) / 10,
     headAngle: Math.round(headAngle * 10) / 10,

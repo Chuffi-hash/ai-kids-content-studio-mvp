@@ -93,20 +93,21 @@ export class BackgroundStudioService {
       details,
       mood,
       artStyle,
+      aspectRatio,
     });
 
-    // Determine dimensions based on aspect ratio
-    let width = 1280;
-    let height = 720;
+    // Determine target dimensions based on aspect ratio (Full 1080p standards)
+    let width = 1920;
+    let height = 1080;
     if (aspectRatio === '9:16') {
-      width = 720;
-      height = 1280;
+      width = 1080;
+      height = 1920;
     } else if (aspectRatio === '1:1') {
-      width = 768;
-      height = 768;
+      width = 1080;
+      height = 1080;
     } else if (aspectRatio === '4:5') {
-      width = 720;
-      height = 900;
+      width = 1080;
+      height = 1350;
     }
 
     let imageBuffer: Buffer;
@@ -157,6 +158,10 @@ export class BackgroundStudioService {
       aspectRatio,
       width,
       height,
+      originalDimensions: { width, height },
+      originalAspectRatio: aspectRatio,
+      fitMode: 'cover',
+      focalPoint: { x: 50, y: 50 },
       tags: [environmentType, artStyle, aspectRatio],
       createdAt: new Date().toISOString(),
     };

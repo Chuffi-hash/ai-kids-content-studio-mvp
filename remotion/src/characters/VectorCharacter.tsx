@@ -117,7 +117,10 @@ export const VectorCharacter: React.FC<VectorCharacterProps> = ({ rig, pose }) =
             strokeDasharray={pose.speaking ? '6 4' : undefined}
             opacity={0.85}
           />
-          {pose.speaking && (
+          {pose.speaking &&
+            pose.facingDirection !== 'back' &&
+            pose.facingDirection !== 'back-left' &&
+            pose.facingDirection !== 'back-right' && (
             <g transform={`translate(${pose.x + (pose.flipX ? -40 : 40) * pose.scale}, ${pose.y - (rig.baseHeight * 0.45) * pose.scale})`}>
               <path
                 d="M 0 -8 A 12 12 0 0 1 0 8"

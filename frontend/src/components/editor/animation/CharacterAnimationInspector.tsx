@@ -4,6 +4,7 @@ import {
   AnimationClip,
   VectorSceneData,
   AnimationActionType,
+  CharacterFacingDirection,
   MotionPath,
   FacialExpression,
   SpeakingDirection,
@@ -54,6 +55,17 @@ const FACIAL_EXPRESSIONS: Array<{ id: FacialExpression; label: string; emoji: st
   { id: 'scared', label: 'Scared', emoji: '😨', desc: 'Tense high brow' },
   { id: 'confused', label: 'Confused', emoji: '🤨', desc: 'Inquisitive look' },
   { id: 'curious', label: 'Curious', emoji: '🤔', desc: 'Puzzled tilt' },
+];
+
+export const FACING_DIRECTIONS: Array<{ id: CharacterFacingDirection; label: string; icon: string; desc: string }> = [
+  { id: 'front', label: 'Front', icon: '⏺', desc: 'Facing camera front' },
+  { id: 'front-left', label: 'Front-L', icon: '↙', desc: 'Three-quarter front facing left' },
+  { id: 'front-right', label: 'Front-R', icon: '↘', desc: 'Three-quarter front facing right' },
+  { id: 'left', label: 'Left', icon: '⬅', desc: 'Side profile facing left' },
+  { id: 'right', label: 'Right', icon: '➡', desc: 'Side profile facing right' },
+  { id: 'back-left', label: 'Back-L', icon: '↖', desc: 'Three-quarter back facing left' },
+  { id: 'back-right', label: 'Back-R', icon: '↗', desc: 'Three-quarter back facing right' },
+  { id: 'back', label: 'Back', icon: '⬆', desc: 'Facing away from camera' },
 ];
 
 export const KOKORO_VOICES = [
@@ -1600,15 +1612,53 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
           </div>
         </div>
 
+        {/* Facing Direction 8-Way Selector */}
+        <div style={{ marginTop: '10px', marginBottom: '8px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+            <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--ed-text-muted)' }}>Facing Orientation</span>
+            <span style={{ fontSize: '11px', color: '#a78bfa', fontWeight: 600 }}>
+              {FACING_DIRECTIONS.find((f) => f.id === (instance.facingDirection || 'front'))?.label || 'Front'}
+            </span>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '4px' }}>
+            {FACING_DIRECTIONS.map((dir) => {
+              const isActive = (instance.facingDirection || 'front') === dir.id;
+              return (
+                <button
+                  key={dir.id}
+                  type="button"
+                  className={`ed-tool-btn ${isActive ? 'primary active' : ''}`}
+                  onClick={() => onUpdateInstance(instance.instanceId, { facingDirection: dir.id })}
+                  title={dir.desc}
+                  style={{
+                    fontSize: '10px',
+                    padding: '5px 2px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: '2px',
+                    border: isActive ? '1px solid #8b5cf6' : '1px solid rgba(255,255,255,0.1)',
+                    background: isActive ? 'rgba(139, 92, 246, 0.3)' : 'rgba(255,255,255,0.04)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <span style={{ fontSize: '13px' }}>{dir.icon}</span>
+                  <span>{dir.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         {/* Flip & Layer ordering */}
-        <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
+        <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
           <button
             type="button"
             className={`ed-tool-btn ${instance.flipX ? 'primary' : ''}`}
             onClick={() => onUpdateInstance(instance.instanceId, { flipX: !instance.flipX })}
             style={{ flex: 1, fontSize: '11px' }}
           >
-            {instance.flipX ? 'Facing Left ◄' : 'Facing Right ►'}
+            {instance.flipX ? 'Flipped Left ◄' : 'Flipped Right ►'}
           </button>
           <button
             type="button"
