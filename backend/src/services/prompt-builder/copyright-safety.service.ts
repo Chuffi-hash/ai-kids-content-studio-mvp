@@ -58,7 +58,7 @@ export class CopyrightSafetyService {
         const artist = match[1].trim();
         // Skip generic words
         if (!['masterpiece', 'oil', 'watercolor', 'classic', 'childrens', 'storybook'].includes(artist)) {
-          warnings.push(`Artist emulation pattern detected: "${match[0]}". To protect originality and commercial rights, use descriptive style terms (e.g. "tactile gouache textures, soft volumetric light") instead of naming specific artists.`);
+          warnings.push(`Living artist or creator emulation pattern detected: "${match[0]}". To protect originality and commercial rights, use descriptive style terms (e.g. "tactile gouache textures, soft volumetric light") instead of naming specific artists.`);
         }
       }
     }

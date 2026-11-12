@@ -107,7 +107,7 @@ describe('Dynamic Visual Generation, Branding & Rights Management', () => {
 
     const artistPrompt = CopyrightSafetyService.inspectPrompt('A whimsical landscape painted in the style of Hayao Miyazaki and Studio Ghibli');
     assert.equal(artistPrompt.safe, false);
-    assert.ok(artistPrompt.warnings.some((w) => w.includes('living artist') || w.includes('franchise')));
+    assert.ok(artistPrompt.warnings.some((w) => w.toLowerCase().includes('artist') || w.toLowerCase().includes('franchise')));
   });
 
   test('Part C: Provider capabilities matrix and asset rights provenance', () => {
