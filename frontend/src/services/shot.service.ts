@@ -5,12 +5,15 @@ const API_URL = getApiUrl();
 
 export async function planShotsForStory(
   storyId: string,
-  forceRegenerate: boolean = false
-): Promise<{ success: boolean; count: number; shots: CinematicShot[] }> {
+  options?: { forceRegenerate?: boolean; useAI?: boolean } | boolean
+): Promise<{ success: boolean; count: number; shots: CinematicShot[]; provider?: string; isFallback?: boolean }> {
+  const payload = typeof options === 'boolean'
+    ? { forceRegenerate: options, useAI: true }
+    : { forceRegenerate: false, useAI: true, ...options };
   const res = await fetch(`${API_URL}/api/shots/story/${storyId}/plan`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ forceRegenerate }),
+    body: JSON.stringify(payload),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
@@ -70,6 +73,22 @@ export async function regenerateShotPrompt(
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error || 'Failed to regenerate prompt');
+  }
+  return res.json();
+}
+
+export async function restoreShotPromptVersion(
+  shotId: string,
+  version: number
+): Promise<{ success: boolean; shot: CinematicShot }> {
+  const res = await fetch(`${API_URL}/api/shots/${shotId}/restore-prompt`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ version }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Failed to restore prompt version');
   }
   return res.json();
 }

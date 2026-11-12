@@ -13,6 +13,7 @@ import {
 import {
   AspectRatio,
   dimensions,
+  FacialExpression,
   frames,
   Scene,
   VideoManifest,
@@ -433,11 +434,16 @@ function SceneView({
     (typeof scene.camera === 'object' ? scene.camera?.rotationDegrees : 10) ||
     10;
 
+  let cameraProgress = progress;
+  if (activeShot && activeShot.endMs > activeShot.startMs) {
+    cameraProgress = Math.min(1, Math.max(0, (sceneRelativeMs - activeShot.startMs) / (activeShot.endMs - activeShot.startMs)));
+  }
+
   const { scale, dx, dy, rotationDeg } = computeCameraTransform({
     movement: rawMovement,
     rotation: rawRotation,
     rotationDegrees: rawDegrees,
-    progress,
+    progress: cameraProgress,
     width,
     height,
   });
@@ -478,6 +484,10 @@ function SceneView({
       y: shotPlacement?.y ?? inst.y,
       scale: shotPlacement?.scale ?? inst.scale,
       flipX: shotPlacement?.flipX ?? targetFlipX ?? inst.flipX,
+      action: shotPlacement?.action || inst.action || 'idle',
+      expression: (shotPlacement?.expression || inst.expression) as FacialExpression | undefined,
+      zIndex: shotPlacement?.zIndex ?? inst.zIndex ?? (instIdx + 1),
+      isSpeaker: shotPlacement?.isSpeaker ?? inst.isSpeaker,
     };
 
     const override = charOverrides?.[inst.instanceId];

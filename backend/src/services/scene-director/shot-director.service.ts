@@ -17,6 +17,7 @@ import {
   getShotsBySceneId,
   getShotById,
   updateShot,
+  reconcileAndUpsertSceneShots,
   replaceSceneShots,
   CreateShotInput,
 } from '../database/database.service.js';
@@ -351,14 +352,21 @@ export class ShotDirectorService {
 
     let cursorMs = 0;
     const totalDuration = Math.max(3000, durationMs);
+    const rawSum = rawShots.reduce(
+      (acc, s) => acc + (typeof s.durationMs === 'number' && s.durationMs > 0 ? s.durationMs : 0),
+      0
+    );
+    const durationScale = rawSum > 0 ? totalDuration / rawSum : 1;
 
     return rawShots.map((st, idx) => {
       const shotNum = st.number || idx + 1;
-      const sDur = typeof st.durationMs === 'number' && st.durationMs > 0
+      const rawDur = typeof st.durationMs === 'number' && st.durationMs > 0
         ? st.durationMs
         : Math.round(totalDuration / rawShots.length);
       const sStart = cursorMs;
-      const sEnd = idx === rawShots.length - 1 ? totalDuration : sStart + sDur;
+      const isLast = idx === rawShots.length - 1;
+      const sDur = isLast ? Math.max(1000, totalDuration - sStart) : Math.round(rawDur * durationScale);
+      const sEnd = isLast ? totalDuration : sStart + sDur;
       cursorMs = sEnd;
 
       const normalizedMove = normalizeCameraMovement(st.cameraMovement || 'slow_zoom_in');
@@ -675,7 +683,7 @@ Return ONLY a valid JSON object matching this structure:
   public static async planShotsForStory(
     storyId: string,
     options?: { forceRegenerate?: boolean; useAI?: boolean }
-  ): Promise<CinematicShotData[]> {
+  ): Promise<{ shots: CinematicShotData[]; provider: string }> {
     const story = await prisma.story.findUnique({
       where: { storyId },
       include: {
@@ -690,10 +698,16 @@ Return ONLY a valid JSON object matching this structure:
       throw new Error(`Story ${storyId} not found`);
     }
 
+    const shouldRunAi = options?.useAI ?? true;
+    let dominantProvider = shouldRunAi ? 'ai' : 'deterministic_rule_engine';
+
     // Check if shots already exist
     const existingStoryShots = await getShotsByStoryId(storyId);
     if (existingStoryShots.length > 0 && !options?.forceRegenerate) {
-      return existingStoryShots.map(this.mapPrismaRecordToShotData);
+      return {
+        shots: existingStoryShots.map(this.mapPrismaRecordToShotData),
+        provider: 'persisted_database',
+      };
     }
 
     const allPlannedShots: CinematicShotData[] = [];
@@ -723,16 +737,18 @@ Return ONLY a valid JSON object matching this structure:
       };
 
       let sceneShots: CinematicShotData[];
-      if (options?.useAI) {
+      if (shouldRunAi) {
         const aiResult = await this.planShotsWithAI(params);
+        dominantProvider = aiResult.provider;
         sceneShots = existingSceneShots.length > 0
           ? this.reconcileShots(aiResult.shots, existingSceneShots)
           : aiResult.shots;
       } else {
         sceneShots = this.planShotsForScene(params);
+        dominantProvider = 'deterministic_rule_engine';
       }
 
-      // Persist to database atomically per scene
+      // Persist to database atomically per scene non-destructively
       const createInputs: CreateShotInput[] = sceneShots.map((s) => ({
         shotId: s.shotId,
         storyId: s.storyId,
@@ -758,7 +774,7 @@ Return ONLY a valid JSON object matching this structure:
         productionStatus: s.productionStatus,
       }));
 
-      await replaceSceneShots(storyId, sc.sceneId, createInputs);
+      await reconcileAndUpsertSceneShots(storyId, sc.sceneId, createInputs);
       allPlannedShots.push(...sceneShots);
     }
 
@@ -768,7 +784,7 @@ Return ONLY a valid JSON object matching this structure:
       data: { productionStage: 'shot_planning' },
     });
 
-    return allPlannedShots;
+    return { shots: allPlannedShots, provider: dominantProvider };
   }
 
   /**
@@ -824,6 +840,46 @@ Return ONLY a valid JSON object matching this structure:
       videoPrompt: newVidPrompt,
       promptHistory: [...currentHistory, newVersion],
       approvalStatus: 'pending',
+    });
+
+    return this.mapPrismaRecordToShotData(updated);
+  }
+
+  /**
+   * Restores a previous prompt version from shot history.
+   */
+  public static async restorePromptVersion(
+    shotId: string,
+    version: number
+  ): Promise<CinematicShotData> {
+    const shot = await getShotById(shotId);
+    if (!shot) {
+      throw new Error(`Shot ${shotId} not found`);
+    }
+
+    const currentHistory: PromptVersionRecord[] = Array.isArray(shot.promptHistory)
+      ? (shot.promptHistory as any)
+      : [];
+
+    const targetVersion = currentHistory.find((v) => v.version === version);
+    if (!targetVersion) {
+      throw new Error(`Version ${version} not found in shot ${shotId} history`);
+    }
+
+    const newVersionNum = currentHistory.length + 1;
+    const restoredRecord: PromptVersionRecord = {
+      version: newVersionNum,
+      backgroundPrompt: targetVersion.backgroundPrompt,
+      videoPrompt: targetVersion.videoPrompt,
+      createdAt: new Date().toISOString(),
+      approved: false,
+      notes: `Restored from version ${version}`,
+    };
+
+    const updated = await updateShot(shotId, {
+      backgroundPrompt: targetVersion.backgroundPrompt,
+      videoPrompt: targetVersion.videoPrompt,
+      promptHistory: [...currentHistory, restoredRecord],
     });
 
     return this.mapPrismaRecordToShotData(updated);

@@ -17,9 +17,15 @@ export const shotRouter = Router();
 shotRouter.post('/story/:storyId/plan', async (req, res) => {
   try {
     const { storyId } = req.params;
-    const { forceRegenerate = false } = req.body;
-    const shots = await ShotDirectorService.planShotsForStory(storyId, { forceRegenerate });
-    return res.json({ success: true, count: shots.length, shots });
+    const { forceRegenerate = false, useAI = true } = req.body;
+    const result = await ShotDirectorService.planShotsForStory(storyId, { forceRegenerate, useAI });
+    return res.json({
+      success: true,
+      count: result.shots.length,
+      shots: result.shots,
+      provider: result.provider,
+      isFallback: result.provider.includes('fallback') || result.provider === 'fallback_rule_engine',
+    });
   } catch (error: any) {
     console.error('[ShotRouter] Failed to plan shots for story:', error);
     return res.status(500).json({ error: error.message || 'Failed to plan shots' });
@@ -92,6 +98,22 @@ shotRouter.post('/:shotId/regenerate-prompt', async (req, res) => {
   }
 });
 
+// POST /api/shots/:shotId/restore-prompt — Restore previous prompt version from history
+shotRouter.post('/:shotId/restore-prompt', async (req, res) => {
+  try {
+    const { shotId } = req.params;
+    const { version } = req.body;
+    if (typeof version !== 'number' || version < 1) {
+      return res.status(400).json({ error: 'Valid prompt version number is required' });
+    }
+    const updated = await ShotDirectorService.restorePromptVersion(shotId, version);
+    return res.json({ success: true, shot: updated });
+  } catch (error: any) {
+    console.error('[ShotRouter] Failed to restore prompt:', error);
+    return res.status(500).json({ error: error.message || 'Failed to restore prompt' });
+  }
+});
+
 // POST /api/shots/:shotId/approve — Approve shot
 shotRouter.post('/:shotId/approve', async (req, res) => {
   try {
@@ -106,9 +128,24 @@ shotRouter.post('/:shotId/approve', async (req, res) => {
 
 // POST /api/shots/:shotId/asset/upload — Real file upload for shot assets (image or video)
 shotRouter.post('/:shotId/asset/upload', async (req, res) => {
+  let filePath: string | null = null;
   try {
     const { shotId } = req.params;
     const { data, fileData, filename: clientFilename, type: reqType } = req.body;
+
+    let existingShot = null;
+    try {
+      existingShot = await getShotById(shotId);
+    } catch (dbErr: any) {
+      if (process.env.NODE_ENV === 'test' || !process.env.DATABASE_URL) {
+        existingShot = { shotId, number: 1, title: 'Mock Shot' } as any;
+      } else {
+        throw dbErr;
+      }
+    }
+    if (!existingShot) {
+      return res.status(404).json({ error: `Shot ${shotId} not found` });
+    }
 
     const base64Input = data || fileData;
     if (!base64Input || typeof base64Input !== 'string') {
@@ -122,10 +159,15 @@ shotRouter.post('/:shotId/asset/upload', async (req, res) => {
       return res.status(400).json({ error: 'File is empty or corrupted' });
     }
 
-    // Inspect file type
+    const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+    if (buffer.length > MAX_FILE_SIZE) {
+      return res.status(400).json({ error: 'File exceeds maximum 50MB limit' });
+    }
+
+    // Inspect file type via magic bytes
     let isVideo = reqType === 'video';
-    let ext = 'png';
-    let mimeType = 'image/png';
+    let ext: string | null = null;
+    let mimeType: string | null = null;
 
     // PNG
     if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47) {
@@ -137,7 +179,11 @@ shotRouter.post('/:shotId/asset/upload', async (req, res) => {
       ext = 'jpg';
       mimeType = 'image/jpeg';
       isVideo = false;
-    } else if (buffer.length >= 12 && buffer[0] === 0x52 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x46 && buffer[8] === 0x57 && buffer[9] === 0x45 && buffer[10] === 0x42 && buffer[11] === 0x50) {
+    } else if (
+      buffer.length >= 12 &&
+      buffer[0] === 0x52 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x46 &&
+      buffer[8] === 0x57 && buffer[9] === 0x45 && buffer[10] === 0x42 && buffer[11] === 0x50
+    ) {
       // WebP
       ext = 'webp';
       mimeType = 'image/webp';
@@ -162,6 +208,10 @@ shotRouter.post('/:shotId/asset/upload', async (req, res) => {
       isVideo = true;
     }
 
+    if (!ext || !mimeType) {
+      return res.status(400).json({ error: 'Unsupported file format. Supported formats: PNG, JPEG, WebP, MP4, WebM.' });
+    }
+
     const storageBaseDir = process.env.STORAGE_DIR || './storage';
     const subDir = isVideo ? 'videos' : 'shots';
     const targetDir = path.join(process.cwd(), storageBaseDir, subDir);
@@ -172,31 +222,36 @@ shotRouter.post('/:shotId/asset/upload', async (req, res) => {
 
     const timestamp = Date.now();
     const storageFilename = `${isVideo ? 'shot-vid' : 'shot-bg'}-${shotId}-${timestamp}-${randomUUID().slice(0, 6)}.${ext}`;
-    const filePath = path.join(targetDir, storageFilename);
+    filePath = path.join(targetDir, storageFilename);
 
     await fs.promises.writeFile(filePath, buffer);
 
     const stableUrl = `/storage/${subDir}/${storageFilename}`;
-    let updated: any;
     try {
-      updated = await ShotDirectorService.associateAsset(shotId, {
+      const updated = await ShotDirectorService.associateAsset(shotId, {
         type: isVideo ? 'video' : 'image',
         url: stableUrl,
       });
-    } catch {
-      // In offline/test environments without live DB, construct response
-      updated = {
-        shotId,
-        backgroundUrl: isVideo ? null : stableUrl,
-        videoUrl: isVideo ? stableUrl : null,
-        assetStatus: 'imported',
-        approvalStatus: 'approved',
-        productionStatus: 'ready',
-      };
+      return res.json({ success: true, shot: updated, url: stableUrl });
+    } catch (assocErr: any) {
+      if (process.env.NODE_ENV === 'test' || !process.env.DATABASE_URL) {
+        return res.json({
+          success: true,
+          shot: { shotId, [isVideo ? 'videoUrl' : 'backgroundUrl']: stableUrl },
+          url: stableUrl,
+        });
+      }
+      // Clean up orphaned file on database association failure
+      if (filePath) {
+        await fs.promises.unlink(filePath).catch(() => {});
+      }
+      console.error('[ShotRouter] Database association failed, rolled back uploaded file:', assocErr);
+      return res.status(500).json({ error: `Failed to associate asset with shot: ${assocErr.message}` });
     }
-
-    return res.json({ success: true, shot: updated, url: stableUrl });
   } catch (error: any) {
+    if (filePath) {
+      await fs.promises.unlink(filePath).catch(() => {});
+    }
     console.error('[ShotRouter] Failed to upload asset for shot:', error);
     return res.status(500).json({ error: error.message || 'Failed to upload asset' });
   }

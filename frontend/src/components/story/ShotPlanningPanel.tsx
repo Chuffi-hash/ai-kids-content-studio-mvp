@@ -9,6 +9,7 @@ import {
   associateShotAsset,
   uploadShotAsset,
   deleteShotRecord,
+  restoreShotPromptVersion,
 } from '../../services/shot.service';
 import {
   SparklesIcon,
@@ -45,6 +46,9 @@ export const ShotPlanningPanel: React.FC<ShotPlanningPanelProps> = ({
   const [historyModalShot, setHistoryModalShot] = useState<CinematicShot | null>(null);
   const [instructionModal, setInstructionModal] = useState<{ shotId: string; type: 'background' | 'video' | 'both' } | null>(null);
   const [customInstructions, setCustomInstructions] = useState('');
+  const [plannerProvider, setPlannerProvider] = useState<string | null>(null);
+  const [isFallback, setIsFallback] = useState<boolean | null>(null);
+  const [showRegenerateConfirm, setShowRegenerateConfirm] = useState(false);
 
   useEffect(() => {
     if (storyId) {
@@ -69,12 +73,15 @@ export const ShotPlanningPanel: React.FC<ShotPlanningPanelProps> = ({
     setPlanning(true);
     setError(null);
     try {
-      const res = await planShotsForStory(storyId, forceRegenerate);
+      const res = await planShotsForStory(storyId, { forceRegenerate, useAI: true });
       setShots(res.shots || []);
+      if (res.provider) setPlannerProvider(res.provider);
+      if (res.isFallback !== undefined) setIsFallback(res.isFallback);
     } catch (err: any) {
       setError(err.message || 'Failed to plan cinematic shots');
     } finally {
       setPlanning(false);
+      setShowRegenerateConfirm(false);
     }
   };
 
@@ -111,10 +118,16 @@ export const ShotPlanningPanel: React.FC<ShotPlanningPanelProps> = ({
 
   const handleRestoreVersion = async (shot: CinematicShot, version: any) => {
     try {
-      await handleUpdateField(shot.shotId, {
-        backgroundPrompt: version.backgroundPrompt,
-        videoPrompt: version.videoPrompt,
-      });
+      if (typeof version.version === 'number') {
+        const res = await restoreShotPromptVersion(shot.shotId, version.version);
+        setShots((prev) => prev.map((s) => (s.shotId === shot.shotId ? res.shot : s)));
+        onShotUpdated?.(res.shot);
+      } else {
+        await handleUpdateField(shot.shotId, {
+          backgroundPrompt: version.backgroundPrompt,
+          videoPrompt: version.videoPrompt,
+        });
+      }
       setHistoryModalShot(null);
     } catch (err: any) {
       setError(err.message || 'Failed to restore prompt version');
@@ -182,6 +195,29 @@ export const ShotPlanningPanel: React.FC<ShotPlanningPanelProps> = ({
             <span style={{ fontSize: '11px', background: 'rgba(124, 58, 237, 0.15)', color: '#8b5cf6', padding: '2px 8px', borderRadius: '12px' }}>
               {filteredShots.length} Shots
             </span>
+            {plannerProvider && (
+              <span
+                style={{
+                  fontSize: '11px',
+                  background: isFallback ? 'rgba(245, 158, 11, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+                  color: isFallback ? '#d97706' : '#059669',
+                  border: `1px solid ${isFallback ? 'rgba(245, 158, 11, 0.3)' : 'rgba(16, 185, 129, 0.3)'}`,
+                  padding: '2px 8px',
+                  borderRadius: '12px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                }}
+              >
+                {isFallback
+                  ? '⚙️ Rule Engine Fallback'
+                  : plannerProvider.includes('gemini')
+                    ? '✨ Gemini AI Directed'
+                    : plannerProvider.includes('openai')
+                      ? '⚡ OpenAI Directed'
+                      : `✨ ${plannerProvider}`}
+              </span>
+            )}
           </h3>
           <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: 'var(--ed-text-muted, #64748b)' }}>
             Each scene is directed into multiple camera angles, environment-only background prompts, and staging.
@@ -192,7 +228,13 @@ export const ShotPlanningPanel: React.FC<ShotPlanningPanelProps> = ({
           <button
             type="button"
             className="ed-btn-action primary"
-            onClick={() => handlePlanShots(shots.length > 0)}
+            onClick={() => {
+              if (shots.length > 0) {
+                setShowRegenerateConfirm(true);
+              } else {
+                handlePlanShots(false);
+              }
+            }}
             disabled={planning}
             style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', padding: '6px 12px' }}
           >
@@ -583,6 +625,46 @@ export const ShotPlanningPanel: React.FC<ShotPlanningPanelProps> = ({
                   )}
                 </div>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Non-Destructive Regeneration Confirmation Modal */}
+      {showRegenerateConfirm && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, padding: '16px' }}>
+          <div style={{ background: 'var(--ed-surface, #fff)', borderRadius: '12px', padding: '20px', maxWidth: '480px', width: '100%', display: 'flex', flexDirection: 'column', gap: '14px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.25)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div style={{ width: '36px', height: '36px', borderRadius: '8px', background: 'rgba(124, 58, 237, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <SparklesIcon size={18} color="#7c3aed" />
+              </div>
+              <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 700 }}>
+                Regenerate Cinematic Shots?
+              </h4>
+            </div>
+            <p style={{ margin: 0, fontSize: '12.5px', color: 'var(--ed-text-muted, #475569)', lineHeight: 1.5 }}>
+              AI shot planning will recalculate camera angles, environment prompts, and character staging.
+              Existing approved shots, customized prompts, and attached media assets will be preserved through non-destructive reconciliation.
+            </p>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '6px' }}>
+              <button
+                type="button"
+                className="ed-btn-action"
+                onClick={() => setShowRegenerateConfirm(false)}
+                disabled={planning}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="ed-btn-action primary"
+                onClick={() => handlePlanShots(true)}
+                disabled={planning}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+              >
+                <SparklesIcon size={13} />
+                <span>{planning ? 'Regenerating...' : 'Confirm Regeneration'}</span>
+              </button>
             </div>
           </div>
         </div>

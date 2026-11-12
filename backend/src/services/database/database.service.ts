@@ -887,47 +887,125 @@ export async function deleteShot(shotId: string) {
   });
 }
 
-export async function replaceSceneShots(storyId: string, sceneId: string, shots: CreateShotInput[]) {
+export async function reconcileAndUpsertSceneShots(
+  storyId: string,
+  sceneId: string,
+  shots: CreateShotInput[]
+) {
   return await prisma.$transaction(async (tx) => {
-    await tx.shot.deleteMany({
+    const existing = await tx.shot.findMany({
       where: { sceneId },
+      orderBy: { order: 'asc' },
     });
-    const created = [];
+
+    const matchedIds = new Set<string>();
+    const results = [];
+
     for (let i = 0; i < shots.length; i++) {
       const s = shots[i];
-      const id = s.id || randomUUID();
-      const shotId = s.shotId || `shot-${sceneId}-${s.number || (i + 1)}-${randomUUID().slice(0, 6)}`;
-      const rec = await tx.shot.create({
-        data: {
-          id,
-          shotId,
-          storyId,
-          sceneId,
-          number: s.number ?? (i + 1),
-          order: s.order ?? (i + 1),
-          title: s.title || `Shot ${s.number ?? (i + 1)}`,
-          description: s.description || '',
-          durationMs: s.durationMs || 5000,
-          shotType: s.shotType || 'wide_establishing',
-          cameraAngle: s.cameraAngle || 'eye_level',
-          cameraMovement: s.cameraMovement || 'static',
-          lighting: s.lighting || 'Natural day lighting',
-          shotDirection: s.shotDirection ?? null,
-          characterInstructions: s.characterInstructions ?? null,
-          backgroundPrompt: s.backgroundPrompt || null,
-          videoPrompt: s.videoPrompt || null,
-          promptHistory: s.promptHistory ?? [],
-          backgroundUrl: s.backgroundUrl || null,
-          videoUrl: s.videoUrl || null,
-          assetStatus: s.assetStatus || 'pending',
-          approvalStatus: s.approvalStatus || 'pending',
-          productionStatus: s.productionStatus || 'draft',
-        },
-      });
-      created.push(rec);
+      // Match by shotId first, then by shot number
+      const match = existing.find(
+        (e) => (s.shotId && e.shotId === s.shotId) || e.number === s.number
+      );
+
+      if (match) {
+        matchedIds.add(match.id);
+        const hasCustomPrompt = Array.isArray(match.promptHistory) && match.promptHistory.length > 1;
+        const isApproved = match.approvalStatus === 'approved';
+        const hasAsset = Boolean(match.backgroundUrl || match.videoUrl);
+
+        // Preserve user edited prompts if approved or manually customized
+        const bgPrompt = (isApproved || hasCustomPrompt) && match.backgroundPrompt
+          ? match.backgroundPrompt
+          : (s.backgroundPrompt || match.backgroundPrompt);
+        const vidPrompt = (isApproved || hasCustomPrompt) && match.videoPrompt
+          ? match.videoPrompt
+          : (s.videoPrompt || match.videoPrompt);
+        const history = Array.isArray(match.promptHistory) && match.promptHistory.length > 0
+          ? match.promptHistory
+          : (s.promptHistory ?? []);
+
+        const updated = await tx.shot.update({
+          where: { id: match.id },
+          data: {
+            title: isApproved ? match.title : (s.title || match.title),
+            description: s.description || match.description,
+            durationMs: s.durationMs || match.durationMs,
+            shotType: isApproved ? match.shotType : (s.shotType || match.shotType),
+            cameraAngle: s.cameraAngle || match.cameraAngle,
+            cameraMovement: s.cameraMovement || match.cameraMovement,
+            lighting: s.lighting || match.lighting,
+            shotDirection: s.shotDirection ?? match.shotDirection,
+            characterInstructions: s.characterInstructions ?? match.characterInstructions,
+            backgroundPrompt: bgPrompt,
+            videoPrompt: vidPrompt,
+            promptHistory: history,
+            backgroundUrl: match.backgroundUrl || s.backgroundUrl,
+            videoUrl: match.videoUrl || s.videoUrl,
+            assetStatus: hasAsset ? match.assetStatus : (s.assetStatus || match.assetStatus),
+            approvalStatus: match.approvalStatus || s.approvalStatus,
+            productionStatus: hasAsset || isApproved ? 'ready' : (s.productionStatus || match.productionStatus),
+          },
+        });
+        results.push(updated);
+      } else {
+        // Create new shot non-destructively
+        const id = s.id || randomUUID();
+        const shotId = s.shotId || `shot-${sceneId}-${s.number || (i + 1)}-${randomUUID().slice(0, 6)}`;
+        const created = await tx.shot.create({
+          data: {
+            id,
+            shotId,
+            storyId,
+            sceneId,
+            number: s.number ?? (i + 1),
+            order: s.order ?? (i + 1),
+            title: s.title || `Shot ${s.number ?? (i + 1)}`,
+            description: s.description || '',
+            durationMs: s.durationMs || 5000,
+            shotType: s.shotType || 'wide_establishing',
+            cameraAngle: s.cameraAngle || 'eye_level',
+            cameraMovement: s.cameraMovement || 'static',
+            lighting: s.lighting || 'Natural day lighting',
+            shotDirection: s.shotDirection ?? null,
+            characterInstructions: s.characterInstructions ?? null,
+            backgroundPrompt: s.backgroundPrompt || null,
+            videoPrompt: s.videoPrompt || null,
+            promptHistory: s.promptHistory ?? [],
+            backgroundUrl: s.backgroundUrl || null,
+            videoUrl: s.videoUrl || null,
+            assetStatus: s.assetStatus || 'pending',
+            approvalStatus: s.approvalStatus || 'pending',
+            productionStatus: s.productionStatus || 'draft',
+          },
+        });
+        results.push(created);
+      }
     }
-    return created;
+
+    // Preserve unmatched existing shots with approved work or attached assets by archiving them
+    for (const ex of existing) {
+      if (!matchedIds.has(ex.id)) {
+        const hasAsset = Boolean(ex.backgroundUrl || ex.videoUrl);
+        const isApproved = ex.approvalStatus === 'approved';
+        if (hasAsset || isApproved) {
+          const archived = await tx.shot.update({
+            where: { id: ex.id },
+            data: { productionStatus: 'archived' },
+          });
+          results.push(archived);
+        } else {
+          await tx.shot.delete({ where: { id: ex.id } });
+        }
+      }
+    }
+
+    return results;
   });
+}
+
+export async function replaceSceneShots(storyId: string, sceneId: string, shots: CreateShotInput[]) {
+  return reconcileAndUpsertSceneShots(storyId, sceneId, shots);
 }
 
 export { prisma };

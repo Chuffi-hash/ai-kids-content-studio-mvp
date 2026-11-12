@@ -99,6 +99,8 @@ export interface CharacterInstance {
   customRig?: VectorRigDefinition;
   appearance?: CustomCharacterAppearance;
   expression?: FacialExpression;
+  action?: string;
+  isSpeaker?: boolean;
 }
 
 export interface AnimationClip {
@@ -392,7 +394,13 @@ export interface SceneShot {
     flipX: boolean;
     action?: string;
     expression?: string;
+    zIndex?: number;
+    isSpeaker?: boolean;
   }>;
+  transition?: {
+    type?: string;
+    durationMs?: number;
+  };
 }
 
 export interface Scene {

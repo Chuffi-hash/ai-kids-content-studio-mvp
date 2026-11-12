@@ -96,7 +96,11 @@ export function evaluateCharacterPose(
     instance.characterId?.includes('earth') ||
     Boolean(instance.name?.toLowerCase().includes('earth'));
 
-  if (!activeClip) {
+  const fallbackAction = ((instance as any).action && ['walk', 'wave', 'jump', 'point', 'idle'].includes((instance as any).action))
+    ? ((instance as any).action as AnimationAction)
+    : 'idle';
+
+  if (!activeClip && fallbackAction === 'idle') {
     activeAction = 'idle';
     const tSec = sceneRelativeMs / 1000;
     if (isPlanet) {
@@ -111,15 +115,16 @@ export function evaluateCharacterPose(
       rightArmAngle = -6 - 2 * Math.sin(2 * Math.PI * 0.6 * tSec);
     }
   } else {
-    activeAction = activeClip.action;
-    const clipOffsetMs = sceneRelativeMs - activeClip.startMs;
-    const durationMs = Math.max(100, activeClip.durationMs);
-    const speed = activeClip.speedMultiplier || 1.0;
+    activeAction = activeClip ? activeClip.action : fallbackAction;
+    const clipOffsetMs = activeClip ? sceneRelativeMs - activeClip.startMs : sceneRelativeMs;
+    const durationMs = activeClip ? Math.max(100, activeClip.durationMs) : 1200;
+    const speed = activeClip?.speedMultiplier || 1.0;
 
     const uRaw = clipOffsetMs / durationMs;
-    const u = activeClip.loop ? uRaw % 1.0 : Math.min(1.0, Math.max(0.0, uRaw));
+    const isLooping = activeClip ? activeClip.loop : true;
+    const u = isLooping ? uRaw % 1.0 : Math.min(1.0, Math.max(0.0, uRaw));
 
-    switch (activeClip.action) {
+    switch (activeAction) {
       case 'walk': {
         const strideFreq = 1.6 * speed;
         const phase = 2 * Math.PI * strideFreq * (clipOffsetMs / 1000);
@@ -140,7 +145,7 @@ export function evaluateCharacterPose(
           headAngle = -2 * Math.sin(phase);
         }
 
-        if (activeClip.motionMode === 'motion_path' && activeClip.motionPath) {
+        if (activeClip?.motionMode === 'motion_path' && activeClip.motionPath) {
           const path = activeClip.motionPath;
           let progress = u;
 
