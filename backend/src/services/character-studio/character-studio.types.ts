@@ -1,3 +1,17 @@
+import { AssetProvenanceRecord } from '../asset-rights/asset-rights.service.js';
+
+export type CharacterFacingDirection =
+  | 'front'
+  | 'front-left'
+  | 'front-right'
+  | 'left'
+  | 'right'
+  | 'back-left'
+  | 'back-right'
+  | 'back';
+
+export type CharacterDirectionalViews = Partial<Record<CharacterFacingDirection, string>>;
+
 export type CharacterProviderType =
   | 'native'
   | 'google_flow'
@@ -172,9 +186,12 @@ export interface CharacterPoses {
 export interface CharacterReferenceAssets {
   mainUrl?: string;
   transparentUrl?: string;
+  characterType?: 'vector' | 'raster';
+  directionalViews?: CharacterDirectionalViews;
   turnaround?: CharacterTurnaround;
   expressions?: CharacterExpressions;
   poses?: CharacterPoses;
+  provenance?: AssetProvenanceRecord;
   sheetUrls?: {
     turnaroundSheetUrl?: string;
     expressionSheetUrl?: string;

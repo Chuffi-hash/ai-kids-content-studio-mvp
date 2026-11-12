@@ -98,13 +98,16 @@ export interface MotionPath {
 export interface CharacterInstance {
   instanceId: string;
   characterId: string;
+  characterType?: 'vector' | 'raster';
+  imageUrl?: string;
+  directionalViews?: Partial<Record<CharacterFacingDirection, string>>;
   assetType?: string;
   name?: string;
   x: number;
   y: number;
   scale: number;
-  rotation: number;
-  flipX: boolean;
+  rotation?: number;
+  flipX?: boolean;
   facingDirection?: CharacterFacingDirection;
   zIndex: number;
   customRig?: VectorRigDefinition;
@@ -406,6 +409,9 @@ export interface SceneShot {
   characterPlacements?: Array<{
     instanceId: string;
     characterId: string;
+    characterType?: 'vector' | 'raster';
+    imageUrl?: string;
+    directionalViews?: Partial<Record<CharacterFacingDirection, string>>;
     name?: string;
     x: number;
     y: number;
@@ -458,6 +464,40 @@ export interface Scene {
   narrationUrl?: string;
 }
 
+export type BrandingPosition =
+  | 'top-left'
+  | 'top-right'
+  | 'bottom-left'
+  | 'bottom-right'
+  | 'custom';
+
+export interface ChannelBrandingConfig {
+  id?: string;
+  storyId?: string;
+  channelName?: string;
+  logoUrl?: string;
+  secondaryLogoUrl?: string;
+  subscribeBadgeUrl?: string;
+  socialHandle?: string;
+  enabled: boolean;
+  position?: BrandingPosition;
+  customX?: number;
+  customY?: number;
+  width?: number;
+  height?: number;
+  opacity?: number;
+  padding?: number;
+  showBackgroundContainer?: boolean;
+  containerBgColor?: string;
+  borderRadius?: number;
+  showShadow?: boolean;
+  startTimeMs?: number;
+  endTimeMs?: number;
+  alwaysVisible?: boolean;
+  formatPresets?: Record<string, any>;
+  safeAreaMargin?: number;
+}
+
 export interface VideoManifest {
   version?: string | number;
   storyId?: string;
@@ -472,6 +512,7 @@ export interface VideoManifest {
   silentAudioSrc?: string;
   templateId?: string;
   subtitleTheme?: 'classic' | 'karaoke' | 'speech-bubble' | 'minimal';
+  branding?: ChannelBrandingConfig;
   scenes: Scene[];
 }
 

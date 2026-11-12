@@ -3,6 +3,8 @@ import path from 'path';
 import { getImagesBySceneId, getShotsBySceneId } from '../database/database.service.js';
 import { getVectorRig, VectorRigDefinition } from '../animation/templates/default-characters.js';
 import { buildRigFromAppearance } from '../animation/templates/custom-character-rig.js';
+import { BrandingService } from '../branding/branding.service.js';
+import { ChannelBrandingConfig } from '../branding/branding.types.js';
 
 export type AspectRatio = '16:9' | '9:16' | '1:1' | '4:5';
 
@@ -79,6 +81,7 @@ export interface RemotionManifestAdapterOptions {
   embedBase64Audio?: boolean;
   templateId?: string;
   subtitleTheme?: 'classic' | 'karaoke' | 'speech-bubble' | 'minimal';
+  branding?: ChannelBrandingConfig;
   excludeMusicFromRemotion?: boolean;
   excludeSilentAudio?: boolean;
 }
@@ -95,6 +98,7 @@ export interface RemotionManifest {
   silentAudioSrc?: string;
   templateId?: string;
   subtitleTheme?: 'classic' | 'karaoke' | 'speech-bubble' | 'minimal';
+  branding?: ChannelBrandingConfig;
   scenes: RemotionScene[];
 }
 
@@ -454,6 +458,25 @@ export class RemotionManifestAdapter {
       throw new Error('Cannot build Remotion manifest: No scenes available');
     }
 
+    // Resolve Channel Branding Configuration
+    const brandingService = new BrandingService({ storageDir: this.storageDir });
+    const rawBranding = options.branding || (story?.storyId ? await brandingService.getBrandingConfig(story.storyId) : undefined);
+    let resolvedBranding: ChannelBrandingConfig | undefined = undefined;
+    if (rawBranding && rawBranding.enabled && rawBranding.logoUrl) {
+      resolvedBranding = {
+        ...rawBranding,
+        logoUrl: embedBase64Images
+          ? this.convertLocalImageToDataUri(rawBranding.logoUrl)
+          : this.resolveAssetUrl(rawBranding.logoUrl),
+        secondaryLogoUrl: rawBranding.secondaryLogoUrl
+          ? (embedBase64Images ? this.convertLocalImageToDataUri(rawBranding.secondaryLogoUrl) : this.resolveAssetUrl(rawBranding.secondaryLogoUrl))
+          : undefined,
+        subscribeBadgeUrl: rawBranding.subscribeBadgeUrl
+          ? (embedBase64Images ? this.convertLocalImageToDataUri(rawBranding.subscribeBadgeUrl) : this.resolveAssetUrl(rawBranding.subscribeBadgeUrl))
+          : undefined,
+      };
+    }
+
     const adaptedScenes: RemotionScene[] = [];
 
     for (let i = 0; i < scenes.length; i++) {
@@ -553,21 +576,39 @@ export class RemotionManifestAdapter {
 
           const rawCharPlacements = (st.characterInstructions as any)?.placements || st.characterPlacements;
           const charPlacements = Array.isArray(rawCharPlacements)
-            ? rawCharPlacements.map((cp: any) => ({
-                instanceId: cp.instanceId,
-                characterId: cp.characterId,
-                name: cp.name,
-                x: cp.x,
-                y: cp.y,
-                scale: cp.scale,
-                rotation: typeof cp.rotation === 'number' ? cp.rotation : 0,
-                flipX: Boolean(cp.flipX),
-                facingDirection: cp.facingDirection || 'front',
-                action: cp.action,
-                expression: cp.expression,
-                zIndex: cp.zIndex,
-                isSpeaker: Boolean(cp.isSpeaker),
-              }))
+            ? rawCharPlacements.map((cp: any) => {
+                const charType = cp.characterType || (cp.imageUrl ? 'raster' : 'vector');
+                let cpImg = cp.imageUrl;
+                let cpViews = cp.directionalViews;
+                if (embedBase64Images && cpImg) {
+                  cpImg = this.convertLocalImageToDataUri(cpImg);
+                }
+                if (embedBase64Images && cpViews) {
+                  const converted: Record<string, string> = {};
+                  for (const [dir, u] of Object.entries(cpViews)) {
+                    converted[dir] = this.convertLocalImageToDataUri(u as string);
+                  }
+                  cpViews = converted;
+                }
+                return {
+                  instanceId: cp.instanceId,
+                  characterId: cp.characterId,
+                  characterType: charType,
+                  imageUrl: cpImg,
+                  directionalViews: cpViews,
+                  name: cp.name,
+                  x: cp.x,
+                  y: cp.y,
+                  scale: cp.scale,
+                  rotation: typeof cp.rotation === 'number' ? cp.rotation : 0,
+                  flipX: Boolean(cp.flipX),
+                  facingDirection: cp.facingDirection || 'front',
+                  action: cp.action,
+                  expression: cp.expression,
+                  zIndex: cp.zIndex,
+                  isSpeaker: Boolean(cp.isSpeaker),
+                };
+              })
             : undefined;
 
           const shotTransition = (st as any).transition ||
@@ -763,9 +804,26 @@ export class RemotionManifestAdapter {
           }
         }
 
+        const charType = inst.characterType || (inst.imageUrl ? 'raster' : 'vector');
+        let imgUrl = inst.imageUrl;
+        let directionalViews = inst.directionalViews;
+        if (embedBase64Images && imgUrl) {
+          imgUrl = this.convertLocalImageToDataUri(imgUrl);
+        }
+        if (embedBase64Images && directionalViews) {
+          const convertedViews: Record<string, string> = {};
+          for (const [dir, vUrl] of Object.entries(directionalViews)) {
+            convertedViews[dir] = this.convertLocalImageToDataUri(vUrl as string);
+          }
+          directionalViews = convertedViews;
+        }
+
         return {
           instanceId: inst.instanceId,
           characterId: inst.characterId,
+          characterType: charType,
+          imageUrl: imgUrl,
+          directionalViews,
           name: inst.name,
           x: inst.x,
           y: inst.y,
@@ -890,6 +948,7 @@ export class RemotionManifestAdapter {
       silentAudioSrc: options.excludeSilentAudio ? undefined : 'silent.wav',
       templateId,
       subtitleTheme,
+      branding: resolvedBranding,
       scenes: adaptedScenes,
     };
   }

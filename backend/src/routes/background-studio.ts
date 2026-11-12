@@ -4,6 +4,9 @@ import {
   buildSceneBackgroundPrompt,
   PROMPT_STYLE_MODIFIERS,
 } from '../services/character-studio/prompt-templates.js';
+import { VisualStylesService, VISUAL_STYLE_PRESETS } from '../services/visual-styles/visual-styles.service.js';
+import { ProviderCapabilitiesService } from '../services/image-generation/provider-capabilities.js';
+import { AssetRightsService } from '../services/asset-rights/asset-rights.service.js';
 
 export const backgroundStudioRouter = Router();
 const backgroundStudioService = new BackgroundStudioService();
@@ -19,10 +22,13 @@ backgroundStudioRouter.get('/', async (_req, res) => {
   }
 });
 
-// GET prompt templates
+// GET prompt templates & visual styles
 backgroundStudioRouter.get('/templates', (_req, res) => {
   res.json({
     styles: PROMPT_STYLE_MODIFIERS,
+    stylePresets: VisualStylesService.getAllPresets(),
+    stylePresetsMap: VISUAL_STYLE_PRESETS,
+    providerCapabilities: ProviderCapabilitiesService.getAllCapabilities(),
     environmentPresets: [
       { id: 'forest', name: 'Lush Storybook Forest', description: 'a vibrant sunny forest path with giant ancient trees, blooming wildflowers, mossy rocks, and soft sunbeams' },
       { id: 'village', name: 'Cheerful Storybook Village', description: 'a quaint friendly village square with colorful stone houses, cobblestone paths, and flower boxes' },
@@ -41,10 +47,47 @@ backgroundStudioRouter.get('/templates', (_req, res) => {
   });
 });
 
+// GET style compatibility check
+backgroundStudioRouter.get('/compatibility', (req, res) => {
+  const { backgroundStyle, characterStyle } = req.query;
+  const result = VisualStylesService.evaluateStyleCompatibility(
+    String(backgroundStyle || 'storybook_illustrated'),
+    String(characterStyle || '2d_cartoon')
+  );
+  res.json(result);
+});
+
+// GET rights summary
+backgroundStudioRouter.get('/rights-summary', async (_req, res) => {
+  try {
+    const backgrounds = await backgroundStudioService.getAllBackgrounds();
+    const records = backgrounds
+      .filter((b) => b.provenance)
+      .map((b) => b.provenance!);
+    const summary = AssetRightsService.generatePublishingRightsSummary(records);
+    res.json(summary);
+  } catch (err: any) {
+    res.status(500).json({ message: 'Failed to generate rights summary' });
+  }
+});
+
 // POST generate background
 backgroundStudioRouter.post('/generate', async (req, res) => {
   try {
-    const { name, environmentType, details, mood, artStyle, aspectRatio, provider } = req.body;
+    const {
+      name,
+      environmentType,
+      details,
+      mood,
+      artStyle,
+      styleId,
+      customStyleInstructions,
+      mode,
+      characters,
+      sceneDescription,
+      aspectRatio,
+      provider,
+    } = req.body;
 
     if (!environmentType) {
       return res.status(400).json({ message: 'environmentType is required' });
@@ -56,6 +99,11 @@ backgroundStudioRouter.post('/generate', async (req, res) => {
       details,
       mood,
       artStyle,
+      styleId: styleId || artStyle,
+      customStyleInstructions,
+      mode,
+      characters,
+      sceneDescription,
       aspectRatio,
       provider,
     });

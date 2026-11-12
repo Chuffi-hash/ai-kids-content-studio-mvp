@@ -3,6 +3,8 @@ import path from 'path';
 import { randomUUID } from 'crypto';
 import { BackgroundAsset, BackgroundProviderType } from './background-studio.types.js';
 import { buildSceneBackgroundPrompt, BackgroundPromptOptions } from '../character-studio/prompt-templates.js';
+import { DynamicPromptBuilderService } from '../prompt-builder/dynamic-prompt-builder.service.js';
+import { AssetRightsService } from '../asset-rights/asset-rights.service.js';
 import { PollinationsImageProvider } from '../image-generation/providers/pollinations-image.provider.js';
 import { GeminiImageProvider } from '../image-generation/providers/gemini-image.provider.js';
 
@@ -73,7 +75,12 @@ export class BackgroundStudioService {
     environmentType: string;
     details?: string;
     mood?: string;
-    artStyle?: '2d_cartoon' | '3d_pixar' | 'storybook_illustrated';
+    artStyle?: string;
+    styleId?: string;
+    customStyleInstructions?: string;
+    mode?: 'environment_only' | 'complete_scene';
+    characters?: Array<{ name: string; species?: string; description?: string; action?: string }>;
+    sceneDescription?: string;
     aspectRatio?: '16:9' | '9:16' | '1:1' | '4:5';
     provider?: BackgroundProviderType;
   }): Promise<BackgroundAsset> {
@@ -83,32 +90,32 @@ export class BackgroundStudioService {
       environmentType,
       details,
       mood,
-      artStyle = 'storybook_illustrated',
+      artStyle,
+      styleId = artStyle || 'storybook_illustrated',
+      customStyleInstructions,
+      mode = 'environment_only',
+      characters,
+      sceneDescription,
       aspectRatio = '16:9',
       provider = 'pollinations',
     } = options;
 
-    const prompt = buildSceneBackgroundPrompt({
+    const promptResult = DynamicPromptBuilderService.buildBackgroundPrompt({
+      mode,
       environmentType,
       details,
       mood,
-      artStyle,
+      styleId,
+      customStyleInstructions,
       aspectRatio,
+      characters,
+      sceneDescription,
+      provider,
     });
 
-    // Determine target dimensions based on aspect ratio (Full 1080p standards)
-    let width = 1920;
-    let height = 1080;
-    if (aspectRatio === '9:16') {
-      width = 1080;
-      height = 1920;
-    } else if (aspectRatio === '1:1') {
-      width = 1080;
-      height = 1080;
-    } else if (aspectRatio === '4:5') {
-      width = 1080;
-      height = 1350;
-    }
+    const prompt = promptResult.generatedPrompt;
+    const width = promptResult.metadata.targetResolution.width;
+    const height = promptResult.metadata.targetResolution.height;
 
     let imageBuffer: Buffer;
     let mimeType = 'image/png';
@@ -123,6 +130,7 @@ export class BackgroundStudioService {
 
       const generated = await this.geminiProvider.generateImage({
         prompt,
+        negativePrompt: promptResult.negativePrompt,
         width,
         height,
         aspectRatio,
@@ -146,12 +154,26 @@ export class BackgroundStudioService {
     await fs.promises.writeFile(filePath, imageBuffer);
 
     const rel = path.relative(path.resolve(process.cwd(), this.storageDir), filePath);
+
+    const provenance = AssetRightsService.createProvenanceRecord({
+      assetId,
+      assetType: 'background',
+      name: name || `${environmentType.charAt(0).toUpperCase() + environmentType.slice(1)} Background`,
+      provider,
+      originalPrompt: promptResult.originalPrompt,
+      generatedPrompt: promptResult.generatedPrompt,
+      dimensions: { width, height },
+      stylePreset: promptResult.stylePreset.id,
+      aspectRatio,
+    });
+
     const asset: BackgroundAsset = {
       id: assetId,
       name: name || `${environmentType.charAt(0).toUpperCase() + environmentType.slice(1)} Background`,
       environmentType,
-      description: details || `Storybook illustrated environment: ${environmentType}`,
+      description: details || `${promptResult.stylePreset.name} environment: ${environmentType}`,
       prompt,
+      originalPrompt: promptResult.originalPrompt,
       imageUrl: this.toPublicUrl(rel),
       storagePath: filePath,
       provider,
@@ -162,7 +184,14 @@ export class BackgroundStudioService {
       originalAspectRatio: aspectRatio,
       fitMode: 'cover',
       focalPoint: { x: 50, y: 50 },
-      tags: [environmentType, artStyle, aspectRatio],
+      stylePreset: promptResult.stylePreset.id,
+      customStyleInstructions,
+      mode,
+      isCompleteSceneWithEmbeddedCharacters: promptResult.metadata.isCompleteSceneWithEmbeddedCharacters,
+      areCharactersIndependentlyAnimated: promptResult.metadata.areCharactersIndependentlyAnimated,
+      disclaimer: promptResult.metadata.disclaimer,
+      provenance,
+      tags: [environmentType, promptResult.stylePreset.id, aspectRatio, mode],
       createdAt: new Date().toISOString(),
     };
 

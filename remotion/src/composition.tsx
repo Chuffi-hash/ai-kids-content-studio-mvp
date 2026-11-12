@@ -17,11 +17,14 @@ import {
   frames,
   Scene,
   VideoManifest,
+  ChannelBrandingConfig,
   normalizeCameraMovement,
 } from './manifest';
 import { evaluateCharacterPose } from './characters/animation-evaluator';
 import { getVectorRig } from './characters/rigs';
 import { VectorCharacter } from './characters/VectorCharacter';
+import { RasterCharacter } from './characters/RasterCharacter';
+import { ChannelBrandingOverlay } from './branding/ChannelBrandingOverlay';
 import { EducationalOverlayRenderer } from './overlays/EducationalOverlay';
 import { getVideoTemplate, SubtitleTheme, VideoTemplate } from './templates';
 
@@ -405,6 +408,7 @@ function SceneView({
   isFirstScene = false,
   isLastScene = false,
   storyTitle,
+  branding,
   fps: fallbackFps = 30,
   width: fallbackWidth = 1280,
   height: fallbackHeight = 720,
@@ -416,6 +420,7 @@ function SceneView({
   isFirstScene?: boolean;
   isLastScene?: boolean;
   storyTitle?: string;
+  branding?: ChannelBrandingConfig;
   fps?: number;
   width?: number;
   height?: number;
@@ -991,7 +996,7 @@ function SceneView({
           {isCrossfading && prevShot && sortedOutgoingInstances.length > 0 && (
             <g opacity={1 - crossfadeAlpha}>
               {sortedOutgoingInstances.map((inst) => {
-                const rig = inst.customRig || getVectorRig(inst.characterId);
+                const isRaster = (inst as any).characterType === 'raster' || Boolean((inst as any).imageUrl) || Boolean((inst as any).directionalViews);
                 const pose = evaluateCharacterPose(
                   inst,
                   scaledClips,
@@ -999,6 +1004,16 @@ function SceneView({
                   scene.expressionCues || [],
                   dialogues
                 );
+                if (isRaster) {
+                  return (
+                    <RasterCharacter
+                      key={`prev-${inst.instanceId}`}
+                      instance={inst as any}
+                      pose={pose}
+                    />
+                  );
+                }
+                const rig = inst.customRig || getVectorRig(inst.characterId);
                 return (
                   <VectorCharacter
                     key={`prev-${inst.instanceId}`}
@@ -1010,10 +1025,10 @@ function SceneView({
             </g>
           )}
 
-          {/* Active / Incoming Articulated Vector Characters */}
+          {/* Active / Incoming Characters (Supports both Vector Rigs and AI Raster Characters) */}
           <g opacity={isCrossfading ? crossfadeAlpha : 1}>
             {sortedIncomingInstances.map((inst) => {
-              const rig = inst.customRig || getVectorRig(inst.characterId);
+              const isRaster = (inst as any).characterType === 'raster' || Boolean((inst as any).imageUrl) || Boolean((inst as any).directionalViews);
               const pose = evaluateCharacterPose(
                 inst,
                 scaledClips,
@@ -1021,6 +1036,16 @@ function SceneView({
                 scene.expressionCues || [],
                 dialogues
               );
+              if (isRaster) {
+                return (
+                  <RasterCharacter
+                    key={`curr-${inst.instanceId}`}
+                    instance={inst as any}
+                    pose={pose}
+                  />
+                );
+              }
+              const rig = inst.customRig || getVectorRig(inst.characterId);
               return (
                 <VectorCharacter
                   key={`curr-${inst.instanceId}`}
@@ -1052,6 +1077,15 @@ function SceneView({
           </svg>
         )}
       </div>
+
+      {/* Layer 6: Channel Branding & Logo Overlay (zIndex: 35 - Above Foreground, Below Captions) */}
+      <ChannelBrandingOverlay
+        branding={branding}
+        format={format}
+        viewportWidth={width}
+        viewportHeight={height}
+        currentTimeMs={sceneRelativeMs}
+      />
 
       {/* Screen-Space Overlays: Scene Title with Template Visual Styling */}
       {scene.title && (
@@ -1376,6 +1410,7 @@ export function StoryVideo(rawProps?: { manifest?: VideoManifest } | VideoManife
               isFirstScene={idx === 0}
               isLastScene={idx === arr.length - 1}
               storyTitle={manifest?.storyTitle}
+              branding={manifest?.branding}
               fps={fps}
               width={dims.width}
               height={dims.height}

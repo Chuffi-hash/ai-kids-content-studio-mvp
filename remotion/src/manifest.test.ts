@@ -120,8 +120,10 @@ test('character pose evaluator preserves and clips facing direction', () => {
     },
     [
       {
-        id: 'clip-1',
+        clipId: 'clip-1',
         instanceId: 'char-1',
+        action: 'idle',
+        loop: true,
         startMs: 0,
         durationMs: 2000,
         facingDirection: 'right',
