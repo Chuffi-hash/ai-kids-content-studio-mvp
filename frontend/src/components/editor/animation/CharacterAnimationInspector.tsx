@@ -13,6 +13,7 @@ import {
   SceneDialogue,
   CharacterVoiceConfig,
   CharacterPerformanceOverride,
+  AspectRatioType,
 } from '../../../types/animation';
 import { EditorCharacter } from '../../../types/editor';
 import { getVectorRig } from '../../../assets/characters/defaultCharacters';
@@ -41,6 +42,9 @@ export interface CharacterAnimationInspectorProps {
   sceneDurationMs: number;
   sceneId?: string;
   characters?: EditorCharacter[];
+  activeFormat?: AspectRatioType;
+  hasOverride?: boolean;
+  onResetOverride?: () => void;
   onUpdateInstance: (instanceId: string, updates: Partial<CharacterInstance>) => void;
   onUpdateAnimationData: (newData: VectorSceneData) => void;
   onRemoveInstance: (instanceId: string) => void;
@@ -159,6 +163,9 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
   sceneDurationMs,
   sceneId,
   characters = [],
+  activeFormat = '16:9',
+  hasOverride = false,
+  onResetOverride,
   onUpdateInstance,
   onUpdateAnimationData,
   onRemoveInstance,
@@ -1564,6 +1571,40 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
         onToggle={() => toggleSection('char-transform')}
         variant="card"
       >
+        {/* Active Format Context Indicator */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '6px 8px',
+            marginBottom: '10px',
+            borderRadius: '4px',
+            background: hasOverride ? 'rgba(168, 85, 247, 0.12)' : 'rgba(255, 255, 255, 0.04)',
+            border: hasOverride ? '1px solid rgba(168, 85, 247, 0.35)' : '1px solid rgba(255, 255, 255, 0.08)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ fontSize: '11px', fontWeight: 600, color: hasOverride ? '#c084fc' : '#94a3b8' }}>
+              Format: {activeFormat}
+            </span>
+            <span style={{ fontSize: '10px', color: 'var(--ed-text-muted)' }}>
+              ({activeFormat === '16:9' ? 'Canonical Base' : hasOverride ? 'Custom Override' : 'Auto Ground Layout'})
+            </span>
+          </div>
+          {hasOverride && onResetOverride && (
+            <button
+              type="button"
+              className="ed-tool-btn"
+              onClick={onResetOverride}
+              style={{ fontSize: '10px', padding: '2px 6px', color: '#f87171' }}
+              title="Reset manual overrides for this format and return to automatic ground-anchored layout"
+            >
+              Reset to Auto
+            </button>
+          )}
+        </div>
+
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
           <div>
             <span style={{ fontSize: '11px', color: 'var(--ed-text-muted)' }}>X (Canvas px)</span>
@@ -1613,42 +1654,87 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
         </div>
 
         {/* Facing Direction 8-Way Selector */}
-        <div style={{ marginTop: '10px', marginBottom: '8px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-            <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--ed-text-muted)' }}>Facing Orientation</span>
-            <span style={{ fontSize: '11px', color: '#a78bfa', fontWeight: 600 }}>
-              {FACING_DIRECTIONS.find((f) => f.id === (instance.facingDirection || 'front'))?.label || 'Front'}
-            </span>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '4px' }}>
-            {FACING_DIRECTIONS.map((dir) => {
-              const isActive = (instance.facingDirection || 'front') === dir.id;
-              return (
-                <button
-                  key={dir.id}
-                  type="button"
-                  className={`ed-tool-btn ${isActive ? 'primary active' : ''}`}
-                  onClick={() => onUpdateInstance(instance.instanceId, { facingDirection: dir.id })}
-                  title={dir.desc}
+        {(() => {
+          const isRaster = (instance as any).characterType === 'raster' || Boolean((instance as any).imageUrl) || Boolean((instance as any).directionalViews);
+          const views = (instance as any).directionalViews || {};
+          const currentFacing = instance.facingDirection || 'front';
+          const hasCurrentDirectionView = isRaster ? (currentFacing === 'front' ? true : Boolean(views[currentFacing])) : true;
+
+          return (
+            <div style={{ marginTop: '10px', marginBottom: '8px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--ed-text-muted)' }}>Facing Orientation</span>
+                <span style={{ fontSize: '11px', color: '#a78bfa', fontWeight: 600 }}>
+                  {FACING_DIRECTIONS.find((f) => f.id === currentFacing)?.label || 'Front'}
+                </span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '4px' }}>
+                {FACING_DIRECTIONS.map((dir) => {
+                  const isActive = currentFacing === dir.id;
+                  const hasCustomView = Boolean(views[dir.id]);
+                  return (
+                    <button
+                      key={dir.id}
+                      type="button"
+                      className={`ed-tool-btn ${isActive ? 'primary active' : ''}`}
+                      onClick={() => onUpdateInstance(instance.instanceId, { facingDirection: dir.id })}
+                      title={isRaster && !hasCustomView && dir.id !== 'front' ? `${dir.desc} (front fallback)` : dir.desc}
+                      style={{
+                        fontSize: '10px',
+                        padding: '5px 2px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: '2px',
+                        border: isActive ? '1px solid #8b5cf6' : '1px solid rgba(255,255,255,0.1)',
+                        background: isActive ? 'rgba(139, 92, 246, 0.3)' : 'rgba(255,255,255,0.04)',
+                        cursor: 'pointer',
+                        position: 'relative',
+                      }}
+                    >
+                      <span style={{ fontSize: '13px' }}>{dir.icon}</span>
+                      <span>{dir.label}</span>
+                      {isRaster && dir.id !== 'front' && (
+                        <span
+                          style={{
+                            fontSize: '8px',
+                            color: hasCustomView ? '#34d399' : '#f59e0b',
+                            lineHeight: 1,
+                          }}
+                        >
+                          {hasCustomView ? '●' : '○'}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Missing View Callout for Raster Characters */}
+              {isRaster && !hasCurrentDirectionView && (
+                <div
                   style={{
-                    fontSize: '10px',
-                    padding: '5px 2px',
+                    marginTop: '8px',
+                    padding: '6px 8px',
+                    borderRadius: '4px',
+                    background: 'rgba(245, 158, 11, 0.12)',
+                    border: '1px solid rgba(245, 158, 11, 0.35)',
+                    fontSize: '10.5px',
+                    color: '#fbbf24',
                     display: 'flex',
                     flexDirection: 'column',
-                    alignItems: 'center',
                     gap: '2px',
-                    border: isActive ? '1px solid #8b5cf6' : '1px solid rgba(255,255,255,0.1)',
-                    background: isActive ? 'rgba(139, 92, 246, 0.3)' : 'rgba(255,255,255,0.04)',
-                    cursor: 'pointer',
                   }}
                 >
-                  <span style={{ fontSize: '13px' }}>{dir.icon}</span>
-                  <span>{dir.label}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
+                  <div style={{ fontWeight: 600 }}>⚠️ Missing {currentFacing} View</div>
+                  <div style={{ color: '#fef3c7', fontSize: '10px', lineHeight: 1.3 }}>
+                    Using front artwork fallback. Generate or upload a dedicated {currentFacing} image for genuine directional rendering.
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {/* Flip & Layer ordering */}
         <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>

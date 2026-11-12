@@ -24,6 +24,7 @@ import { evaluateCharacterPose } from './characters/animation-evaluator';
 import { getVectorRig } from './characters/rigs';
 import { VectorCharacter } from './characters/VectorCharacter';
 import { RasterCharacter } from './characters/RasterCharacter';
+import { calculateResponsiveCharacterPlacement } from './characters/placement-engine';
 import { ChannelBrandingOverlay } from './branding/ChannelBrandingOverlay';
 import { EducationalOverlayRenderer } from './overlays/EducationalOverlay';
 import { getVideoTemplate, SubtitleTheme, VideoTemplate } from './templates';
@@ -527,167 +528,9 @@ function SceneView({
     ? `${focalPoint.x}% ${focalPoint.y}%`
     : 'center';
 
-  // Helper function to adapt any character instance to the active format and dimensions
-  const adaptInstanceForFormat = (
-    inst: typeof scene.characterInstances extends (infer U)[] | undefined ? U : any,
-    placement: any,
-    instIdx: number,
-    arr: any[]
-  ) => {
-    let targetFlipX = inst.flipX;
-    if (arr.length === 2 && targetFlipX === undefined) {
-      const other = arr[1 - instIdx];
-      if (other && inst.x > other.x) {
-        targetFlipX = true;
-      }
-    }
 
-    const rawX = placement?.x ?? inst.x;
-    const rawY = placement?.y ?? inst.y;
-    const rawScaleVal = placement?.scale ?? inst.scale;
 
-    const baseInst = {
-      ...inst,
-      x: rawX,
-      y: rawY,
-      scale: rawScaleVal,
-      rotation: placement?.rotation ?? inst.rotation ?? 0,
-      flipX: placement?.flipX ?? targetFlipX ?? inst.flipX,
-      facingDirection: placement?.facingDirection || inst.facingDirection || 'front',
-      action: placement?.action || inst.action || 'idle',
-      expression: (placement?.expression || inst.expression) as FacialExpression | undefined,
-      zIndex: placement?.zIndex ?? inst.zIndex ?? (instIdx + 1),
-      isSpeaker: placement?.isSpeaker ?? inst.isSpeaker,
-    };
 
-    const override = charOverrides?.[inst.instanceId];
-    if (override) {
-      const variantRefW = formatVariant?.width || (format === '16:9' ? 1280 : 720);
-      const variantRefH = formatVariant?.height || (format === '16:9' ? 720 : (format === '9:16' ? 1280 : format === '4:5' ? 900 : 720));
-      const scaleX = width / variantRefW;
-      const scaleY = height / variantRefH;
-      let ox = override.x !== undefined ? Math.round(override.x * scaleX) : baseInst.x;
-      let oy = override.y !== undefined ? Math.round(override.y * scaleY) : baseInst.y;
-      const oScale = override.scale !== undefined
-        ? Number((override.scale * scaleX).toFixed(2))
-        : Number(((baseInst.scale ?? 1.0) * scaleX).toFixed(2));
-
-      // Auto-recovery safety margin (ensures character stays in visible frame)
-      if (format === '9:16' && (oy < Math.round(height * 0.15) || oy > height - Math.round(height * 0.08))) {
-        oy = Math.round(height * 0.65);
-      } else if (format === '1:1' && (oy < Math.round(height * 0.12) || oy > height - Math.round(height * 0.08))) {
-        oy = Math.round(height * 0.68);
-      } else if (format === '4:5' && (oy < Math.round(height * 0.15) || oy > height - Math.round(height * 0.08))) {
-        oy = Math.round(height * 0.68);
-      }
-      return {
-        ...baseInst,
-        x: ox,
-        y: oy,
-        scale: oScale,
-        rotation: override.rotation !== undefined ? override.rotation : baseInst.rotation,
-        flipX: override.flipX !== undefined ? override.flipX : baseInst.flipX,
-        facingDirection: override.facingDirection || baseInst.facingDirection || 'front',
-      };
-    }
-
-    const rawScale = baseInst.scale ?? 1.0;
-    const isSingleChar = arr.length === 1;
-
-    if (format === '16:9' || (width === 1280 && height === 720)) {
-      const s = width / 1280;
-      return {
-        ...baseInst,
-        x: Math.round(baseInst.x * s),
-        y: Math.round(baseInst.y * s),
-        scale: Number((rawScale * s).toFixed(2)),
-        flipX: targetFlipX ?? baseInst.flipX,
-        facingDirection: baseInst.facingDirection || 'front',
-      };
-    }
-
-    if (format === '9:16' || width < height) {
-      // 9:16 Portrait Reel:
-      const resFactor = width / 720;
-      const scaleMult = isSingleChar ? 1.55 : 1.35;
-      const boostedScale = Number((rawScale * scaleMult * resFactor).toFixed(2));
-      let newX: number;
-      let newY = Math.round(height * 0.65);
-
-      if (isSingleChar) {
-        newX = Math.round(width / 2);
-      } else if (arr.length === 2) {
-        newX = instIdx === 0 ? Math.round(width * 0.35) : Math.round(width * 0.65);
-      } else {
-        const span = width * 0.6;
-        const step = span / Math.max(1, arr.length - 1);
-        newX = Math.round(width * 0.2 + instIdx * step);
-      }
-
-      return {
-        ...baseInst,
-        x: newX,
-        y: newY,
-        scale: boostedScale,
-        flipX: targetFlipX ?? baseInst.flipX,
-        facingDirection: baseInst.facingDirection || 'front',
-      };
-    }
-
-    if (format === '1:1') {
-      const resFactor = width / 720;
-      const scaleMult = isSingleChar ? 1.25 : 1.15;
-      let newX: number;
-      let newY = Math.round(height * 0.68);
-
-      if (isSingleChar) {
-        newX = Math.round(width / 2);
-      } else if (arr.length === 2) {
-        newX = instIdx === 0 ? Math.round(width * 0.36) : Math.round(width * 0.64);
-      } else {
-        const span = width * 0.65;
-        const step = span / Math.max(1, arr.length - 1);
-        newX = Math.round(width * 0.18 + instIdx * step);
-      }
-
-      return {
-        ...baseInst,
-        x: newX,
-        y: newY,
-        scale: Number((rawScale * scaleMult * resFactor).toFixed(2)),
-        flipX: targetFlipX ?? baseInst.flipX,
-        facingDirection: baseInst.facingDirection || 'front',
-      };
-    }
-
-    if (format === '4:5') {
-      const resFactor = width / 720;
-      const scaleMult = isSingleChar ? 1.35 : 1.22;
-      let newX: number;
-      let newY = Math.round(height * 0.68);
-
-      if (isSingleChar) {
-        newX = Math.round(width / 2);
-      } else if (arr.length === 2) {
-        newX = instIdx === 0 ? Math.round(width * 0.35) : Math.round(width * 0.65);
-      } else {
-        const span = width * 0.62;
-        const step = span / Math.max(1, arr.length - 1);
-        newX = Math.round(width * 0.19 + instIdx * step);
-      }
-
-      return {
-        ...baseInst,
-        x: newX,
-        y: newY,
-        scale: Number((rawScale * scaleMult * resFactor).toFixed(2)),
-        flipX: targetFlipX ?? baseInst.flipX,
-        facingDirection: baseInst.facingDirection || 'front',
-      };
-    }
-
-    return baseInst;
-  };
 
   // Base raw instances: use scene.characterInstances if present, otherwise reconstruct from activeShot.characterPlacements
   const rawSceneInstances = (scene.characterInstances && scene.characterInstances.length > 0)
@@ -711,21 +554,77 @@ function SceneView({
         }))
       : [];
 
-  // Evaluate incoming instances for active shot
-  const instances = rawSceneInstances.map((inst, instIdx, arr) => {
+  // Stage incoming instances for active shot
+  const stagedIncomingInstances = rawSceneInstances.map((inst, instIdx) => {
     const currPlacement = activeShot?.characterPlacements?.find(
       (cp) => cp.instanceId === inst.instanceId || cp.characterId === inst.characterId || cp.name === inst.name
     );
-    return adaptInstanceForFormat(inst, currPlacement, instIdx, arr);
+    let targetFlipX = inst.flipX;
+    if (rawSceneInstances.length === 2 && targetFlipX === undefined) {
+      const other = rawSceneInstances[1 - instIdx];
+      if (other && inst.x > other.x) {
+        targetFlipX = true;
+      }
+    }
+    return {
+      ...inst,
+      x: currPlacement?.x ?? inst.x,
+      y: currPlacement?.y ?? inst.y,
+      scale: currPlacement?.scale ?? inst.scale ?? 1.0,
+      rotation: currPlacement?.rotation ?? inst.rotation ?? 0,
+      flipX: currPlacement?.flipX ?? targetFlipX ?? inst.flipX,
+      facingDirection: currPlacement?.facingDirection || inst.facingDirection || 'front',
+      action: currPlacement?.action || inst.action || 'idle',
+      expression: (currPlacement?.expression || inst.expression) as FacialExpression | undefined,
+      zIndex: currPlacement?.zIndex ?? inst.zIndex ?? (instIdx + 1),
+      isSpeaker: currPlacement?.isSpeaker ?? inst.isSpeaker,
+    };
+  });
+
+  const instances = calculateResponsiveCharacterPlacement({
+    instances: stagedIncomingInstances as any,
+    format,
+    canvasWidth: width,
+    canvasHeight: height,
+    formatVariants: scene.formatVariants,
   });
 
   // Evaluate outgoing instances for previous shot during crossfade
-  const outgoingInstances = isCrossfading && prevShot
-    ? rawSceneInstances.map((inst, instIdx, arr) => {
+  const stagedOutgoingInstances = (isCrossfading && prevShot)
+    ? rawSceneInstances.map((inst, instIdx) => {
         const prevPlacement = prevShot.characterPlacements?.find(
           (cp) => cp.instanceId === inst.instanceId || cp.characterId === inst.characterId || cp.name === inst.name
         );
-        return adaptInstanceForFormat(inst, prevPlacement, instIdx, arr);
+        let targetFlipX = inst.flipX;
+        if (rawSceneInstances.length === 2 && targetFlipX === undefined) {
+          const other = rawSceneInstances[1 - instIdx];
+          if (other && inst.x > other.x) {
+            targetFlipX = true;
+          }
+        }
+        return {
+          ...inst,
+          x: prevPlacement?.x ?? inst.x,
+          y: prevPlacement?.y ?? inst.y,
+          scale: prevPlacement?.scale ?? inst.scale ?? 1.0,
+          rotation: prevPlacement?.rotation ?? inst.rotation ?? 0,
+          flipX: prevPlacement?.flipX ?? targetFlipX ?? inst.flipX,
+          facingDirection: prevPlacement?.facingDirection || inst.facingDirection || 'front',
+          action: prevPlacement?.action || inst.action || 'idle',
+          expression: (prevPlacement?.expression || inst.expression) as FacialExpression | undefined,
+          zIndex: prevPlacement?.zIndex ?? inst.zIndex ?? (instIdx + 1),
+          isSpeaker: prevPlacement?.isSpeaker ?? inst.isSpeaker,
+        };
+      })
+    : [];
+
+  const outgoingInstances = stagedOutgoingInstances.length > 0
+    ? calculateResponsiveCharacterPlacement({
+        instances: stagedOutgoingInstances as any,
+        format,
+        canvasWidth: width,
+        canvasHeight: height,
+        formatVariants: scene.formatVariants,
       })
     : [];
 

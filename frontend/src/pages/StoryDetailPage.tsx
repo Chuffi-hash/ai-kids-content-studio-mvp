@@ -1201,21 +1201,88 @@ export default function StoryDetailPage() {
   );
 
   const handleUpdateInstance = useCallback(
-    (instanceId: string, updates: Partial<CharacterInstance>) => {
+    (
+      instanceId: string,
+      updates: Partial<CharacterInstance>,
+      targetFormat: AspectRatioType = previewFormat
+    ) => {
       if (!activeSceneId) return;
       const targetScene = scenes.find((s) => s.sceneId === activeSceneId);
       if (!targetScene || !targetScene.animationData) return;
 
-      const updatedInstances = (targetScene.animationData.characterInstances || []).map((inst) =>
-        inst.instanceId === instanceId ? { ...inst, ...updates } : inst
-      );
+      const currentAnimData = targetScene.animationData;
+
+      if (targetFormat === '16:9') {
+        const updatedInstances = (currentAnimData.characterInstances || []).map((inst) =>
+          inst.instanceId === instanceId ? { ...inst, ...updates } : inst
+        );
+        handleUpdateAnimationData(activeSceneId, {
+          ...currentAnimData,
+          characterInstances: updatedInstances,
+        });
+      } else {
+        const currentVariants = currentAnimData.formatVariants || {};
+        const currentVariant = currentVariants[targetFormat] || {
+          aspectRatio: targetFormat,
+          width: targetFormat === '9:16' ? 720 : targetFormat === '1:1' ? 720 : 720,
+          height: targetFormat === '9:16' ? 1280 : targetFormat === '1:1' ? 720 : 900,
+          characterOverrides: {},
+        };
+        const currentOverrides = currentVariant.characterOverrides || {};
+        const updatedOverrides = {
+          ...currentOverrides,
+          [instanceId]: {
+            ...(currentOverrides[instanceId] || {}),
+            ...(updates.x !== undefined ? { x: updates.x } : {}),
+            ...(updates.y !== undefined ? { y: updates.y } : {}),
+            ...(updates.scale !== undefined ? { scale: updates.scale } : {}),
+            ...(updates.flipX !== undefined ? { flipX: updates.flipX } : {}),
+            ...(updates.rotation !== undefined ? { rotation: updates.rotation } : {}),
+            ...(updates.facingDirection !== undefined ? { facingDirection: updates.facingDirection } : {}),
+          },
+        };
+
+        handleUpdateAnimationData(activeSceneId, {
+          ...currentAnimData,
+          formatVariants: {
+            ...currentVariants,
+            [targetFormat]: {
+              ...currentVariant,
+              characterOverrides: updatedOverrides,
+            },
+          },
+        });
+      }
+    },
+    [activeSceneId, scenes, previewFormat, handleUpdateAnimationData]
+  );
+
+  const handleResetCharacterOverride = useCallback(
+    (instanceId: string, targetFormat: AspectRatioType = previewFormat) => {
+      if (!activeSceneId || targetFormat === '16:9') return;
+      const targetScene = scenes.find((s) => s.sceneId === activeSceneId);
+      if (!targetScene || !targetScene.animationData) return;
+
+      const currentAnimData = targetScene.animationData;
+      const currentVariants = currentAnimData.formatVariants || {};
+      const currentVariant = currentVariants[targetFormat];
+      if (!currentVariant || !currentVariant.characterOverrides?.[instanceId]) return;
+
+      const newOverrides = { ...currentVariant.characterOverrides };
+      delete newOverrides[instanceId];
 
       handleUpdateAnimationData(activeSceneId, {
-        ...targetScene.animationData,
-        characterInstances: updatedInstances,
+        ...currentAnimData,
+        formatVariants: {
+          ...currentVariants,
+          [targetFormat]: {
+            ...currentVariant,
+            characterOverrides: newOverrides,
+          },
+        },
       });
     },
-    [activeSceneId, scenes, handleUpdateAnimationData]
+    [activeSceneId, scenes, previewFormat, handleUpdateAnimationData]
   );
 
   const handleUpdateOverlay = useCallback(
@@ -2041,6 +2108,8 @@ export default function StoryDetailPage() {
           isGeneratingVoice={generatingVoiceForScene === activeSceneId}
           isGeneratingVideo={generatingVideoForScene === activeSceneId}
           selectedInstanceId={selectedInstanceId}
+          activeFormat={previewFormat}
+          onResetCharacterOverride={handleResetCharacterOverride}
           onSelectInstance={handleSelectInstance}
           onUpdateInstance={handleUpdateInstance}
           selectedOverlayId={selectedOverlayId}

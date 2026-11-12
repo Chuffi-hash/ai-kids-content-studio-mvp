@@ -11,6 +11,8 @@ import { getVectorRig } from "../../../assets/characters/defaultCharacters";
 import { buildRigFromAppearance } from "../../../utils/customCharacterRig";
 import { evaluateCharacterPose } from "../../../utils/animationEngine";
 import { VectorCharacterRenderer } from "./VectorCharacterRenderer";
+import { RasterCharacterRenderer } from "./RasterCharacterRenderer";
+import { calculateResponsiveCharacterPlacement } from "../../../utils/characterPlacementEngine";
 import { TransformGizmo } from "./TransformGizmo";
 import { OverlayGizmo } from "./OverlayGizmo";
 import { renderEducationalOverlayXml } from "../../../utils/educationalOverlayRenderer";
@@ -101,90 +103,16 @@ export const VectorSceneCanvas: React.FC<VectorSceneCanvasProps> = ({
     return Math.round(y / (h / 720));
   };
 
-  // Non-destructive format variant mapping
-  const instances = rawInstances.map((inst, instIdx, arr) => {
-    const override = characterOverrides?.[inst.instanceId];
-    if (override) {
-      let ox = override.x !== undefined ? override.x : inst.x;
-      let oy = override.y !== undefined ? override.y : inst.y;
-      // Auto-recovery across all aspect ratios: ensure characters never float in the sky
-      if (effectiveFormat === "9:16" && (oy < 680 || oy > 1150)) {
-        oy = Math.round(canvasHeight * 0.65);
-      } else if (effectiveFormat === "1:1" && (oy < 350 || oy > 650)) {
-        oy = Math.round(canvasHeight * 0.68);
-      } else if (effectiveFormat === "4:5" && (oy < 450 || oy > 850)) {
-        oy = Math.round(canvasHeight * 0.68);
-      }
-      return {
-        ...inst,
-        x: ox,
-        y: oy,
-        scale: override.scale !== undefined ? override.scale : inst.scale,
-        rotation: override.rotation !== undefined ? override.rotation : inst.rotation,
-        flipX: override.flipX !== undefined ? override.flipX : inst.flipX,
-        facingDirection: override.facingDirection || inst.facingDirection || 'front',
-      };
-    }
-
-    const rawScale = inst.scale || 1.0;
-    const isSingleChar = arr.length === 1;
-
-    if (effectiveFormat === "9:16") {
-      const scaleMult = isSingleChar ? 1.55 : 1.35;
-      const boostedScale = Number((rawScale * scaleMult).toFixed(2));
-      let newX = mapBaseXToFormat(inst.x, effectiveFormat, canvasWidth);
-      let newY = Math.round(inst.y * (canvasHeight / 720));
-      // Ground anchor across 9:16
-      if (newY < 680 || newY > 1150) {
-        newY = Math.round(canvasHeight * 0.65);
-      }
-      if (arr.length === 2) {
-        newX = instIdx === 0 ? Math.round(canvasWidth * 0.35) : Math.round(canvasWidth * 0.65);
-      }
-
-      return {
-        ...inst,
-        x: Math.round(newX),
-        y: newY,
-        scale: boostedScale,
-      };
-    }
-    if (effectiveFormat === "1:1") {
-      let newX = mapBaseXToFormat(inst.x, effectiveFormat, canvasWidth);
-      let newY = mapBaseYToFormat(inst.y, effectiveFormat, canvasHeight);
-      if (newY < 350 || newY > 650) {
-        newY = Math.round(canvasHeight * 0.68);
-      }
-      if (arr.length === 2) {
-        newX = instIdx === 0 ? Math.round(canvasWidth * 0.36) : Math.round(canvasWidth * 0.64);
-      }
-      const scaleMult = isSingleChar ? 1.25 : 1.15;
-      return {
-        ...inst,
-        x: Math.round(newX),
-        y: Math.round(newY),
-        scale: Number((rawScale * scaleMult).toFixed(2)),
-      };
-    }
-    if (effectiveFormat === "4:5") {
-      let newX = mapBaseXToFormat(inst.x, effectiveFormat, canvasWidth);
-      let newY = mapBaseYToFormat(inst.y, effectiveFormat, canvasHeight);
-      if (newY < 450 || newY > 850) {
-        newY = Math.round(canvasHeight * 0.68);
-      }
-      if (arr.length === 2) {
-        newX = instIdx === 0 ? Math.round(canvasWidth * 0.35) : Math.round(canvasWidth * 0.65);
-      }
-      const scaleMult = isSingleChar ? 1.35 : 1.22;
-      return {
-        ...inst,
-        x: Math.round(newX),
-        y: Math.round(newY),
-        scale: Number((rawScale * scaleMult).toFixed(2)),
-      };
-    }
-    return inst;
-  });
+  // Responsive character placement across all aspect ratios with override preservation
+  const instances = useMemo(() => {
+    return calculateResponsiveCharacterPlacement({
+      instances: rawInstances,
+      format: effectiveFormat,
+      canvasWidth,
+      canvasHeight,
+      formatVariants: animationData.formatVariants,
+    });
+  }, [rawInstances, effectiveFormat, canvasWidth, canvasHeight, animationData.formatVariants]);
 
   // Dynamically map motion paths of animation clips to current format dimensions and anchored instance coordinates
   const scaledClips: AnimationClip[] = useMemo(() => {
@@ -663,9 +591,34 @@ export const VectorSceneCanvas: React.FC<VectorSceneCanvasProps> = ({
         );
       })}
 
-      {/* 3. Character Instances Layer */}
+      {/* 3. Character Instances Layer (Supports both Vector Rigs and AI Raster Characters) */}
       {sortedInstances.map((instance) => {
         const isSelected = instance.instanceId === selectedInstanceId;
+        const isRaster = (instance as any).characterType === 'raster' || Boolean((instance as any).imageUrl) || Boolean((instance as any).directionalViews);
+        const pose = evaluateCharacterPose(
+          instance,
+          scaledClips,
+          sceneRelativeMs,
+          animationData.expressionCues,
+          animationData.dialogueLines,
+        );
+
+        if (isRaster) {
+          return (
+            <RasterCharacterRenderer
+              key={instance.instanceId}
+              instance={instance}
+              pose={pose}
+              isSelected={isSelected}
+              onClick={(e) => {
+                e.stopPropagation();
+                onSelectInstance(instance.instanceId);
+                onSelectOverlay?.(null);
+              }}
+            />
+          );
+        }
+
         const hasHeadTags = instance.customRig?.parts?.head?.shapes?.some(
           (s) => s.tag === "eyes" || s.tag === "mouth",
         );
@@ -679,13 +632,6 @@ export const VectorSceneCanvas: React.FC<VectorSceneCanvasProps> = ({
                   instance.appearance,
                 )
               : instance.customRig || getVectorRig(instance.characterId);
-        const pose = evaluateCharacterPose(
-          instance,
-          scaledClips,
-          sceneRelativeMs,
-          animationData.expressionCues,
-          animationData.dialogueLines,
-        );
 
         return (
           <g key={instance.instanceId} className="character-instance-wrapper">
@@ -749,12 +695,14 @@ export const VectorSceneCanvas: React.FC<VectorSceneCanvasProps> = ({
           scale: selectedPose.scale,
           rotation: selectedPose.rotation,
         };
+        const isRaster = (selectedInstance as any).characterType === 'raster' || Boolean((selectedInstance as any).imageUrl) || Boolean((selectedInstance as any).directionalViews);
         const hasHeadTags =
           selectedInstance.customRig?.parts?.head?.shapes?.some(
             (s) => s.tag === "eyes" || s.tag === "mouth",
           );
-        const rig =
-          selectedInstance.customRig && hasHeadTags
+        const rig = isRaster
+          ? ({ baseWidth: 280, baseHeight: 360, parts: {} } as any)
+          : (selectedInstance.customRig && hasHeadTags
             ? selectedInstance.customRig
             : selectedInstance.appearance
               ? buildRigFromAppearance(
@@ -763,7 +711,7 @@ export const VectorSceneCanvas: React.FC<VectorSceneCanvasProps> = ({
                   selectedInstance.appearance,
                 )
               : selectedInstance.customRig ||
-                getVectorRig(selectedInstance.characterId);
+                getVectorRig(selectedInstance.characterId));
 
         return (
           <TransformGizmo

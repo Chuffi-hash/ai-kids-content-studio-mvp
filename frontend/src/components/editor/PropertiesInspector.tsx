@@ -7,7 +7,8 @@ import {
   formatTimeMs,
 } from '../../utils/timingEngine';
 import { resolveAssetUrl } from '../../utils/urlHelper';
-import { CharacterInstance, VectorSceneData, EducationalOverlay, EducationalOverlayType, SpeakingEmotion, SceneDialogue } from '../../types/animation';
+import { CharacterInstance, VectorSceneData, EducationalOverlay, EducationalOverlayType, SpeakingEmotion, SceneDialogue, AspectRatioType } from '../../types/animation';
+import { resolveEffectiveCharacterInstance } from '../../utils/characterPlacementEngine';
 import { CharacterAnimationInspector } from './animation/CharacterAnimationInspector';
 import { OverlayInspector } from './animation/OverlayInspector';
 import { DialogueInspector } from './animation/DialogueInspector';
@@ -132,6 +133,8 @@ interface PropertiesInspectorProps {
   isGeneratingVideo?: boolean;
 
   selectedInstanceId?: string | null;
+  activeFormat?: AspectRatioType;
+  onResetCharacterOverride?: (instanceId: string, format?: AspectRatioType) => void;
   onSelectInstance?: (instanceId: string | null) => void;
   onUpdateInstance?: (instanceId: string, updates: Partial<CharacterInstance>) => void;
   onUpdateAnimationData?: (sceneId: string, newData: VectorSceneData) => void;
@@ -184,6 +187,8 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
   isGeneratingVoice,
   isGeneratingVideo,
   selectedInstanceId,
+  activeFormat = '16:9',
+  onResetCharacterOverride,
   onSelectInstance,
   onUpdateInstance,
   onUpdateAnimationData,
@@ -3468,16 +3473,38 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                 </span>
               </div>
 
-              <CharacterAnimationInspector
-                instance={selectedCharacterInstance}
-                animationData={scene.animationData}
-                sceneDurationMs={durationMs}
-                sceneId={scene.sceneId}
-                characters={characters}
-                onUpdateInstance={(id, updates) => onUpdateInstance && onUpdateInstance(id, updates)}
-                onUpdateAnimationData={(newData) => onUpdateAnimationData && onUpdateAnimationData(scene.sceneId, newData)}
-                onRemoveInstance={(id) => onRemoveCharacterFromScene && onRemoveCharacterFromScene(scene.sceneId, id)}
-              />
+              {(() => {
+                const effectiveInstance = resolveEffectiveCharacterInstance(
+                  selectedCharacterInstance,
+                  scene.animationData,
+                  activeFormat || '16:9'
+                );
+                const hasOverride = Boolean(
+                  activeFormat &&
+                  activeFormat !== '16:9' &&
+                  scene.animationData?.formatVariants?.[activeFormat]?.characterOverrides?.[selectedCharacterInstance.instanceId]
+                );
+
+                return (
+                  <CharacterAnimationInspector
+                    instance={effectiveInstance}
+                    animationData={scene.animationData}
+                    sceneDurationMs={durationMs}
+                    sceneId={scene.sceneId}
+                    characters={characters}
+                    activeFormat={activeFormat}
+                    hasOverride={hasOverride}
+                    onResetOverride={
+                      onResetCharacterOverride
+                        ? () => onResetCharacterOverride(selectedCharacterInstance.instanceId, activeFormat)
+                        : undefined
+                    }
+                    onUpdateInstance={(id, updates) => onUpdateInstance && onUpdateInstance(id, updates)}
+                    onUpdateAnimationData={(newData) => onUpdateAnimationData && onUpdateAnimationData(scene.sceneId, newData)}
+                    onRemoveInstance={(id) => onRemoveCharacterFromScene && onRemoveCharacterFromScene(scene.sceneId, id)}
+                  />
+                );
+              })()}
             </div>
               ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>

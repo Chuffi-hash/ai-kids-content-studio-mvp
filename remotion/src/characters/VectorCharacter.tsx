@@ -1,7 +1,7 @@
 import React from 'react';
 import { VectorRigDefinition, VectorPartShape } from '../manifest';
 import { EvaluatedCharacterPose } from './animation-evaluator';
-import { getHeadShapesForPose } from './face-renderer';
+import { resolveDirectionalRig } from './directional-rig-resolver';
 
 interface VectorCharacterProps {
   rig: VectorRigDefinition;
@@ -76,6 +76,9 @@ export const VectorCharacter: React.FC<VectorCharacterProps> = ({ rig, pose }) =
   // Root transform: placement (x, y), scale (with flipX), rotation
   const rootTransform = `translate(${pose.x}, ${pose.y}) scale(${pose.scale * (pose.flipX ? -1 : 1)}, ${pose.scale}) rotate(${pose.rotation})`;
 
+  // Directional rig resolution across all 8 orientations
+  const directional = resolveDirectionalRig(rig, pose);
+
   // Limb and body transforms
   const leftLegTransform = `rotate(${pose.leftLegAngle}, ${parts.leftLeg.pivot.x}, ${parts.leftLeg.pivot.y})`;
   const rightLegTransform = `rotate(${pose.rightLegAngle}, ${parts.rightLeg.pivot.x}, ${parts.rightLeg.pivot.y})`;
@@ -83,9 +86,6 @@ export const VectorCharacter: React.FC<VectorCharacterProps> = ({ rig, pose }) =
   const leftArmTransform = `translate(0, ${pose.torsoBobY}) rotate(${pose.leftArmAngle}, ${parts.leftArm.pivot.x}, ${parts.leftArm.pivot.y})`;
   const rightArmTransform = `translate(0, ${pose.torsoBobY}) rotate(${pose.rightArmAngle}, ${parts.rightArm.pivot.x}, ${parts.rightArm.pivot.y})`;
   const headTransform = `translate(0, ${pose.torsoBobY}) rotate(${pose.headAngle}, ${parts.head.pivot.x}, ${parts.head.pivot.y})`;
-
-  // Dynamic head shapes for current expression and viseme mouth shape
-  const headShapes = getHeadShapesForPose(rig, pose);
 
   // Soft contact drop shadow beneath character
   const shadowY = pose.y + (rig.baseHeight / 2) * pose.scale - 8;
@@ -146,49 +146,49 @@ export const VectorCharacter: React.FC<VectorCharacterProps> = ({ rig, pose }) =
       {/* Articulated vector rig */}
       <g transform={rootTransform}>
         {/* Left Leg */}
-        <g id={parts.leftLeg.id} transform={leftLegTransform}>
-          {parts.leftLeg.shapes.map((s, idx) => renderShape(s, `lleg-${idx}`))}
+        <g id={parts.leftLeg.id} transform={leftLegTransform} opacity={directional.leftLegOpacity}>
+          {directional.leftLegShapes.map((s, idx) => renderShape(s, `lleg-${idx}`))}
         </g>
 
         {/* Right Leg */}
-        <g id={parts.rightLeg.id} transform={rightLegTransform}>
-          {parts.rightLeg.shapes.map((s, idx) => renderShape(s, `rleg-${idx}`))}
+        <g id={parts.rightLeg.id} transform={rightLegTransform} opacity={directional.rightLegOpacity}>
+          {directional.rightLegShapes.map((s, idx) => renderShape(s, `rleg-${idx}`))}
         </g>
 
         {/* Left Arm & Forearm */}
-        <g id={parts.leftArm.id} transform={leftArmTransform}>
-          {parts.leftArm.shapes.map((s, idx) => renderShape(s, `larm-${idx}`))}
-          {parts.leftForearm && (
+        <g id={parts.leftArm.id} transform={leftArmTransform} opacity={directional.leftArmOpacity}>
+          {directional.leftArmShapes.map((s, idx) => renderShape(s, `larm-${idx}`))}
+          {directional.leftForearmShapes && parts.leftForearm && (
             <g
               id={parts.leftForearm.id}
               transform={`rotate(${pose.leftForearmAngle}, ${parts.leftForearm.pivot.x}, ${parts.leftForearm.pivot.y})`}
             >
-              {parts.leftForearm.shapes.map((s, idx) => renderShape(s, `lforearm-${idx}`))}
+              {directional.leftForearmShapes.map((s, idx) => renderShape(s, `lforearm-${idx}`))}
             </g>
           )}
         </g>
 
-        {/* Torso */}
+        {/* Torso with directional belly patch & tail */}
         <g id={parts.torso.id} transform={torsoTransform}>
-          {parts.torso.shapes.map((s, idx) => renderShape(s, `torso-${idx}`))}
+          {directional.torsoShapes.map((s, idx) => renderShape(s, `torso-${idx}`))}
         </g>
 
         {/* Right Arm & Forearm */}
-        <g id={parts.rightArm.id} transform={rightArmTransform}>
-          {parts.rightArm.shapes.map((s, idx) => renderShape(s, `rarm-${idx}`))}
-          {parts.rightForearm && (
+        <g id={parts.rightArm.id} transform={rightArmTransform} opacity={directional.rightArmOpacity}>
+          {directional.rightArmShapes.map((s, idx) => renderShape(s, `rarm-${idx}`))}
+          {directional.rightForearmShapes && parts.rightForearm && (
             <g
               id={parts.rightForearm.id}
               transform={`rotate(${pose.rightForearmAngle}, ${parts.rightForearm.pivot.x}, ${parts.rightForearm.pivot.y})`}
             >
-              {parts.rightForearm.shapes.map((s, idx) => renderShape(s, `rforearm-${idx}`))}
+              {directional.rightForearmShapes.map((s, idx) => renderShape(s, `rforearm-${idx}`))}
             </g>
           )}
         </g>
 
-        {/* Head with dynamic eyes, brows and mouth */}
+        {/* Head with directional 8-way features */}
         <g id={parts.head.id} transform={headTransform}>
-          {headShapes.map((s, idx) => renderShape(s, `head-${idx}`))}
+          {directional.headShapes.map((s, idx) => renderShape(s, `head-${idx}`))}
         </g>
       </g>
     </>

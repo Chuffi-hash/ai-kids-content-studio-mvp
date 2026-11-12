@@ -17,6 +17,7 @@ export const RasterCharacter: React.FC<RasterCharacterProps> = ({ instance, pose
   // 3. Front view fallback
   // 4. Default instance imageUrl
   let activeSrc: string | undefined = views[facing];
+  const isDirectMatch = Boolean(activeSrc);
   if (!activeSrc) {
     if (facing.includes('left') && views['left']) {
       activeSrc = views['left'];
@@ -32,6 +33,8 @@ export const RasterCharacter: React.FC<RasterCharacterProps> = ({ instance, pose
   if (!activeSrc) {
     return null;
   }
+
+  const isFallback = !isDirectMatch && facing !== 'front';
 
   // Base character bounding box (default ~280x360 px at scale 1.0)
   const charWidth = 280;
@@ -79,6 +82,36 @@ export const RasterCharacter: React.FC<RasterCharacterProps> = ({ instance, pose
         height={charHeight}
         preserveAspectRatio="xMidYMid meet"
       />
+
+      {/* 4. Missing-view Fallback Status Indicator Badge */}
+      {isFallback && (
+        <g
+          transform={`scale(${flipX ? -1 : 1}, 1) translate(0, ${charHeight / 2 + 18})`}
+          pointerEvents="none"
+        >
+          <rect
+            x={-90}
+            y={-12}
+            width={180}
+            height={22}
+            rx={11}
+            fill="rgba(15, 23, 42, 0.9)"
+            stroke="#f59e0b"
+            strokeWidth={1.5}
+          />
+          <text
+            x={0}
+            y={3}
+            textAnchor="middle"
+            fill="#fcd34d"
+            fontSize={10.5}
+            fontWeight={600}
+            fontFamily="sans-serif"
+          >
+            ⚠️ {facing} (front fallback)
+          </text>
+        </g>
+      )}
     </g>
   );
 };

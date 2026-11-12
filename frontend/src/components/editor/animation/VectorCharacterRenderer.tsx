@@ -1,6 +1,6 @@
 import React from 'react';
 import { VectorRigDefinition, EvaluatedCharacterPose, VectorPartShape } from '../../../types/animation';
-import { getHeadShapesForPose } from '../../../utils/faceRenderer';
+import { resolveDirectionalRig } from '../../../utils/directionalRigResolver';
 
 interface VectorCharacterRendererProps {
   rig: VectorRigDefinition;
@@ -85,6 +85,9 @@ export const VectorCharacterRenderer: React.FC<VectorCharacterRendererProps> = (
   // Base transform: placement (x, y), scale, flip, rotation
   const rootTransform = `translate(${pose.x}, ${pose.y}) scale(${pose.scale * (pose.flipX ? -1 : 1)}, ${pose.scale}) rotate(${pose.rotation})`;
 
+  // Directional rig shapes and occlusion resolution (all 8 directions)
+  const directional = resolveDirectionalRig(rig, pose);
+
   // Limb transforms relative to respective pivots
   const leftLegTransform = `rotate(${pose.leftLegAngle}, ${parts.leftLeg.pivot.x}, ${parts.leftLeg.pivot.y})`;
   const rightLegTransform = `rotate(${pose.rightLegAngle}, ${parts.rightLeg.pivot.x}, ${parts.rightLeg.pivot.y})`;
@@ -102,47 +105,47 @@ export const VectorCharacterRenderer: React.FC<VectorCharacterRendererProps> = (
       style={{ cursor: 'pointer', userSelect: 'none' }}
     >
       {/* 1. Behind Torso: Left Arm, Left Leg, Right Leg */}
-      <g id="leftLeg" transform={leftLegTransform}>
-        {parts.leftLeg.shapes.map(renderShape)}
+      <g id="leftLeg" transform={leftLegTransform} opacity={directional.leftLegOpacity}>
+        {directional.leftLegShapes.map(renderShape)}
       </g>
 
-      <g id="rightLeg" transform={rightLegTransform}>
-        {parts.rightLeg.shapes.map(renderShape)}
+      <g id="rightLeg" transform={rightLegTransform} opacity={directional.rightLegOpacity}>
+        {directional.rightLegShapes.map(renderShape)}
       </g>
 
-      <g id="leftArm" transform={leftArmTransform}>
-        {parts.leftArm.shapes.map(renderShape)}
-        {parts.leftForearm && (
+      <g id="leftArm" transform={leftArmTransform} opacity={directional.leftArmOpacity}>
+        {directional.leftArmShapes.map(renderShape)}
+        {directional.leftForearmShapes && (
           <g
             id="leftForearm"
-            transform={`rotate(${pose.leftForearmAngle}, ${parts.leftForearm.pivot.x}, ${parts.leftForearm.pivot.y})`}
+            transform={`rotate(${pose.leftForearmAngle}, ${parts.leftForearm!.pivot.x}, ${parts.leftForearm!.pivot.y})`}
           >
-            {parts.leftForearm.shapes.map(renderShape)}
+            {directional.leftForearmShapes.map(renderShape)}
           </g>
         )}
       </g>
 
-      {/* 2. Torso with chest breathing scale and bob */}
+      {/* 2. Torso with directional belly patch / tail, breathing scale and bob */}
       <g id="torso" transform={torsoTransform}>
-        {parts.torso.shapes.map(renderShape)}
+        {directional.torsoShapes.map(renderShape)}
       </g>
 
-      {/* 3. Front Arm. Forearm motion is nested under the shoulder transform. */}
-      <g id="rightArm" transform={rightArmTransform}>
-        {parts.rightArm.shapes.map(renderShape)}
-        {parts.rightForearm && (
+      {/* 3. Front Arm with directional occlusion */}
+      <g id="rightArm" transform={rightArmTransform} opacity={directional.rightArmOpacity}>
+        {directional.rightArmShapes.map(renderShape)}
+        {directional.rightForearmShapes && (
           <g
             id="rightForearm"
-            transform={`rotate(${pose.rightForearmAngle}, ${parts.rightForearm.pivot.x}, ${parts.rightForearm.pivot.y})`}
+            transform={`rotate(${pose.rightForearmAngle}, ${parts.rightForearm!.pivot.x}, ${parts.rightForearm!.pivot.y})`}
           >
-            {parts.rightForearm.shapes.map(renderShape)}
+            {directional.rightForearmShapes.map(renderShape)}
           </g>
         )}
       </g>
 
-      {/* 4. Head Group with dynamic expressions & lip-sync */}
+      {/* 4. Head Group with directional 8-way orientation, expressions & lip-sync */}
       <g id="head" transform={headTransform}>
-        {getHeadShapesForPose(rig, pose).map(renderShape)}
+        {directional.headShapes.map(renderShape)}
       </g>
 
       {/* Optional selection bounding box indicator when not using full interactive gizmo */}
