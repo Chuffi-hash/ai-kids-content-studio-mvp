@@ -325,12 +325,38 @@ export type AudioTrack = {
   volume: number;
 };
 
+export interface SceneShot {
+  id: string;
+  shotNumber: number;
+  durationMs: number;
+  shotType?: string;
+  cameraMovement?: string;
+  cameraAngle?: string;
+  backgroundUrl?: string;
+  videoUrl?: string;
+  startMs: number;
+  endMs: number;
+  characterPlacements?: Array<{
+    instanceId: string;
+    characterId: string;
+    name?: string;
+    x: number;
+    y: number;
+    scale: number;
+    flipX: boolean;
+    action?: string;
+    expression?: string;
+  }>;
+}
+
 export interface Scene {
   id: string;
   sceneNumber?: number;
   durationMs: number;
   title?: string;
   caption?: string;
+  shotType?: string;
+  shots?: SceneShot[];
   background?: BackgroundConfig;
   camera?: 'static' | 'zoom-in' | 'zoom-out' | 'pan-left' | 'pan-right' | CameraConfig;
   cameraMovement?: string;

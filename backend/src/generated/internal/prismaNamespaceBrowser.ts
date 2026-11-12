@@ -54,6 +54,7 @@ export const ModelName = {
   Story: 'Story',
   Scene: 'Scene',
   SceneVersion: 'SceneVersion',
+  Shot: 'Shot',
   Image: 'Image',
   Character: 'Character',
   StoryCharacter: 'StoryCharacter'
@@ -89,6 +90,8 @@ export const StoryScalarFieldEnum = {
   targetDuration: 'targetDuration',
   visualBible: 'visualBible',
   flowProjectId: 'flowProjectId',
+  originalScript: 'originalScript',
+  productionStage: 'productionStage',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 } as const
@@ -140,6 +143,37 @@ export const SceneVersionScalarFieldEnum = {
 } as const
 
 export type SceneVersionScalarFieldEnum = (typeof SceneVersionScalarFieldEnum)[keyof typeof SceneVersionScalarFieldEnum]
+
+
+export const ShotScalarFieldEnum = {
+  id: 'id',
+  shotId: 'shotId',
+  storyId: 'storyId',
+  sceneId: 'sceneId',
+  number: 'number',
+  order: 'order',
+  title: 'title',
+  description: 'description',
+  durationMs: 'durationMs',
+  shotType: 'shotType',
+  cameraAngle: 'cameraAngle',
+  cameraMovement: 'cameraMovement',
+  lighting: 'lighting',
+  shotDirection: 'shotDirection',
+  characterInstructions: 'characterInstructions',
+  backgroundPrompt: 'backgroundPrompt',
+  videoPrompt: 'videoPrompt',
+  promptHistory: 'promptHistory',
+  backgroundUrl: 'backgroundUrl',
+  videoUrl: 'videoUrl',
+  assetStatus: 'assetStatus',
+  approvalStatus: 'approvalStatus',
+  productionStatus: 'productionStatus',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type ShotScalarFieldEnum = (typeof ShotScalarFieldEnum)[keyof typeof ShotScalarFieldEnum]
 
 
 export const ImageScalarFieldEnum = {

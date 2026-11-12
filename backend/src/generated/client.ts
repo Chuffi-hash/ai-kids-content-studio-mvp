@@ -57,6 +57,11 @@ export type Scene = Prisma.SceneModel
  */
 export type SceneVersion = Prisma.SceneVersionModel
 /**
+ * Model Shot
+ * 
+ */
+export type Shot = Prisma.ShotModel
+/**
  * Model Image
  * 
  */

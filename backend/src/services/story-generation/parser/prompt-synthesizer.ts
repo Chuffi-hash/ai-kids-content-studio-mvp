@@ -303,6 +303,34 @@ export class PromptSynthesizer {
   }
 
   /**
+   * Synthesizes a dedicated cinematic video prompt for video generation tools (Veo / Google Flow / Runway).
+   * Describes camera movement, atmospheric particle motion, lighting evolution, and visual momentum.
+   */
+  public static synthesizeVideoPrompt(options: {
+    locationName?: string;
+    environmentDesc?: string;
+    cameraMovement?: string;
+    cameraAngle?: string;
+    shotType?: string;
+    visualStyle?: string;
+    atmosphereEffects?: string[];
+    timeOfDay?: string;
+    motionIntensity?: number;
+  }): string {
+    const loc = options.locationName || options.environmentDesc || 'scenic storybook landscape';
+    const move = options.cameraMovement ? options.cameraMovement.replace(/_/g, ' ') : 'slow cinematic push-in';
+    const angle = options.cameraAngle ? options.cameraAngle.replace(/_/g, ' ') : 'eye-level';
+    const shot = options.shotType ? options.shotType.replace(/_/g, ' ') : 'wide establishing';
+    const style = options.visualStyle || '3D storybook animation, Pixar aesthetic';
+    const effects = options.atmosphereEffects?.length
+      ? options.atmosphereEffects.join(', ')
+      : 'gentle atmospheric breeze, subtle sunlight shimmer';
+    const intensity = options.motionIntensity || 4;
+
+    return `Cinematic animated camera movement: ${move} across ${loc}. Camera framing: ${shot} from an ${angle} angle. Visual style: ${style}. Environmental motion: ${effects}. Motion dynamics: smooth and cinematic, motion intensity ${intensity}/10. High temporal consistency, 24fps film motion, stable environmental geometry, warm cheerful storybook lighting.`;
+  }
+
+  /**
    * Normalizes a raw location string or scene title to a canonical location name.
    */
   public static normalizeLocationName(name: string): string {

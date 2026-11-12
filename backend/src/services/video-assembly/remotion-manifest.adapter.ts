@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { getImagesBySceneId } from '../database/database.service.js';
+import { getImagesBySceneId, getShotsBySceneId } from '../database/database.service.js';
 import { getVectorRig, VectorRigDefinition } from '../animation/templates/default-characters.js';
 import { buildRigFromAppearance } from '../animation/templates/custom-character-rig.js';
 
@@ -104,6 +104,20 @@ export interface RemotionScene {
   durationMs: number;
   title?: string;
   caption?: string;
+  shotType?: string;
+  shots?: Array<{
+    id: string;
+    shotNumber: number;
+    durationMs: number;
+    shotType?: string;
+    cameraMovement?: string;
+    cameraAngle?: string;
+    backgroundUrl?: string;
+    videoUrl?: string;
+    startMs: number;
+    endMs: number;
+    characterPlacements?: any[];
+  }>;
   background?: {
     imageUrl?: string;
     fit?: 'cover' | 'contain' | 'fill';
@@ -507,6 +521,50 @@ export class RemotionManifestAdapter {
         }
       }
 
+      // 1b. Multi-shot cinematic breakdown adaptation (if present on scene or in database)
+      let rawShots = Array.isArray(scene.shots) ? scene.shots : [];
+      if (rawShots.length === 0) {
+        try {
+          rawShots = await getShotsBySceneId(scene.sceneId || scene.id);
+        } catch {
+          // DB query unavailable in offline test environments
+        }
+      }
+
+      let adaptedShots: RemotionScene['shots'] = undefined;
+      if (rawShots.length > 0) {
+        let shotCursorMs = 0;
+        adaptedShots = rawShots.map((st: any, sIdx: number) => {
+          const sDur = st.durationMs || 5000;
+          const sStart = typeof st.startMs === 'number' ? st.startMs : shotCursorMs;
+          const sEnd = typeof st.endMs === 'number' ? st.endMs : sStart + sDur;
+          shotCursorMs = sEnd;
+
+          let shotBg = st.backgroundUrl;
+          if (shotBg && embedBase64Images) {
+            shotBg = this.convertLocalImageToDataUri(shotBg);
+          } else if (shotBg) {
+            shotBg = this.resolveAssetUrl(shotBg);
+          }
+
+          const charPlacements = (st.characterInstructions as any)?.placements || st.characterPlacements;
+
+          return {
+            id: st.shotId || st.id || `shot-${sceneNum}-${sIdx + 1}`,
+            shotNumber: st.number || sIdx + 1,
+            durationMs: sDur,
+            shotType: st.shotType,
+            cameraMovement: st.cameraMovement,
+            cameraAngle: st.cameraAngle,
+            backgroundUrl: shotBg,
+            videoUrl: st.videoUrl ? this.resolveAssetUrl(st.videoUrl) : undefined,
+            startMs: sStart,
+            endMs: sEnd,
+            characterPlacements: charPlacements,
+          };
+        });
+      }
+
       // 2. Audio Scheduling & Overlap Prevention Model
       const INITIAL_PAUSE_MS = 250;
       const SPEECH_TURN_GAP_MS = 380;
@@ -768,6 +826,8 @@ export class RemotionManifestAdapter {
         durationMs,
         title: scene.title || `Scene ${sceneNum}`,
         caption: scene.caption || '',
+        shotType: scene.shotType || animData.shotType || 'wide_establishing',
+        shots: adaptedShots,
         background: backgroundConfig,
         cameraMovement,
         cameraRotation,

@@ -542,7 +542,7 @@ export const PreviewCanvas: React.FC<PreviewCanvasProps> = ({
           <RemotionPlayerPreview
             storyId={storyId}
             format={activeFormat}
-            refreshTrigger={(activeScene as any)?.updatedAt || (activeScene as any)?.id}
+            refreshTrigger={(activeScene as any)?.updatedAt}
             currentTimeMs={currentTimeMs}
             isPlaying={isPlaying}
             onTimeUpdate={onTimeUpdate || onSeek}

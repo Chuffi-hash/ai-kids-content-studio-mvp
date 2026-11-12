@@ -1,7 +1,8 @@
-import React, { useRef } from "react";
+import React, { useRef, useMemo } from "react";
 import {
   VectorSceneData,
   CharacterInstance,
+  AnimationClip,
   MotionPath,
   EducationalOverlay,
   AspectRatioType,
@@ -78,6 +79,48 @@ export const VectorSceneCanvas: React.FC<VectorSceneCanvasProps> = ({
   const formatVariant = animationData.formatVariants?.[effectiveFormat];
   const characterOverrides = formatVariant?.characterOverrides;
 
+  const mapBaseXToFormat = (x: number, format: AspectRatioType, w: number): number => {
+    if (format === '16:9') return x;
+    const xOffset = x - 640;
+    return Math.round(w / 2 + xOffset * (w / 1280));
+  };
+
+  const mapBaseYToFormat = (y: number, format: AspectRatioType, h: number): number => {
+    if (format === '16:9') return y;
+    return Math.round(y * (h / 720));
+  };
+
+  const mapFormatXToBase = (x: number, format: AspectRatioType, w: number): number => {
+    if (format === '16:9') return x;
+    const norm = (x - w / 2) / (w / 1280);
+    return Math.round(640 + norm);
+  };
+
+  const mapFormatYToBase = (y: number, format: AspectRatioType, h: number): number => {
+    if (format === '16:9') return y;
+    return Math.round(y / (h / 720));
+  };
+
+  // Dynamically map motion paths of animation clips to current format
+  const scaledClips: AnimationClip[] = useMemo(() => {
+    if (effectiveFormat === '16:9') return clips;
+    return clips.map((clip) => {
+      if (clip.motionPath) {
+        return {
+          ...clip,
+          motionPath: {
+            ...clip.motionPath,
+            startX: mapBaseXToFormat(clip.motionPath.startX, effectiveFormat, canvasWidth),
+            startY: mapBaseYToFormat(clip.motionPath.startY, effectiveFormat, canvasHeight),
+            endX: mapBaseXToFormat(clip.motionPath.endX, effectiveFormat, canvasWidth),
+            endY: mapBaseYToFormat(clip.motionPath.endY, effectiveFormat, canvasHeight),
+          },
+        };
+      }
+      return clip;
+    });
+  }, [clips, effectiveFormat, canvasWidth, canvasHeight]);
+
   // Non-destructive format variant mapping
   const instances = rawInstances.map((inst, instIdx, arr) => {
     const override = characterOverrides?.[inst.instanceId];
@@ -85,7 +128,7 @@ export const VectorSceneCanvas: React.FC<VectorSceneCanvasProps> = ({
       let ox = override.x !== undefined ? override.x : inst.x;
       let oy = override.y !== undefined ? override.y : inst.y;
       // Auto-recovery: if a previous drag placed character in the sky in 9:16 (y < 450), anchor safely
-      if (effectiveFormat === "9:16" && oy < 450) {
+      if (effectiveFormat === "9:16" && oy < 500) {
         oy = Math.round(canvasHeight * 0.63);
       }
       return {
@@ -107,11 +150,11 @@ export const VectorSceneCanvas: React.FC<VectorSceneCanvasProps> = ({
       if (arr.length === 2) {
         newX = instIdx === 0 ? Math.round(canvasWidth * 0.32) : Math.round(canvasWidth * 0.68);
       } else if (!isSingleChar) {
-        const xOffset = inst.x - 640;
-        newX = canvasWidth / 2 + xOffset * (canvasWidth / 1280);
+        newX = mapBaseXToFormat(inst.x, effectiveFormat, canvasWidth);
       }
 
-      const newY = Math.round(canvasHeight * 0.63);
+      // Ground anchor in 9:16: scale ground from 720 base (~480px) to 1280 base (~853px)
+      const newY = Math.round(inst.y * (canvasHeight / 720));
 
       return {
         ...inst,
@@ -121,9 +164,8 @@ export const VectorSceneCanvas: React.FC<VectorSceneCanvasProps> = ({
       };
     }
     if (effectiveFormat === "1:1") {
-      const xOffset = inst.x - 640;
-      const newX = canvasWidth / 2 + xOffset * (canvasWidth / 1280);
-      const newY = Math.round(inst.y * (canvasHeight / 720));
+      const newX = mapBaseXToFormat(inst.x, effectiveFormat, canvasWidth);
+      const newY = mapBaseYToFormat(inst.y, effectiveFormat, canvasHeight);
       const scaleMult = isSingleChar ? 1.25 : 1.15;
       return {
         ...inst,
@@ -133,9 +175,8 @@ export const VectorSceneCanvas: React.FC<VectorSceneCanvasProps> = ({
       };
     }
     if (effectiveFormat === "4:5") {
-      const xOffset = inst.x - 640;
-      const newX = canvasWidth / 2 + xOffset * (canvasWidth / 1280);
-      const newY = Math.round(inst.y * (canvasHeight / 720));
+      const newX = mapBaseXToFormat(inst.x, effectiveFormat, canvasWidth);
+      const newY = mapBaseYToFormat(inst.y, effectiveFormat, canvasHeight);
       const scaleMult = isSingleChar ? 1.35 : 1.22;
       return {
         ...inst,
@@ -203,10 +244,10 @@ export const VectorSceneCanvas: React.FC<VectorSceneCanvasProps> = ({
   const selectedInstance =
     instances.find((i) => i.instanceId === selectedInstanceId) || null;
 
-  // Find if selected instance has an active motion path clip
+  // Find if selected instance has an active motion path clip (using format-scaled coordinates)
   let selectedMotionPath: MotionPath | null = null;
   if (selectedInstance) {
-    const activeClip = clips.find(
+    const activeClip = scaledClips.find(
       (c) =>
         c.instanceId === selectedInstance.instanceId &&
         c.action === "walk" &&
@@ -233,12 +274,20 @@ export const VectorSceneCanvas: React.FC<VectorSceneCanvasProps> = ({
 
   const handleUpdateMotionPath = (newPath: MotionPath) => {
     if (!selectedInstance || !onUpdateAnimationData) return;
+    // Map newPath back from canvas coordinates to base 16:9 coordinates
+    const basePath: MotionPath = {
+      ...newPath,
+      startX: mapFormatXToBase(newPath.startX, effectiveFormat, canvasWidth),
+      startY: mapFormatYToBase(newPath.startY, effectiveFormat, canvasHeight),
+      endX: mapFormatXToBase(newPath.endX, effectiveFormat, canvasWidth),
+      endY: mapFormatYToBase(newPath.endY, effectiveFormat, canvasHeight),
+    };
     const updatedClips = clips.map((c) => {
       if (c.instanceId === selectedInstance.instanceId && c.action === "walk") {
         return {
           ...c,
           motionMode: "motion_path" as const,
-          motionPath: newPath,
+          motionPath: basePath,
         };
       }
       return c;
@@ -530,7 +579,7 @@ export const VectorSceneCanvas: React.FC<VectorSceneCanvasProps> = ({
               : instance.customRig || getVectorRig(instance.characterId);
         const pose = evaluateCharacterPose(
           instance,
-          clips,
+          scaledClips,
           sceneRelativeMs,
           animationData.expressionCues,
           animationData.dialogueLines,
@@ -583,34 +632,51 @@ export const VectorSceneCanvas: React.FC<VectorSceneCanvasProps> = ({
       })}
 
       {/* 5. Interactive Transform Gizmo Overlay */}
-      {selectedInstance && (
-        <TransformGizmo
-          instance={selectedInstance}
-          viewportWidth={canvasWidth}
-          viewportHeight={canvasHeight}
-          rig={(() => {
-            const hasHeadTags =
-              selectedInstance.customRig?.parts?.head?.shapes?.some(
-                (s) => s.tag === "eyes" || s.tag === "mouth",
-              );
-            return selectedInstance.customRig && hasHeadTags
-              ? selectedInstance.customRig
-              : selectedInstance.appearance
-                ? buildRigFromAppearance(
-                    selectedInstance.characterId,
-                    selectedInstance.name || "Character",
-                    selectedInstance.appearance,
-                  )
-                : selectedInstance.customRig ||
-                  getVectorRig(selectedInstance.characterId);
-          })()}
-          motionPath={selectedMotionPath}
-          onUpdateInstance={(updates) =>
-            handleInstanceTransformUpdate(selectedInstance.instanceId, updates)
-          }
-          onUpdateMotionPath={handleUpdateMotionPath}
-        />
-      )}
+      {selectedInstance && (() => {
+        const selectedPose = evaluateCharacterPose(
+          selectedInstance,
+          scaledClips,
+          sceneRelativeMs,
+          animationData.expressionCues,
+          animationData.dialogueLines,
+        );
+        const gizmoInstance = {
+          ...selectedInstance,
+          x: selectedPose.x,
+          y: selectedPose.y,
+          scale: selectedPose.scale,
+          rotation: selectedPose.rotation,
+        };
+        const hasHeadTags =
+          selectedInstance.customRig?.parts?.head?.shapes?.some(
+            (s) => s.tag === "eyes" || s.tag === "mouth",
+          );
+        const rig =
+          selectedInstance.customRig && hasHeadTags
+            ? selectedInstance.customRig
+            : selectedInstance.appearance
+              ? buildRigFromAppearance(
+                  selectedInstance.characterId,
+                  selectedInstance.name || "Character",
+                  selectedInstance.appearance,
+                )
+              : selectedInstance.customRig ||
+                getVectorRig(selectedInstance.characterId);
+
+        return (
+          <TransformGizmo
+            instance={gizmoInstance}
+            viewportWidth={canvasWidth}
+            viewportHeight={canvasHeight}
+            rig={rig}
+            motionPath={selectedMotionPath}
+            onUpdateInstance={(updates) =>
+              handleInstanceTransformUpdate(selectedInstance.instanceId, updates)
+            }
+            onUpdateMotionPath={handleUpdateMotionPath}
+          />
+        );
+      })()}
 
       {/* 6. Interactive Overlay Gizmo */}
       {selectedOverlay && onUpdateOverlay && (

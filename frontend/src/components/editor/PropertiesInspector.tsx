@@ -53,13 +53,16 @@ import {
   BookOpenIcon,
   ChevronDownIcon,
   ChevronUpIcon,
+  CameraIcon,
 } from '../common/Icons';
 import { CollapsibleSection } from './CollapsibleSection';
 import { getAllBackgroundAssets, BackgroundAsset, autoDirectStory } from '../../services/studio.service';
+import ShotPlanningPanel from '../story/ShotPlanningPanel';
 
 
 export type InspectorSection =
   | 'overview'
+  | 'shots'
   | 'timing'
   | 'narration'
   | 'background'
@@ -70,6 +73,7 @@ export type InspectorSection =
 
 export function normalizeInspectorSection(tab?: string): InspectorSection {
   if (!tab || tab === 'scene' || tab === 'scene_settings' || tab === 'overview') return 'overview';
+  if (tab === 'shots' || tab === 'shot_planning' || tab === 'cinematic_shots' || tab === 'director') return 'shots';
   if (tab === 'animation' || tab === 'rig' || tab === 'characters') return 'characters';
   if (tab === 'timing') return 'timing';
   if (tab === 'narration') return 'narration';
@@ -85,6 +89,7 @@ interface PropertiesInspectorProps {
   characters: EditorCharacter[];
   playheadMs: number;
   storyId?: string;
+  flowProjectId?: string | null;
   onUpdateScene: (sceneId: string, updates: Partial<EditorScene>) => void;
   onUploadBackground?: (sceneId: string, file: File, fit?: 'cover' | 'contain') => Promise<void>;
   onSetBackground?: (sceneId: string, imageUrl: string, fit?: 'cover' | 'contain') => Promise<void>;
@@ -159,6 +164,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
   characters,
   playheadMs,
   storyId,
+  flowProjectId,
   onUpdateScene,
   onUploadBackground,
   onSetBackground,
@@ -1120,6 +1126,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
     timing: ['tm-duration', 'tm-ripple'],
     narration: ['nr-text', 'nr-studio', 'nr-player'],
     background: ['bg-plate', 'bg-bible', 'bg-flow', 'bg-inapp'],
+    shots: ['sh-planning'],
     characters: ['ch-list', 'ch-add', 'ch-story'],
     dialogue: [],
     overlays: [],
@@ -1491,6 +1498,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
         <div>
           <h3 style={{ fontSize: '13px', fontWeight: 700, margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
             {activeSection === 'overview' && 'Scene Overview'}
+            {activeSection === 'shots' && 'Cinematic Shot Director'}
             {activeSection === 'timing' && 'Timing & Duration'}
             {activeSection === 'narration' && 'Narration Voice Studio'}
             {activeSection === 'background' && 'Stage Background'}
@@ -3480,6 +3488,17 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                   </div>
                 </CollapsibleSection>
               )}
+            </div>
+          )}
+
+          {activeSection === 'shots' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <ShotPlanningPanel
+                storyId={storyId || ''}
+                activeSceneId={scene.sceneId}
+                scenes={[scene]}
+                flowProjectId={flowProjectId}
+              />
             </div>
           )}
         </div>

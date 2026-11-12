@@ -506,8 +506,13 @@ export class IntelligentScriptParser {
             });
           }
         } else if (node.type === 'action') {
-          // If no narration yet, and this looks like a narration line
-          if (!narration && !node.raw.startsWith('Effects:') && !node.raw.startsWith('Visual:') && !node.raw.startsWith('Action:') && !node.raw.startsWith('Character Action:')) {
+          // If no narration yet, and this looks like real narration (not a production instruction)
+          const raw = (node.raw || node.text || '').trim();
+          const isMetadataOrInstruction =
+            /^(?:Effects|Visual|Action|Character Action|Suggested|Facial Expression|Suggested Facial|Suggested Emotion|Camera|Shot|Caption|Background|Transition|Note|Director)/i.test(raw) ||
+            /^(?:प्रभाव|दृश्य|क्रिया|अभिनय|भाव|चेहरे के भाव|कैप्शन|पृष्ठभूमि)/u.test(raw) ||
+            /^(?:[A-Za-z\s]+(?:\s*(?:->|➔|-->|—>)\s*[A-Za-z\s]+)+)\.?$/i.test(raw);
+          if (!narration && !isMetadataOrInstruction) {
             narration = node.text;
           }
         }

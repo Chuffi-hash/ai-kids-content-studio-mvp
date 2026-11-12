@@ -22,6 +22,64 @@ import {
 
 const execFileAsync = promisify(execFile);
 
+/**
+ * Rigorously sanitizes text before speech synthesis (TTS) to ensure:
+ * 1. Markdown symbols, braces, brackets, and parentheticals are stripped.
+ * 2. Production metadata lines (e.g. "Suggested Facial Expressions: ...", "Visual Prompt: ...") are completely eliminated.
+ * 3. Emotion arrow notations ("Confused -> Surprised -> Worried") are removed.
+ * 4. Purely instruction text is never spoken aloud by the voice actors.
+ */
+export function sanitizeTextForTTS(rawText: string): string {
+  if (!rawText || typeof rawText !== 'string') return '';
+
+  // 1. Remove bracketed / parenthetical notes and markdown formatting:
+  let cleaned = rawText
+    .replace(/\[\[.*?\]\]/gs, '')
+    .replace(/\[.*?\]/gs, '')
+    .replace(/\(.*?\)/gs, '')
+    .replace(/[*_#`~]/g, '');
+
+  // 2. Split into lines and filter out production instruction lines / labels:
+  const lines = cleaned.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const cleanLines: string[] = [];
+
+  for (const line of lines) {
+    const stripped = line.replace(/^[-*•–—\s]+/, '').trim();
+
+    // Check if line is a metadata/instruction line:
+    if (
+      /^(?:suggested\s+)?(?:facial\s+)?(?:expression(?:s)?|चेहरे के भाव|अभिव्यक्ति)\s*(?::|—|-)\s*/i.test(stripped) ||
+      /^(?:suggested\s+)?(?:character\s+)?(?:emotion(?:s)?|speaking\s+emotion|भाव|बोलने का भाव)\s*(?::|—|-)\s*/i.test(stripped) ||
+      /^(?:visual\s+prompt|background\s+prompt|visual|background|दृश्य|पृष्ठभूमि)\s*(?::|—|-)\s*/i.test(stripped) ||
+      /^(?:camera\s+direction|camera\s+movement|camera\s+framing|camera|शॉट)\s*(?::|—|-)\s*/i.test(stripped) ||
+      /^(?:scene\s+transition|transition)\s*(?::|—|-)\s*/i.test(stripped) ||
+      /^(?:opening\s+caption|closing\s+caption|caption|कैप्शन)\s*(?::|—|-)\s*/i.test(stripped) ||
+      /^(?:character\s+action|action|क्रिया|अभिनय)\s*(?::|—|-)\s*/i.test(stripped) ||
+      /^(?:shot\s+type|shot\s+breakdown|shot)\s*(?::|—|-)\s*/i.test(stripped) ||
+      /^(?:soundtrack|music|audio\s+effect|effects|overlay|overlays)\s*(?::|—|-)\s*/i.test(stripped) ||
+      // Sequence of emotions with arrows: e.g. "Confused -> Surprised -> Worried -> Determined"
+      /^(?:[A-Za-z\s]+(?:\s*(?:->|➔|-->|—>)\s*[A-Za-z\s]+)+)\.?$/i.test(stripped)
+    ) {
+      continue;
+    }
+
+    // Strip leading "Narration:" or "Narrator:" label if present
+    const narrationPrefixMatch = stripped.match(/^(?:narration|narrator|सूत्रधार|कथावाचक)\s*(?::|—|-)\s*(.+)/i);
+    if (narrationPrefixMatch && narrationPrefixMatch[1]) {
+      cleanLines.push(narrationPrefixMatch[1].trim());
+    } else {
+      cleanLines.push(stripped);
+    }
+  }
+
+  cleaned = cleanLines.join(' ').replace(/\s+/g, ' ').trim();
+
+  // Strip residual emotion arrow notations e.g. "->", "➔", "-->"
+  cleaned = cleaned.replace(/\s*(?:->|➔|-->|—>)\s*/g, ' ').trim();
+
+  return cleaned;
+}
+
 export class AudioGenerationService {
   private storageDir: string;
   private audioDir: string;
@@ -226,14 +284,11 @@ export class AudioGenerationService {
 
     console.log(`[AudioGeneration] Generating narration for scene ${sceneId}: "${narration.substring(0, 60)}..." (provider: ${provider || 'default'}, voice: ${selectedVoice}, lang: ${effectiveLang}, emotion: ${emotion}, intensity: ${delivery.intensity}%)`);
 
-    // Clean narration text: remove markdown formatting, stage directions, or extra symbols
-    const cleanText = narration
-      .replace(/\[.*?\]/g, '')
-      .replace(/\(.*?\)/g, '')
-      .replace(/[*_#`]/g, '')
-      .trim();
-
-    const textToSpeak = cleanText.length > 0 ? cleanText : narration.trim();
+    // Clean narration text: rigorously filter production metadata, stage directions, and instruction labels
+    const textToSpeak = sanitizeTextForTTS(narration);
+    if (!textToSpeak || textToSpeak.length === 0) {
+      throw new Error('No spoken narration content found after stripping metadata instructions');
+    }
 
     // Select TTS provider (Kokoro-82M by default or fallback)
     const providerInstance = await TTSProviderFactory.getProvider(provider);
@@ -380,13 +435,10 @@ export class AudioGenerationService {
       throw new Error('Dialogue text is required');
     }
 
-    const cleanText = text
-      .replace(/\[.*?\]/g, '')
-      .replace(/\(.*?\)/g, '')
-      .replace(/[*_#`~]/g, '')
-      .trim();
-
-    const textToSpeak = cleanText.length > 0 ? cleanText : text.trim();
+    const textToSpeak = sanitizeTextForTTS(text);
+    if (!textToSpeak || textToSpeak.length === 0) {
+      throw new Error('No spoken dialogue content found after stripping metadata instructions');
+    }
 
     // 1. Fetch Scene and Story for Hierarchical Precedence
     const scene = await getSceneBySceneId(sceneId);

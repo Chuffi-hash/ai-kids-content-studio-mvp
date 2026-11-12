@@ -379,6 +379,7 @@ export type SceneWhereInput = {
   story?: Prisma.XOR<Prisma.StoryScalarRelationFilter, Prisma.StoryWhereInput>
   images?: Prisma.ImageListRelationFilter
   versions?: Prisma.SceneVersionListRelationFilter
+  shots?: Prisma.ShotListRelationFilter
 }
 
 export type SceneOrderByWithRelationInput = {
@@ -408,6 +409,7 @@ export type SceneOrderByWithRelationInput = {
   story?: Prisma.StoryOrderByWithRelationInput
   images?: Prisma.ImageOrderByRelationAggregateInput
   versions?: Prisma.SceneVersionOrderByRelationAggregateInput
+  shots?: Prisma.ShotOrderByRelationAggregateInput
 }
 
 export type SceneWhereUniqueInput = Prisma.AtLeast<{
@@ -440,6 +442,7 @@ export type SceneWhereUniqueInput = Prisma.AtLeast<{
   story?: Prisma.XOR<Prisma.StoryScalarRelationFilter, Prisma.StoryWhereInput>
   images?: Prisma.ImageListRelationFilter
   versions?: Prisma.SceneVersionListRelationFilter
+  shots?: Prisma.ShotListRelationFilter
 }, "id" | "sceneId">
 
 export type SceneOrderByWithAggregationInput = {
@@ -528,6 +531,7 @@ export type SceneCreateInput = {
   story: Prisma.StoryCreateNestedOneWithoutScenesInput
   images?: Prisma.ImageCreateNestedManyWithoutSceneInput
   versions?: Prisma.SceneVersionCreateNestedManyWithoutSceneInput
+  shots?: Prisma.ShotCreateNestedManyWithoutSceneInput
 }
 
 export type SceneUncheckedCreateInput = {
@@ -556,6 +560,7 @@ export type SceneUncheckedCreateInput = {
   updatedAt?: Date | string
   images?: Prisma.ImageUncheckedCreateNestedManyWithoutSceneInput
   versions?: Prisma.SceneVersionUncheckedCreateNestedManyWithoutSceneInput
+  shots?: Prisma.ShotUncheckedCreateNestedManyWithoutSceneInput
 }
 
 export type SceneUpdateInput = {
@@ -584,6 +589,7 @@ export type SceneUpdateInput = {
   story?: Prisma.StoryUpdateOneRequiredWithoutScenesNestedInput
   images?: Prisma.ImageUpdateManyWithoutSceneNestedInput
   versions?: Prisma.SceneVersionUpdateManyWithoutSceneNestedInput
+  shots?: Prisma.ShotUpdateManyWithoutSceneNestedInput
 }
 
 export type SceneUncheckedUpdateInput = {
@@ -612,6 +618,7 @@ export type SceneUncheckedUpdateInput = {
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   images?: Prisma.ImageUncheckedUpdateManyWithoutSceneNestedInput
   versions?: Prisma.SceneVersionUncheckedUpdateManyWithoutSceneNestedInput
+  shots?: Prisma.ShotUncheckedUpdateManyWithoutSceneNestedInput
 }
 
 export type SceneCreateManyInput = {
@@ -868,6 +875,20 @@ export type SceneUpdateOneRequiredWithoutVersionsNestedInput = {
   update?: Prisma.XOR<Prisma.XOR<Prisma.SceneUpdateToOneWithWhereWithoutVersionsInput, Prisma.SceneUpdateWithoutVersionsInput>, Prisma.SceneUncheckedUpdateWithoutVersionsInput>
 }
 
+export type SceneCreateNestedOneWithoutShotsInput = {
+  create?: Prisma.XOR<Prisma.SceneCreateWithoutShotsInput, Prisma.SceneUncheckedCreateWithoutShotsInput>
+  connectOrCreate?: Prisma.SceneCreateOrConnectWithoutShotsInput
+  connect?: Prisma.SceneWhereUniqueInput
+}
+
+export type SceneUpdateOneRequiredWithoutShotsNestedInput = {
+  create?: Prisma.XOR<Prisma.SceneCreateWithoutShotsInput, Prisma.SceneUncheckedCreateWithoutShotsInput>
+  connectOrCreate?: Prisma.SceneCreateOrConnectWithoutShotsInput
+  upsert?: Prisma.SceneUpsertWithoutShotsInput
+  connect?: Prisma.SceneWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.SceneUpdateToOneWithWhereWithoutShotsInput, Prisma.SceneUpdateWithoutShotsInput>, Prisma.SceneUncheckedUpdateWithoutShotsInput>
+}
+
 export type SceneCreateNestedOneWithoutImagesInput = {
   create?: Prisma.XOR<Prisma.SceneCreateWithoutImagesInput, Prisma.SceneUncheckedCreateWithoutImagesInput>
   connectOrCreate?: Prisma.SceneCreateOrConnectWithoutImagesInput
@@ -907,6 +928,7 @@ export type SceneCreateWithoutStoryInput = {
   updatedAt?: Date | string
   images?: Prisma.ImageCreateNestedManyWithoutSceneInput
   versions?: Prisma.SceneVersionCreateNestedManyWithoutSceneInput
+  shots?: Prisma.ShotCreateNestedManyWithoutSceneInput
 }
 
 export type SceneUncheckedCreateWithoutStoryInput = {
@@ -934,6 +956,7 @@ export type SceneUncheckedCreateWithoutStoryInput = {
   updatedAt?: Date | string
   images?: Prisma.ImageUncheckedCreateNestedManyWithoutSceneInput
   versions?: Prisma.SceneVersionUncheckedCreateNestedManyWithoutSceneInput
+  shots?: Prisma.ShotUncheckedCreateNestedManyWithoutSceneInput
 }
 
 export type SceneCreateOrConnectWithoutStoryInput = {
@@ -1016,6 +1039,7 @@ export type SceneCreateWithoutVersionsInput = {
   updatedAt?: Date | string
   story: Prisma.StoryCreateNestedOneWithoutScenesInput
   images?: Prisma.ImageCreateNestedManyWithoutSceneInput
+  shots?: Prisma.ShotCreateNestedManyWithoutSceneInput
 }
 
 export type SceneUncheckedCreateWithoutVersionsInput = {
@@ -1043,6 +1067,7 @@ export type SceneUncheckedCreateWithoutVersionsInput = {
   createdAt?: Date | string
   updatedAt?: Date | string
   images?: Prisma.ImageUncheckedCreateNestedManyWithoutSceneInput
+  shots?: Prisma.ShotUncheckedCreateNestedManyWithoutSceneInput
 }
 
 export type SceneCreateOrConnectWithoutVersionsInput = {
@@ -1086,6 +1111,7 @@ export type SceneUpdateWithoutVersionsInput = {
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   story?: Prisma.StoryUpdateOneRequiredWithoutScenesNestedInput
   images?: Prisma.ImageUpdateManyWithoutSceneNestedInput
+  shots?: Prisma.ShotUpdateManyWithoutSceneNestedInput
 }
 
 export type SceneUncheckedUpdateWithoutVersionsInput = {
@@ -1113,6 +1139,135 @@ export type SceneUncheckedUpdateWithoutVersionsInput = {
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   images?: Prisma.ImageUncheckedUpdateManyWithoutSceneNestedInput
+  shots?: Prisma.ShotUncheckedUpdateManyWithoutSceneNestedInput
+}
+
+export type SceneCreateWithoutShotsInput = {
+  id?: string
+  sceneId: string
+  title: string
+  number: number
+  order?: number
+  startMs?: number
+  endMs?: number
+  narration: string
+  visualPrompt?: string | null
+  cameraDirection?: string | null
+  characterIds?: string | null
+  imageUrl?: string | null
+  videoUrl?: string | null
+  audioUrl?: string | null
+  generationStatus?: string
+  estimatedDurationMs?: number
+  actualAudioDurationMs?: number | null
+  generationError?: string | null
+  animationData?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  deletedAt?: Date | string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  story: Prisma.StoryCreateNestedOneWithoutScenesInput
+  images?: Prisma.ImageCreateNestedManyWithoutSceneInput
+  versions?: Prisma.SceneVersionCreateNestedManyWithoutSceneInput
+}
+
+export type SceneUncheckedCreateWithoutShotsInput = {
+  id?: string
+  sceneId: string
+  storyId: string
+  title: string
+  number: number
+  order?: number
+  startMs?: number
+  endMs?: number
+  narration: string
+  visualPrompt?: string | null
+  cameraDirection?: string | null
+  characterIds?: string | null
+  imageUrl?: string | null
+  videoUrl?: string | null
+  audioUrl?: string | null
+  generationStatus?: string
+  estimatedDurationMs?: number
+  actualAudioDurationMs?: number | null
+  generationError?: string | null
+  animationData?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  deletedAt?: Date | string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  images?: Prisma.ImageUncheckedCreateNestedManyWithoutSceneInput
+  versions?: Prisma.SceneVersionUncheckedCreateNestedManyWithoutSceneInput
+}
+
+export type SceneCreateOrConnectWithoutShotsInput = {
+  where: Prisma.SceneWhereUniqueInput
+  create: Prisma.XOR<Prisma.SceneCreateWithoutShotsInput, Prisma.SceneUncheckedCreateWithoutShotsInput>
+}
+
+export type SceneUpsertWithoutShotsInput = {
+  update: Prisma.XOR<Prisma.SceneUpdateWithoutShotsInput, Prisma.SceneUncheckedUpdateWithoutShotsInput>
+  create: Prisma.XOR<Prisma.SceneCreateWithoutShotsInput, Prisma.SceneUncheckedCreateWithoutShotsInput>
+  where?: Prisma.SceneWhereInput
+}
+
+export type SceneUpdateToOneWithWhereWithoutShotsInput = {
+  where?: Prisma.SceneWhereInput
+  data: Prisma.XOR<Prisma.SceneUpdateWithoutShotsInput, Prisma.SceneUncheckedUpdateWithoutShotsInput>
+}
+
+export type SceneUpdateWithoutShotsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  sceneId?: Prisma.StringFieldUpdateOperationsInput | string
+  title?: Prisma.StringFieldUpdateOperationsInput | string
+  number?: Prisma.IntFieldUpdateOperationsInput | number
+  order?: Prisma.IntFieldUpdateOperationsInput | number
+  startMs?: Prisma.IntFieldUpdateOperationsInput | number
+  endMs?: Prisma.IntFieldUpdateOperationsInput | number
+  narration?: Prisma.StringFieldUpdateOperationsInput | string
+  visualPrompt?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  cameraDirection?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  characterIds?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  imageUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  videoUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  audioUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  generationStatus?: Prisma.StringFieldUpdateOperationsInput | string
+  estimatedDurationMs?: Prisma.IntFieldUpdateOperationsInput | number
+  actualAudioDurationMs?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  generationError?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  animationData?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  deletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  story?: Prisma.StoryUpdateOneRequiredWithoutScenesNestedInput
+  images?: Prisma.ImageUpdateManyWithoutSceneNestedInput
+  versions?: Prisma.SceneVersionUpdateManyWithoutSceneNestedInput
+}
+
+export type SceneUncheckedUpdateWithoutShotsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  sceneId?: Prisma.StringFieldUpdateOperationsInput | string
+  storyId?: Prisma.StringFieldUpdateOperationsInput | string
+  title?: Prisma.StringFieldUpdateOperationsInput | string
+  number?: Prisma.IntFieldUpdateOperationsInput | number
+  order?: Prisma.IntFieldUpdateOperationsInput | number
+  startMs?: Prisma.IntFieldUpdateOperationsInput | number
+  endMs?: Prisma.IntFieldUpdateOperationsInput | number
+  narration?: Prisma.StringFieldUpdateOperationsInput | string
+  visualPrompt?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  cameraDirection?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  characterIds?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  imageUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  videoUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  audioUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  generationStatus?: Prisma.StringFieldUpdateOperationsInput | string
+  estimatedDurationMs?: Prisma.IntFieldUpdateOperationsInput | number
+  actualAudioDurationMs?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  generationError?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  animationData?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  deletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  images?: Prisma.ImageUncheckedUpdateManyWithoutSceneNestedInput
+  versions?: Prisma.SceneVersionUncheckedUpdateManyWithoutSceneNestedInput
 }
 
 export type SceneCreateWithoutImagesInput = {
@@ -1140,6 +1295,7 @@ export type SceneCreateWithoutImagesInput = {
   updatedAt?: Date | string
   story: Prisma.StoryCreateNestedOneWithoutScenesInput
   versions?: Prisma.SceneVersionCreateNestedManyWithoutSceneInput
+  shots?: Prisma.ShotCreateNestedManyWithoutSceneInput
 }
 
 export type SceneUncheckedCreateWithoutImagesInput = {
@@ -1167,6 +1323,7 @@ export type SceneUncheckedCreateWithoutImagesInput = {
   createdAt?: Date | string
   updatedAt?: Date | string
   versions?: Prisma.SceneVersionUncheckedCreateNestedManyWithoutSceneInput
+  shots?: Prisma.ShotUncheckedCreateNestedManyWithoutSceneInput
 }
 
 export type SceneCreateOrConnectWithoutImagesInput = {
@@ -1210,6 +1367,7 @@ export type SceneUpdateWithoutImagesInput = {
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   story?: Prisma.StoryUpdateOneRequiredWithoutScenesNestedInput
   versions?: Prisma.SceneVersionUpdateManyWithoutSceneNestedInput
+  shots?: Prisma.ShotUpdateManyWithoutSceneNestedInput
 }
 
 export type SceneUncheckedUpdateWithoutImagesInput = {
@@ -1237,6 +1395,7 @@ export type SceneUncheckedUpdateWithoutImagesInput = {
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   versions?: Prisma.SceneVersionUncheckedUpdateManyWithoutSceneNestedInput
+  shots?: Prisma.ShotUncheckedUpdateManyWithoutSceneNestedInput
 }
 
 export type SceneCreateManyStoryInput = {
@@ -1289,6 +1448,7 @@ export type SceneUpdateWithoutStoryInput = {
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   images?: Prisma.ImageUpdateManyWithoutSceneNestedInput
   versions?: Prisma.SceneVersionUpdateManyWithoutSceneNestedInput
+  shots?: Prisma.ShotUpdateManyWithoutSceneNestedInput
 }
 
 export type SceneUncheckedUpdateWithoutStoryInput = {
@@ -1316,6 +1476,7 @@ export type SceneUncheckedUpdateWithoutStoryInput = {
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   images?: Prisma.ImageUncheckedUpdateManyWithoutSceneNestedInput
   versions?: Prisma.SceneVersionUncheckedUpdateManyWithoutSceneNestedInput
+  shots?: Prisma.ShotUncheckedUpdateManyWithoutSceneNestedInput
 }
 
 export type SceneUncheckedUpdateManyWithoutStoryInput = {
@@ -1351,11 +1512,13 @@ export type SceneUncheckedUpdateManyWithoutStoryInput = {
 export type SceneCountOutputType = {
   images: number
   versions: number
+  shots: number
 }
 
 export type SceneCountOutputTypeSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   images?: boolean | SceneCountOutputTypeCountImagesArgs
   versions?: boolean | SceneCountOutputTypeCountVersionsArgs
+  shots?: boolean | SceneCountOutputTypeCountShotsArgs
 }
 
 /**
@@ -1380,6 +1543,13 @@ export type SceneCountOutputTypeCountImagesArgs<ExtArgs extends runtime.Types.Ex
  */
 export type SceneCountOutputTypeCountVersionsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   where?: Prisma.SceneVersionWhereInput
+}
+
+/**
+ * SceneCountOutputType without action
+ */
+export type SceneCountOutputTypeCountShotsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.ShotWhereInput
 }
 
 
@@ -1410,6 +1580,7 @@ export type SceneSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = 
   story?: boolean | Prisma.StoryDefaultArgs<ExtArgs>
   images?: boolean | Prisma.Scene$imagesArgs<ExtArgs>
   versions?: boolean | Prisma.Scene$versionsArgs<ExtArgs>
+  shots?: boolean | Prisma.Scene$shotsArgs<ExtArgs>
   _count?: boolean | Prisma.SceneCountOutputTypeDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["scene"]>
 
@@ -1498,6 +1669,7 @@ export type SceneInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs =
   story?: boolean | Prisma.StoryDefaultArgs<ExtArgs>
   images?: boolean | Prisma.Scene$imagesArgs<ExtArgs>
   versions?: boolean | Prisma.Scene$versionsArgs<ExtArgs>
+  shots?: boolean | Prisma.Scene$shotsArgs<ExtArgs>
   _count?: boolean | Prisma.SceneCountOutputTypeDefaultArgs<ExtArgs>
 }
 export type SceneIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
@@ -1513,6 +1685,7 @@ export type $ScenePayload<ExtArgs extends runtime.Types.Extensions.InternalArgs 
     story: Prisma.$StoryPayload<ExtArgs>
     images: Prisma.$ImagePayload<ExtArgs>[]
     versions: Prisma.$SceneVersionPayload<ExtArgs>[]
+    shots: Prisma.$ShotPayload<ExtArgs>[]
   }
   scalars: runtime.Types.Extensions.GetPayloadResult<{
     id: string
@@ -1935,6 +2108,7 @@ export interface Prisma__SceneClient<T, Null = never, ExtArgs extends runtime.Ty
   story<T extends Prisma.StoryDefaultArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.StoryDefaultArgs<ExtArgs>>): Prisma.Prisma__StoryClient<runtime.Types.Result.GetResult<Prisma.$StoryPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>
   images<T extends Prisma.Scene$imagesArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Scene$imagesArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$ImagePayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   versions<T extends Prisma.Scene$versionsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Scene$versionsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$SceneVersionPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  shots<T extends Prisma.Scene$shotsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Scene$shotsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$ShotPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   /**
    * Attaches callbacks for the resolution and/or rejection of the Promise.
    * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -2433,6 +2607,30 @@ export type Scene$versionsArgs<ExtArgs extends runtime.Types.Extensions.Internal
   take?: number
   skip?: number
   distinct?: Prisma.SceneVersionScalarFieldEnum | Prisma.SceneVersionScalarFieldEnum[]
+}
+
+/**
+ * Scene.shots
+ */
+export type Scene$shotsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the Shot
+   */
+  select?: Prisma.ShotSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the Shot
+   */
+  omit?: Prisma.ShotOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.ShotInclude<ExtArgs> | null
+  where?: Prisma.ShotWhereInput
+  orderBy?: Prisma.ShotOrderByWithRelationInput | Prisma.ShotOrderByWithRelationInput[]
+  cursor?: Prisma.ShotWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.ShotScalarFieldEnum | Prisma.ShotScalarFieldEnum[]
 }
 
 /**

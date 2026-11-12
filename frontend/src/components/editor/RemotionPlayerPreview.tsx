@@ -141,7 +141,7 @@ export const RemotionPlayerPreview: React.FC<RemotionPlayerPreviewProps> = ({
       onPlayStateChange?.(false);
     };
 
-    const handleFrameUpdate = (e: { detail: { frame: number } }) => {
+    const handleTimeOrFrameUpdate = (e: { detail: { frame: number } }) => {
       const f = e.detail?.frame ?? 0;
       lastEmittedFrameRef.current = f;
       const ms = Math.round((f / config.fps) * 1000);
@@ -167,7 +167,8 @@ export const RemotionPlayerPreview: React.FC<RemotionPlayerPreviewProps> = ({
 
     player.addEventListener('play', handlePlay);
     player.addEventListener('pause', handlePause);
-    player.addEventListener('frameupdate', handleFrameUpdate);
+    player.addEventListener('timeupdate', handleTimeOrFrameUpdate);
+    player.addEventListener('frameupdate', handleTimeOrFrameUpdate);
     player.addEventListener('seeked', handleSeeked);
     player.addEventListener('ended', handleEnded);
 
@@ -175,7 +176,8 @@ export const RemotionPlayerPreview: React.FC<RemotionPlayerPreviewProps> = ({
       try {
         player.removeEventListener('play', handlePlay);
         player.removeEventListener('pause', handlePause);
-        player.removeEventListener('frameupdate', handleFrameUpdate);
+        player.removeEventListener('timeupdate', handleTimeOrFrameUpdate);
+        player.removeEventListener('frameupdate', handleTimeOrFrameUpdate);
         player.removeEventListener('seeked', handleSeeked);
         player.removeEventListener('ended', handleEnded);
       } catch {

@@ -2608,7 +2608,13 @@ contentRouter.get(["/story/:storyId/flow-project", "/stories/:storyId/flow-proje
     const storyId = Array.isArray(rawStoryId) ? rawStoryId[0] : rawStoryId;
     const story = await getStoryByStoryId(storyId);
     if (!story) {
-      return res.status(404).json({ message: `Story not found: ${storyId}` });
+      return res.json({
+        success: true,
+        storyId,
+        flowProjectId: null,
+        projectUrl: null,
+        isConnected: false,
+      });
     }
 
     const flowProjectId = (story as any).flowProjectId || null;
@@ -2647,12 +2653,16 @@ contentRouter.put(["/story/:storyId/flow-project", "/stories/:storyId/flow-proje
       });
     }
 
-    const story = await getStoryByStoryId(storyId);
+    let story = await getStoryByStoryId(storyId);
     if (!story) {
-      return res.status(404).json({ message: `Story not found: ${storyId}` });
+      story = await createStory({
+        storyId,
+        title: "Untitled Story",
+        flowProjectId: validation.flowProjectId,
+      });
+    } else {
+      await updateStoryFlowProject(storyId, validation.flowProjectId);
     }
-
-    await updateStoryFlowProject(storyId, validation.flowProjectId);
 
     return res.json({
       success: true,
@@ -2675,7 +2685,14 @@ contentRouter.delete(["/story/:storyId/flow-project", "/stories/:storyId/flow-pr
     const storyId = Array.isArray(rawStoryId) ? rawStoryId[0] : rawStoryId;
     const story = await getStoryByStoryId(storyId);
     if (!story) {
-      return res.status(404).json({ message: `Story not found: ${storyId}` });
+      return res.json({
+        success: true,
+        storyId,
+        flowProjectId: null,
+        projectUrl: null,
+        isConnected: false,
+        message: "Google Flow project disconnected.",
+      });
     }
 
     await updateStoryFlowProject(storyId, null);

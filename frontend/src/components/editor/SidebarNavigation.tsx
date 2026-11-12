@@ -11,6 +11,7 @@ import {
   ChevronRightIcon,
   ScissorsIcon,
   VolumeHighIcon,
+  CameraIcon,
 } from '../common/Icons';
 
 export type SidebarSection =
@@ -20,6 +21,7 @@ export type SidebarSection =
   | 'videos'
   | 'audio'
   | 'overview'
+  | 'shots'
   | 'scene_settings'
   | 'timing'
   | 'narration'
@@ -100,6 +102,11 @@ export const SidebarNavigation: React.FC<SidebarNavigationProps> = ({
       id: 'overview',
       label: 'Overview',
       icon: <SettingsIcon size={16} />,
+    },
+    {
+      id: 'shots',
+      label: 'Cinematic Shots',
+      icon: <CameraIcon size={16} />,
     },
     {
       id: 'timing',

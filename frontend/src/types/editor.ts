@@ -14,6 +14,66 @@ export interface SceneVersionItem {
 
 import { VectorSceneData } from './animation';
 
+export interface PromptVersionRecord {
+  version: number;
+  backgroundPrompt: string;
+  videoPrompt: string;
+  createdAt: string;
+  approved?: boolean;
+  notes?: string;
+}
+
+export interface CinematicShot {
+  shotId: string;
+  sceneId: string;
+  storyId: string;
+  number: number;
+  order: number;
+  title: string;
+  description: string;
+  durationMs: number;
+  shotType: string;
+  cameraAngle: string;
+  cameraMovement: string;
+  lighting?: string;
+  composition?: {
+    foreground?: string;
+    middleground?: string;
+    background?: string;
+    depthOfField?: string;
+    characterPlacementZone?: string;
+  };
+  characterPlacements?: Array<{
+    instanceId: string;
+    characterId: string;
+    name?: string;
+    x: number;
+    y: number;
+    scale: number;
+    flipX: boolean;
+    zIndex?: number;
+    action?: string;
+    expression?: string;
+    isSpeaker?: boolean;
+  }>;
+  requiredProps?: string[];
+  requiredEffects?: string[];
+  startMs: number;
+  endMs: number;
+  transition?: {
+    type: 'fade' | 'cut';
+    durationMs: number;
+  };
+  backgroundPrompt: string;
+  videoPrompt: string;
+  promptHistory: PromptVersionRecord[];
+  backgroundUrl?: string | null;
+  videoUrl?: string | null;
+  assetStatus: 'pending' | 'generating' | 'imported' | 'approved';
+  approvalStatus: 'pending' | 'approved' | 'rejected';
+  productionStatus: 'draft' | 'ready' | 'completed';
+}
+
 export interface EditorScene {
   id: string;
   sceneId: string;
@@ -75,6 +135,9 @@ export interface EditorStory {
   characters?: EditorCharacter[];
   scenes: EditorScene[];
   flowProjectId?: string | null;
+  originalScript?: string | null;
+  productionStage?: string | null;
+  shots?: CinematicShot[];
 }
 
 export type SaveStatus = 'saved' | 'saving' | 'dirty' | 'error';

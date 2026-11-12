@@ -45,6 +45,9 @@ export async function createStory(data: {
   visualStyle?: string | null;
   targetDuration?: number | null;
   visualBible?: any;
+  flowProjectId?: string | null;
+  originalScript?: string | null;
+  productionStage?: string | null;
 }) {
   const id = data.id || randomUUID();
   const storyId = data.storyId || `story-${Date.now()}-${randomUUID().slice(0, 8)}`;
@@ -60,6 +63,9 @@ export async function createStory(data: {
       genre: data.genre,
       visualStyle: data.visualStyle,
       targetDuration: data.targetDuration,
+      ...(data.flowProjectId !== undefined ? { flowProjectId: data.flowProjectId } : {}),
+      ...(data.originalScript !== undefined ? { originalScript: data.originalScript } : {}),
+      ...(data.productionStage !== undefined ? { productionStage: data.productionStage } : {}),
       ...(data.visualBible !== undefined ? { visualBible: data.visualBible } : {}),
     },
     create: {
@@ -75,6 +81,9 @@ export async function createStory(data: {
       visualStyle: data.visualStyle,
       targetDuration: data.targetDuration,
       visualBible: data.visualBible || null,
+      flowProjectId: data.flowProjectId || null,
+      originalScript: data.originalScript || null,
+      productionStage: data.productionStage || 'script',
     },
   });
 }
@@ -91,6 +100,8 @@ export async function updateStoryMetadata(storyId: string, data: {
   targetDuration?: number | null;
   visualBible?: any;
   flowProjectId?: string | null;
+  originalScript?: string | null;
+  productionStage?: string | null;
 }) {
   return await prisma.story.update({
     where: { storyId },
@@ -749,6 +760,174 @@ export async function getStoriesByCharacterId(characterId: string) {
   });
 
   return storyCharacters.map((sc) => sc.story);
+}
+
+// ====================================================
+// Shot Operations (Cinematic Scene & Shot Director)
+// ====================================================
+
+export interface CreateShotInput {
+  id?: string;
+  shotId?: string;
+  storyId: string;
+  sceneId: string;
+  number: number;
+  order?: number;
+  title?: string;
+  description?: string;
+  durationMs?: number;
+  shotType?: string;
+  cameraAngle?: string;
+  cameraMovement?: string;
+  lighting?: string;
+  shotDirection?: any;
+  characterInstructions?: any;
+  backgroundPrompt?: string | null;
+  videoPrompt?: string | null;
+  promptHistory?: any;
+  backgroundUrl?: string | null;
+  videoUrl?: string | null;
+  assetStatus?: string;
+  approvalStatus?: string;
+  productionStatus?: string;
+}
+
+export async function createShot(data: CreateShotInput) {
+  const id = data.id || randomUUID();
+  const shotId = data.shotId || `shot-${data.sceneId}-${data.number}-${randomUUID().slice(0, 6)}`;
+  return await prisma.shot.create({
+    data: {
+      id,
+      shotId,
+      storyId: data.storyId,
+      sceneId: data.sceneId,
+      number: data.number,
+      order: data.order ?? data.number,
+      title: data.title || `Shot ${data.number}`,
+      description: data.description || '',
+      durationMs: data.durationMs || 5000,
+      shotType: data.shotType || 'wide_establishing',
+      cameraAngle: data.cameraAngle || 'eye_level',
+      cameraMovement: data.cameraMovement || 'static',
+      lighting: data.lighting || 'Natural day lighting',
+      shotDirection: data.shotDirection ?? null,
+      characterInstructions: data.characterInstructions ?? null,
+      backgroundPrompt: data.backgroundPrompt || null,
+      videoPrompt: data.videoPrompt || null,
+      promptHistory: data.promptHistory ?? [],
+      backgroundUrl: data.backgroundUrl || null,
+      videoUrl: data.videoUrl || null,
+      assetStatus: data.assetStatus || 'pending',
+      approvalStatus: data.approvalStatus || 'pending',
+      productionStatus: data.productionStatus || 'draft',
+    },
+  });
+}
+
+export async function getShotsByStoryId(storyId: string) {
+  return await prisma.shot.findMany({
+    where: { storyId },
+    orderBy: [
+      { order: 'asc' },
+      { number: 'asc' },
+    ],
+  });
+}
+
+export async function getShotsBySceneId(sceneId: string) {
+  return await prisma.shot.findMany({
+    where: { sceneId },
+    orderBy: [
+      { order: 'asc' },
+      { number: 'asc' },
+    ],
+  });
+}
+
+export async function getShotById(shotId: string) {
+  return await prisma.shot.findUnique({
+    where: { shotId },
+    include: {
+      scene: true,
+      story: true,
+    },
+  });
+}
+
+export async function updateShot(shotId: string, updates: Partial<{
+  title: string;
+  description: string;
+  durationMs: number;
+  order: number;
+  number: number;
+  shotType: string;
+  cameraAngle: string;
+  cameraMovement: string;
+  lighting: string;
+  shotDirection: any;
+  characterInstructions: any;
+  backgroundPrompt: string;
+  videoPrompt: string;
+  promptHistory: any;
+  backgroundUrl: string;
+  videoUrl: string;
+  assetStatus: string;
+  approvalStatus: string;
+  productionStatus: string;
+}>) {
+  return await prisma.shot.update({
+    where: { shotId },
+    data: updates as any,
+  });
+}
+
+export async function deleteShot(shotId: string) {
+  return await prisma.shot.delete({
+    where: { shotId },
+  });
+}
+
+export async function replaceSceneShots(storyId: string, sceneId: string, shots: CreateShotInput[]) {
+  return await prisma.$transaction(async (tx) => {
+    await tx.shot.deleteMany({
+      where: { sceneId },
+    });
+    const created = [];
+    for (let i = 0; i < shots.length; i++) {
+      const s = shots[i];
+      const id = s.id || randomUUID();
+      const shotId = s.shotId || `shot-${sceneId}-${s.number || (i + 1)}-${randomUUID().slice(0, 6)}`;
+      const rec = await tx.shot.create({
+        data: {
+          id,
+          shotId,
+          storyId,
+          sceneId,
+          number: s.number ?? (i + 1),
+          order: s.order ?? (i + 1),
+          title: s.title || `Shot ${s.number ?? (i + 1)}`,
+          description: s.description || '',
+          durationMs: s.durationMs || 5000,
+          shotType: s.shotType || 'wide_establishing',
+          cameraAngle: s.cameraAngle || 'eye_level',
+          cameraMovement: s.cameraMovement || 'static',
+          lighting: s.lighting || 'Natural day lighting',
+          shotDirection: s.shotDirection ?? null,
+          characterInstructions: s.characterInstructions ?? null,
+          backgroundPrompt: s.backgroundPrompt || null,
+          videoPrompt: s.videoPrompt || null,
+          promptHistory: s.promptHistory ?? [],
+          backgroundUrl: s.backgroundUrl || null,
+          videoUrl: s.videoUrl || null,
+          assetStatus: s.assetStatus || 'pending',
+          approvalStatus: s.approvalStatus || 'pending',
+          productionStatus: s.productionStatus || 'draft',
+        },
+      });
+      created.push(rec);
+    }
+    return created;
+  });
 }
 
 export { prisma };

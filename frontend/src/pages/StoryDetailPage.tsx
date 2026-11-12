@@ -880,6 +880,7 @@ export default function StoryDetailPage() {
       else if (section === 'timing') setActiveInspectorTab('timing');
       else if (section === 'narration') setActiveInspectorTab('narration');
       else if (section === 'background') setActiveInspectorTab('background');
+      else if (section === 'shots') setActiveInspectorTab('shots');
       else if (section === 'characters' || section === 'rig') setActiveInspectorTab('characters');
       else if (section === 'dialogue') setActiveInspectorTab('dialogue');
       else if (section === 'overlays') setActiveInspectorTab('overlays');
@@ -2004,6 +2005,7 @@ export default function StoryDetailPage() {
           characters={story.characters || []}
           playheadMs={currentTimeMs}
           storyId={story.storyId}
+          flowProjectId={story.flowProjectId}
           onUpdateScene={handleUpdateActiveScene}
           onUploadBackground={handleUploadBackground}
           onSetBackground={handleSetBackground}
@@ -2047,6 +2049,7 @@ export default function StoryDetailPage() {
             else if (tab === 'timing') setActiveSidebarSection('timing');
             else if (tab === 'narration') setActiveSidebarSection('narration');
             else if (tab === 'background') setActiveSidebarSection('background');
+            else if (tab === 'shots') setActiveSidebarSection('shots');
             else if (tab === 'characters' || tab === 'animation' || tab === 'rig') setActiveSidebarSection('characters');
             else if (tab === 'dialogue') setActiveSidebarSection('dialogue');
             else if (tab === 'overlays') setActiveSidebarSection('overlays');

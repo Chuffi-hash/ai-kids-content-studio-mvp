@@ -400,6 +400,7 @@ export const ModelName = {
   Story: 'Story',
   Scene: 'Scene',
   SceneVersion: 'SceneVersion',
+  Shot: 'Shot',
   Image: 'Image',
   Character: 'Character',
   StoryCharacter: 'StoryCharacter'
@@ -418,7 +419,7 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
     omit: GlobalOmitOptions
   }
   meta: {
-    modelProps: "story" | "scene" | "sceneVersion" | "image" | "character" | "storyCharacter"
+    modelProps: "story" | "scene" | "sceneVersion" | "shot" | "image" | "character" | "storyCharacter"
     txIsolationLevel: TransactionIsolationLevel
   }
   model: {
@@ -641,6 +642,80 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         count: {
           args: Prisma.SceneVersionCountArgs<ExtArgs>
           result: runtime.Types.Utils.Optional<Prisma.SceneVersionCountAggregateOutputType> | number
+        }
+      }
+    }
+    Shot: {
+      payload: Prisma.$ShotPayload<ExtArgs>
+      fields: Prisma.ShotFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.ShotFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ShotPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.ShotFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ShotPayload>
+        }
+        findFirst: {
+          args: Prisma.ShotFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ShotPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.ShotFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ShotPayload>
+        }
+        findMany: {
+          args: Prisma.ShotFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ShotPayload>[]
+        }
+        create: {
+          args: Prisma.ShotCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ShotPayload>
+        }
+        createMany: {
+          args: Prisma.ShotCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.ShotCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ShotPayload>[]
+        }
+        delete: {
+          args: Prisma.ShotDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ShotPayload>
+        }
+        update: {
+          args: Prisma.ShotUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ShotPayload>
+        }
+        deleteMany: {
+          args: Prisma.ShotDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.ShotUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.ShotUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ShotPayload>[]
+        }
+        upsert: {
+          args: Prisma.ShotUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ShotPayload>
+        }
+        aggregate: {
+          args: Prisma.ShotAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateShot>
+        }
+        groupBy: {
+          args: Prisma.ShotGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.ShotGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.ShotCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.ShotCountAggregateOutputType> | number
         }
       }
     }
@@ -919,6 +994,8 @@ export const StoryScalarFieldEnum = {
   targetDuration: 'targetDuration',
   visualBible: 'visualBible',
   flowProjectId: 'flowProjectId',
+  originalScript: 'originalScript',
+  productionStage: 'productionStage',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 } as const
@@ -970,6 +1047,37 @@ export const SceneVersionScalarFieldEnum = {
 } as const
 
 export type SceneVersionScalarFieldEnum = (typeof SceneVersionScalarFieldEnum)[keyof typeof SceneVersionScalarFieldEnum]
+
+
+export const ShotScalarFieldEnum = {
+  id: 'id',
+  shotId: 'shotId',
+  storyId: 'storyId',
+  sceneId: 'sceneId',
+  number: 'number',
+  order: 'order',
+  title: 'title',
+  description: 'description',
+  durationMs: 'durationMs',
+  shotType: 'shotType',
+  cameraAngle: 'cameraAngle',
+  cameraMovement: 'cameraMovement',
+  lighting: 'lighting',
+  shotDirection: 'shotDirection',
+  characterInstructions: 'characterInstructions',
+  backgroundPrompt: 'backgroundPrompt',
+  videoPrompt: 'videoPrompt',
+  promptHistory: 'promptHistory',
+  backgroundUrl: 'backgroundUrl',
+  videoUrl: 'videoUrl',
+  assetStatus: 'assetStatus',
+  approvalStatus: 'approvalStatus',
+  productionStatus: 'productionStatus',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type ShotScalarFieldEnum = (typeof ShotScalarFieldEnum)[keyof typeof ShotScalarFieldEnum]
 
 
 export const ImageScalarFieldEnum = {
@@ -1295,6 +1403,7 @@ export type GlobalOmitConfig = {
   story?: Prisma.StoryOmit
   scene?: Prisma.SceneOmit
   sceneVersion?: Prisma.SceneVersionOmit
+  shot?: Prisma.ShotOmit
   image?: Prisma.ImageOmit
   character?: Prisma.CharacterOmit
   storyCharacter?: Prisma.StoryCharacterOmit

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   AbsoluteFill,
   Audio,
@@ -405,8 +405,14 @@ function SceneView({
     sceneOpacity = Math.min(fadeIn, fadeOut);
   }
 
+  // Active Shot within Scene (if multi-shot breakdown exists)
+  const activeShot = (scene.shots && scene.shots.length > 0)
+    ? scene.shots.find((s) => sceneRelativeMs >= s.startMs && sceneRelativeMs < s.endMs) || scene.shots[0]
+    : undefined;
+
   // Resolve camera settings
   const rawMovement =
+    activeShot?.cameraMovement ||
     scene.cameraMovement ||
     (typeof scene.camera === 'string' ? scene.camera : scene.camera?.movement) ||
     'static';
@@ -428,12 +434,13 @@ function SceneView({
     height,
   });
 
-  // Background resolution
+  // Background resolution (active shot backgroundUrl takes precedence if set)
   const bg = scene.background;
   const isBgRemoved = Boolean(bg?.removed);
+  const shotBgUrl = activeShot?.backgroundUrl;
   const bgUrl = isBgRemoved
     ? ''
-    : bg?.imageUrl || scene.backgroundUrl || (scene.backgroundSrc ? staticFile(scene.backgroundSrc) : '');
+    : shotBgUrl || bg?.imageUrl || scene.backgroundUrl || (scene.backgroundSrc ? staticFile(scene.backgroundSrc) : '');
   const rawFit = bg?.fit || 'cover';
   const objectFit: React.CSSProperties['objectFit'] = rawFit === 'contain' ? 'contain' : (rawFit === 'fill' ? 'fill' : 'cover');
 
@@ -441,6 +448,30 @@ function SceneView({
   const formatVariant = scene.formatVariants?.[format];
   const charOverrides = formatVariant?.characterOverrides;
   const overlayOverrides = formatVariant?.overlayOverrides;
+
+  // Dynamically map motion paths of animation clips to current format dimensions
+  const scaledClips = useMemo(() => {
+    if (format === '16:9' || (width === 1280 && height === 720)) {
+      return scene.animationClips || [];
+    }
+    return (scene.animationClips || []).map((clip) => {
+      if (clip.motionPath) {
+        const xOffsetStart = clip.motionPath.startX - 640;
+        const xOffsetEnd = clip.motionPath.endX - 640;
+        return {
+          ...clip,
+          motionPath: {
+            ...clip.motionPath,
+            startX: Math.round(width / 2 + xOffsetStart * (width / 1280)),
+            startY: Math.round(clip.motionPath.startY * (height / 720)),
+            endX: Math.round(width / 2 + xOffsetEnd * (width / 1280)),
+            endY: Math.round(clip.motionPath.endY * (height / 720)),
+          },
+        };
+      }
+      return clip;
+    });
+  }, [scene.animationClips, format, width, height]);
 
   // Coordinate adaptation for non-16:9 formats and storybook character scaling
   const instances = (scene.characterInstances || []).map((inst, instIdx, arr) => {
@@ -723,7 +754,7 @@ function SceneView({
             const rig = inst.customRig || getVectorRig(inst.characterId);
             const pose = evaluateCharacterPose(
               inst,
-              scene.animationClips || [],
+              scaledClips,
               sceneRelativeMs,
               scene.expressionCues || [],
               dialogues

@@ -24,8 +24,11 @@ model Story {
   targetDuration Int?
   visualBible    Json?
   flowProjectId  String?
+  originalScript String?
+  productionStage String?         @default("script")
   scenes         Scene[]
   storyCharacters StoryCharacter[]
+  shots          Shot[]
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
 
@@ -56,6 +59,7 @@ model Scene {
   animationData         Json?
   images                Image[]
   versions              SceneVersion[]
+  shots                 Shot[]
   deletedAt             DateTime?
   createdAt             DateTime       @default(now())
   updatedAt             DateTime       @updatedAt
@@ -80,6 +84,40 @@ model SceneVersion {
   createdAt       DateTime @default(now())
 
   @@index([sceneId])
+}
+
+model Shot {
+  id                    String    @id @default(cuid())
+  shotId                String    @unique
+  storyId               String
+  story                 Story     @relation(fields: [storyId], references: [storyId])
+  sceneId               String
+  scene                 Scene     @relation(fields: [sceneId], references: [sceneId])
+  number                Int
+  order                 Int       @default(0)
+  title                 String?
+  description           String?
+  durationMs            Int       @default(5000)
+  shotType              String?
+  cameraAngle           String?
+  cameraMovement        String?
+  lighting              String?
+  shotDirection         Json?
+  characterInstructions Json?
+  backgroundPrompt      String?
+  videoPrompt           String?
+  promptHistory         Json?
+  backgroundUrl         String?
+  videoUrl              String?
+  assetStatus           String    @default("pending")
+  approvalStatus        String    @default("pending")
+  productionStatus      String    @default("draft")
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([shotId])
+  @@index([sceneId])
+  @@index([storyId])
 }
 
 model Image {
