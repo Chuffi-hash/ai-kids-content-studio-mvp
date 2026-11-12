@@ -177,10 +177,32 @@ export class IntelligentScriptParser {
     const effectiveOptionDuration = [options.targetDurationSeconds, options.desiredDurationSeconds, options.targetDuration].find(
       (d) => typeof d === 'number' && Number.isFinite(d) && d > 0
     );
-    let targetDurationSeconds = effectiveOptionDuration || validTitleDuration || 60;
+    let targetDurationSeconds = effectiveOptionDuration || validTitleDuration;
     let logline = titlePage['logline'] || titlePage['synopsis'] || '';
     let lesson = titlePage['lesson'] || titlePage['moral'] || '';
-    let genre = options.genre || titlePage['genre'] || 'Educational';
+    
+    // Auto-detect genre if not explicitly provided
+    let genre = options.genre || titlePage['genre'];
+    if (!genre || genre === 'Auto') {
+      const lower = text.toLowerCase();
+      if (lower.includes('lullaby') || lower.includes('sleep') || lower.includes('bedtime') || lower.includes('night')) {
+        genre = 'Bedtime';
+      } else if (lower.includes('space') || lower.includes('planet') || lower.includes('rocket') || lower.includes('galaxy') || lower.includes('alien')) {
+        genre = 'Sci-Fi';
+      } else if (lower.includes('magic') || lower.includes('fairy') || lower.includes('wizard') || lower.includes('dragon') || lower.includes('castle')) {
+        genre = 'Fantasy';
+      } else if (lower.includes('funny') || lower.includes('laugh') || lower.includes('silly') || lower.includes('joke')) {
+        genre = 'Comedy';
+      } else if (lower.includes('quest') || lower.includes('treasure') || lower.includes('adventure') || lower.includes('explore')) {
+        genre = 'Adventure';
+      } else if (lower.includes('friend') || lower.includes('together') || lower.includes('help')) {
+        genre = 'Friendship';
+      } else if (lower.includes('season') || lower.includes('earth') || lower.includes('nature') || lower.includes('sun') || lower.includes('rain')) {
+        genre = 'Nature';
+      } else {
+        genre = 'Educational';
+      }
+    }
 
     // Check first heading if title not found in titlePage
     if (!title) {

@@ -834,6 +834,7 @@ export async function parseScriptForDraft(payload: {
   rawText: string;
   language?: string;
   title?: string;
+  genre?: string;
   targetDuration?: number;
   targetDurationSeconds?: number;
   desiredDurationSeconds?: number;

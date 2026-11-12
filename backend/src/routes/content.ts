@@ -187,6 +187,7 @@ contentRouter.post("/story/parse-script", async (req, res) => {
       rawText,
       language,
       title,
+      genre,
       targetDuration,
       targetDurationSeconds,
       desiredDurationSeconds,
@@ -236,6 +237,7 @@ contentRouter.post("/story/parse-script", async (req, res) => {
       language: language || "Hindi",
       defaultTitle: title,
       targetDuration: effectiveDuration,
+      genre: genre || undefined,
       existingCharacters: charactersToPass.length > 0 ? charactersToPass : undefined,
     });
 

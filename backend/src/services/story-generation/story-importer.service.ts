@@ -555,6 +555,7 @@ export class StoryImporterService {
       targetDuration?: number;
       targetDurationSeconds?: number;
       desiredDurationSeconds?: number;
+      genre?: string;
       existingCharacters?: Array<{ id: string; name: string; species?: string }>;
     }
   ): DraftStoryboardResult {
@@ -573,6 +574,7 @@ export class StoryImporterService {
       targetDuration: effectiveDuration,
       targetDurationSeconds: effectiveDuration,
       existingCharacters: options?.existingCharacters,
+      genre: options?.genre,
     });
 
     return IntelligentScriptParser.adaptIRToDraftStoryboardResult(ir);

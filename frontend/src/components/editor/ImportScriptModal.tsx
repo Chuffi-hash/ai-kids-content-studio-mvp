@@ -82,7 +82,7 @@ export const ImportScriptModal: React.FC<ImportScriptModalProps> = ({
   const [step, setStep] = useState<'input' | 'review'>('input');
   const [rawText, setRawText] = useState<string>('');
   const [selectedLanguage, setSelectedLanguage] = useState<'Hindi' | 'English'>('Hindi');
-  const [targetDurationSeconds, setTargetDurationSeconds] = useState<number>(60);
+  const [targetDurationSeconds, setTargetDurationSeconds] = useState<number>(0);
   const [isParsing, setIsParsing] = useState<boolean>(false);
   const [parseError, setParseError] = useState<string | null>(null);
 
@@ -110,8 +110,8 @@ export const ImportScriptModal: React.FC<ImportScriptModalProps> = ({
         rawText: rawText.trim(),
         language: selectedLanguage,
         title: storyTitle,
-        targetDuration: targetDurationSeconds,
-        targetDurationSeconds,
+        targetDuration: targetDurationSeconds > 0 ? targetDurationSeconds : undefined,
+        targetDurationSeconds: targetDurationSeconds > 0 ? targetDurationSeconds : undefined,
         storyId,
         existingCharacters,
       });
@@ -361,14 +361,21 @@ export const ImportScriptModal: React.FC<ImportScriptModalProps> = ({
 
                   <label style={{ fontSize: '12px', fontWeight: 500, color: 'var(--ed-text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
                     Target Duration:
-                    <input
-                      type="number"
-                      className="ed-input"
+                    <select
+                      className="ed-select"
                       value={targetDurationSeconds}
-                      onChange={(e) => setTargetDurationSeconds(Math.max(10, parseInt(e.target.value, 10) || 60))}
-                      style={{ width: '70px', padding: '4px 8px', fontSize: '12px' }}
-                    />
-                    <span style={{ fontSize: '11px', color: 'var(--ed-text-muted)' }}>sec</span>
+                      onChange={(e) => setTargetDurationSeconds(Number(e.target.value))}
+                      style={{ padding: '4px 8px', fontSize: '12px' }}
+                    >
+                      <option value={0}>♾️ No Limit / Script Length (Auto)</option>
+                      <option value={30}>30s (~2 scenes)</option>
+                      <option value={60}>60s (~4 scenes)</option>
+                      <option value={90}>90s (~5 scenes)</option>
+                      <option value={120}>2 min (~6 scenes)</option>
+                      <option value={180}>3 min (~8 scenes)</option>
+                      <option value={300}>5 min (~12 scenes)</option>
+                      <option value={600}>10 min (~20 scenes)</option>
+                    </select>
                   </label>
                 </div>
 

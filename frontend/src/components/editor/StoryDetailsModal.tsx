@@ -369,12 +369,26 @@ export const StoryDetailsModal: React.FC<StoryDetailsModalProps> = ({
                     value={genre}
                     onChange={(e) => setGenre(e.target.value)}
                   >
-                    <option value="Adventure">Adventure</option>
-                    <option value="Bedtime">Bedtime / Calm</option>
-                    <option value="Educational">Educational / Learning</option>
-                    <option value="Comedy">Fun & Comedy</option>
+                    <option value="Adventure">Adventure & Quest</option>
+                    <option value="Bedtime">Bedtime & Calm</option>
+                    <option value="Educational">Educational & Science</option>
+                    <option value="Comedy">Fun & Playful / Comedy</option>
                     <option value="Fantasy">Magic & Fantasy</option>
-                    <option value="Friendship">Friendship</option>
+                    <option value="Friendship">Friendship & Social</option>
+                    <option value="Moral">Moral & Fable</option>
+                    <option value="Sci-Fi">Sci-Fi & Space</option>
+                    <option value="Nature">Nature & Animals</option>
+                    <option value="Superhero">Action & Superhero</option>
+                    <option value="Mystery">Mystery & Detective</option>
+                    <option value="Rhymes">Nursery Rhyme & Music</option>
+                    <option value="DailyLife">Everyday Life & Family</option>
+                    {![
+                      "Adventure", "Bedtime", "Educational", "Comedy", "Fantasy",
+                      "Friendship", "Moral", "Sci-Fi", "Nature", "Superhero",
+                      "Mystery", "Rhymes", "DailyLife"
+                    ].includes(genre) && (
+                      <option value={genre}>{genre}</option>
+                    )}
                   </select>
                 </div>
               </div>

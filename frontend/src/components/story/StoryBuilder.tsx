@@ -236,8 +236,9 @@ Earth: पतझड़ के बाद नया बसंत आता है!
     setImportLanguage("Hindi");
     setImportDuration(0); // 0 = No Limit (Auto)
     setIsCustomDuration(false);
-    setImportGenre("Educational");
+    setImportGenre("Auto"); // Auto = Auto-Detect from Script (No Limit)
     setIsCustomGenre(false);
+    setCustomGenreInput("");
     setImportError(null);
   }
 

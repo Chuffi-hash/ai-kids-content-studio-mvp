@@ -105,6 +105,7 @@ export default function StoryCreatePage() {
         rawText: data.rawText,
         title: data.title,
         language: data.language || "Hindi",
+        genre: data.genre,
         targetDuration: targetSec,
         targetDurationSeconds: targetSec,
         existingCharacters: characters.map((c) => ({ id: c.id, name: c.name, species: c.species })),
