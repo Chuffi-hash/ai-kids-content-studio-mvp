@@ -319,9 +319,13 @@ contentRouter.post("/story/create-from-draft", async (req, res) => {
       return res.status(400).json({ message: "scenes array cannot be empty" });
     }
 
+    const totalScenesDurationSec = Array.isArray(scenes)
+      ? Math.round(scenes.reduce((sum: number, sc: any) => sum + (sc.durationMs || (sc.durationSeconds ? sc.durationSeconds * 1000 : 0) || sc.estimatedDurationMs || 5000), 0) / 1000)
+      : 60;
+
     const effectiveDuration = [targetDurationSeconds, desiredDurationSeconds, targetDuration].find(
       (d) => typeof d === "number" && Number.isFinite(d) && d > 0
-    ) || 60;
+    ) || totalScenesDurationSec || 60;
 
     const result = await StoryImporterService.createStoryFromDraft({
       title: title || "Untitled Story",

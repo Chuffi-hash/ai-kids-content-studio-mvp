@@ -97,14 +97,22 @@ export default function StoryCreatePage() {
     setReviewMode("import");
 
     try {
+      const targetSec = data.targetDurationSeconds && data.targetDurationSeconds > 0
+        ? data.targetDurationSeconds
+        : undefined;
+
       const draft = await parseScriptForDraft({
         rawText: data.rawText,
         title: data.title,
         language: data.language || "Hindi",
-        targetDuration: data.targetDurationSeconds || 60,
-        targetDurationSeconds: data.targetDurationSeconds || 60,
+        targetDuration: targetSec,
+        targetDurationSeconds: targetSec,
         existingCharacters: characters.map((c) => ({ id: c.id, name: c.name, species: c.species })),
       });
+
+      if (data.genre) {
+        draft.metadata = { ...(draft.metadata || {}), genre: data.genre };
+      }
 
       setDraftResult(draft);
       setStep("review");

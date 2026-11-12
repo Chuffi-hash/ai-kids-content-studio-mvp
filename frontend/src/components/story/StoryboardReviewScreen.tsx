@@ -292,7 +292,7 @@ export const StoryboardReviewScreen: React.FC<StoryboardReviewScreenProps> = ({
                 fontWeight: 600,
               }}
             >
-              ⏱️ Total Duration: {totalCalculatedDuration}s (Target: {draft.targetDurationSeconds}s)
+              ⏱️ Total Duration: {totalCalculatedDuration}s {draft.targetDurationSeconds && draft.targetDurationSeconds > 0 ? `(Target: ${draft.targetDurationSeconds}s)` : '(No Limit • Script Length)'}
             </span>
           </div>
         </div>

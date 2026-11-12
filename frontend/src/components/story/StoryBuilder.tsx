@@ -186,9 +186,14 @@ export default function StoryBuilder({
   const [importText, setImportText] = useState<string>("");
   const [importTitle, setImportTitle] = useState<string>("");
   const [importLanguage, setImportLanguage] = useState<string>("Hindi");
-  const [importDuration, setImportDuration] = useState<number>(60);
+  const [importDuration, setImportDuration] = useState<number>(0); // 0 = No Limit (Auto / Full Script Length)
+  const [isCustomDuration, setIsCustomDuration] = useState<boolean>(false);
+  const [customDurationInput, setCustomDurationInput] = useState<string>("120");
   const [importFormat, setImportFormat] = useState<"16:9" | "9:16">("16:9");
-  const [importGenre, setImportGenre] = useState<string>("Educational");
+  const [importGenre, setImportGenre] = useState<string>("Auto"); // Auto = Auto-Detect from Script (No Limit)
+  const [isCustomGenre, setIsCustomGenre] = useState<boolean>(false);
+  const [customGenreInput, setCustomGenreInput] = useState<string>("");
+  const [customAiGenreInput, setCustomAiGenreInput] = useState<string>("");
   const [importError, setImportError] = useState<string | null>(null);
 
   React.useEffect(() => {
@@ -229,7 +234,10 @@ Earth: पतझड़ के बाद नया बसंत आता है!
     setImportTitle("Earth's Promise: The Four Seasons");
     setImportText(SAMPLE_FOUR_SEASONS);
     setImportLanguage("Hindi");
-    setImportDuration(60);
+    setImportDuration(0); // 0 = No Limit (Auto)
+    setIsCustomDuration(false);
+    setImportGenre("Educational");
+    setIsCustomGenre(false);
     setImportError(null);
   }
 
@@ -239,24 +247,36 @@ Earth: पतझड़ के बाद नया बसंत आता है!
       return;
     }
     setImportError(null);
+
+    const parsedCustomDuration = parseInt(customDurationInput, 10);
+    const effectiveDuration = isCustomDuration
+      ? (Number.isFinite(parsedCustomDuration) && parsedCustomDuration > 0 ? parsedCustomDuration : 0)
+      : importDuration;
+
+    const effectiveGenre = isCustomGenre && customGenreInput.trim()
+      ? customGenreInput.trim()
+      : (importGenre === "Auto" ? undefined : importGenre);
+
     if (onImport) {
       onImport({
         rawText: importText,
         title: importTitle || undefined,
         language: importLanguage,
         format: importFormat,
-        genre: importGenre,
-        targetDurationSeconds: importDuration,
+        genre: effectiveGenre,
+        targetDurationSeconds: effectiveDuration,
       });
     }
   }
 
   const estimatedScenes =
-    form.desiredDurationSeconds <= 30
-      ? "3"
-      : form.desiredDurationSeconds <= 60
-        ? "4"
-        : "5–6";
+    form.desiredDurationSeconds === 0
+      ? "Auto / Full Story"
+      : form.desiredDurationSeconds <= 30
+        ? "3"
+        : form.desiredDurationSeconds <= 60
+          ? "4"
+          : "5–6";
 
   return (
     <div className="story-studio-workbench">
@@ -326,6 +346,11 @@ Earth: पतझड़ के बाद नया बसंत आता है!
                 onClick={() => {
                   setImportText("");
                   setImportTitle("");
+                  setImportDuration(0);
+                  setIsCustomDuration(false);
+                  setImportGenre("Auto");
+                  setIsCustomGenre(false);
+                  setCustomGenreInput("");
                   setImportError(null);
                 }}
               >
@@ -384,28 +409,88 @@ Earth: पतझड़ के बाद नया बसंत आता है!
               <label className="studio-label">Target Duration</label>
               <select
                 className="studio-input"
-                value={importDuration}
-                onChange={(e) => setImportDuration(Number(e.target.value))}
+                value={isCustomDuration ? "custom" : importDuration}
+                onChange={(e) => {
+                  if (e.target.value === "custom") {
+                    setIsCustomDuration(true);
+                  } else {
+                    setIsCustomDuration(false);
+                    setImportDuration(Number(e.target.value));
+                  }
+                }}
               >
+                <option value={0}>♾️ No Limit / Script Length (Auto)</option>
                 <option value={30}>30s (~2 scenes)</option>
                 <option value={60}>60s (~4 scenes)</option>
                 <option value={90}>90s (~5 scenes)</option>
                 <option value={120}>2 min (~6 scenes)</option>
+                <option value={180}>3 min (~8 scenes)</option>
+                <option value={300}>5 min (~12 scenes)</option>
+                <option value={600}>10 min (~20 scenes)</option>
+                <option value={900}>15 min (Extended Story)</option>
+                <option value="custom">✏️ Custom Duration...</option>
               </select>
+              {isCustomDuration && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px' }}>
+                  <input
+                    type="number"
+                    min="1"
+                    className="studio-input"
+                    placeholder="Enter seconds (e.g. 150)"
+                    value={customDurationInput}
+                    onChange={(e) => setCustomDurationInput(e.target.value)}
+                    style={{ flex: 1 }}
+                    autoFocus
+                  />
+                  <span style={{ fontSize: '12px', color: 'var(--ed-text-muted, #64748b)', whiteSpace: 'nowrap' }}>
+                    seconds
+                  </span>
+                </div>
+              )}
             </div>
 
             <div className="studio-field">
               <label className="studio-label">Genre</label>
               <select
                 className="studio-input"
-                value={importGenre}
-                onChange={(e) => setImportGenre(e.target.value)}
+                value={isCustomGenre ? "custom" : importGenre}
+                onChange={(e) => {
+                  if (e.target.value === "custom") {
+                    setIsCustomGenre(true);
+                  } else {
+                    setIsCustomGenre(false);
+                    setImportGenre(e.target.value);
+                  }
+                }}
               >
+                <option value="Auto">✨ Auto-Detect from Script (No Limit)</option>
                 <option value="Educational">Educational & Science</option>
-                <option value="Adventure">Adventure</option>
+                <option value="Adventure">Adventure & Quest</option>
                 <option value="Bedtime">Bedtime & Calm</option>
-                <option value="Comedy">Fun & Playful</option>
+                <option value="Comedy">Fun & Playful / Comedy</option>
+                <option value="Fantasy">Magic & Fantasy</option>
+                <option value="Moral">Moral & Fable</option>
+                <option value="Sci-Fi">Sci-Fi & Space</option>
+                <option value="Friendship">Friendship & Social</option>
+                <option value="Nature">Nature & Animals</option>
+                <option value="Superhero">Action & Superhero</option>
+                <option value="Mystery">Mystery & Detective</option>
+                <option value="Rhymes">Nursery Rhyme & Music</option>
+                <option value="DailyLife">Everyday Life & Family</option>
+                <option value="custom">✏️ Custom Genre...</option>
               </select>
+              {isCustomGenre && (
+                <div style={{ marginTop: '6px' }}>
+                  <input
+                    type="text"
+                    className="studio-input"
+                    placeholder="Type custom genre (e.g. Space Dinosaurs, Mythology)..."
+                    value={customGenreInput}
+                    onChange={(e) => setCustomGenreInput(e.target.value)}
+                    autoFocus
+                  />
+                </div>
+              )}
             </div>
           </div>
 
@@ -847,11 +932,12 @@ Earth: पतझड़ के बाद नया बसंत आता है!
                 <div className="studio-control-block">
                   <label className="studio-label">Pacing & Duration</label>
                   <div
-                    className="studio-segmented-group cols-3"
+                    className="studio-segmented-group cols-4"
                     role="radiogroup"
                     aria-label="Pacing & Duration"
                   >
                     {[
+                      { id: 0, label: "No Limit", icon: "♾️", desc: "Adaptive" },
                       { id: 30, label: "30s", icon: "⚡", desc: "~3 scenes" },
                       { id: 60, label: "60s", icon: "⏱️", desc: "~4 scenes" },
                       {
@@ -899,22 +985,44 @@ Earth: पतझड़ के बाद नया बसंत आता है!
                       { id: "Educational", label: "Learning", icon: "🔬" },
                       { id: "Fantasy", label: "Magic & Fantasy", icon: "🪄" },
                       { id: "Friendship", label: "Friendship", icon: "🤝" },
+                      { id: "Moral", label: "Moral & Fable", icon: "📖" },
+                      { id: "Sci-Fi", label: "Sci-Fi & Space", icon: "🚀" },
+                      { id: "Custom", label: "Custom...", icon: "✏️" },
                     ].map((g) => (
                       <button
                         key={g.id}
                         type="button"
                         role="radio"
-                        aria-checked={form.genre === g.id}
-                        className={`genre-badge-pill ${form.genre === g.id ? "active" : ""}`}
-                        onClick={() =>
-                          setForm((prev) => ({ ...prev, genre: g.id }))
-                        }
+                        aria-checked={form.genre === g.id || (g.id === "Custom" && !["Adventure", "Bedtime", "Comedy", "Educational", "Fantasy", "Friendship", "Moral", "Sci-Fi"].includes(form.genre))}
+                        className={`genre-badge-pill ${form.genre === g.id || (g.id === "Custom" && !["Adventure", "Bedtime", "Comedy", "Educational", "Fantasy", "Friendship", "Moral", "Sci-Fi"].includes(form.genre)) ? "active" : ""}`}
+                        onClick={() => {
+                          if (g.id === "Custom") {
+                            setForm((prev) => ({ ...prev, genre: customAiGenreInput || "Custom" }));
+                          } else {
+                            setForm((prev) => ({ ...prev, genre: g.id }));
+                          }
+                        }}
                       >
                         <span>{g.icon}</span>
                         <span>{g.label}</span>
                       </button>
                     ))}
                   </div>
+                  {(!["Adventure", "Bedtime", "Comedy", "Educational", "Fantasy", "Friendship", "Moral", "Sci-Fi"].includes(form.genre) || form.genre === "Custom") && (
+                    <div style={{ marginTop: "10px" }}>
+                      <input
+                        type="text"
+                        className="studio-input"
+                        placeholder="Enter custom genre / theme (e.g. Space Dinosaurs, Mythology)..."
+                        value={customAiGenreInput}
+                        onChange={(e) => {
+                          setCustomAiGenreInput(e.target.value);
+                          setForm((prev) => ({ ...prev, genre: e.target.value || "Custom" }));
+                        }}
+                        autoFocus
+                      />
+                    </div>
+                  )}
                 </div>
 
                 {/* Language & Visual Style Compact Row */}
@@ -979,7 +1087,7 @@ Earth: पतझड़ के बाद नया बसंत आता है!
                     <span className="prod-badge">PROD</span>
                     <span className="prod-text">
                       Generates <strong>~{estimatedScenes} scenes</strong> •{" "}
-                      {form.desiredDurationSeconds}s • {form.ageGroup} •{" "}
+                      {form.desiredDurationSeconds === 0 ? "Adaptive Duration (No Limit)" : `${form.desiredDurationSeconds}s`} • {form.ageGroup} •{" "}
                       {form.visualStyle}
                     </span>
                   </div>
