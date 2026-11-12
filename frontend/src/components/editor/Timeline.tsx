@@ -120,6 +120,9 @@ interface TimelineProps {
   onPreviewNarration?: (scene: EditorScene) => void;
   onRegenerateNarration?: (sceneId: string) => void;
   onSelectTrack?: (track: string) => void;
+  branding?: any;
+  onUpdateBranding?: (branding: any) => void;
+  onOpenBrandingModal?: () => void;
 }
 
 interface TimelineLayoutItem<T> {
@@ -203,6 +206,9 @@ export const Timeline: React.FC<TimelineProps> = ({
   onPreviewNarration,
   onRegenerateNarration,
   onSelectTrack,
+  branding,
+  onUpdateBranding,
+  onOpenBrandingModal,
 }) => {
   // Right-click context menu state
   const [contextMenu, setContextMenu] = useState<{
@@ -1030,6 +1036,15 @@ export const Timeline: React.FC<TimelineProps> = ({
             <MusicIcon size={13} />
             <span>Soundtrack</span>
           </div>
+          <div
+            className="ed-track-header track-branding"
+            style={{ cursor: 'pointer', height: '34px', minHeight: '34px' }}
+            onClick={() => onOpenBrandingModal?.()}
+            title="Click to configure Channel Logo and Branding overlay"
+          >
+            <span style={{ fontSize: '12px' }}>🏷️</span>
+            <span>Branding</span>
+          </div>
         </div>
 
         {/* Scrollable Tracks Content */}
@@ -1676,6 +1691,72 @@ export const Timeline: React.FC<TimelineProps> = ({
                 <span>
                   Soundtrack: {selectedMusic.replace('/storage/music/', '').replace(/\.mp3$/, '')}
                 </span>
+              </div>
+            )}
+          </div>
+
+          {/* Track: Channel Branding Overlay */}
+          <div
+            className="ed-track-row track-branding"
+            style={{ height: '34px', minHeight: '34px', position: 'relative' }}
+            onClick={handleTrackRowClick}
+            onDoubleClick={() => onOpenBrandingModal?.()}
+            title="Branding Overlay Track (Click to edit timing, double-click to open settings)"
+          >
+            {branding?.enabled && branding?.logoUrl ? (
+              <div
+                className="ed-branding-clip"
+                style={{
+                  position: 'absolute',
+                  left: `${msToPx(branding.startTimeMs || 0)}px`,
+                  width: `${Math.max(40, msToPx(branding.alwaysVisible ? totalDurationMs : Math.max(1000, (branding.endTimeMs || totalDurationMs) - (branding.startTimeMs || 0))))}px`,
+                  height: '24px',
+                  top: '5px',
+                  background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.4), rgba(99, 102, 241, 0.35))',
+                  border: '1px solid #8b5cf6',
+                  borderRadius: '4px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '0 8px',
+                  fontSize: '11px',
+                  color: '#ffffff',
+                  cursor: 'pointer',
+                  overflow: 'hidden',
+                  whiteSpace: 'nowrap',
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenBrandingModal?.();
+                }}
+              >
+                <img
+                  src={resolveAssetUrl(branding.logoUrl)}
+                  alt="Logo"
+                  style={{ width: '16px', height: '16px', objectFit: 'contain' }}
+                />
+                <span style={{ fontWeight: 600 }}>{branding.channelName || 'Channel Logo'}</span>
+                <span style={{ opacity: 0.75, fontSize: '10px' }}>
+                  ({branding.alwaysVisible ? 'Entire Video' : `${formatTimeMs(branding.startTimeMs || 0)} - ${formatTimeMs(branding.endTimeMs || totalDurationMs)}`})
+                </span>
+              </div>
+            ) : (
+              <div
+                style={{
+                  position: 'absolute',
+                  left: '10px',
+                  top: '5px',
+                  fontSize: '11px',
+                  color: 'var(--ed-text-muted, #94a3b8)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  cursor: 'pointer',
+                }}
+                onClick={() => onOpenBrandingModal?.()}
+              >
+                <span>🏷️ No Channel Logo Added</span>
+                <span style={{ color: '#a78bfa', textDecoration: 'underline' }}>+ Add Channel Logo</span>
               </div>
             )}
           </div>

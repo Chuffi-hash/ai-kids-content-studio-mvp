@@ -25,6 +25,8 @@ import { StoryDetailsModal } from '../components/editor/StoryDetailsModal';
 import { ImportScriptModal } from '../components/editor/ImportScriptModal';
 import { CharacterBuilderModal } from '../components/characters/CharacterBuilderModal';
 import GoogleFlowProjectModal from '../components/common/GoogleFlowProjectModal';
+import { ChannelLogoModal } from '../components/editor/ChannelLogoModal';
+import { fetchBrandingConfig, ChannelBrandingConfig, DEFAULT_BRANDING_CONFIG } from '../services/branding.service';
 import { buildRigFromAppearance } from '../utils/customCharacterRig';
 import { createCharacter, updateCharacter, updateCharacterVoice } from '../services/character.service';
 import { SceneDialogue, EducationalOverlayType, AspectRatioType } from '../types/animation';
@@ -46,6 +48,8 @@ export default function StoryDetailPage() {
   const [isStoryDetailsOpen, setIsStoryDetailsOpen] = useState<boolean>(false);
   const [isCharacterBuilderOpen, setIsCharacterBuilderOpen] = useState<boolean>(false);
   const [isFlowModalOpen, setIsFlowModalOpen] = useState<boolean>(false);
+  const [isChannelLogoOpen, setIsChannelLogoOpen] = useState<boolean>(false);
+  const [branding, setBranding] = useState<ChannelBrandingConfig | null>(null);
 
   // Layout & Sidebar states
   const [activeSidebarSection, setActiveSidebarSection] = useState<SidebarSection>('scenes');
@@ -135,6 +139,14 @@ export default function StoryDetailPage() {
         } catch (e) {
           console.warn('Could not load versions:', e);
         }
+      }
+
+      // Load channel branding config
+      try {
+        const brandingConfig = await fetchBrandingConfig(storyId);
+        setBranding(brandingConfig);
+      } catch (e) {
+        console.warn('Could not load channel branding:', e);
       }
 
       setSaveStatus('saved');
@@ -1847,6 +1859,8 @@ export default function StoryDetailPage() {
         isAutoDirecting={isAutoDirecting}
         hasValidationErrors={hasValidationErrors}
         validationMessage={validationMessage}
+        branding={branding}
+        onOpenChannelLogo={() => setIsChannelLogoOpen(true)}
       />
 
       {/* 2. Main Middle Workspace Area (Left Persistent Sidebar + Left Drawer + Center Preview Canvas + Right Inspector) */}
@@ -1949,6 +1963,9 @@ export default function StoryDetailPage() {
             activeFormat={previewFormat}
             onFormatChange={setPreviewFormat}
             onUpdateAnimationData={(newData) => activeSceneId && handleUpdateAnimationData(activeSceneId, newData)}
+            branding={branding}
+            onUpdateBranding={(newB) => setBranding(newB)}
+            onOpenBrandingModal={() => setIsChannelLogoOpen(true)}
           />
         ) : (
           <div
@@ -2093,6 +2110,9 @@ export default function StoryDetailPage() {
         onPreviewNarration={handlePreviewNarration}
         onRegenerateNarration={handleRegenerateNarration}
         onSelectTrack={handleSelectTrack}
+        branding={branding}
+        onUpdateBranding={(newB) => setBranding(newB)}
+        onOpenBrandingModal={() => setIsChannelLogoOpen(true)}
       />
 
       {/* 4. Real Media Assembly & Video Export Modal */}
@@ -2161,6 +2181,20 @@ export default function StoryDetailPage() {
           onConnectionChange={(_connected: boolean, newId: string | null) => {
             setStory((prev) => (prev ? { ...prev, flowProjectId: newId } : prev));
           }}
+        />
+      )}
+
+      {/* 9. Channel Logo & Watermark Branding Modal */}
+      {story && (
+        <ChannelLogoModal
+          isOpen={isChannelLogoOpen}
+          onClose={() => setIsChannelLogoOpen(false)}
+          storyId={story.storyId || story.id || storyId || ''}
+          currentBranding={branding || DEFAULT_BRANDING_CONFIG}
+          onBrandingSaved={(saved) => {
+            setBranding(saved);
+          }}
+          activeFormat={previewFormat === '9:16' || previewFormat === '1:1' || previewFormat === '4:5' ? previewFormat : '16:9'}
         />
       )}
     </div>

@@ -172,3 +172,31 @@ backgroundStudioRouter.post('/upload', async (req, res) => {
     res.status(500).json({ message: err.message || 'Background upload failed' });
   }
 });
+
+// POST adapt background for another aspect ratio
+backgroundStudioRouter.post('/adapt', async (req, res) => {
+  try {
+    const { sourceAssetId, targetAspectRatio, adaptationMode, focalPoint, cropOffset } = req.body;
+    if (!sourceAssetId || !targetAspectRatio || !adaptationMode) {
+      return res.status(400).json({
+        message: 'sourceAssetId, targetAspectRatio, and adaptationMode are required',
+      });
+    }
+
+    const asset = await backgroundStudioService.adaptBackground({
+      sourceAssetId,
+      targetAspectRatio,
+      adaptationMode,
+      focalPoint,
+      cropOffset,
+    });
+
+    res.json({
+      success: true,
+      asset,
+    });
+  } catch (err: any) {
+    console.error('[BackgroundStudio] Adaptation failed:', err);
+    res.status(500).json({ message: err.message || 'Background adaptation failed' });
+  }
+});

@@ -23,8 +23,11 @@ export interface BackgroundAsset {
   height: number;
   originalDimensions?: { width: number; height: number };
   originalAspectRatio?: '16:9' | '9:16' | '1:1' | '4:5';
+  derivedFromAssetId?: string;
+  adaptationMode?: 'cover' | 'contain' | 'ai_extend' | 'variant';
   fitMode?: 'cover' | 'contain' | 'fill';
   focalPoint?: { x: number; y: number };
+  cropOffset?: { x: number; y: number };
   stylePreset?: string;
   customStyleInstructions?: string;
   mode?: 'environment_only' | 'complete_scene';

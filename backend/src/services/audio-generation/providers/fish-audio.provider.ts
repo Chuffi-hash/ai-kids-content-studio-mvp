@@ -42,7 +42,7 @@ export const FISH_VOICE_PRESETS: Record<
   fish_default: {
     gender: "neutral",
     lang: "hi",
-    name: "Fish Audio Default Voice (Zero-Shot)",
+    name: "Fish Audio Default Voice",
     description:
       "Fish Audio base multilingual zero-shot voice for natural storytelling (no reference required)",
   },

@@ -282,10 +282,105 @@ export class BackgroundStudioService {
       aspectRatio,
       width: aspectRatio === '9:16' ? 720 : 1280,
       height: aspectRatio === '9:16' ? 1280 : 720,
+      originalDimensions: {
+        width: aspectRatio === '9:16' ? 720 : 1280,
+        height: aspectRatio === '9:16' ? 1280 : 720,
+      },
+      originalAspectRatio: aspectRatio,
       tags: ['uploaded', environmentType, aspectRatio],
       createdAt: new Date().toISOString(),
     };
 
     return await this.saveBackgroundAsset(asset);
+  }
+
+  /**
+   * Adapts an existing background asset to a target aspect ratio.
+   * Modes:
+   * - 'contain': Letterbox / pillarbox preserving original artwork without cropping.
+   * - 'cover': Crops to target aspect ratio using focal point / crop offset.
+   * - 'ai_extend': AI outpainting / expanding the scene to target aspect ratio.
+   * - 'variant': Generates a new variant matching target aspect ratio with original style preset.
+   *
+   * Crucial: NEVER overwrites the original asset. Creates a new derived asset record.
+   */
+  public async adaptBackground(options: {
+    sourceAssetId: string;
+    targetAspectRatio: '16:9' | '9:16' | '1:1' | '4:5';
+    adaptationMode: 'cover' | 'contain' | 'ai_extend' | 'variant';
+    focalPoint?: { x: number; y: number };
+    cropOffset?: { x: number; y: number };
+  }): Promise<BackgroundAsset> {
+    await this.ensureStorage();
+    const assets = await this.getAllBackgrounds();
+    const sourceAsset = assets.find((a) => a.id === options.sourceAssetId);
+    if (!sourceAsset) {
+      throw new Error(`Source background asset not found: ${options.sourceAssetId}`);
+    }
+
+    const targetDims =
+      options.targetAspectRatio === '9:16'
+        ? { width: 1080, height: 1920 }
+        : options.targetAspectRatio === '1:1'
+        ? { width: 1080, height: 1080 }
+        : options.targetAspectRatio === '4:5'
+        ? { width: 1080, height: 1350 }
+        : { width: 1920, height: 1080 };
+
+    if (options.adaptationMode === 'variant' || options.adaptationMode === 'ai_extend') {
+      const modeInstruction =
+        options.adaptationMode === 'ai_extend'
+          ? `Outpainted extension of ${sourceAsset.environmentType || 'scenic background'} seamlessly extending margins to ${options.targetAspectRatio}. Maintain exact central features, lighting, textures and atmosphere.`
+          : sourceAsset.description || sourceAsset.prompt;
+
+      const newAsset = await this.generateBackground({
+        name: `${sourceAsset.name} (${options.targetAspectRatio} ${options.adaptationMode === 'ai_extend' ? 'Extended' : 'Variant'})`,
+        environmentType: sourceAsset.environmentType,
+        details: modeInstruction,
+        mood: sourceAsset.tags?.find((t) => ['calm', 'cheerful', 'magical', 'adventurous'].includes(t)),
+        styleId: sourceAsset.stylePreset || 'storybook_illustrated',
+        customStyleInstructions: sourceAsset.customStyleInstructions,
+        mode: sourceAsset.mode || 'environment_only',
+        aspectRatio: options.targetAspectRatio,
+        provider: sourceAsset.provider === 'gemini' ? 'gemini' : 'pollinations',
+      });
+
+      newAsset.derivedFromAssetId = sourceAsset.id;
+      newAsset.adaptationMode = options.adaptationMode;
+      newAsset.originalDimensions = sourceAsset.originalDimensions || {
+        width: sourceAsset.width,
+        height: sourceAsset.height,
+      };
+      newAsset.originalAspectRatio = sourceAsset.originalAspectRatio || sourceAsset.aspectRatio;
+      newAsset.focalPoint = options.focalPoint || { x: 50, y: 50 };
+      newAsset.cropOffset = options.cropOffset || { x: 0, y: 0 };
+      newAsset.fitMode = 'cover';
+
+      return await this.saveBackgroundAsset(newAsset);
+    }
+
+    // For 'cover' and 'contain', create a new derived asset record referencing the original image file
+    const derivedId = `adapted-bg-${Date.now()}-${randomUUID().slice(0, 6)}`;
+    const adaptedAsset: BackgroundAsset = {
+      ...sourceAsset,
+      id: derivedId,
+      name: `${sourceAsset.name} (${options.targetAspectRatio} ${options.adaptationMode.toUpperCase()})`,
+      aspectRatio: options.targetAspectRatio,
+      width: targetDims.width,
+      height: targetDims.height,
+      originalDimensions: sourceAsset.originalDimensions || {
+        width: sourceAsset.width,
+        height: sourceAsset.height,
+      },
+      originalAspectRatio: sourceAsset.originalAspectRatio || sourceAsset.aspectRatio,
+      derivedFromAssetId: sourceAsset.id,
+      adaptationMode: options.adaptationMode,
+      fitMode: options.adaptationMode === 'contain' ? 'contain' : 'cover',
+      focalPoint: options.focalPoint || sourceAsset.focalPoint || { x: 50, y: 50 },
+      cropOffset: options.cropOffset || sourceAsset.cropOffset || { x: 0, y: 0 },
+      createdAt: new Date().toISOString(),
+    };
+
+    return await this.saveBackgroundAsset(adaptedAsset);
   }
 }

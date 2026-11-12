@@ -300,6 +300,13 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
   const currentBgUrl = isBgExplicitlyRemoved ? '' : (scene.animationData?.background?.imageUrl || scene.imageUrl || '');
   const currentBgFit = scene.animationData?.background?.fit || 'cover';
 
+  // Multi-aspect-ratio background reuse and adaptation state
+  const [adaptationMode, setAdaptationMode] = useState<'cover' | 'contain' | 'ai_extend' | 'variant'>('cover');
+  const [targetAspect, setTargetAspect] = useState<'16:9' | '9:16' | '1:1' | '4:5'>('16:9');
+  const [focalPoint, setFocalPoint] = useState<{ x: number; y: number }>({ x: 50, y: 50 });
+  const [isAdaptingBg, setIsAdaptingBg] = useState<boolean>(false);
+  const [originalSourceUrl, setOriginalSourceUrl] = useState<string | null>(null);
+
   // Dedicated audio player state for scene inspector
   const audioPlayerRef = React.useRef<HTMLAudioElement | null>(null);
   const [audioPlaying, setAudioPlaying] = useState<boolean>(false);
@@ -887,6 +894,49 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
           if (res.scene) onUpdateScene(scene.sceneId, res.scene);
         })
         .catch((err) => setBgError(err.message || 'Failed to update fit mode'));
+    }
+  };
+
+  const handleAdaptBackground = async (mode: 'cover' | 'contain' | 'ai_extend' | 'variant') => {
+    if (!currentBgUrl) return;
+    setIsAdaptingBg(true);
+    setBgError(null);
+    try {
+      if (!originalSourceUrl) {
+        setOriginalSourceUrl(currentBgUrl);
+      }
+      const res = await fetch('/api/background-studio/adapt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sourceAssetId: (scene.animationData as any)?.background?.id || scene.sceneId,
+          targetAspectRatio: targetAspect,
+          adaptationMode: mode,
+          focalPoint,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || 'Background adaptation failed');
+      }
+      const data = await res.json();
+      if (data.asset?.imageUrl) {
+        if (onSetBackground) {
+          await onSetBackground(scene.sceneId, data.asset.imageUrl, data.asset.fitMode || (mode === 'contain' ? 'contain' : 'cover'));
+        }
+      }
+    } catch (err: any) {
+      console.error('Adaptation failed:', err);
+      setBgError(err.message || 'Failed to adapt background');
+    } finally {
+      setIsAdaptingBg(false);
+    }
+  };
+
+  const handleResetToOriginalBackground = async () => {
+    if (originalSourceUrl && onSetBackground) {
+      await onSetBackground(scene.sceneId, originalSourceUrl, 'cover');
+      setOriginalSourceUrl(null);
     }
   };
 
@@ -2690,6 +2740,148 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                         >
                           Contain (Fit)
                         </button>
+                      </div>
+                    </div>
+
+                    {/* Multi-Aspect-Ratio & Resolution Adaptation Panel */}
+                    <div style={{ marginTop: '10px', padding: '10px', background: 'rgba(255, 255, 255, 0.03)', borderRadius: '6px', border: '1px solid var(--ed-border)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                        <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--ed-text)' }}>
+                          Multi-Format Adaptation
+                        </span>
+                        <span style={{ fontSize: '10px', color: 'var(--ed-text-muted)' }}>
+                          Target: {targetAspect === '9:16' ? '1080×1920' : targetAspect === '1:1' ? '1080×1080' : targetAspect === '4:5' ? '1080×1350' : '1920×1080'}
+                        </span>
+                      </div>
+
+                      {/* Format selector buttons */}
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '4px', marginBottom: '8px' }}>
+                        {(['16:9', '9:16', '1:1', '4:5'] as const).map((fmt) => (
+                          <button
+                            key={fmt}
+                            type="button"
+                            className={`ed-tool-btn ${targetAspect === fmt ? 'active' : ''}`}
+                            style={{
+                              fontSize: '10px',
+                              padding: '3px 4px',
+                              textAlign: 'center',
+                              background: targetAspect === fmt ? '#8b5cf6' : undefined,
+                              color: targetAspect === fmt ? '#ffffff' : undefined,
+                              borderColor: targetAspect === fmt ? '#8b5cf6' : undefined,
+                            }}
+                            onClick={() => setTargetAspect(fmt)}
+                          >
+                            {fmt}
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Adaptation Mode selector */}
+                      <div style={{ marginBottom: '8px' }}>
+                        <label className="ed-field-label" style={{ fontSize: '10px', marginBottom: '3px' }}>Adaptation Mode</label>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '4px' }}>
+                          <button
+                            type="button"
+                            className={`ed-bg-fit-btn ${adaptationMode === 'cover' ? 'active' : ''}`}
+                            onClick={() => { setAdaptationMode('cover'); handleToggleFit('cover'); }}
+                            style={{ fontSize: '10px', padding: '4px 6px' }}
+                            title="Crop edges to fill target aspect ratio"
+                          >
+                            Cover (Crop)
+                          </button>
+                          <button
+                            type="button"
+                            className={`ed-bg-fit-btn ${adaptationMode === 'contain' ? 'active' : ''}`}
+                            onClick={() => { setAdaptationMode('contain'); handleToggleFit('contain'); }}
+                            style={{ fontSize: '10px', padding: '4px 6px' }}
+                            title="Letterbox / Pillarbox whole artwork without crop"
+                          >
+                            Contain (Fit)
+                          </button>
+                          <button
+                            type="button"
+                            className={`ed-bg-fit-btn ${adaptationMode === 'ai_extend' ? 'active' : ''}`}
+                            onClick={() => { setAdaptationMode('ai_extend'); handleAdaptBackground('ai_extend'); }}
+                            disabled={isAdaptingBg}
+                            style={{ fontSize: '10px', padding: '4px 6px' }}
+                            title="AI Outpainting to extend edges for target format"
+                          >
+                            AI Extend
+                          </button>
+                          <button
+                            type="button"
+                            className={`ed-bg-fit-btn ${adaptationMode === 'variant' ? 'active' : ''}`}
+                            onClick={() => { setAdaptationMode('variant'); handleAdaptBackground('variant'); }}
+                            disabled={isAdaptingBg}
+                            style={{ fontSize: '10px', padding: '4px 6px' }}
+                            title="Generate a fresh variant matching target format"
+                          >
+                            New Variant
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Focal Point Presets */}
+                      <div style={{ marginBottom: '8px' }}>
+                        <label className="ed-field-label" style={{ fontSize: '10px', marginBottom: '3px' }}>Focal Point Preset</label>
+                        <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                          {[
+                            { label: 'Center', x: 50, y: 50 },
+                            { label: 'Top', x: 50, y: 20 },
+                            { label: 'Bottom', x: 50, y: 80 },
+                            { label: 'Left', x: 20, y: 50 },
+                            { label: 'Right', x: 80, y: 50 },
+                          ].map((fp) => (
+                            <button
+                              key={fp.label}
+                              type="button"
+                              className="ed-tool-btn"
+                              style={{
+                                fontSize: '9px',
+                                padding: '2px 6px',
+                                background: focalPoint.x === fp.x && focalPoint.y === fp.y ? 'rgba(139, 92, 246, 0.25)' : undefined,
+                                borderColor: focalPoint.x === fp.x && focalPoint.y === fp.y ? '#8b5cf6' : undefined,
+                              }}
+                              onClick={() => setFocalPoint({ x: fp.x, y: fp.y })}
+                            >
+                              {fp.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Adaptation Action buttons */}
+                      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                        <button
+                          type="button"
+                          className="ed-tool-btn"
+                          disabled={isAdaptingBg}
+                          onClick={() => handleAdaptBackground('ai_extend')}
+                          style={{ fontSize: '10px', padding: '4px 8px', flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '4px', background: 'rgba(139, 92, 246, 0.15)', borderColor: '#8b5cf6', color: '#c4b5fd' }}
+                        >
+                          <SparklesIcon size={11} />
+                          <span>{isAdaptingBg ? 'Processing...' : `AI Outpaint for ${targetAspect}`}</span>
+                        </button>
+                        <button
+                          type="button"
+                          className="ed-tool-btn"
+                          disabled={isAdaptingBg}
+                          onClick={() => handleAdaptBackground('variant')}
+                          style={{ fontSize: '10px', padding: '4px 8px', flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
+                        >
+                          <span>Generate Variant</span>
+                        </button>
+                        {originalSourceUrl && (
+                          <button
+                            type="button"
+                            className="ed-tool-btn"
+                            onClick={handleResetToOriginalBackground}
+                            style={{ fontSize: '10px', padding: '4px 8px', color: '#f87171' }}
+                            title="Reset background to original source before adaptation"
+                          >
+                            Reset to Original
+                          </button>
+                        )}
                       </div>
                     </div>
 

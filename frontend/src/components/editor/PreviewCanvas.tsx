@@ -3,6 +3,7 @@ import { EditorScene } from "../../types/editor";
 import { CharacterInstance, VectorSceneData, AspectRatioType } from "../../types/animation";
 import { VectorSceneCanvas } from "./animation/VectorSceneCanvas";
 import { RemotionPlayerPreview } from "./RemotionPlayerPreview";
+import { ChannelBrandingCanvasOverlay } from "./ChannelBrandingCanvasOverlay";
 import { formatTimeMs } from "../../utils/timingEngine";
 import { resolveAssetUrl } from "../../utils/urlHelper";
 import {
@@ -51,6 +52,9 @@ interface PreviewCanvasProps {
   onFormatChange?: (format: AspectRatioType) => void;
   onTimeUpdate?: (timeMs: number) => void;
   onPlayStateChange?: (playing: boolean) => void;
+  branding?: any;
+  onUpdateBranding?: (branding: any) => void;
+  onOpenBrandingModal?: () => void;
 }
 
 export const PreviewCanvas: React.FC<PreviewCanvasProps> = ({
@@ -84,6 +88,9 @@ export const PreviewCanvas: React.FC<PreviewCanvasProps> = ({
   onFormatChange,
   onTimeUpdate,
   onPlayStateChange,
+  branding,
+  onUpdateBranding,
+  onOpenBrandingModal,
 }) => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -633,6 +640,14 @@ export const PreviewCanvas: React.FC<PreviewCanvasProps> = ({
             )}
           </div>
         )}
+        {/* Layer 6: Live Channel Branding Overlay (zIndex: 35) */}
+        <ChannelBrandingCanvasOverlay
+          branding={branding}
+          format={activeFormat}
+          currentTimeMs={currentTimeMs}
+          onUpdateBranding={onUpdateBranding}
+          onOpenModal={onOpenBrandingModal}
+        />
       </div>
 
       {/* Preview Transport Scrubber Bar - only displayed for scene/export modes; Remotion Player renders its own transport bar */}

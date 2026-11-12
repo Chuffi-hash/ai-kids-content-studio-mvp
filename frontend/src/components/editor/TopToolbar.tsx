@@ -42,6 +42,8 @@ interface TopToolbarProps {
   isAutoDirecting?: boolean;
   hasValidationErrors?: boolean;
   validationMessage?: string;
+  branding?: any;
+  onOpenChannelLogo?: () => void;
 }
 
 export const TopToolbar: React.FC<TopToolbarProps> = ({
@@ -70,6 +72,8 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
   isAutoDirecting,
   hasValidationErrors,
   validationMessage,
+  branding,
+  onOpenChannelLogo,
 }) => {
   const [localTitle, setLocalTitle] = useState(title);
   const [isEditingTarget, setIsEditingTarget] = useState(false);
@@ -356,6 +360,27 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
           >
             <SparklesIcon size={13} color="#a78bfa" />
             <span>{isAutoDirecting ? 'Directing...' : 'Auto-Direct Story'}</span>
+          </button>
+        )}
+        {onOpenChannelLogo && (
+          <button
+            type="button"
+            className="ed-btn-action"
+            onClick={onOpenChannelLogo}
+            title={branding?.logoUrl ? "Edit channel logo overlay and placement" : "Add channel logo overlay to your video"}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontSize: '11.5px',
+              padding: '5px 11px',
+              background: branding?.logoUrl ? 'rgba(139, 92, 246, 0.16)' : 'var(--ed-surface-elevated, rgba(255, 255, 255, 0.06))',
+              borderColor: branding?.logoUrl ? '#8b5cf6' : 'var(--ed-border, rgba(255, 255, 255, 0.15))',
+              color: branding?.logoUrl ? '#c4b5fd' : 'var(--ed-text)',
+            }}
+          >
+            <span style={{ fontSize: '12px' }}>🏷️</span>
+            <span>{branding?.logoUrl ? 'Edit Channel Logo' : '+ Add Channel Logo'}</span>
           </button>
         )}
         <ThemeSelector />

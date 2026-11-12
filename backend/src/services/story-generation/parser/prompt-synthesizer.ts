@@ -96,6 +96,70 @@ export class PromptSynthesizer {
   }
 
   /**
+   * Generates target image specifications clause for image generation pipelines,
+   * distinguishing target dimensions and source dimensions.
+   */
+  public static getTargetImageSpecifications(
+    aspectRatio?: string,
+    sourceDimensions?: { width: number; height: number }
+  ): {
+    width: number;
+    height: number;
+    aspectRatio: string;
+    orientation: 'Landscape' | 'Vertical' | 'Square';
+    composition: string;
+    specificationClause: string;
+  } {
+    const raw = (aspectRatio || '16:9').toLowerCase();
+    let width = 1920;
+    let height = 1080;
+    let canonical = '16:9';
+    let orientation: 'Landscape' | 'Vertical' | 'Square' = 'Landscape';
+    let composition =
+      'Wide panoramic vista, expansive horizontal eye-level framing, lateral space for action and character placement';
+
+    if (raw.includes('9:16') || raw.includes('reel') || raw.includes('short')) {
+      width = 1080;
+      height = 1920;
+      canonical = '9:16';
+      orientation = 'Vertical';
+      composition =
+        'Vertical composition, high sky, deep ground, open center, vertical breathing room for character placement in the middle safe area';
+    } else if (raw.includes('1:1') || raw.includes('square')) {
+      width = 1080;
+      height = 1080;
+      canonical = '1:1';
+      orientation = 'Square';
+      composition =
+        'Balanced compact framing, centered focus, even borders and balanced ground plane';
+    } else if (raw.includes('4:5') || (raw.includes('portrait') && !raw.includes('9:16'))) {
+      width = 1080;
+      height = 1350;
+      canonical = '4:5';
+      orientation = 'Vertical';
+      composition =
+        'Slightly taller than wide social feed composition with balanced upper sky and lower ground plane';
+    }
+
+    let specClause = `TARGET IMAGE SPECIFICATIONS: Width: ${width}px, Height: ${height}px, Aspect Ratio: ${canonical}, Orientation: ${orientation}. Composition: ${composition}.`;
+    if (
+      sourceDimensions &&
+      (sourceDimensions.width !== width || sourceDimensions.height !== height)
+    ) {
+      specClause += ` (Source dimensions: ${sourceDimensions.width}x${sourceDimensions.height} -> Target: ${width}x${height}).`;
+    }
+
+    return {
+      width,
+      height,
+      aspectRatio: canonical,
+      orientation,
+      composition,
+      specificationClause: specClause,
+    };
+  }
+
+  /**
    * Synthesizes or normalizes a scene background image prompt.
    * If an explicit prompt exists in the script, it respects and preserves the user's prompt
    * while ensuring proper negative constraints (open foreground, no baked-in characters/text)
@@ -111,6 +175,8 @@ export class PromptSynthesizer {
     visualStyle?: string;
     look?: Partial<ProjectLookDNA>;
     bibles?: ProjectBibles;
+    includeSpecificationsClause?: boolean;
+    sourceDimensions?: { width: number; height: number };
   }): string {
     const {
       explicitPrompt,
@@ -122,6 +188,8 @@ export class PromptSynthesizer {
       visualStyle,
       look,
       bibles,
+      includeSpecificationsClause,
+      sourceDimensions,
     } = options;
     const activeLook: ProjectLookDNA = { ...DEFAULT_PROJECT_LOOK, ...(look || {}) };
 
@@ -274,6 +342,12 @@ export class PromptSynthesizer {
         prompt += ` ${negativeAvoid}`;
       }
 
+      if (includeSpecificationsClause) {
+        const effectiveAspect = aspectRatio || activeLook.aspect;
+        const specs = PromptSynthesizer.getTargetImageSpecifications(effectiveAspect, sourceDimensions);
+        prompt += ` ${specs.specificationClause}`;
+      }
+
       return prompt;
     }
 
@@ -298,6 +372,12 @@ export class PromptSynthesizer {
       `Keep the central foreground open and clean for a separately animated character.`,
       `Environment only. ${activeLook.avoid}`,
     ];
+
+    if (includeSpecificationsClause) {
+      const effectiveAspect = aspectRatio || activeLook.aspect;
+      const specs = PromptSynthesizer.getTargetImageSpecifications(effectiveAspect, sourceDimensions);
+      promptParts.push(specs.specificationClause);
+    }
 
     return promptParts.join(' ');
   }
