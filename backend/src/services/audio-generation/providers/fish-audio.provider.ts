@@ -26,7 +26,8 @@ export const DEFAULT_FISH_MODEL = "s2.1-pro-free";
 export const ALLOWED_FREE_MODELS = ["s2.1-pro-free"] as const;
 
 /**
- * Curated preset voices for Fish Audio with verified gender classifications and characteristics.
+ * Curated preset voices for Fish Audio with verified active reference IDs from the official provider catalogue.
+ * Tested and verified against https://api.fish.audio/v1/tts.
  */
 export const FISH_VOICE_PRESETS: Record<
   string,
@@ -41,41 +42,49 @@ export const FISH_VOICE_PRESETS: Record<
   fish_default: {
     gender: "neutral",
     lang: "hi",
-    name: "Fish Audio Default Voice",
+    name: "Fish Audio Default Voice (Zero-Shot)",
     description:
-      "Fish Audio base multilingual zero-shot voice for natural storytelling",
+      "Fish Audio base multilingual zero-shot voice for natural storytelling (no reference required)",
   },
   fish_female_narrator: {
-    referenceId: "e86e4e5d6d844c8eb5607b019800a7fa",
+    referenceId: "4d7609058bd34213b1378b29efbde1f1",
     gender: "female",
     lang: "hi",
     name: "Pooja (Female - Warm Storyteller)",
     description:
-      "Warm, expressive female narrator ideal for bedtime stories and calm scenes",
-  },
-  fish_female_bright: {
-    referenceId: "7f92f8afb8ec43bf81429cc1c9199cb1",
-    gender: "female",
-    lang: "en",
-    name: "Aria (Female - Bright & Cheerful)",
-    description:
-      "Lively, friendly female voice perfect for girl characters and upbeat narration",
+      "Warm, clear, and expressive female voice ideal for bedtime stories and gentle narration",
   },
   fish_male_narrator: {
-    referenceId: "1b4f4c4a4a5848fa88c5efb0f279f001",
+    referenceId: "0de8162a9e384545a0106046b57488a7",
     gender: "male",
     lang: "hi",
     name: "Kabir (Male - Deep Narrator)",
     description:
-      "Rich, cinematic male narrator for adventurous, grand, and educational stories",
+      "Rich, resonant, cinematic male narrator for adventurous, grand, and educational stories",
+  },
+  fish_male_storyteller: {
+    referenceId: "06134e9a49cb4a36997b75402c8a0621",
+    gender: "male",
+    lang: "hi",
+    name: "Rajnish (Male - Wise Storyteller)",
+    description:
+      "Calm, crisp, authoritative male voice for educational and moral fable narration",
+  },
+  fish_female_bright: {
+    referenceId: "0af969cba6c24e74b5600d6df78e8975",
+    gender: "female",
+    lang: "en",
+    name: "Aria (Female - Bright & Clear)",
+    description:
+      "Lively, clear female voice perfect for girl characters and cheerful English/multilingual narration",
   },
   fish_male_friendly: {
-    referenceId: "3d8a7c2b4e1f486fa029bc4178201a4e",
+    referenceId: "0327fdb5da9e4fd782899a8058c8ae2b",
     gender: "male",
     lang: "en",
     name: "Leo (Male - Friendly Explorer)",
     description:
-      "Enthusiastic and warm male voice suitable for brave boy characters and sidekicks",
+      "Calm, warm, articulate male voice suitable for brave boy characters and documentary narration",
   },
 };
 
@@ -482,6 +491,14 @@ export class FishAudioProvider implements TTSProvider {
           ) {
             throw new Error(
               `Fish Audio free model "${model}" rejected: ${errorBody}. Free-model policy prevents falling back to paid models.`,
+            );
+          }
+          if (
+            errorBody.toLowerCase().includes("reference not found") ||
+            errorBody.toLowerCase().includes("reference")
+          ) {
+            throw new Error(
+              `Fish Audio voice "${voice}" reference (${referenceId || 'unknown'}) was not found or is no longer accessible on the provider. Please select "Fish Audio Default Voice (Zero-Shot)" or a verified voice preset.`,
             );
           }
           throw new Error(

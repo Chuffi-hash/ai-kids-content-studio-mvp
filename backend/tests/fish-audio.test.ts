@@ -390,6 +390,50 @@ test('Fish Audio - Multi-Key Parsing and Sanitization', () => {
   assert.deepStrictEqual(empty, []);
 });
 
+test('Fish Audio - Reference Not Found Descriptive Error Handling', async () => {
+  const originalFetch = global.fetch;
+  try {
+    global.fetch = async (url: any, init: any) => {
+      return {
+        ok: false,
+        status: 400,
+        text: async () => JSON.stringify({ message: 'Reference not found', status: 400 }),
+      } as any;
+    };
+
+    const provider = new FishAudioProvider({ apiKey: 'test-key' });
+    await assert.rejects(
+      async () => {
+        await provider.generateSpeech('Test speech', { voice: 'fish_male_narrator' });
+      },
+      (err: any) => {
+        assert.ok(err.message.includes('not found or is no longer accessible'));
+        assert.ok(err.message.includes('fish_male_narrator'));
+        return true;
+      },
+      'Should throw descriptive error indicating the specific voice and reference was not found'
+    );
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('Fish Audio - Verified Active Preset Reference IDs and Default Voice', () => {
+  const defaultVoice = DEFAULT_FISH_VOICES.find(v => v.id === 'fish_default');
+  assert.ok(defaultVoice, 'fish_default must exist in catalogue');
+  assert.strictEqual(defaultVoice.gender, 'neutral');
+
+  const kabir = DEFAULT_FISH_VOICES.find(v => v.id === 'fish_male_narrator');
+  assert.ok(kabir, 'Kabir must exist in catalogue');
+  assert.strictEqual(kabir.gender, 'male');
+  assert.strictEqual(kabir.lang, 'hi');
+
+  const pooja = DEFAULT_FISH_VOICES.find(v => v.id === 'fish_female_narrator');
+  assert.ok(pooja, 'Pooja must exist in catalogue');
+  assert.strictEqual(pooja.gender, 'female');
+  assert.strictEqual(pooja.lang, 'hi');
+});
+
 test('TTS Provider Factory - Coexistence of Kokoro-82M and Fish Audio', async () => {
   const origIsAvail = (TTSProviderFactory as any).kokoroProvider.isAvailable;
   (TTSProviderFactory as any).kokoroProvider.isAvailable = async () => true;
