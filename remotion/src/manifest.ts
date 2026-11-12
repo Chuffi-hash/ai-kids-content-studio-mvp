@@ -391,6 +391,7 @@ export interface SceneShot {
     x: number;
     y: number;
     scale: number;
+    rotation?: number;
     flipX: boolean;
     action?: string;
     expression?: string;

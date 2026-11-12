@@ -27,8 +27,19 @@ const adapter = new PrismaPg({
 
 const prisma = new PrismaClient({ adapter });
 
-export function initializeDatabase() {
-  console.log('[Database] Database initialized with Prisma (PostgreSQL)');
+export async function initializeDatabase() {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    console.log('[Database] Database initialized with Prisma (PostgreSQL) - Schema verified & connection healthy');
+  } catch (err: any) {
+    if (err.code === 'P1001') {
+      console.warn('[Database] Warning: PostgreSQL database is unreachable at localhost. Please verify that Postgres is running on the configured port.');
+    } else if (err.code === 'P2022') {
+      console.warn('[Database] Warning: Schema column mismatch detected. Run `npx prisma migrate deploy` to synchronize migrations.');
+    } else {
+      console.warn('[Database] Database connection notice:', err.message);
+    }
+  }
 }
 
 // Story operations
@@ -883,21 +894,23 @@ export async function updateShot(shotId: string, updates: Partial<{
   transitionType: string;
   transitionDurationMs: number;
   userEditedFields: any;
-}>) {
-  const existing = await (prisma.shot as any).findUnique({
+}>, options?: { isUserAction?: boolean }) {
+  const existing = await prisma.shot.findUnique({
     where: { shotId },
   });
 
   const currentEdited = (existing?.userEditedFields as Record<string, boolean>) || {};
   const newlyEdited: Record<string, boolean> = { ...currentEdited };
 
-  for (const key of Object.keys(updates)) {
-    if (key !== 'userEditedFields' && key !== 'updatedAt') {
-      newlyEdited[key] = true;
+  if (options?.isUserAction !== false) {
+    for (const key of Object.keys(updates)) {
+      if (key !== 'userEditedFields' && key !== 'updatedAt') {
+        newlyEdited[key] = true;
+      }
     }
   }
 
-  return await (prisma.shot as any).update({
+  return await prisma.shot.update({
     where: { shotId },
     data: {
       ...updates,
@@ -1015,12 +1028,15 @@ export async function reconcileAndUpsertSceneShots(
       }
     }
 
-    // Preserve unmatched existing shots with approved work or attached assets by archiving them
+    // Preserve unmatched existing shots with approved work, user edits, custom prompts, or attached assets by archiving them
     for (const ex of existing) {
       if (!matchedIds.has(ex.id)) {
         const hasAsset = Boolean(ex.backgroundUrl || ex.videoUrl);
         const isApproved = ex.approvalStatus === 'approved';
-        if (hasAsset || isApproved) {
+        const userEdits = ((ex as any).userEditedFields as Record<string, boolean>) || {};
+        const hasUserEdits = Object.keys(userEdits).length > 0;
+        const hasCustomPrompt = Array.isArray(ex.promptHistory) && ex.promptHistory.length > 1;
+        if (hasAsset || isApproved || hasUserEdits || hasCustomPrompt) {
           const archived = await tx.shot.update({
             where: { id: ex.id },
             data: { productionStatus: 'archived' },

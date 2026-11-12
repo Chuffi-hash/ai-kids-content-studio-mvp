@@ -1,0 +1,4 @@
+-- AlterTable
+ALTER TABLE "Story" ADD COLUMN IF NOT EXISTS "originalScript" TEXT;
+ALTER TABLE "Story" ADD COLUMN IF NOT EXISTS "visualBible" JSONB;
+ALTER TABLE "Story" ADD COLUMN IF NOT EXISTS "productionStage" TEXT DEFAULT 'script';

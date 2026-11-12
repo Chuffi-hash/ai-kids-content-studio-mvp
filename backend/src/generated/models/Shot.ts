@@ -30,12 +30,14 @@ export type ShotAvgAggregateOutputType = {
   number: number | null
   order: number | null
   durationMs: number | null
+  transitionDurationMs: number | null
 }
 
 export type ShotSumAggregateOutputType = {
   number: number | null
   order: number | null
   durationMs: number | null
+  transitionDurationMs: number | null
 }
 
 export type ShotMinAggregateOutputType = {
@@ -59,6 +61,8 @@ export type ShotMinAggregateOutputType = {
   assetStatus: string | null
   approvalStatus: string | null
   productionStatus: string | null
+  transitionType: string | null
+  transitionDurationMs: number | null
   createdAt: Date | null
   updatedAt: Date | null
 }
@@ -84,6 +88,8 @@ export type ShotMaxAggregateOutputType = {
   assetStatus: string | null
   approvalStatus: string | null
   productionStatus: string | null
+  transitionType: string | null
+  transitionDurationMs: number | null
   createdAt: Date | null
   updatedAt: Date | null
 }
@@ -112,6 +118,9 @@ export type ShotCountAggregateOutputType = {
   assetStatus: number
   approvalStatus: number
   productionStatus: number
+  transitionType: number
+  transitionDurationMs: number
+  userEditedFields: number
   createdAt: number
   updatedAt: number
   _all: number
@@ -122,12 +131,14 @@ export type ShotAvgAggregateInputType = {
   number?: true
   order?: true
   durationMs?: true
+  transitionDurationMs?: true
 }
 
 export type ShotSumAggregateInputType = {
   number?: true
   order?: true
   durationMs?: true
+  transitionDurationMs?: true
 }
 
 export type ShotMinAggregateInputType = {
@@ -151,6 +162,8 @@ export type ShotMinAggregateInputType = {
   assetStatus?: true
   approvalStatus?: true
   productionStatus?: true
+  transitionType?: true
+  transitionDurationMs?: true
   createdAt?: true
   updatedAt?: true
 }
@@ -176,6 +189,8 @@ export type ShotMaxAggregateInputType = {
   assetStatus?: true
   approvalStatus?: true
   productionStatus?: true
+  transitionType?: true
+  transitionDurationMs?: true
   createdAt?: true
   updatedAt?: true
 }
@@ -204,6 +219,9 @@ export type ShotCountAggregateInputType = {
   assetStatus?: true
   approvalStatus?: true
   productionStatus?: true
+  transitionType?: true
+  transitionDurationMs?: true
+  userEditedFields?: true
   createdAt?: true
   updatedAt?: true
   _all?: true
@@ -319,6 +337,9 @@ export type ShotGroupByOutputType = {
   assetStatus: string
   approvalStatus: string
   productionStatus: string
+  transitionType: string | null
+  transitionDurationMs: number | null
+  userEditedFields: runtime.JsonValue | null
   createdAt: Date
   updatedAt: Date
   _count: ShotCountAggregateOutputType | null
@@ -370,6 +391,9 @@ export type ShotWhereInput = {
   assetStatus?: Prisma.StringFilter<"Shot"> | string
   approvalStatus?: Prisma.StringFilter<"Shot"> | string
   productionStatus?: Prisma.StringFilter<"Shot"> | string
+  transitionType?: Prisma.StringNullableFilter<"Shot"> | string | null
+  transitionDurationMs?: Prisma.IntNullableFilter<"Shot"> | number | null
+  userEditedFields?: Prisma.JsonNullableFilter<"Shot">
   createdAt?: Prisma.DateTimeFilter<"Shot"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"Shot"> | Date | string
   story?: Prisma.XOR<Prisma.StoryScalarRelationFilter, Prisma.StoryWhereInput>
@@ -400,6 +424,9 @@ export type ShotOrderByWithRelationInput = {
   assetStatus?: Prisma.SortOrder
   approvalStatus?: Prisma.SortOrder
   productionStatus?: Prisma.SortOrder
+  transitionType?: Prisma.SortOrderInput | Prisma.SortOrder
+  transitionDurationMs?: Prisma.SortOrderInput | Prisma.SortOrder
+  userEditedFields?: Prisma.SortOrderInput | Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
   story?: Prisma.StoryOrderByWithRelationInput
@@ -433,6 +460,9 @@ export type ShotWhereUniqueInput = Prisma.AtLeast<{
   assetStatus?: Prisma.StringFilter<"Shot"> | string
   approvalStatus?: Prisma.StringFilter<"Shot"> | string
   productionStatus?: Prisma.StringFilter<"Shot"> | string
+  transitionType?: Prisma.StringNullableFilter<"Shot"> | string | null
+  transitionDurationMs?: Prisma.IntNullableFilter<"Shot"> | number | null
+  userEditedFields?: Prisma.JsonNullableFilter<"Shot">
   createdAt?: Prisma.DateTimeFilter<"Shot"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"Shot"> | Date | string
   story?: Prisma.XOR<Prisma.StoryScalarRelationFilter, Prisma.StoryWhereInput>
@@ -463,6 +493,9 @@ export type ShotOrderByWithAggregationInput = {
   assetStatus?: Prisma.SortOrder
   approvalStatus?: Prisma.SortOrder
   productionStatus?: Prisma.SortOrder
+  transitionType?: Prisma.SortOrderInput | Prisma.SortOrder
+  transitionDurationMs?: Prisma.SortOrderInput | Prisma.SortOrder
+  userEditedFields?: Prisma.SortOrderInput | Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
   _count?: Prisma.ShotCountOrderByAggregateInput
@@ -499,6 +532,9 @@ export type ShotScalarWhereWithAggregatesInput = {
   assetStatus?: Prisma.StringWithAggregatesFilter<"Shot"> | string
   approvalStatus?: Prisma.StringWithAggregatesFilter<"Shot"> | string
   productionStatus?: Prisma.StringWithAggregatesFilter<"Shot"> | string
+  transitionType?: Prisma.StringNullableWithAggregatesFilter<"Shot"> | string | null
+  transitionDurationMs?: Prisma.IntNullableWithAggregatesFilter<"Shot"> | number | null
+  userEditedFields?: Prisma.JsonNullableWithAggregatesFilter<"Shot">
   createdAt?: Prisma.DateTimeWithAggregatesFilter<"Shot"> | Date | string
   updatedAt?: Prisma.DateTimeWithAggregatesFilter<"Shot"> | Date | string
 }
@@ -525,6 +561,9 @@ export type ShotCreateInput = {
   assetStatus?: string
   approvalStatus?: string
   productionStatus?: string
+  transitionType?: string | null
+  transitionDurationMs?: number | null
+  userEditedFields?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Date | string
   updatedAt?: Date | string
   story: Prisma.StoryCreateNestedOneWithoutShotsInput
@@ -555,6 +594,9 @@ export type ShotUncheckedCreateInput = {
   assetStatus?: string
   approvalStatus?: string
   productionStatus?: string
+  transitionType?: string | null
+  transitionDurationMs?: number | null
+  userEditedFields?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Date | string
   updatedAt?: Date | string
 }
@@ -581,6 +623,9 @@ export type ShotUpdateInput = {
   assetStatus?: Prisma.StringFieldUpdateOperationsInput | string
   approvalStatus?: Prisma.StringFieldUpdateOperationsInput | string
   productionStatus?: Prisma.StringFieldUpdateOperationsInput | string
+  transitionType?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  transitionDurationMs?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  userEditedFields?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   story?: Prisma.StoryUpdateOneRequiredWithoutShotsNestedInput
@@ -611,6 +656,9 @@ export type ShotUncheckedUpdateInput = {
   assetStatus?: Prisma.StringFieldUpdateOperationsInput | string
   approvalStatus?: Prisma.StringFieldUpdateOperationsInput | string
   productionStatus?: Prisma.StringFieldUpdateOperationsInput | string
+  transitionType?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  transitionDurationMs?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  userEditedFields?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -639,6 +687,9 @@ export type ShotCreateManyInput = {
   assetStatus?: string
   approvalStatus?: string
   productionStatus?: string
+  transitionType?: string | null
+  transitionDurationMs?: number | null
+  userEditedFields?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Date | string
   updatedAt?: Date | string
 }
@@ -665,6 +716,9 @@ export type ShotUpdateManyMutationInput = {
   assetStatus?: Prisma.StringFieldUpdateOperationsInput | string
   approvalStatus?: Prisma.StringFieldUpdateOperationsInput | string
   productionStatus?: Prisma.StringFieldUpdateOperationsInput | string
+  transitionType?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  transitionDurationMs?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  userEditedFields?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -693,6 +747,9 @@ export type ShotUncheckedUpdateManyInput = {
   assetStatus?: Prisma.StringFieldUpdateOperationsInput | string
   approvalStatus?: Prisma.StringFieldUpdateOperationsInput | string
   productionStatus?: Prisma.StringFieldUpdateOperationsInput | string
+  transitionType?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  transitionDurationMs?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  userEditedFields?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -731,6 +788,9 @@ export type ShotCountOrderByAggregateInput = {
   assetStatus?: Prisma.SortOrder
   approvalStatus?: Prisma.SortOrder
   productionStatus?: Prisma.SortOrder
+  transitionType?: Prisma.SortOrder
+  transitionDurationMs?: Prisma.SortOrder
+  userEditedFields?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
 }
@@ -739,6 +799,7 @@ export type ShotAvgOrderByAggregateInput = {
   number?: Prisma.SortOrder
   order?: Prisma.SortOrder
   durationMs?: Prisma.SortOrder
+  transitionDurationMs?: Prisma.SortOrder
 }
 
 export type ShotMaxOrderByAggregateInput = {
@@ -762,6 +823,8 @@ export type ShotMaxOrderByAggregateInput = {
   assetStatus?: Prisma.SortOrder
   approvalStatus?: Prisma.SortOrder
   productionStatus?: Prisma.SortOrder
+  transitionType?: Prisma.SortOrder
+  transitionDurationMs?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
 }
@@ -787,6 +850,8 @@ export type ShotMinOrderByAggregateInput = {
   assetStatus?: Prisma.SortOrder
   approvalStatus?: Prisma.SortOrder
   productionStatus?: Prisma.SortOrder
+  transitionType?: Prisma.SortOrder
+  transitionDurationMs?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
 }
@@ -795,6 +860,7 @@ export type ShotSumOrderByAggregateInput = {
   number?: Prisma.SortOrder
   order?: Prisma.SortOrder
   durationMs?: Prisma.SortOrder
+  transitionDurationMs?: Prisma.SortOrder
 }
 
 export type ShotCreateNestedManyWithoutStoryInput = {
@@ -903,6 +969,9 @@ export type ShotCreateWithoutStoryInput = {
   assetStatus?: string
   approvalStatus?: string
   productionStatus?: string
+  transitionType?: string | null
+  transitionDurationMs?: number | null
+  userEditedFields?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Date | string
   updatedAt?: Date | string
   scene: Prisma.SceneCreateNestedOneWithoutShotsInput
@@ -931,6 +1000,9 @@ export type ShotUncheckedCreateWithoutStoryInput = {
   assetStatus?: string
   approvalStatus?: string
   productionStatus?: string
+  transitionType?: string | null
+  transitionDurationMs?: number | null
+  userEditedFields?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Date | string
   updatedAt?: Date | string
 }
@@ -988,6 +1060,9 @@ export type ShotScalarWhereInput = {
   assetStatus?: Prisma.StringFilter<"Shot"> | string
   approvalStatus?: Prisma.StringFilter<"Shot"> | string
   productionStatus?: Prisma.StringFilter<"Shot"> | string
+  transitionType?: Prisma.StringNullableFilter<"Shot"> | string | null
+  transitionDurationMs?: Prisma.IntNullableFilter<"Shot"> | number | null
+  userEditedFields?: Prisma.JsonNullableFilter<"Shot">
   createdAt?: Prisma.DateTimeFilter<"Shot"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"Shot"> | Date | string
 }
@@ -1014,6 +1089,9 @@ export type ShotCreateWithoutSceneInput = {
   assetStatus?: string
   approvalStatus?: string
   productionStatus?: string
+  transitionType?: string | null
+  transitionDurationMs?: number | null
+  userEditedFields?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Date | string
   updatedAt?: Date | string
   story: Prisma.StoryCreateNestedOneWithoutShotsInput
@@ -1042,6 +1120,9 @@ export type ShotUncheckedCreateWithoutSceneInput = {
   assetStatus?: string
   approvalStatus?: string
   productionStatus?: string
+  transitionType?: string | null
+  transitionDurationMs?: number | null
+  userEditedFields?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Date | string
   updatedAt?: Date | string
 }
@@ -1095,6 +1176,9 @@ export type ShotCreateManyStoryInput = {
   assetStatus?: string
   approvalStatus?: string
   productionStatus?: string
+  transitionType?: string | null
+  transitionDurationMs?: number | null
+  userEditedFields?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Date | string
   updatedAt?: Date | string
 }
@@ -1121,6 +1205,9 @@ export type ShotUpdateWithoutStoryInput = {
   assetStatus?: Prisma.StringFieldUpdateOperationsInput | string
   approvalStatus?: Prisma.StringFieldUpdateOperationsInput | string
   productionStatus?: Prisma.StringFieldUpdateOperationsInput | string
+  transitionType?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  transitionDurationMs?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  userEditedFields?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   scene?: Prisma.SceneUpdateOneRequiredWithoutShotsNestedInput
@@ -1149,6 +1236,9 @@ export type ShotUncheckedUpdateWithoutStoryInput = {
   assetStatus?: Prisma.StringFieldUpdateOperationsInput | string
   approvalStatus?: Prisma.StringFieldUpdateOperationsInput | string
   productionStatus?: Prisma.StringFieldUpdateOperationsInput | string
+  transitionType?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  transitionDurationMs?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  userEditedFields?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -1176,6 +1266,9 @@ export type ShotUncheckedUpdateManyWithoutStoryInput = {
   assetStatus?: Prisma.StringFieldUpdateOperationsInput | string
   approvalStatus?: Prisma.StringFieldUpdateOperationsInput | string
   productionStatus?: Prisma.StringFieldUpdateOperationsInput | string
+  transitionType?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  transitionDurationMs?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  userEditedFields?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -1203,6 +1296,9 @@ export type ShotCreateManySceneInput = {
   assetStatus?: string
   approvalStatus?: string
   productionStatus?: string
+  transitionType?: string | null
+  transitionDurationMs?: number | null
+  userEditedFields?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Date | string
   updatedAt?: Date | string
 }
@@ -1229,6 +1325,9 @@ export type ShotUpdateWithoutSceneInput = {
   assetStatus?: Prisma.StringFieldUpdateOperationsInput | string
   approvalStatus?: Prisma.StringFieldUpdateOperationsInput | string
   productionStatus?: Prisma.StringFieldUpdateOperationsInput | string
+  transitionType?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  transitionDurationMs?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  userEditedFields?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   story?: Prisma.StoryUpdateOneRequiredWithoutShotsNestedInput
@@ -1257,6 +1356,9 @@ export type ShotUncheckedUpdateWithoutSceneInput = {
   assetStatus?: Prisma.StringFieldUpdateOperationsInput | string
   approvalStatus?: Prisma.StringFieldUpdateOperationsInput | string
   productionStatus?: Prisma.StringFieldUpdateOperationsInput | string
+  transitionType?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  transitionDurationMs?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  userEditedFields?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -1284,6 +1386,9 @@ export type ShotUncheckedUpdateManyWithoutSceneInput = {
   assetStatus?: Prisma.StringFieldUpdateOperationsInput | string
   approvalStatus?: Prisma.StringFieldUpdateOperationsInput | string
   productionStatus?: Prisma.StringFieldUpdateOperationsInput | string
+  transitionType?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  transitionDurationMs?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  userEditedFields?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -1314,6 +1419,9 @@ export type ShotSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = r
   assetStatus?: boolean
   approvalStatus?: boolean
   productionStatus?: boolean
+  transitionType?: boolean
+  transitionDurationMs?: boolean
+  userEditedFields?: boolean
   createdAt?: boolean
   updatedAt?: boolean
   story?: boolean | Prisma.StoryDefaultArgs<ExtArgs>
@@ -1344,6 +1452,9 @@ export type ShotSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Extensio
   assetStatus?: boolean
   approvalStatus?: boolean
   productionStatus?: boolean
+  transitionType?: boolean
+  transitionDurationMs?: boolean
+  userEditedFields?: boolean
   createdAt?: boolean
   updatedAt?: boolean
   story?: boolean | Prisma.StoryDefaultArgs<ExtArgs>
@@ -1374,6 +1485,9 @@ export type ShotSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensio
   assetStatus?: boolean
   approvalStatus?: boolean
   productionStatus?: boolean
+  transitionType?: boolean
+  transitionDurationMs?: boolean
+  userEditedFields?: boolean
   createdAt?: boolean
   updatedAt?: boolean
   story?: boolean | Prisma.StoryDefaultArgs<ExtArgs>
@@ -1404,11 +1518,14 @@ export type ShotSelectScalar = {
   assetStatus?: boolean
   approvalStatus?: boolean
   productionStatus?: boolean
+  transitionType?: boolean
+  transitionDurationMs?: boolean
+  userEditedFields?: boolean
   createdAt?: boolean
   updatedAt?: boolean
 }
 
-export type ShotOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "shotId" | "storyId" | "sceneId" | "number" | "order" | "title" | "description" | "durationMs" | "shotType" | "cameraAngle" | "cameraMovement" | "lighting" | "shotDirection" | "characterInstructions" | "backgroundPrompt" | "videoPrompt" | "promptHistory" | "backgroundUrl" | "videoUrl" | "assetStatus" | "approvalStatus" | "productionStatus" | "createdAt" | "updatedAt", ExtArgs["result"]["shot"]>
+export type ShotOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "shotId" | "storyId" | "sceneId" | "number" | "order" | "title" | "description" | "durationMs" | "shotType" | "cameraAngle" | "cameraMovement" | "lighting" | "shotDirection" | "characterInstructions" | "backgroundPrompt" | "videoPrompt" | "promptHistory" | "backgroundUrl" | "videoUrl" | "assetStatus" | "approvalStatus" | "productionStatus" | "transitionType" | "transitionDurationMs" | "userEditedFields" | "createdAt" | "updatedAt", ExtArgs["result"]["shot"]>
 export type ShotInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   story?: boolean | Prisma.StoryDefaultArgs<ExtArgs>
   scene?: boolean | Prisma.SceneDefaultArgs<ExtArgs>
@@ -1452,6 +1569,9 @@ export type $ShotPayload<ExtArgs extends runtime.Types.Extensions.InternalArgs =
     assetStatus: string
     approvalStatus: string
     productionStatus: string
+    transitionType: string | null
+    transitionDurationMs: number | null
+    userEditedFields: runtime.JsonValue | null
     createdAt: Date
     updatedAt: Date
   }, ExtArgs["result"]["shot"]>
@@ -1902,6 +2022,9 @@ export interface ShotFieldRefs {
   readonly assetStatus: Prisma.FieldRef<"Shot", 'String'>
   readonly approvalStatus: Prisma.FieldRef<"Shot", 'String'>
   readonly productionStatus: Prisma.FieldRef<"Shot", 'String'>
+  readonly transitionType: Prisma.FieldRef<"Shot", 'String'>
+  readonly transitionDurationMs: Prisma.FieldRef<"Shot", 'Int'>
+  readonly userEditedFields: Prisma.FieldRef<"Shot", 'Json'>
   readonly createdAt: Prisma.FieldRef<"Shot", 'DateTime'>
   readonly updatedAt: Prisma.FieldRef<"Shot", 'DateTime'>
 }

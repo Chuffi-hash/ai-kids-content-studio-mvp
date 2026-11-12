@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { frames, validateManifest, type VideoManifest } from './manifest.js';
+import { evaluateEasing, evaluateCharacterPose } from './characters/animation-evaluator.js';
 
 const validManifest = (): VideoManifest => ({
   version: 1,
@@ -56,4 +57,36 @@ test('rejects invalid audio gain and frame rates', () => {
 test('converts millisecond durations to at least one frame', () => {
   assert.equal(frames(0, 30), 1);
   assert.equal(frames(1000, 30), 30);
+});
+
+test('evaluates motion path easing functions accurately', () => {
+  assert.equal(evaluateEasing('linear', 0.5), 0.5);
+  assert.equal(evaluateEasing('easeIn', 0.5), 0.25);
+  assert.equal(evaluateEasing('ease-in', 0.5), 0.25);
+  assert.equal(evaluateEasing('easeOut', 0.5), 0.75);
+  assert.equal(evaluateEasing('ease-out', 0.5), 0.75);
+  assert.equal(evaluateEasing('easeInOut', 0.5), 0.5);
+  assert.equal(evaluateEasing('ease-in-out', 0.5), 0.5);
+  assert.equal(evaluateEasing('smoothStep', 0.5), 0.5);
+  assert.equal(evaluateEasing('smooth-step', 0.5), 0.5);
+  assert.equal(evaluateEasing('unknown-bezier', 0.5), 0.5); // safe fallback
+});
+
+test('character pose evaluator preserves rotation and speaker state', () => {
+  const pose = evaluateCharacterPose({
+    instanceId: 'char-1',
+    characterId: 'char-bear',
+    name: 'Pip',
+    x: 640,
+    y: 360,
+    scale: 1.2,
+    rotation: 15,
+    flipX: false,
+    zIndex: 1,
+    isSpeaker: true,
+  });
+
+  assert.equal(pose.rotation, 15);
+  assert.equal(pose.scale, 1.2);
+  assert.equal(pose.isSpeaker, true);
 });

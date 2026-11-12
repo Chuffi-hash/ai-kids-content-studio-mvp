@@ -551,7 +551,24 @@ export class RemotionManifestAdapter {
             shotBg = this.resolveAssetUrl(shotBg);
           }
 
-          const charPlacements = (st.characterInstructions as any)?.placements || st.characterPlacements;
+          const rawCharPlacements = (st.characterInstructions as any)?.placements || st.characterPlacements;
+          const charPlacements = Array.isArray(rawCharPlacements)
+            ? rawCharPlacements.map((cp: any) => ({
+                instanceId: cp.instanceId,
+                characterId: cp.characterId,
+                name: cp.name,
+                x: cp.x,
+                y: cp.y,
+                scale: cp.scale,
+                rotation: typeof cp.rotation === 'number' ? cp.rotation : 0,
+                flipX: Boolean(cp.flipX),
+                action: cp.action,
+                expression: cp.expression,
+                zIndex: cp.zIndex,
+                isSpeaker: Boolean(cp.isSpeaker),
+              }))
+            : undefined;
+
           const shotTransition = (st as any).transition ||
             (st.shotDirection as any)?.transition ||
             ((st as any).transitionType ? { type: (st as any).transitionType, durationMs: (st as any).transitionDurationMs || 500 } : undefined);
@@ -756,6 +773,7 @@ export class RemotionManifestAdapter {
           flipX,
           zIndex: inst.zIndex ?? (instIdx + 1),
           expression: inst.expression || 'neutral',
+          isSpeaker: Boolean(inst.isSpeaker),
           customRig: rig,
         };
       });
@@ -817,7 +835,7 @@ export class RemotionManifestAdapter {
         pathD: o.pathD,
         startMs: o.startMs ?? 0,
         durationMs: o.durationMs ?? durationMs,
-        layerDepth: o.layerPosition === 'below_characters' || (o.zIndex !== undefined && o.zIndex < 0)
+        layerDepth: (o.layerDepth === 'below_characters' || o.layerPosition === 'below_characters' || (o.zIndex !== undefined && o.zIndex < 0))
           ? 'below_characters' as const
           : 'above_characters' as const,
       }));

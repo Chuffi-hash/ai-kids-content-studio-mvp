@@ -58,6 +58,7 @@ export default function StorySettings({
             value={durationSeconds}
             onChange={(e) => onDurationChange(Number(e.target.value))}
           >
+            <option value={0}>♾️ No Limit / Script Length (Auto)</option>
             <option value={30}>30s (Quick Teaser ~3 scenes)</option>
             <option value={60}>60s (Standard 1 Min ~4 scenes)</option>
             <option value={120}>120s (Extended 2 Mins ~5 scenes)</option>

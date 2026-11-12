@@ -47,6 +47,7 @@ function computeCameraTransform(opts: {
   rotation?: string;
   rotationDegrees?: number;
   cameraAngle?: string;
+  shotType?: string;
   progress: number;
   width: number;
   height: number;
@@ -56,6 +57,7 @@ function computeCameraTransform(opts: {
     rotation = 'none',
     rotationDegrees = 10,
     cameraAngle = 'eye_level',
+    shotType = 'wide_establishing',
     progress: t,
     width,
     height,
@@ -116,6 +118,21 @@ function computeCameraTransform(opts: {
   } else if (angleStr.includes('dutch')) {
     // Dutch Angle / tilted horizon
     rotationDeg += 4.5;
+  }
+
+  // 2D Shot Type Framing Adjustments
+  const cleanShotType = (shotType || '').toLowerCase().trim();
+  if (cleanShotType.includes('closeup') || cleanShotType.includes('close_up')) {
+    scale *= 1.18;
+    dy += Math.round(height * 0.02);
+  } else if (cleanShotType.includes('extreme_close')) {
+    scale *= 1.30;
+    dy += Math.round(height * 0.04);
+  } else if (cleanShotType.includes('extreme_wide') || cleanShotType.includes('wide_establishing')) {
+    scale *= 0.96;
+  } else if (cleanShotType.includes('over_the_shoulder') || cleanShotType.includes('over_shoulder')) {
+    scale *= 1.08;
+    dx += Math.round(width * 0.03);
   }
 
   // 2D Roll Rotation
@@ -481,6 +498,7 @@ function SceneView({
     rotation: rawRotation,
     rotationDegrees: rawDegrees,
     cameraAngle: activeShot?.cameraAngle,
+    shotType: activeShot?.shotType || scene.shotType,
     progress: cameraProgress,
     width,
     height,
@@ -501,8 +519,13 @@ function SceneView({
   const charOverrides = formatVariant?.characterOverrides;
   const overlayOverrides = formatVariant?.overlayOverrides;
 
-  // Coordinate adaptation for non-16:9 formats and storybook character scaling
-  const instances = (scene.characterInstances || []).map((inst, instIdx, arr) => {
+  // Helper function to adapt any character instance to the active format and dimensions
+  const adaptInstanceForFormat = (
+    inst: typeof scene.characterInstances extends (infer U)[] | undefined ? U : any,
+    placement: any,
+    instIdx: number,
+    arr: any[]
+  ) => {
     let targetFlipX = inst.flipX;
     if (arr.length === 2 && targetFlipX === undefined) {
       const other = arr[1 - instIdx];
@@ -511,34 +534,21 @@ function SceneView({
       }
     }
 
-    // Active shot character placement override (if defined)
-    const prevPlacement = prevShot?.characterPlacements?.find(
-      (cp) => cp.instanceId === inst.instanceId || cp.characterId === inst.characterId
-    );
-    const currPlacement = activeShot?.characterPlacements?.find(
-      (cp) => cp.instanceId === inst.instanceId || cp.characterId === inst.characterId
-    );
-
-    let rawX = currPlacement?.x ?? inst.x;
-    let rawY = currPlacement?.y ?? inst.y;
-    let rawScaleVal = currPlacement?.scale ?? inst.scale;
-
-    if (isCrossfading && prevPlacement && currPlacement) {
-      rawX = Math.round(prevPlacement.x + (currPlacement.x - prevPlacement.x) * crossfadeAlpha);
-      rawY = Math.round(prevPlacement.y + (currPlacement.y - prevPlacement.y) * crossfadeAlpha);
-      rawScaleVal = Number((prevPlacement.scale + (currPlacement.scale - prevPlacement.scale) * crossfadeAlpha).toFixed(2));
-    }
+    const rawX = placement?.x ?? inst.x;
+    const rawY = placement?.y ?? inst.y;
+    const rawScaleVal = placement?.scale ?? inst.scale;
 
     const baseInst = {
       ...inst,
       x: rawX,
       y: rawY,
       scale: rawScaleVal,
-      flipX: currPlacement?.flipX ?? targetFlipX ?? inst.flipX,
-      action: currPlacement?.action || inst.action || 'idle',
-      expression: (currPlacement?.expression || inst.expression) as FacialExpression | undefined,
-      zIndex: currPlacement?.zIndex ?? inst.zIndex ?? (instIdx + 1),
-      isSpeaker: currPlacement?.isSpeaker ?? inst.isSpeaker,
+      rotation: placement?.rotation ?? inst.rotation ?? 0,
+      flipX: placement?.flipX ?? targetFlipX ?? inst.flipX,
+      action: placement?.action || inst.action || 'idle',
+      expression: (placement?.expression || inst.expression) as FacialExpression | undefined,
+      zIndex: placement?.zIndex ?? inst.zIndex ?? (instIdx + 1),
+      isSpeaker: placement?.isSpeaker ?? inst.isSpeaker,
     };
 
     const override = charOverrides?.[inst.instanceId];
@@ -631,7 +641,25 @@ function SceneView({
     }
 
     return baseInst;
+  };
+
+  // Evaluate incoming instances for active shot
+  const instances = (scene.characterInstances || []).map((inst, instIdx, arr) => {
+    const currPlacement = activeShot?.characterPlacements?.find(
+      (cp) => cp.instanceId === inst.instanceId || cp.characterId === inst.characterId
+    );
+    return adaptInstanceForFormat(inst, currPlacement, instIdx, arr);
   });
+
+  // Evaluate outgoing instances for previous shot during crossfade
+  const outgoingInstances = isCrossfading && prevShot
+    ? (scene.characterInstances || []).map((inst, instIdx, arr) => {
+        const prevPlacement = prevShot.characterPlacements?.find(
+          (cp) => cp.instanceId === inst.instanceId || cp.characterId === inst.characterId
+        );
+        return adaptInstanceForFormat(inst, prevPlacement, instIdx, arr);
+      })
+    : [];
 
   // Dynamically map motion paths of animation clips to current format dimensions and anchored instance coordinates
   const scaledClips = useMemo(() => {
@@ -675,7 +703,8 @@ function SceneView({
     });
   }, [scene.animationClips, instances, scene.characterInstances, format, width, height]);
 
-  const sortedInstances = [...instances].sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
+  const sortedIncomingInstances = [...instances].sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
+  const sortedOutgoingInstances = [...outgoingInstances].sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
 
   // Overlays
   const overlays = (scene.overlays || []).map((o) => {
@@ -789,17 +818,22 @@ function SceneView({
           transformOrigin: '50% 50%',
         }}
       >
-        {/* Background Layer: Video Clip, Image Sequence, Background Image, or Storybook Scenic Canvas */}
-        {isCrossfading && prevShot?.backgroundUrl && (
-          <AbsoluteFill style={{ zIndex: 0 }}>
-            <Img
-              src={prevShot.backgroundUrl}
-              style={{
-                width: '100%',
-                height: '100%',
-                objectFit,
-              }}
-            />
+        {/* Background Layer: Outgoing Shot Background (during crossfade) */}
+        {isCrossfading && prevShot && (
+          <AbsoluteFill style={{ zIndex: 0, opacity: 1 - crossfadeAlpha }}>
+            {prevShot.videoUrl ? (
+              <Video
+                src={prevShot.videoUrl.startsWith('http') || prevShot.videoUrl.startsWith('data:') ? prevShot.videoUrl : staticFile(prevShot.videoUrl)}
+                style={{ width: '100%', height: '100%', objectFit }}
+              />
+            ) : prevShot.backgroundUrl ? (
+              <Img
+                src={prevShot.backgroundUrl}
+                style={{ width: '100%', height: '100%', objectFit }}
+              />
+            ) : (
+              <StorybookScenicBackdrop width={width} height={height} sceneNumber={scene.sceneNumber || 1} />
+            )}
           </AbsoluteFill>
         )}
         <AbsoluteFill style={{ zIndex: 1, opacity: isCrossfading ? crossfadeAlpha : 1 }}>
@@ -873,24 +907,49 @@ function SceneView({
             />
           ))}
 
-          {/* Articulated Vector Characters */}
-          {sortedInstances.map((inst) => {
-            const rig = inst.customRig || getVectorRig(inst.characterId);
-            const pose = evaluateCharacterPose(
-              inst,
-              scaledClips,
-              sceneRelativeMs,
-              scene.expressionCues || [],
-              dialogues
-            );
-            return (
-              <VectorCharacter
-                key={inst.instanceId}
-                rig={rig}
-                pose={pose}
-              />
-            );
-          })}
+          {/* Outgoing characters during crossfade */}
+          {isCrossfading && prevShot && sortedOutgoingInstances.length > 0 && (
+            <g opacity={1 - crossfadeAlpha}>
+              {sortedOutgoingInstances.map((inst) => {
+                const rig = inst.customRig || getVectorRig(inst.characterId);
+                const pose = evaluateCharacterPose(
+                  inst,
+                  scaledClips,
+                  sceneRelativeMs,
+                  scene.expressionCues || [],
+                  dialogues
+                );
+                return (
+                  <VectorCharacter
+                    key={`prev-${inst.instanceId}`}
+                    rig={rig}
+                    pose={pose}
+                  />
+                );
+              })}
+            </g>
+          )}
+
+          {/* Active / Incoming Articulated Vector Characters */}
+          <g opacity={isCrossfading ? crossfadeAlpha : 1}>
+            {sortedIncomingInstances.map((inst) => {
+              const rig = inst.customRig || getVectorRig(inst.characterId);
+              const pose = evaluateCharacterPose(
+                inst,
+                scaledClips,
+                sceneRelativeMs,
+                scene.expressionCues || [],
+                dialogues
+              );
+              return (
+                <VectorCharacter
+                  key={`curr-${inst.instanceId}`}
+                  rig={rig}
+                  pose={pose}
+                />
+              );
+            })}
+          </g>
 
           {/* Above-Character Overlays */}
           {aboveOverlays.map((o) => (

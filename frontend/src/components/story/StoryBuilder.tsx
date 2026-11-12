@@ -38,7 +38,7 @@ interface StoryBuilderProps {
 const defaultState: StoryFormState = {
   topic: "",
   ageGroup: "4-7 years",
-  desiredDurationSeconds: 60,
+  desiredDurationSeconds: 0,
   language: "Hindi",
   title: "",
   genre: "Adventure",

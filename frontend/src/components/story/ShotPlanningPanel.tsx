@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { CinematicShot, EditorScene } from '../../types/editor';
 import {
   fetchShotsForStory,
@@ -28,6 +28,74 @@ interface ShotPlanningPanelProps {
   flowProjectId?: string | null;
   onShotUpdated?: (shot: CinematicShot) => void;
 }
+
+const DebouncedPromptTextarea: React.FC<{
+  value: string;
+  onSave: (val: string) => void;
+  placeholder?: string;
+  rows?: number;
+  style?: React.CSSProperties;
+}> = ({ value, onSave, placeholder, rows = 2, style }) => {
+  const [localVal, setLocalVal] = useState(value);
+  const [isSaving, setIsSaving] = useState(false);
+  const timerRef = useRef<any>(null);
+
+  useEffect(() => {
+    setLocalVal(value);
+  }, [value]);
+
+  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const next = e.target.value;
+    setLocalVal(next);
+    setIsSaving(true);
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => {
+      onSave(next);
+      setIsSaving(false);
+    }, 750);
+  };
+
+  const handleBlur = () => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    if (localVal !== value) {
+      onSave(localVal);
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div style={{ position: 'relative', width: '100%' }}>
+      <textarea
+        rows={rows}
+        value={localVal}
+        onChange={handleChange}
+        onBlur={handleBlur}
+        placeholder={placeholder}
+        style={style}
+      />
+      {isSaving && (
+        <span
+          style={{
+            position: 'absolute',
+            bottom: '8px',
+            right: '8px',
+            fontSize: '10px',
+            color: '#64748b',
+            background: 'rgba(255,255,255,0.85)',
+            padding: '1px 6px',
+            borderRadius: '4px',
+            pointerEvents: 'none',
+          }}
+        >
+          Saving...
+        </span>
+      )}
+    </div>
+  );
+};
 
 export const ShotPlanningPanel: React.FC<ShotPlanningPanelProps> = ({
   storyId,
@@ -436,10 +504,10 @@ export const ShotPlanningPanel: React.FC<ShotPlanningPanelProps> = ({
                     </button>
                   </div>
                 </div>
-                <textarea
+                <DebouncedPromptTextarea
                   rows={2}
                   value={shot.backgroundPrompt}
-                  onChange={(e) => handleUpdateField(shot.shotId, { backgroundPrompt: e.target.value })}
+                  onSave={(val) => handleUpdateField(shot.shotId, { backgroundPrompt: val })}
                   placeholder="Describe environment scenery, foliage, weather, and lighting..."
                   style={{ width: '100%', boxSizing: 'border-box', fontSize: '12px', padding: '6px 8px', borderRadius: '4px', border: '1px solid var(--ed-border, #cbd5e1)', background: 'var(--ed-surface, #fff)', fontFamily: 'inherit', resize: 'vertical' }}
                 />
@@ -476,10 +544,10 @@ export const ShotPlanningPanel: React.FC<ShotPlanningPanelProps> = ({
                     </button>
                   </div>
                 </div>
-                <textarea
+                <DebouncedPromptTextarea
                   rows={2}
                   value={shot.videoPrompt}
-                  onChange={(e) => handleUpdateField(shot.shotId, { videoPrompt: e.target.value })}
+                  onSave={(val) => handleUpdateField(shot.shotId, { videoPrompt: val })}
                   placeholder="Describe camera movement and environmental dynamics for video models..."
                   style={{ width: '100%', boxSizing: 'border-box', fontSize: '12px', padding: '6px 8px', borderRadius: '4px', border: '1px solid rgba(56, 189, 248, 0.3)', background: 'var(--ed-surface, #fff)', fontFamily: 'inherit', resize: 'vertical' }}
                 />

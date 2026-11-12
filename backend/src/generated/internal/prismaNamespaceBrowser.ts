@@ -169,6 +169,9 @@ export const ShotScalarFieldEnum = {
   assetStatus: 'assetStatus',
   approvalStatus: 'approvalStatus',
   productionStatus: 'productionStatus',
+  transitionType: 'transitionType',
+  transitionDurationMs: 'transitionDurationMs',
+  userEditedFields: 'userEditedFields',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 } as const

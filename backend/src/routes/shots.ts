@@ -77,7 +77,7 @@ shotRouter.get('/:shotId', async (req, res) => {
 shotRouter.patch('/:shotId', async (req, res) => {
   try {
     const { shotId } = req.params;
-    const updated = await updateShot(shotId, req.body);
+    const updated = await updateShot(shotId, req.body, { isUserAction: true });
     return res.json({ success: true, shot: ShotDirectorService.mapPrismaRecordToShotData(updated) });
   } catch (error: any) {
     console.error('[ShotRouter] Failed to update shot:', error);
@@ -195,14 +195,6 @@ shotRouter.post('/:shotId/asset/upload', async (req, res) => {
       isVideo = true;
     } else if (buffer.length >= 4 && buffer[0] === 0x1a && buffer[1] === 0x45 && buffer[2] === 0xdf && buffer[3] === 0xa3) {
       // WebM
-      ext = 'webm';
-      mimeType = 'video/webm';
-      isVideo = true;
-    } else if (clientFilename?.endsWith('.mp4')) {
-      ext = 'mp4';
-      mimeType = 'video/mp4';
-      isVideo = true;
-    } else if (clientFilename?.endsWith('.webm')) {
       ext = 'webm';
       mimeType = 'video/webm';
       isVideo = true;

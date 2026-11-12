@@ -103,6 +103,43 @@ export const VectorCharacter: React.FC<VectorCharacterProps> = ({ rig, pose }) =
         fill="rgba(0, 0, 0, 0.3)"
       />
 
+      {/* Speaker highlight aura */}
+      {(pose.speaking || pose.isSpeaker) && (
+        <g>
+          <ellipse
+            cx={pose.x}
+            cy={pose.y - 10 * pose.scale}
+            rx={Math.round((rig.baseWidth * 0.58) * pose.scale)}
+            ry={Math.round((rig.baseHeight * 0.52) * pose.scale)}
+            fill="none"
+            stroke={pose.speaking ? 'rgba(56, 189, 248, 0.45)' : 'rgba(250, 204, 21, 0.35)'}
+            strokeWidth={Math.max(2, Math.round(2.5 * pose.scale))}
+            strokeDasharray={pose.speaking ? '6 4' : undefined}
+            opacity={0.85}
+          />
+          {pose.speaking && (
+            <g transform={`translate(${pose.x + (pose.flipX ? -40 : 40) * pose.scale}, ${pose.y - (rig.baseHeight * 0.45) * pose.scale})`}>
+              <path
+                d="M 0 -8 A 12 12 0 0 1 0 8"
+                fill="none"
+                stroke="#38bdf8"
+                strokeWidth={2.5}
+                strokeLinecap="round"
+                opacity={0.9}
+              />
+              <path
+                d="M 6 -14 A 18 18 0 0 1 6 14"
+                fill="none"
+                stroke="#38bdf8"
+                strokeWidth={2.5}
+                strokeLinecap="round"
+                opacity={0.65}
+              />
+            </g>
+          )}
+        </g>
+      )}
+
       {/* Articulated vector rig */}
       <g transform={rootTransform}>
         {/* Left Leg */}

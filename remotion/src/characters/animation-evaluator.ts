@@ -28,6 +28,31 @@ export interface EvaluatedCharacterPose {
   expression: FacialExpression;
   mouthState: MouthShape;
   speaking: boolean;
+  isSpeaker?: boolean;
+}
+
+/**
+ * Deterministically evaluates motion path easing curves.
+ * Supports linear, ease-in, ease-out, ease-in-out, smooth-step, and safe linear fallback.
+ */
+export function evaluateEasing(rawEasing: string | undefined, u: number): number {
+  if (!rawEasing) return u;
+  const clean = rawEasing.toLowerCase().trim().replace(/[-_]+/g, '');
+  if (clean === 'easein') {
+    return u * u;
+  }
+  if (clean === 'easeout') {
+    return 1 - (1 - u) * (1 - u);
+  }
+  if (clean === 'easeinout') {
+    return u < 0.5
+      ? 2 * u * u
+      : 1 - Math.pow(-2 * u + 2, 2) / 2;
+  }
+  if (clean === 'smoothstep') {
+    return u * u * (3 - 2 * u);
+  }
+  return u;
 }
 
 /**
@@ -100,7 +125,20 @@ export function evaluateCharacterPose(
     ? ((instance as any).action as AnimationAction)
     : 'idle';
 
-  if (!activeClip && fallbackAction === 'idle') {
+  // Animation Precedence Model:
+  // 1. Explicit user-authored active non-idle timeline animation clip.
+  // 2. Shot-level character action (instance.action) when clip is absent or ambient idle.
+  // 3. Default ambient idle breathing.
+  const isDefaultIdleClip = activeClip && (activeClip.action === 'idle' || activeClip.clipId.startsWith('default-') || activeClip.clipId.startsWith('auto-'));
+  if (isDefaultIdleClip && fallbackAction !== 'idle') {
+    activeAction = fallbackAction;
+  } else if (activeClip) {
+    activeAction = activeClip.action;
+  } else {
+    activeAction = fallbackAction;
+  }
+
+  if (!activeClip && activeAction === 'idle') {
     activeAction = 'idle';
     const tSec = sceneRelativeMs / 1000;
     if (isPlanet) {
@@ -147,17 +185,7 @@ export function evaluateCharacterPose(
 
         if (activeClip?.motionMode === 'motion_path' && activeClip.motionPath) {
           const path = activeClip.motionPath;
-          let progress = u;
-
-          if (path.easing === 'easeInOut') {
-            progress = progress < 0.5
-              ? 2 * progress * progress
-              : 1 - Math.pow(-2 * progress + 2, 2) / 2;
-          } else if (path.easing === 'easeIn') {
-            progress = progress * progress;
-          } else if (path.easing === 'easeOut') {
-            progress = 1 - (1 - progress) * (1 - progress);
-          }
+          const progress = evaluateEasing(path.easing, u);
 
           currentX = path.startX + (path.endX - path.startX) * progress;
           currentY = path.startY + (path.endY - path.startY) * progress;
@@ -383,6 +411,7 @@ export function evaluateCharacterPose(
     expression,
     mouthState,
     speaking,
+    isSpeaker: Boolean((instance as any).isSpeaker || speaking),
   };
 }
 
