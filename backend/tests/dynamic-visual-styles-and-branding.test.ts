@@ -124,14 +124,14 @@ describe('Dynamic Visual Generation, Branding & Rights Management', () => {
       originalPrompt: 'Serene mountain valley at sunset',
       stylePreset: 'cinematic',
       aspectRatio: '16:9',
-      originalDimensions: { width: 1920, height: 1080 },
+      dimensions: { width: 1920, height: 1080 },
     });
 
     assert.equal(record.commercialUseStatus, 'verified_commercial');
     assert.equal(record.watermarkStatus, 'watermark_free');
     assert.ok(record.generatedAt);
 
-    const summary = AssetRightsService.getPublishingRightsSummary([record]);
+    const summary = AssetRightsService.generatePublishingRightsSummary([record]);
     assert.equal(summary.eligibleForCommercialUse, true);
     assert.equal(summary.watermarkFreeCount, 1);
   });
@@ -150,22 +150,22 @@ describe('Dynamic Visual Generation, Branding & Rights Management', () => {
     };
 
     // 16:9 Landscape
-    const layout169 = branding.calculateOverlayLayout(testBranding, '16:9', 1920, 1080);
+    const layout169 = BrandingService.calculatePlacement(testBranding, '16:9', 1920, 1080);
     assert.ok(layout169.visible);
     assert.ok(layout169.x > 0);
     assert.ok(layout169.y >= 0);
 
     // 9:16 Vertical Short (must respect top safe-margin)
-    const layout916 = branding.calculateOverlayLayout(testBranding, '9:16', 1080, 1920);
+    const layout916 = BrandingService.calculatePlacement(testBranding, '9:16', 1080, 1920);
     assert.ok(layout916.visible);
     assert.ok(layout916.y >= 18, '9:16 vertical must have top safe margin');
 
     // 1:1 Square
-    const layout11 = branding.calculateOverlayLayout(testBranding, '1:1', 1080, 1080);
+    const layout11 = BrandingService.calculatePlacement(testBranding, '1:1', 1080, 1080);
     assert.ok(layout11.visible);
 
     // 4:5 Portrait
-    const layout45 = branding.calculateOverlayLayout(testBranding, '4:5', 1080, 1350);
+    const layout45 = BrandingService.calculatePlacement(testBranding, '4:5', 1080, 1350);
     assert.ok(layout45.visible);
   });
 });
