@@ -824,9 +824,12 @@ export async function createShot(data: CreateShotInput) {
   });
 }
 
-export async function getShotsByStoryId(storyId: string) {
+export async function getShotsByStoryId(storyId: string, options?: { includeArchived?: boolean }) {
   return await prisma.shot.findMany({
-    where: { storyId },
+    where: {
+      storyId,
+      ...(options?.includeArchived ? {} : { productionStatus: { not: 'archived' } }),
+    },
     orderBy: [
       { order: 'asc' },
       { number: 'asc' },
@@ -834,9 +837,12 @@ export async function getShotsByStoryId(storyId: string) {
   });
 }
 
-export async function getShotsBySceneId(sceneId: string) {
+export async function getShotsBySceneId(sceneId: string, options?: { includeArchived?: boolean }) {
   return await prisma.shot.findMany({
-    where: { sceneId },
+    where: {
+      sceneId,
+      ...(options?.includeArchived ? {} : { productionStatus: { not: 'archived' } }),
+    },
     orderBy: [
       { order: 'asc' },
       { number: 'asc' },
@@ -874,10 +880,29 @@ export async function updateShot(shotId: string, updates: Partial<{
   assetStatus: string;
   approvalStatus: string;
   productionStatus: string;
+  transitionType: string;
+  transitionDurationMs: number;
+  userEditedFields: any;
 }>) {
-  return await prisma.shot.update({
+  const existing = await (prisma.shot as any).findUnique({
     where: { shotId },
-    data: updates as any,
+  });
+
+  const currentEdited = (existing?.userEditedFields as Record<string, boolean>) || {};
+  const newlyEdited: Record<string, boolean> = { ...currentEdited };
+
+  for (const key of Object.keys(updates)) {
+    if (key !== 'userEditedFields' && key !== 'updatedAt') {
+      newlyEdited[key] = true;
+    }
+  }
+
+  return await (prisma.shot as any).update({
+    where: { shotId },
+    data: {
+      ...updates,
+      userEditedFields: newlyEdited,
+    },
   });
 }
 
@@ -913,12 +938,19 @@ export async function reconcileAndUpsertSceneShots(
         const hasCustomPrompt = Array.isArray(match.promptHistory) && match.promptHistory.length > 1;
         const isApproved = match.approvalStatus === 'approved';
         const hasAsset = Boolean(match.backgroundUrl || match.videoUrl);
+        const userEdits = ((match as any).userEditedFields as Record<string, boolean>) || {};
 
-        // Preserve user edited prompts if approved or manually customized
-        const bgPrompt = (isApproved || hasCustomPrompt) && match.backgroundPrompt
+        // Preserve user edited prompts and fields if user touched them, or if approved or manually customized
+        const titleVal = userEdits['title'] || isApproved ? match.title : (s.title || match.title);
+        const descVal = userEdits['description'] || isApproved ? match.description : (s.description || match.description);
+        const durVal = userEdits['durationMs'] ? match.durationMs : (s.durationMs || match.durationMs);
+        const shotTypeVal = userEdits['shotType'] || isApproved ? match.shotType : (s.shotType || match.shotType);
+        const camAngleVal = userEdits['cameraAngle'] ? match.cameraAngle : (s.cameraAngle || match.cameraAngle);
+        const camMoveVal = userEdits['cameraMovement'] ? match.cameraMovement : (s.cameraMovement || match.cameraMovement);
+        const bgPromptVal = userEdits['backgroundPrompt'] || isApproved || hasCustomPrompt
           ? match.backgroundPrompt
           : (s.backgroundPrompt || match.backgroundPrompt);
-        const vidPrompt = (isApproved || hasCustomPrompt) && match.videoPrompt
+        const vidPromptVal = userEdits['videoPrompt'] || isApproved || hasCustomPrompt
           ? match.videoPrompt
           : (s.videoPrompt || match.videoPrompt);
         const history = Array.isArray(match.promptHistory) && match.promptHistory.length > 0
@@ -928,17 +960,17 @@ export async function reconcileAndUpsertSceneShots(
         const updated = await tx.shot.update({
           where: { id: match.id },
           data: {
-            title: isApproved ? match.title : (s.title || match.title),
-            description: s.description || match.description,
-            durationMs: s.durationMs || match.durationMs,
-            shotType: isApproved ? match.shotType : (s.shotType || match.shotType),
-            cameraAngle: s.cameraAngle || match.cameraAngle,
-            cameraMovement: s.cameraMovement || match.cameraMovement,
+            title: titleVal,
+            description: descVal,
+            durationMs: durVal,
+            shotType: shotTypeVal,
+            cameraAngle: camAngleVal,
+            cameraMovement: camMoveVal,
             lighting: s.lighting || match.lighting,
             shotDirection: s.shotDirection ?? match.shotDirection,
             characterInstructions: s.characterInstructions ?? match.characterInstructions,
-            backgroundPrompt: bgPrompt,
-            videoPrompt: vidPrompt,
+            backgroundPrompt: bgPromptVal,
+            videoPrompt: vidPromptVal,
             promptHistory: history,
             backgroundUrl: match.backgroundUrl || s.backgroundUrl,
             videoUrl: match.videoUrl || s.videoUrl,

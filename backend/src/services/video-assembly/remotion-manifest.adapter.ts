@@ -116,6 +116,10 @@ export interface RemotionScene {
     videoUrl?: string;
     startMs: number;
     endMs: number;
+    transition?: {
+      type?: string;
+      durationMs?: number;
+    };
     characterPlacements?: any[];
   }>;
   background?: {
@@ -548,6 +552,9 @@ export class RemotionManifestAdapter {
           }
 
           const charPlacements = (st.characterInstructions as any)?.placements || st.characterPlacements;
+          const shotTransition = (st as any).transition ||
+            (st.shotDirection as any)?.transition ||
+            ((st as any).transitionType ? { type: (st as any).transitionType, durationMs: (st as any).transitionDurationMs || 500 } : undefined);
 
           return {
             id: st.shotId || st.id || `shot-${sceneNum}-${sIdx + 1}`,
@@ -560,6 +567,7 @@ export class RemotionManifestAdapter {
             videoUrl: st.videoUrl ? this.resolveAssetUrl(st.videoUrl) : undefined,
             startMs: sStart,
             endMs: sEnd,
+            transition: shotTransition,
             characterPlacements: charPlacements,
           };
         });

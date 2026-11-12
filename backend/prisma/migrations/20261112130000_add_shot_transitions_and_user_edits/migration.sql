@@ -1,0 +1,4 @@
+-- AlterTable
+ALTER TABLE "Shot" ADD COLUMN IF NOT EXISTS "transitionType" TEXT DEFAULT 'cut';
+ALTER TABLE "Shot" ADD COLUMN IF NOT EXISTS "transitionDurationMs" INTEGER DEFAULT 0;
+ALTER TABLE "Shot" ADD COLUMN IF NOT EXISTS "userEditedFields" JSONB;

@@ -46,6 +46,7 @@ function computeCameraTransform(opts: {
   movement?: string;
   rotation?: string;
   rotationDegrees?: number;
+  cameraAngle?: string;
   progress: number;
   width: number;
   height: number;
@@ -54,6 +55,7 @@ function computeCameraTransform(opts: {
     movement = 'static',
     rotation = 'none',
     rotationDegrees = 10,
+    cameraAngle = 'eye_level',
     progress: t,
     width,
     height,
@@ -61,6 +63,7 @@ function computeCameraTransform(opts: {
 
   const canonicalMove = normalizeCameraMovement(movement);
   const rotStr = rotation.toLowerCase().trim();
+  const angleStr = (cameraAngle || '').toLowerCase().trim();
 
   let scale = 1.0;
   let dx = 0;
@@ -93,15 +96,37 @@ function computeCameraTransform(opts: {
     scale = 1.20 - 0.20 * t;
   }
 
+  // 2D Camera Angle Adjustments (framing viewpoint)
+  if (angleStr.includes('low_angle') || angleStr === 'low') {
+    // Low Angle: looking up, camera framed lower, slight upward perspective
+    dy += Math.round(height * 0.04);
+    scale *= 1.04;
+  } else if (angleStr.includes('high_angle') || angleStr === 'high') {
+    // High Angle: looking down, camera framed higher, looking onto subject
+    dy -= Math.round(height * 0.04);
+    scale *= 1.04;
+  } else if (angleStr.includes('birds_eye') || angleStr.includes('overhead') || angleStr.includes('top_down')) {
+    // Bird's Eye: overhead bird view, wider scale, elevated camera
+    dy -= Math.round(height * 0.06);
+    scale *= 0.94;
+  } else if (angleStr.includes('worms_eye')) {
+    // Worm's Eye: ground level looking way up
+    dy += Math.round(height * 0.07);
+    scale *= 1.08;
+  } else if (angleStr.includes('dutch')) {
+    // Dutch Angle / tilted horizon
+    rotationDeg += 4.5;
+  }
+
   // 2D Roll Rotation
   const degAmount = Math.max(0, Math.min(45, rotationDegrees));
   const isClockwise = rotStr.includes('clockwise') && !rotStr.includes('anti') && !rotStr.includes('counter');
   const isAnticlockwise = rotStr.includes('anti') || rotStr.includes('counter');
 
   if (isClockwise) {
-    rotationDeg = t * degAmount;
+    rotationDeg += t * degAmount;
   } else if (isAnticlockwise) {
-    rotationDeg = -t * degAmount;
+    rotationDeg -= t * degAmount;
   }
 
   return { scale, dx, dy, rotationDeg };
@@ -415,9 +440,21 @@ function SceneView({
   }
 
   // Active Shot within Scene (if multi-shot breakdown exists)
-  const activeShot = (scene.shots && scene.shots.length > 0)
-    ? scene.shots.find((s) => sceneRelativeMs >= s.startMs && sceneRelativeMs < s.endMs) || scene.shots[0]
-    : undefined;
+  const shots = scene.shots && scene.shots.length > 0 ? scene.shots : undefined;
+  const activeShotIndex = shots
+    ? shots.findIndex((s) => sceneRelativeMs >= s.startMs && sceneRelativeMs < s.endMs)
+    : -1;
+  const resolvedShotIndex = activeShotIndex >= 0 ? activeShotIndex : 0;
+  const activeShot = shots ? shots[resolvedShotIndex] : undefined;
+
+  // Shot-level transition handling (crossfade / cut between shots)
+  const shotTransition = activeShot?.transition;
+  const transitionType = shotTransition?.type || 'cut';
+  const transitionDurationMs = Math.max(100, Math.min(2000, shotTransition?.durationMs || 500));
+  const timeIntoShotMs = activeShot ? sceneRelativeMs - activeShot.startMs : 0;
+  const isCrossfading = transitionType === 'fade' && resolvedShotIndex > 0 && timeIntoShotMs < transitionDurationMs;
+  const crossfadeAlpha = isCrossfading ? Math.min(1, Math.max(0, timeIntoShotMs / transitionDurationMs)) : 1;
+  const prevShot = isCrossfading && shots ? shots[resolvedShotIndex - 1] : undefined;
 
   // Resolve camera settings
   const rawMovement =
@@ -443,6 +480,7 @@ function SceneView({
     movement: rawMovement,
     rotation: rawRotation,
     rotationDegrees: rawDegrees,
+    cameraAngle: activeShot?.cameraAngle,
     progress: cameraProgress,
     width,
     height,
@@ -474,20 +512,33 @@ function SceneView({
     }
 
     // Active shot character placement override (if defined)
-    const shotPlacement = activeShot?.characterPlacements?.find(
+    const prevPlacement = prevShot?.characterPlacements?.find(
+      (cp) => cp.instanceId === inst.instanceId || cp.characterId === inst.characterId
+    );
+    const currPlacement = activeShot?.characterPlacements?.find(
       (cp) => cp.instanceId === inst.instanceId || cp.characterId === inst.characterId
     );
 
+    let rawX = currPlacement?.x ?? inst.x;
+    let rawY = currPlacement?.y ?? inst.y;
+    let rawScaleVal = currPlacement?.scale ?? inst.scale;
+
+    if (isCrossfading && prevPlacement && currPlacement) {
+      rawX = Math.round(prevPlacement.x + (currPlacement.x - prevPlacement.x) * crossfadeAlpha);
+      rawY = Math.round(prevPlacement.y + (currPlacement.y - prevPlacement.y) * crossfadeAlpha);
+      rawScaleVal = Number((prevPlacement.scale + (currPlacement.scale - prevPlacement.scale) * crossfadeAlpha).toFixed(2));
+    }
+
     const baseInst = {
       ...inst,
-      x: shotPlacement?.x ?? inst.x,
-      y: shotPlacement?.y ?? inst.y,
-      scale: shotPlacement?.scale ?? inst.scale,
-      flipX: shotPlacement?.flipX ?? targetFlipX ?? inst.flipX,
-      action: shotPlacement?.action || inst.action || 'idle',
-      expression: (shotPlacement?.expression || inst.expression) as FacialExpression | undefined,
-      zIndex: shotPlacement?.zIndex ?? inst.zIndex ?? (instIdx + 1),
-      isSpeaker: shotPlacement?.isSpeaker ?? inst.isSpeaker,
+      x: rawX,
+      y: rawY,
+      scale: rawScaleVal,
+      flipX: currPlacement?.flipX ?? targetFlipX ?? inst.flipX,
+      action: currPlacement?.action || inst.action || 'idle',
+      expression: (currPlacement?.expression || inst.expression) as FacialExpression | undefined,
+      zIndex: currPlacement?.zIndex ?? inst.zIndex ?? (instIdx + 1),
+      isSpeaker: currPlacement?.isSpeaker ?? inst.isSpeaker,
     };
 
     const override = charOverrides?.[inst.instanceId];
@@ -495,11 +546,11 @@ function SceneView({
       let ox = override.x !== undefined ? override.x : baseInst.x;
       let oy = override.y !== undefined ? override.y : baseInst.y;
       // Auto-recovery across all aspect ratios
-      if (format === '9:16' && (oy < 680 || oy > 1150)) {
+      if (format === '9:16' && (oy < 200 || oy > height - 100)) {
         oy = Math.round(height * 0.65);
-      } else if (format === '1:1' && (oy < 350 || oy > 650)) {
+      } else if (format === '1:1' && (oy < 150 || oy > height - 80)) {
         oy = Math.round(height * 0.68);
-      } else if (format === '4:5' && (oy < 450 || oy > 850)) {
+      } else if (format === '4:5' && (oy < 180 || oy > height - 90)) {
         oy = Math.round(height * 0.68);
       }
       return {
@@ -532,11 +583,8 @@ function SceneView({
       const xOffset = baseInst.x - 640;
       let newX = width / 2 + (xOffset * (width / 1280));
       let newY = Math.round(baseInst.y * (height / 720));
-      if (newY < 680 || newY > 1150) {
+      if (newY < 200 || newY > height - 100) {
         newY = Math.round(height * 0.65);
-      }
-      if (arr.length === 2) {
-        newX = instIdx === 0 ? Math.round(width * 0.35) : Math.round(width * 0.65);
       }
 
       return {
@@ -552,11 +600,8 @@ function SceneView({
       const xOffset = baseInst.x - 640;
       let newX = width / 2 + (xOffset * (width / 1280));
       let newY = Math.round(baseInst.y * (height / 720));
-      if (newY < 350 || newY > 650) {
+      if (newY < 150 || newY > height - 80) {
         newY = Math.round(height * 0.68);
-      }
-      if (arr.length === 2) {
-        newX = instIdx === 0 ? Math.round(width * 0.36) : Math.round(width * 0.64);
       }
       const scaleMult = isSingleChar ? 1.25 : 1.15;
       return {
@@ -572,11 +617,8 @@ function SceneView({
       const xOffset = baseInst.x - 640;
       let newX = width / 2 + (xOffset * (width / 1280));
       let newY = Math.round(baseInst.y * (height / 720));
-      if (newY < 450 || newY > 850) {
+      if (newY < 180 || newY > height - 90) {
         newY = Math.round(height * 0.68);
-      }
-      if (arr.length === 2) {
-        newX = instIdx === 0 ? Math.round(width * 0.35) : Math.round(width * 0.65);
       }
       const scaleMult = isSingleChar ? 1.35 : 1.22;
       return {
@@ -748,28 +790,10 @@ function SceneView({
         }}
       >
         {/* Background Layer: Video Clip, Image Sequence, Background Image, or Storybook Scenic Canvas */}
-        {activeShot?.videoUrl || scene.videoSrc ? (
-          <AbsoluteFill>
-            <Video
-              src={(() => {
-                const vSrc = activeShot?.videoUrl || scene.videoSrc!;
-                return vSrc.startsWith('http') || vSrc.startsWith('data:') ? vSrc : staticFile(vSrc);
-              })()}
-              style={{
-                width: '100%',
-                height: '100%',
-                objectFit,
-              }}
-            />
-          </AbsoluteFill>
-        ) : scene.frames && scene.frames.length > 0 ? (
-          <AbsoluteFill>
+        {isCrossfading && prevShot?.backgroundUrl && (
+          <AbsoluteFill style={{ zIndex: 0 }}>
             <Img
-              src={(() => {
-                const idx = Math.min(scene.frames.length - 1, Math.floor(progress * scene.frames.length));
-                const f = scene.frames[idx];
-                return f.startsWith('http') || f.startsWith('data:') ? f : staticFile(f);
-              })()}
+              src={prevShot.backgroundUrl}
               style={{
                 width: '100%',
                 height: '100%',
@@ -777,27 +801,59 @@ function SceneView({
               }}
             />
           </AbsoluteFill>
-        ) : bgUrl ? (
-          <AbsoluteFill>
-            <Img
-              src={bgUrl}
-              style={{
-                width: '100%',
-                height: '100%',
-                objectFit,
-              }}
-              onError={(e) => {
-                console.warn('[Remotion] Scene background image load failed, falling back to storybook scenery:', e);
-              }}
-            />
-          </AbsoluteFill>
-        ) : (
-          <StorybookScenicBackdrop
-            width={width}
-            height={height}
-            sceneNumber={scene.sceneNumber || 1}
-          />
         )}
+        <AbsoluteFill style={{ zIndex: 1, opacity: isCrossfading ? crossfadeAlpha : 1 }}>
+          {activeShot?.videoUrl || scene.videoSrc ? (
+            <AbsoluteFill>
+              <Video
+                src={(() => {
+                  const vSrc = activeShot?.videoUrl || scene.videoSrc!;
+                  return vSrc.startsWith('http') || vSrc.startsWith('data:') ? vSrc : staticFile(vSrc);
+                })()}
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit,
+                }}
+              />
+            </AbsoluteFill>
+          ) : scene.frames && scene.frames.length > 0 ? (
+            <AbsoluteFill>
+              <Img
+                src={(() => {
+                  const idx = Math.min(scene.frames.length - 1, Math.floor(progress * scene.frames.length));
+                  const f = scene.frames[idx];
+                  return f.startsWith('http') || f.startsWith('data:') ? f : staticFile(f);
+                })()}
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit,
+                }}
+              />
+            </AbsoluteFill>
+          ) : bgUrl ? (
+            <AbsoluteFill>
+              <Img
+                src={bgUrl}
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit,
+                }}
+                onError={(e) => {
+                  console.warn('[Remotion] Scene background image load failed, falling back to storybook scenery:', e);
+                }}
+              />
+            </AbsoluteFill>
+          ) : (
+            <StorybookScenicBackdrop
+              width={width}
+              height={height}
+              sceneNumber={scene.sceneNumber || 1}
+            />
+          )}
+        </AbsoluteFill>
 
         {/* Vector Characters & Overlays SVG Plane */}
         <svg
