@@ -25,6 +25,7 @@ import {
   suggestEmotionForText,
 } from '../../../utils/emotionSuggester';
 import { formatDurationHuman } from '../../../utils/timingEngine';
+import { FISH_VOICES_CATALOG } from '../../characters/CharacterBuilderModal';
 
 interface DialogueInspectorProps {
   scene: EditorScene;
@@ -79,6 +80,7 @@ export const DialogueInspector: React.FC<DialogueInspectorProps> = ({
 
   // Scope: 'line' | 'char_default'
   const [editScope, setEditScope] = useState<'line' | 'char_default'>('line');
+  const [dialogueGenderFilter, setDialogueGenderFilter] = useState<'all' | 'female' | 'male'>('all');
 
   // Accordion sections for selected dialogue
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
@@ -159,7 +161,9 @@ export const DialogueInspector: React.FC<DialogueInspectorProps> = ({
     const currentLang = selectedDialogue.lang || 'hi';
 
     if (newProvider === 'fish_audio') {
-      const nextVoice = 'fish_default';
+      const nextVoice = characterVoiceConfig?.voiceId?.startsWith('fish_')
+        ? characterVoiceConfig.voiceId
+        : 'fish_female_narrator';
       const nextIntensity = selectedDialogue.emotion === 'neutral' ? 0 : 15;
       onUpdateDialogue(selectedDialogue.id, {
         provider: 'fish_audio',
@@ -215,33 +219,26 @@ export const DialogueInspector: React.FC<DialogueInspectorProps> = ({
   // Filter voices strictly by active provider and language (never leak Kokoro voices into Fish Audio)
   const currentLang = selectedDialogue?.lang || 'hi';
   const filteredVoices = useMemo(() => {
-    if (currentProvider === 'fish_audio') {
-      const defaultVoiceItem: SupportedVoice = {
-        id: 'fish_default',
-        name: 'Fish Audio Default (Zero-Shot Natural)',
-        gender: 'neutral',
-        lang: currentLang,
-        accent: 'Multilingual Natural',
-        description: 'Fish Audio s2.1-pro-free multilingual base model',
-      };
-      if (!fishAudioVoices || fishAudioVoices.length === 0) {
-        return [defaultVoiceItem];
-      }
-      const hasDefault = fishAudioVoices.some((v) => v.id === 'fish_default');
-      const list = hasDefault ? [...fishAudioVoices] : [defaultVoiceItem, ...fishAudioVoices];
-      return list.filter(
-        (v) =>
-          !v.id.startsWith('hf_') &&
-          !v.id.startsWith('hm_') &&
-          !v.id.startsWith('af_') &&
-          !v.id.startsWith('am_') &&
-          !v.id.startsWith('bf_') &&
-          !v.id.startsWith('bm_')
-      );
-    }
+    let list: SupportedVoice[] = [];
 
-    if (currentProvider === 'google') {
-      return currentLang === 'hi'
+    if (currentProvider === 'fish_audio') {
+      const presets: SupportedVoice[] = FISH_VOICES_CATALOG.map((f) => ({
+        id: f.id,
+        name: f.name,
+        gender: f.gender as any,
+        lang: f.lang,
+        description: f.desc,
+      }));
+      if (fishAudioVoices && fishAudioVoices.length > 0) {
+        const customModels = fishAudioVoices.filter(
+          (v) => !v.id.startsWith('fish_') && v.id !== 'fish_default'
+        );
+        list = [...presets, ...customModels];
+      } else {
+        list = presets;
+      }
+    } else if (currentProvider === 'google') {
+      list = currentLang === 'hi'
         ? [
             { id: 'hi-IN-Standard-A', name: 'Hindi Female (Google)', lang: 'hi', gender: 'female' },
             { id: 'hi-IN-Standard-B', name: 'Hindi Male (Google)', lang: 'hi', gender: 'male' },
@@ -250,24 +247,35 @@ export const DialogueInspector: React.FC<DialogueInspectorProps> = ({
             { id: 'en-US-Standard-C', name: 'English Female (Google)', lang: 'en', gender: 'female' },
             { id: 'en-US-Standard-B', name: 'English Male (Google)', lang: 'en', gender: 'male' },
           ];
+    } else {
+      // Default: Kokoro-82M
+      const kokoroOnly = ttsVoices.filter(
+        (v) => !v.id.startsWith('fish_') && v.id !== 'fish_default'
+      );
+      if (currentLang === 'hi') {
+        const hi = kokoroOnly.filter(
+          (v) => v.lang === 'hi' || v.lang === 'Hindi' || v.id.startsWith('h')
+        );
+        list = hi.length > 0 ? hi : kokoroOnly;
+      } else {
+        const en = kokoroOnly.filter(
+          (v) => v.lang === 'en' || v.lang === 'en-us' || v.lang === 'English' || v.id.startsWith('a') || v.id.startsWith('b')
+        );
+        list = en.length > 0 ? en : kokoroOnly;
+      }
     }
 
-    // Default: Kokoro-82M
-    const kokoroOnly = ttsVoices.filter(
-      (v) => !v.id.startsWith('fish_') && v.id !== 'fish_default'
-    );
-    if (currentLang === 'hi') {
-      const hi = kokoroOnly.filter(
-        (v) => v.lang === 'hi' || v.lang === 'Hindi' || v.id.startsWith('h')
-      );
-      return hi.length > 0 ? hi : kokoroOnly;
-    } else {
-      const en = kokoroOnly.filter(
-        (v) => v.lang === 'en' || v.lang === 'en-us' || v.lang === 'English' || v.id.startsWith('a') || v.id.startsWith('b')
-      );
-      return en.length > 0 ? en : kokoroOnly;
+    if (dialogueGenderFilter !== 'all') {
+      list = list.filter((v) => {
+        const g = (v.gender || '').toLowerCase();
+        if (dialogueGenderFilter === 'female') return g.includes('female');
+        if (dialogueGenderFilter === 'male') return g.includes('male') && !g.includes('female');
+        return true;
+      });
     }
-  }, [currentProvider, ttsVoices, fishAudioVoices, currentLang]);
+
+    return list;
+  }, [currentProvider, ttsVoices, fishAudioVoices, currentLang, dialogueGenderFilter]);
 
   // Audio preview handler
   const handleTogglePlayDialogue = () => {
@@ -882,13 +890,45 @@ export const DialogueInspector: React.FC<DialogueInspectorProps> = ({
             </div>
 
             <div>
-              <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--ed-text-muted)', display: 'block', marginBottom: '4px' }}>
-                Voice Profile {currentProvider === 'fish_audio' ? '(Fish Audio)' : '(Kokoro)'}
-              </label>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--ed-text-muted)', margin: 0 }}>
+                  Voice Profile {currentProvider === 'fish_audio' ? '(Fish Audio)' : '(Kokoro)'}
+                </label>
+                <div style={{ display: 'flex', gap: '3px' }}>
+                  {(['all', 'female', 'male'] as const).map((g) => (
+                    <button
+                      key={g}
+                      type="button"
+                      className={`ed-tool-btn ${dialogueGenderFilter === g ? 'primary' : ''}`}
+                      style={{
+                        fontSize: '9px',
+                        padding: '1px 6px',
+                        background: dialogueGenderFilter === g ? (currentProvider === 'fish_audio' ? '#2563eb' : '#059669') : undefined,
+                      }}
+                      onClick={() => setDialogueGenderFilter(g)}
+                    >
+                      {g === 'all' ? 'All' : g === 'female' ? '👩' : '👨'}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <select
                 className="ed-select"
                 value={selectedDialogue.voice || (currentProvider === 'fish_audio' ? 'fish_default' : (currentLang === 'hi' ? 'hf_alpha' : 'af_heart'))}
-                onChange={(e) => onUpdateDialogue(selectedDialogue.id, { voice: e.target.value })}
+                onChange={(e) => {
+                  const newVoice = e.target.value;
+                  onUpdateDialogue(selectedDialogue.id, { voice: newVoice });
+                  if (editScope === 'char_default' && selectedDialogue.characterId && onSaveCharacterDefault) {
+                    onSaveCharacterDefault(selectedDialogue.characterId, {
+                      provider: currentProvider,
+                      model: currentProvider === 'fish_audio' ? 's2.1-pro-free' : undefined,
+                      voice: newVoice,
+                      lang: currentLang,
+                      emotion: selectedDialogue.emotion,
+                      emotionIntensity: selectedDialogue.emotionIntensity,
+                    });
+                  }
+                }}
                 style={{ width: '100%', fontSize: '11px' }}
               >
                 {filteredVoices.map((v) => (

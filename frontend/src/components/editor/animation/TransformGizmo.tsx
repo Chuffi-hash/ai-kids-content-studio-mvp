@@ -3,6 +3,7 @@ import { CharacterInstance, MotionPath, VectorRigDefinition } from '../../../typ
 
 interface TransformGizmoProps {
   instance: CharacterInstance;
+  baseInstance?: CharacterInstance;
   rig: VectorRigDefinition;
   motionPath?: MotionPath | null;
   onUpdateInstance: (updates: Partial<CharacterInstance>) => void;
@@ -13,6 +14,7 @@ interface TransformGizmoProps {
 
 export const TransformGizmo: React.FC<TransformGizmoProps> = ({
   instance,
+  baseInstance,
   rig,
   motionPath,
   onUpdateInstance,
@@ -42,11 +44,12 @@ export const TransformGizmo: React.FC<TransformGizmoProps> = ({
     const svgRect = svgEl?.getBoundingClientRect();
     const effectiveW = viewportWidth || 1280;
     const scaleFactor = svgRect && svgRect.width > 0 ? effectiveW / svgRect.width : 1;
+    const base = baseInstance || instance;
     dragStartRef.current = {
       pointerX: e.clientX,
       pointerY: e.clientY,
-      startX: instance.x,
-      startY: instance.y,
+      startX: base.x,
+      startY: base.y,
       startScale: scaleFactor,
       startRotation: instance.rotation,
     };

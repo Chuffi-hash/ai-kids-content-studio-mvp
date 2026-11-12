@@ -70,6 +70,14 @@ export const KOKORO_VOICES_CATALOG = {
   ],
 };
 
+export const FISH_VOICES_CATALOG = [
+  { id: 'fish_default', name: 'Default (Multilingual Natural)', gender: 'neutral', lang: 'hi', desc: 'Balanced multilingual zero-shot base voice' },
+  { id: 'fish_female_narrator', name: 'Pooja (Female • Warm Storyteller)', gender: 'female', lang: 'hi', desc: 'Warm, expressive female voice for bedtime and calm stories' },
+  { id: 'fish_female_bright', name: 'Aria (Female • Bright & Cheerful)', gender: 'female', lang: 'en', desc: 'Lively, energetic female voice for playful characters' },
+  { id: 'fish_male_narrator', name: 'Kabir (Male • Deep Narrator)', gender: 'male', lang: 'hi', desc: 'Resonant, cinematic male voice for grand narratives' },
+  { id: 'fish_male_friendly', name: 'Leo (Male • Friendly Explorer)', gender: 'male', lang: 'en', desc: 'Warm, adventurous male voice for boy characters' },
+];
+
 interface CharacterBuilderModalProps {
   isOpen: boolean;
   character?: Character | null;
@@ -230,6 +238,7 @@ export const CharacterBuilderModal: React.FC<CharacterBuilderModalProps> = ({
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [isDuplicating, setIsDuplicating] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [charVoiceGenderFilter, setCharVoiceGenderFilter] = useState<'all' | 'female' | 'male'>('all');
 
   // Snip / Snapshot state
   const stageSvgRef = useRef<SVGSVGElement | null>(null);
@@ -336,6 +345,7 @@ export const CharacterBuilderModal: React.FC<CharacterBuilderModalProps> = ({
 
       const res = await previewVoice({
         voice: effectiveVoice,
+        provider: appearance.voiceConfig?.provider || (effectiveVoice.startsWith('fish_') ? 'fish_audio' : 'kokoro'),
         lang: charLang,
         speed: appearance.voiceConfig?.speed ?? 1.0,
         effect: appearance.voiceConfig?.effect || 'normal',
@@ -1049,6 +1059,115 @@ export const CharacterBuilderModal: React.FC<CharacterBuilderModalProps> = ({
                   )}
 
                   <div className="char-control-group">
+                    <label>TTS Engine Provider</label>
+                    <div className="char-builder-section-desc" style={{ marginBottom: '8px' }}>
+                      Choose between local Kokoro neural engine or cloud Fish Audio zero-shot voice synthesis:
+                    </div>
+                    <div className="char-pill-row">
+                      <button
+                        type="button"
+                        className={`char-pill-btn ${(appearance.voiceConfig?.provider || 'kokoro') === 'kokoro' ? 'active' : ''}`}
+                        onClick={() => {
+                          updateAppearance((a) => ({
+                            ...a,
+                            voiceConfig: {
+                              ...a.voiceConfig,
+                              provider: 'kokoro',
+                              voiceId: a.voiceConfig?.voiceId?.startsWith('h') ? a.voiceConfig.voiceId : 'hf_alpha',
+                              speed: a.voiceConfig?.speed ?? 1.0,
+                              emotion: a.voiceConfig?.emotion || 'neutral',
+                              effect: a.voiceConfig?.effect || 'normal',
+                            },
+                          }));
+                        }}
+                      >
+                        🤖 Kokoro-82M (Local Neural)
+                      </button>
+                      <button
+                        type="button"
+                        className={`char-pill-btn ${(appearance.voiceConfig?.provider) === 'fish_audio' ? 'active' : ''}`}
+                        onClick={() => {
+                          updateAppearance((a) => ({
+                            ...a,
+                            voiceConfig: {
+                              ...a.voiceConfig,
+                              provider: 'fish_audio',
+                              model: 's2.1-pro-free',
+                              voiceId: 'fish_female_narrator',
+                              speed: a.voiceConfig?.speed ?? 1.0,
+                              emotion: a.voiceConfig?.emotion || 'neutral',
+                              effect: a.voiceConfig?.effect || 'normal',
+                            },
+                          }));
+                        }}
+                      >
+                        🐟 Fish Audio (Cloud s2.1-pro-free)
+                      </button>
+                    </div>
+                  </div>
+
+                  {(appearance.voiceConfig?.provider) === 'fish_audio' ? (
+                    <div className="char-control-group">
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                        <label style={{ margin: 0 }}>Fish Audio Voice Selection</label>
+                        <div className="char-pill-row" style={{ margin: 0 }}>
+                          {(['all', 'female', 'male'] as const).map((g) => (
+                            <button
+                              key={g}
+                              type="button"
+                              className={`char-pill-btn ${charVoiceGenderFilter === g ? 'active' : ''}`}
+                              style={{ fontSize: '10px', padding: '2px 8px' }}
+                              onClick={() => setCharVoiceGenderFilter(g)}
+                            >
+                              {g === 'all' ? 'All' : g === 'female' ? '♀ Female' : '♂ Male'}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '8px' }}>
+                        Select a male or female voice for this character. Audition with the button above:
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '6px' }}>
+                        {FISH_VOICES_CATALOG
+                          .filter((v) => charVoiceGenderFilter === 'all' || v.gender.toLowerCase() === charVoiceGenderFilter)
+                          .map((v) => {
+                            const currentVoice = appearance.voiceConfig?.voiceId || 'fish_default';
+                            const isSelected = currentVoice === v.id;
+                            return (
+                              <button
+                                key={v.id}
+                                type="button"
+                                className={`char-pill-btn ${isSelected ? 'active' : ''}`}
+                                style={{ textAlign: 'left', padding: '8px 12px', display: 'flex', flexDirection: 'column', gap: '2px', width: '100%' }}
+                                onClick={() =>
+                                  updateAppearance((a) => ({
+                                    ...a,
+                                    voiceConfig: {
+                                      ...a.voiceConfig,
+                                      provider: 'fish_audio',
+                                      model: 's2.1-pro-free',
+                                      voiceId: v.id,
+                                      lang: v.lang,
+                                      speed: a.voiceConfig?.speed ?? 1.0,
+                                      emotion: a.voiceConfig?.emotion || 'neutral',
+                                      effect: a.voiceConfig?.effect || 'normal',
+                                    },
+                                  }))
+                                }
+                              >
+                                <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
+                                  <strong style={{ color: isSelected ? '#fff' : '#c4b5fd' }}>{v.name}</strong>
+                                  <span style={{ fontSize: '10px', opacity: 0.8, textTransform: 'capitalize' }}>{v.gender} • {v.lang.toUpperCase()}</span>
+                                </div>
+                                <span style={{ fontSize: '10px', color: '#94a3b8' }}>{v.desc}</span>
+                              </button>
+                            );
+                          })}
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                  <div className="char-control-group">
                     <label>Speech Language</label>
                     <div className="char-builder-section-desc" style={{ marginBottom: '8px' }}>
                       Choose Hindi (default) or English for this character's spoken dialogue:
@@ -1189,6 +1308,8 @@ export const CharacterBuilderModal: React.FC<CharacterBuilderModalProps> = ({
                       </div>
                     )}
                   </div>
+                  </>
+                  )}
 
                   <div className="char-control-group">
                     <label>

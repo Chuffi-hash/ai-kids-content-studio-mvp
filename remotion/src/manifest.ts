@@ -216,6 +216,52 @@ export interface EducationalOverlay {
   text?: string; // backwards compatibility with pilot text overlays
 }
 
+export type CameraMovementType =
+  | 'static'
+  | 'slow_zoom_in'
+  | 'zoom_out'
+  | 'pan_left'
+  | 'pan_right'
+  | 'tilt_up'
+  | 'tilt_down'
+  | 'push_in'
+  | 'pull_out'
+  | 'tracking'
+  | 'dolly';
+
+/**
+ * Normalizes any free-form or variant camera movement string into canonical CameraMovementType
+ */
+export function normalizeCameraMovement(raw?: string): CameraMovementType {
+  if (!raw) return 'static';
+  const clean = raw.toLowerCase().trim().replace(/[-_]+/g, ' ');
+  if (clean.includes('push in') || clean.includes('slow zoom in') || clean.includes('zoom in')) {
+    return 'slow_zoom_in';
+  }
+  if (clean.includes('pull out') || clean.includes('slow zoom out') || clean.includes('zoom out')) {
+    return 'zoom_out';
+  }
+  if (clean.includes('pan left')) {
+    return 'pan_left';
+  }
+  if (clean.includes('pan right')) {
+    return 'pan_right';
+  }
+  if (clean.includes('tilt up')) {
+    return 'tilt_up';
+  }
+  if (clean.includes('tilt down')) {
+    return 'tilt_down';
+  }
+  if (clean.includes('tracking') || clean.includes('truck')) {
+    return 'tracking';
+  }
+  if (clean.includes('dolly')) {
+    return 'dolly';
+  }
+  return 'static';
+}
+
 export interface CameraConfig {
   movement?: string;
   rotation?: string;

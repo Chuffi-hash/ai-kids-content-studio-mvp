@@ -6,6 +6,7 @@ interface VectorCharacterRendererProps {
   rig: VectorRigDefinition;
   pose: EvaluatedCharacterPose;
   isSelected?: boolean;
+  showSelectionBox?: boolean;
   onClick?: (e: React.MouseEvent) => void;
   onPointerDown?: (e: React.PointerEvent) => void;
 }
@@ -14,6 +15,7 @@ export const VectorCharacterRenderer: React.FC<VectorCharacterRendererProps> = (
   rig,
   pose,
   isSelected = false,
+  showSelectionBox = false,
   onClick,
   onPointerDown,
 }) => {
@@ -143,8 +145,8 @@ export const VectorCharacterRenderer: React.FC<VectorCharacterRendererProps> = (
         {getHeadShapesForPose(rig, pose).map(renderShape)}
       </g>
 
-      {/* Selection bounding box indicator when selected */}
-      {isSelected && (
+      {/* Optional selection bounding box indicator when not using full interactive gizmo */}
+      {isSelected && showSelectionBox && (
         <rect
           x={-rig.baseWidth / 2 - 10}
           y={-rig.baseHeight / 2 - 30}

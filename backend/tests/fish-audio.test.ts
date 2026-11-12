@@ -115,7 +115,7 @@ test('Fish Audio - Honest Voice Catalogue & Dynamic Account Models', async () =>
 
     const providerWithCustom = new FishAudioProvider({ apiKey: 'test-custom-key' });
     const customVoices = await providerWithCustom.getSupportedVoices();
-    assert.strictEqual(customVoices.length, 2, 'Should include fish_default and custom model');
+    assert.ok(customVoices.length >= 2, 'Should include presets and custom model');
     assert.ok(customVoices.some(v => v.id === '7f938b826433434f853c822663116cd3'), 'Should include custom voice ID');
   } finally {
     global.fetch = originalFetch;
@@ -391,21 +391,27 @@ test('Fish Audio - Multi-Key Parsing and Sanitization', () => {
 });
 
 test('TTS Provider Factory - Coexistence of Kokoro-82M and Fish Audio', async () => {
-  // 1. Get Kokoro provider
-  const kokoro = await TTSProviderFactory.getProvider('kokoro');
-  assert.strictEqual(kokoro.name, 'kokoro');
+  const origIsAvail = (TTSProviderFactory as any).kokoroProvider.isAvailable;
+  (TTSProviderFactory as any).kokoroProvider.isAvailable = async () => true;
+  try {
+    // 1. Get Kokoro provider
+    const kokoro = await TTSProviderFactory.getProvider('kokoro');
+    assert.strictEqual(kokoro.name, 'kokoro');
 
-  // 2. Get Fish Audio provider
-  const fish = await TTSProviderFactory.getProvider('fish_audio');
-  assert.strictEqual(fish.name, 'fish_audio');
+    // 2. Get Fish Audio provider
+    const fish = await TTSProviderFactory.getProvider('fish_audio');
+    assert.strictEqual(fish.name, 'fish_audio');
 
-  // 3. Catalogue includes both Kokoro 32 voices and Fish Audio voices
-  const catalogue = await TTSProviderFactory.getAllVoices();
-  assert.ok(catalogue.voices.length >= 32, 'Must preserve at least 32 Kokoro voices');
-  assert.ok(Array.isArray(catalogue.fishAudioVoices), 'Should include fishAudioVoices list');
-  assert.ok(catalogue.fishAudioVoices.some(v => v.id === 'fish_default'), 'Should include honest fish_default');
+    // 3. Catalogue includes both Kokoro 32 voices and Fish Audio voices
+    const catalogue = await TTSProviderFactory.getAllVoices();
+    assert.ok(catalogue.voices.length >= 32, 'Must preserve at least 32 Kokoro voices');
+    assert.ok(Array.isArray(catalogue.fishAudioVoices), 'Should include fishAudioVoices list');
+    assert.ok(catalogue.fishAudioVoices.some(v => v.id === 'fish_default'), 'Should include honest fish_default');
 
-  // 4. Provider list includes fish_audio and kokoro
-  assert.ok(catalogue.providers.some(p => p.id === 'fish_audio'), 'Providers array should include fish_audio');
-  assert.ok(catalogue.providers.some(p => p.id === 'kokoro'), 'Providers array should include kokoro');
+    // 4. Provider list includes fish_audio and kokoro
+    assert.ok(catalogue.providers.some(p => p.id === 'fish_audio'), 'Providers array should include fish_audio');
+    assert.ok(catalogue.providers.some(p => p.id === 'kokoro'), 'Providers array should include kokoro');
+  } finally {
+    (TTSProviderFactory as any).kokoroProvider.isAvailable = origIsAvail;
+  }
 });

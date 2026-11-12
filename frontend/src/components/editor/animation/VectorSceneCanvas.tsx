@@ -101,35 +101,19 @@ export const VectorSceneCanvas: React.FC<VectorSceneCanvasProps> = ({
     return Math.round(y / (h / 720));
   };
 
-  // Dynamically map motion paths of animation clips to current format
-  const scaledClips: AnimationClip[] = useMemo(() => {
-    if (effectiveFormat === '16:9') return clips;
-    return clips.map((clip) => {
-      if (clip.motionPath) {
-        return {
-          ...clip,
-          motionPath: {
-            ...clip.motionPath,
-            startX: mapBaseXToFormat(clip.motionPath.startX, effectiveFormat, canvasWidth),
-            startY: mapBaseYToFormat(clip.motionPath.startY, effectiveFormat, canvasHeight),
-            endX: mapBaseXToFormat(clip.motionPath.endX, effectiveFormat, canvasWidth),
-            endY: mapBaseYToFormat(clip.motionPath.endY, effectiveFormat, canvasHeight),
-          },
-        };
-      }
-      return clip;
-    });
-  }, [clips, effectiveFormat, canvasWidth, canvasHeight]);
-
   // Non-destructive format variant mapping
   const instances = rawInstances.map((inst, instIdx, arr) => {
     const override = characterOverrides?.[inst.instanceId];
     if (override) {
       let ox = override.x !== undefined ? override.x : inst.x;
       let oy = override.y !== undefined ? override.y : inst.y;
-      // Auto-recovery: if a previous drag placed character in the sky in 9:16 (y < 450), anchor safely
-      if (effectiveFormat === "9:16" && oy < 500) {
-        oy = Math.round(canvasHeight * 0.63);
+      // Auto-recovery across all aspect ratios: ensure characters never float in the sky
+      if (effectiveFormat === "9:16" && (oy < 680 || oy > 1150)) {
+        oy = Math.round(canvasHeight * 0.65);
+      } else if (effectiveFormat === "1:1" && (oy < 350 || oy > 650)) {
+        oy = Math.round(canvasHeight * 0.68);
+      } else if (effectiveFormat === "4:5" && (oy < 450 || oy > 850)) {
+        oy = Math.round(canvasHeight * 0.68);
       }
       return {
         ...inst,
@@ -145,16 +129,15 @@ export const VectorSceneCanvas: React.FC<VectorSceneCanvasProps> = ({
     if (effectiveFormat === "9:16") {
       const scaleMult = isSingleChar ? 1.55 : 1.35;
       const boostedScale = Number((rawScale * scaleMult).toFixed(2));
-
-      let newX = canvasWidth / 2;
-      if (arr.length === 2) {
-        newX = instIdx === 0 ? Math.round(canvasWidth * 0.32) : Math.round(canvasWidth * 0.68);
-      } else if (!isSingleChar) {
-        newX = mapBaseXToFormat(inst.x, effectiveFormat, canvasWidth);
+      let newX = mapBaseXToFormat(inst.x, effectiveFormat, canvasWidth);
+      let newY = Math.round(inst.y * (canvasHeight / 720));
+      // Ground anchor across 9:16
+      if (newY < 680 || newY > 1150) {
+        newY = Math.round(canvasHeight * 0.65);
       }
-
-      // Ground anchor in 9:16: scale ground from 720 base (~480px) to 1280 base (~853px)
-      const newY = Math.round(inst.y * (canvasHeight / 720));
+      if (arr.length === 2) {
+        newX = instIdx === 0 ? Math.round(canvasWidth * 0.35) : Math.round(canvasWidth * 0.65);
+      }
 
       return {
         ...inst,
@@ -164,8 +147,14 @@ export const VectorSceneCanvas: React.FC<VectorSceneCanvasProps> = ({
       };
     }
     if (effectiveFormat === "1:1") {
-      const newX = mapBaseXToFormat(inst.x, effectiveFormat, canvasWidth);
-      const newY = mapBaseYToFormat(inst.y, effectiveFormat, canvasHeight);
+      let newX = mapBaseXToFormat(inst.x, effectiveFormat, canvasWidth);
+      let newY = mapBaseYToFormat(inst.y, effectiveFormat, canvasHeight);
+      if (newY < 350 || newY > 650) {
+        newY = Math.round(canvasHeight * 0.68);
+      }
+      if (arr.length === 2) {
+        newX = instIdx === 0 ? Math.round(canvasWidth * 0.36) : Math.round(canvasWidth * 0.64);
+      }
       const scaleMult = isSingleChar ? 1.25 : 1.15;
       return {
         ...inst,
@@ -175,8 +164,14 @@ export const VectorSceneCanvas: React.FC<VectorSceneCanvasProps> = ({
       };
     }
     if (effectiveFormat === "4:5") {
-      const newX = mapBaseXToFormat(inst.x, effectiveFormat, canvasWidth);
-      const newY = mapBaseYToFormat(inst.y, effectiveFormat, canvasHeight);
+      let newX = mapBaseXToFormat(inst.x, effectiveFormat, canvasWidth);
+      let newY = mapBaseYToFormat(inst.y, effectiveFormat, canvasHeight);
+      if (newY < 450 || newY > 850) {
+        newY = Math.round(canvasHeight * 0.68);
+      }
+      if (arr.length === 2) {
+        newX = instIdx === 0 ? Math.round(canvasWidth * 0.35) : Math.round(canvasWidth * 0.65);
+      }
       const scaleMult = isSingleChar ? 1.35 : 1.22;
       return {
         ...inst,
@@ -187,6 +182,44 @@ export const VectorSceneCanvas: React.FC<VectorSceneCanvasProps> = ({
     }
     return inst;
   });
+
+  // Dynamically map motion paths of animation clips to current format dimensions and anchored instance coordinates
+  const scaledClips: AnimationClip[] = useMemo(() => {
+    if (effectiveFormat === '16:9') return clips;
+    return clips.map((clip) => {
+      if (clip.motionPath) {
+        const baseInst = rawInstances.find((i) => i.instanceId === clip.instanceId);
+        const curInst = instances.find((i) => i.instanceId === clip.instanceId);
+        if (baseInst && curInst) {
+          const deltaStartX = (clip.motionPath.startX - baseInst.x) * (canvasWidth / 1280);
+          const deltaEndX = (clip.motionPath.endX - baseInst.x) * (canvasWidth / 1280);
+          const deltaStartY = (clip.motionPath.startY - baseInst.y) * (canvasHeight / 720);
+          const deltaEndY = (clip.motionPath.endY - baseInst.y) * (canvasHeight / 720);
+          return {
+            ...clip,
+            motionPath: {
+              ...clip.motionPath,
+              startX: Math.round(curInst.x + deltaStartX),
+              startY: Math.round(curInst.y + deltaStartY),
+              endX: Math.round(curInst.x + deltaEndX),
+              endY: Math.round(curInst.y + deltaEndY),
+            },
+          };
+        }
+        return {
+          ...clip,
+          motionPath: {
+            ...clip.motionPath,
+            startX: mapBaseXToFormat(clip.motionPath.startX, effectiveFormat, canvasWidth),
+            startY: mapBaseYToFormat(clip.motionPath.startY, effectiveFormat, canvasHeight),
+            endX: mapBaseXToFormat(clip.motionPath.endX, effectiveFormat, canvasWidth),
+            endY: mapBaseYToFormat(clip.motionPath.endY, effectiveFormat, canvasHeight),
+          },
+        };
+      }
+      return clip;
+    });
+  }, [clips, instances, rawInstances, effectiveFormat, canvasWidth, canvasHeight]);
 
   const overlays = rawOverlays.map((o) => {
     const override = formatVariant?.overlayOverrides?.[o.id];
@@ -274,14 +307,23 @@ export const VectorSceneCanvas: React.FC<VectorSceneCanvasProps> = ({
 
   const handleUpdateMotionPath = (newPath: MotionPath) => {
     if (!selectedInstance || !onUpdateAnimationData) return;
-    // Map newPath back from canvas coordinates to base 16:9 coordinates
-    const basePath: MotionPath = {
-      ...newPath,
-      startX: mapFormatXToBase(newPath.startX, effectiveFormat, canvasWidth),
-      startY: mapFormatYToBase(newPath.startY, effectiveFormat, canvasHeight),
-      endX: mapFormatXToBase(newPath.endX, effectiveFormat, canvasWidth),
-      endY: mapFormatYToBase(newPath.endY, effectiveFormat, canvasHeight),
-    };
+    const baseInst = rawInstances.find((i) => i.instanceId === selectedInstance.instanceId);
+    let basePath: MotionPath;
+    if (baseInst && effectiveFormat !== '16:9') {
+      const deltaStartX = (newPath.startX - selectedInstance.x) / (canvasWidth / 1280);
+      const deltaEndX = (newPath.endX - selectedInstance.x) / (canvasWidth / 1280);
+      const deltaStartY = (newPath.startY - selectedInstance.y) / (canvasHeight / 720);
+      const deltaEndY = (newPath.endY - selectedInstance.y) / (canvasHeight / 720);
+      basePath = {
+        ...newPath,
+        startX: Math.round(baseInst.x + deltaStartX),
+        startY: Math.round(baseInst.y + deltaStartY),
+        endX: Math.round(baseInst.x + deltaEndX),
+        endY: Math.round(baseInst.y + deltaEndY),
+      };
+    } else {
+      basePath = newPath;
+    }
     const updatedClips = clips.map((c) => {
       if (c.instanceId === selectedInstance.instanceId && c.action === "walk") {
         return {
@@ -338,6 +380,38 @@ export const VectorSceneCanvas: React.FC<VectorSceneCanvasProps> = ({
         });
       }
     } else {
+      // In 16:9 mode: update instance, and if character has a motion path, shift motion path by (dx, dy)
+      const baseInst = rawInstances.find((i) => i.instanceId === instanceId);
+      if (baseInst && onUpdateAnimationData && (updates.x !== undefined || updates.y !== undefined)) {
+        const dx = (updates.x !== undefined ? updates.x : baseInst.x) - baseInst.x;
+        const dy = (updates.y !== undefined ? updates.y : baseInst.y) - baseInst.y;
+        if (dx !== 0 || dy !== 0) {
+          const updatedClips = clips.map((c) => {
+            if (c.instanceId === instanceId && c.motionPath) {
+              return {
+                ...c,
+                motionPath: {
+                  ...c.motionPath,
+                  startX: Math.round(c.motionPath.startX + dx),
+                  startY: Math.round(c.motionPath.startY + dy),
+                  endX: Math.round(c.motionPath.endX + dx),
+                  endY: Math.round(c.motionPath.endY + dy),
+                },
+              };
+            }
+            return c;
+          });
+          const updatedInstances = rawInstances.map((i) =>
+            i.instanceId === instanceId ? { ...i, ...updates } : i
+          );
+          onUpdateAnimationData({
+            ...animationData,
+            characterInstances: updatedInstances,
+            animationClips: updatedClips,
+          });
+          return;
+        }
+      }
       onUpdateInstance(instanceId, updates);
     }
   };
@@ -348,7 +422,26 @@ export const VectorSceneCanvas: React.FC<VectorSceneCanvasProps> = ({
   const cx = canvasWidth / 2;
   const cy = canvasHeight / 2;
 
+  const normalizeCameraMovement = (raw?: string): string => {
+    if (!raw) return 'static';
+    const clean = raw.toLowerCase().trim().replace(/[-_]+/g, ' ');
+    if (clean.includes('push in') || clean.includes('slow zoom in') || clean.includes('zoom in')) {
+      return 'slow_zoom_in';
+    }
+    if (clean.includes('pull out') || clean.includes('slow zoom out') || clean.includes('zoom out')) {
+      return 'zoom_out';
+    }
+    if (clean.includes('pan left')) return 'pan_left';
+    if (clean.includes('pan right')) return 'pan_right';
+    if (clean.includes('tilt up')) return 'tilt_up';
+    if (clean.includes('tilt down')) return 'tilt_down';
+    if (clean.includes('tracking') || clean.includes('truck')) return 'tracking';
+    if (clean.includes('dolly')) return 'dolly';
+    return 'static';
+  };
+
   const moveStr = (animationData.cameraMovement || '').toLowerCase().trim();
+  const canonicalMovement = normalizeCameraMovement(animationData.cameraMovement);
   const rotStr = (animationData.cameraRotation || '').toLowerCase().trim();
   const rotDegrees = typeof animationData.cameraRotationDegrees === 'number' && Number.isFinite(animationData.cameraRotationDegrees)
     ? Math.max(0, Math.min(45, animationData.cameraRotationDegrees))
@@ -359,22 +452,27 @@ export const VectorSceneCanvas: React.FC<VectorSceneCanvasProps> = ({
   let dy = 0;
   let rotationDeg = 0;
 
-  if (moveStr.includes('zoom in') || moveStr === 'slow zoom in') {
+  if (canonicalMovement === 'slow_zoom_in') {
     scale = 1.0 + 0.15 * t;
-  } else if (moveStr.includes('zoom out') || moveStr === 'slow zoom out') {
+  } else if (canonicalMovement === 'zoom_out') {
     scale = 1.15 - 0.15 * t;
-  } else if (moveStr.includes('pan left')) {
+  } else if (canonicalMovement === 'pan_left') {
     scale = 1.12;
     dx = (t - 0.5) * (canvasWidth * 0.08);
-  } else if (moveStr.includes('pan right')) {
+  } else if (canonicalMovement === 'pan_right') {
     scale = 1.12;
     dx = (0.5 - t) * (canvasWidth * 0.08);
-  } else if (moveStr.includes('tilt up')) {
+  } else if (canonicalMovement === 'tilt_up') {
     scale = 1.12;
     dy = (t - 0.5) * (canvasHeight * 0.08);
-  } else if (moveStr.includes('tilt down')) {
+  } else if (canonicalMovement === 'tilt_down') {
     scale = 1.12;
     dy = (0.5 - t) * (canvasHeight * 0.08);
+  } else if (canonicalMovement === 'tracking') {
+    scale = 1.10;
+    dx = (t - 0.5) * (canvasWidth * 0.10);
+  } else if (canonicalMovement === 'dolly') {
+    scale = 1.0 + 0.20 * t;
   }
 
   let isClockwise = rotStr.includes('clockwise') && !rotStr.includes('anti') && !rotStr.includes('counter');
@@ -666,6 +764,7 @@ export const VectorSceneCanvas: React.FC<VectorSceneCanvasProps> = ({
         return (
           <TransformGizmo
             instance={gizmoInstance}
+            baseInstance={selectedInstance}
             viewportWidth={canvasWidth}
             viewportHeight={canvasHeight}
             rig={rig}

@@ -104,6 +104,37 @@ export async function associateShotAsset(
   return res.json();
 }
 
+export async function uploadShotAsset(
+  shotId: string,
+  file: File,
+  assetType?: 'image' | 'video'
+): Promise<{ success: boolean; shot: CinematicShot; url: string }> {
+  // Convert File to base64 Data URI
+  const base64Data = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+
+  const res = await fetch(`${API_URL}/api/shots/${shotId}/asset/upload`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      fileData: base64Data,
+      filename: file.name,
+      type: assetType || (file.type.startsWith('video') ? 'video' : 'image'),
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Failed to upload asset');
+  }
+
+  return res.json();
+}
+
 export async function deleteShotRecord(shotId: string): Promise<{ success: boolean }> {
   const res = await fetch(`${API_URL}/api/shots/${shotId}`, {
     method: 'DELETE',

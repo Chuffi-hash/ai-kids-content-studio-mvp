@@ -33,6 +33,7 @@ import {
   StoryVisualBible,
 } from '../../services/editor.service';
 import { EMOTION_OPTIONS } from '../../utils/emotionSuggester';
+import { FISH_VOICES_CATALOG } from '../characters/CharacterBuilderModal';
 import {
   AlertTriangleIcon,
   CheckIcon,
@@ -330,6 +331,26 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
       audioPlayerRef.current.pause();
       audioPlayerRef.current.currentTime = 0;
     }
+
+    const narrationCfg = (scene.animationData as any)?.narrationConfig;
+    if (narrationCfg?.provider) {
+      setSelectedProvider(narrationCfg.provider);
+    }
+    if (narrationCfg?.voice) {
+      setSelectedVoice(narrationCfg.voice);
+    }
+    if (narrationCfg?.lang) {
+      setSelectedLanguage(narrationCfg.lang);
+    }
+    if (narrationCfg?.emotion) {
+      setVoiceEmotion(narrationCfg.emotion);
+    }
+    if (typeof narrationCfg?.emotionIntensity === 'number') {
+      setVoiceEmotionIntensity(narrationCfg.emotionIntensity);
+    }
+    if (typeof narrationCfg?.speed === 'number') {
+      setVoiceSpeed(narrationCfg.speed);
+    }
   }, [
     scene.sceneId,
     scene.title,
@@ -337,6 +358,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
     scene.visualPrompt,
     scene.cameraDirection,
     scene.audioUrl,
+    (scene.animationData as any)?.narrationConfig,
     (scene.animationData as any)?.cameraMovement,
     (scene.animationData as any)?.cameraRotation,
     (scene.animationData as any)?.cameraRotationDegrees,
@@ -384,12 +406,66 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
   const [voiceEmotionIntensity, setVoiceEmotionIntensity] = useState<number>(0);
   const [voiceSpeed, setVoiceSpeed] = useState<number>(1.0);
   const [voiceEffect, setVoiceEffect] = useState<'normal' | 'robot' | 'cartoon' | 'whisper' | 'shout'>('normal');
+  const [narratorGenderFilter, setNarratorGenderFilter] = useState<'all' | 'female' | 'male'>('all');
 
   // Preview state
   const [isPreviewingVoice, setIsPreviewingVoice] = useState<boolean>(false);
   const [previewAudioUrl, setPreviewAudioUrl] = useState<string | null>(null);
   const [isPlayingPreview, setIsPlayingPreview] = useState<boolean>(false);
   const previewAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Filtered narrator voices catalog
+  const narratorVoicesList = React.useMemo(() => {
+    let list: any[] = [];
+    if (selectedProvider === 'fish_audio') {
+      const presets = FISH_VOICES_CATALOG.map((f) => ({
+        id: f.id,
+        name: f.name,
+        gender: f.gender,
+        lang: f.lang,
+        desc: f.desc,
+      }));
+      if (fishAudioVoices && fishAudioVoices.length > 0) {
+        const customModels = fishAudioVoices.filter(
+          (v) => !v.id.startsWith('fish_') && v.id !== 'fish_default'
+        );
+        list = [...presets, ...customModels];
+      } else {
+        list = presets;
+      }
+    } else {
+      list = ttsVoices.filter((v: any) => {
+        if (selectedLanguage === 'hi') {
+          return v.lang === 'hi' || v.id.startsWith('hf_') || v.id.startsWith('hm_');
+        }
+        if (selectedLanguage === 'en-gb') {
+          return v.lang === 'en-gb' || v.id.startsWith('bf_') || v.id.startsWith('bm_');
+        }
+        if (selectedLanguage === 'en-us') {
+          return v.lang === 'en-us' || v.id.startsWith('af_') || v.id.startsWith('am_');
+        }
+        return true;
+      });
+    }
+
+    if (narratorGenderFilter !== 'all') {
+      list = list.filter((v: any) => {
+        const g = (v.gender || '').toLowerCase();
+        if (narratorGenderFilter === 'female') return g.includes('female');
+        if (narratorGenderFilter === 'male') return g.includes('male') && !g.includes('female');
+        return true;
+      });
+    }
+
+    return list;
+  }, [selectedProvider, fishAudioVoices, ttsVoices, selectedLanguage, narratorGenderFilter]);
+
+  // Keep selected voice valid when provider or filter shifts
+  useEffect(() => {
+    if (narratorVoicesList.length > 0 && !narratorVoicesList.some((v) => v.id === selectedVoice)) {
+      setSelectedVoice(narratorVoicesList[0].id);
+    }
+  }, [narratorVoicesList, selectedVoice]);
 
   // Fetch TTS voices on mount
   useEffect(() => {
@@ -446,6 +522,26 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
       emotion: voiceEmotion,
       emotionIntensity: voiceEmotionIntensity,
     });
+    const updatedAnim = {
+      ...(scene.animationData || {
+        version: 1,
+        viewport: { width: 1280, height: 720 },
+        characterInstances: [],
+        animationClips: [],
+      }),
+      narrationConfig: {
+        provider: selectedProvider,
+        voice: selectedVoice,
+        lang: selectedLanguage,
+        speed: voiceSpeed,
+        emotion: voiceEmotion,
+        emotionIntensity: voiceEmotionIntensity,
+      },
+    };
+    if (onUpdateAnimationData) {
+      onUpdateAnimationData(scene.sceneId, updatedAnim as any);
+    }
+    onUpdateScene(scene.sceneId, { animationData: updatedAnim as any });
   };
 
 
@@ -871,9 +967,8 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
     };
     if (onUpdateAnimationData) {
       onUpdateAnimationData(scene.sceneId, anim as any);
-    } else {
-      onUpdateScene(scene.sceneId, { animationData: anim as any });
     }
+    onUpdateScene(scene.sceneId, { animationData: anim as any });
   };
 
   const handleTransitionChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -892,9 +987,8 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
     };
     if (onUpdateAnimationData) {
       onUpdateAnimationData(scene.sceneId, anim as any);
-    } else {
-      onUpdateScene(scene.sceneId, { animationData: anim as any });
     }
+    onUpdateScene(scene.sceneId, { animationData: anim as any });
   };
 
   const handleCameraRotationChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -1565,6 +1659,11 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                     value={localTitle}
                     onChange={(e) => setLocalTitle(e.target.value)}
                     onBlur={handleTitleBlur}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        (e.target as HTMLInputElement).blur();
+                      }
+                    }}
                   />
                 </div>
 
@@ -1576,6 +1675,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                     onChange={(e) => setLocalPrompt(e.target.value)}
                     onBlur={handlePromptBlur}
                     placeholder="Describe the visual composition, characters, action..."
+                    rows={4}
                   />
                 </div>
 
@@ -1649,14 +1749,16 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                       <button
                         className="ed-btn-action primary"
                         style={{ width: '100%' }}
-                        onClick={() =>
+                        onClick={() => {
+                          handleTitleBlur();
+                          handlePromptBlur();
                           onGenerateImage(scene.sceneId, localPrompt, {
                             cameraDirection: localCamera,
                             cameraMovement: localCameraMovement,
                             aspectRatio: localAspectRatio,
                             visualStyle: localVisualStyle,
-                          })
-                        }
+                          });
+                        }}
                         disabled={isGeneratingImage}
                       >
                         {isGeneratingImage ? 'Generating Image...' : hasVisual ? 'Regenerate Scene Image' : 'Generate Scene Image'}
@@ -2002,33 +2104,39 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                   {isPreviewingVoice ? 'Previewing...' : '🔊 Audition Voice'}
                 </button>
               </div>
+
+              {/* Gender Filter Pills */}
+              <div style={{ display: 'flex', gap: '4px', marginBottom: '6px' }}>
+                {(['all', 'female', 'male'] as const).map((g) => (
+                  <button
+                    key={g}
+                    type="button"
+                    className={`ed-tool-btn ${narratorGenderFilter === g ? 'primary' : ''}`}
+                    style={{
+                      fontSize: '10px',
+                      padding: '2px 8px',
+                      flex: 1,
+                      justifyContent: 'center',
+                      background: narratorGenderFilter === g ? (selectedProvider === 'fish_audio' ? '#2563eb' : '#059669') : undefined,
+                    }}
+                    onClick={() => setNarratorGenderFilter(g)}
+                  >
+                    {g === 'all' ? 'All Voices' : g === 'female' ? '👩 Female' : '👨 Male'}
+                  </button>
+                ))}
+              </div>
+
               <select
                 className="ed-input"
                 style={{ fontSize: '11px', padding: '4px 6px', height: '30px' }}
                 value={selectedVoice}
                 onChange={(e) => setSelectedVoice(e.target.value)}
               >
-                {(selectedProvider === 'fish_audio' && fishAudioVoices.length > 0 ? fishAudioVoices : (selectedProvider === 'fish_audio' ? [{ id: 'fish_default', name: 'Fish Audio Default Voice (Multilingual)', gender: 'neutral', lang: 'hi', accent: 'Multilingual' }] : ttsVoices))
-                  .filter((v: any) => {
-                    if (selectedProvider === 'fish_audio') {
-                      return true; // Fish Audio s2.1 base voice is multilingual
-                    }
-                    if (selectedLanguage === 'hi') {
-                      return v.lang === 'hi' || v.id.startsWith('hf_') || v.id.startsWith('hm_');
-                    }
-                    if (selectedLanguage === 'en-gb') {
-                      return v.lang === 'en-gb' || v.id.startsWith('bf_') || v.id.startsWith('bm_');
-                    }
-                    if (selectedLanguage === 'en-us') {
-                      return v.lang === 'en-us' || v.id.startsWith('af_') || v.id.startsWith('am_');
-                    }
-                    return true;
-                  })
-                  .map((v: any) => (
-                    <option key={v.id} value={v.id}>
-                      {v.name} ({v.gender}, {v.accent || v.lang})
-                    </option>
-                  ))}
+                {narratorVoicesList.map((v: any) => (
+                  <option key={v.id} value={v.id}>
+                    {v.name} ({v.gender || 'voice'}{v.desc ? ` • ${v.desc}` : ''})
+                  </option>
+                ))}
               </select>
             </div>
 

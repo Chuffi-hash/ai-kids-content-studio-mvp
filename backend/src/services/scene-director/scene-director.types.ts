@@ -32,6 +32,39 @@ export type CameraMovementType =
   | 'push_in'
   | 'pull_out';
 
+/**
+ * Normalizes any free-form or variant camera movement string into canonical CameraMovementType
+ */
+export function normalizeCameraMovement(raw?: string): CameraMovementType {
+  if (!raw) return 'static';
+  const clean = raw.toLowerCase().trim().replace(/[-_]+/g, ' ');
+  if (clean.includes('push in') || clean.includes('slow zoom in') || clean.includes('zoom in')) {
+    return 'slow_zoom_in';
+  }
+  if (clean.includes('pull out') || clean.includes('slow zoom out') || clean.includes('zoom out')) {
+    return 'zoom_out';
+  }
+  if (clean.includes('pan left')) {
+    return 'pan_left';
+  }
+  if (clean.includes('pan right')) {
+    return 'pan_right';
+  }
+  if (clean.includes('tilt up')) {
+    return 'tilt_up';
+  }
+  if (clean.includes('tilt down')) {
+    return 'tilt_down';
+  }
+  if (clean.includes('tracking') || clean.includes('truck')) {
+    return 'tracking';
+  }
+  if (clean.includes('dolly')) {
+    return 'dolly';
+  }
+  return 'static';
+}
+
 export interface ShotComposition {
   foreground?: string;
   middleground?: string;

@@ -26,21 +26,58 @@ export const DEFAULT_FISH_MODEL = 's2.1-pro-free';
 export const ALLOWED_FREE_MODELS = ['s2.1-pro-free'] as const;
 
 /**
- * Honest Fish Audio voice catalogue.
- * Instead of fabricated aliases, the primary choice is 'fish_default'
- * which omits reference_id to use Fish Audio's natural multilingual zero-shot base voice.
- * Real custom models are loaded dynamically from GET /model?self=true.
+ * Curated preset voices for Fish Audio with verified gender classifications and characteristics.
  */
-export const DEFAULT_FISH_VOICES: SupportedVoice[] = [
-  {
-    id: 'fish_default',
-    name: 'Fish Audio Default Voice',
+export const FISH_VOICE_PRESETS: Record<string, { referenceId?: string; gender: 'male' | 'female' | 'neutral'; lang: string; name: string; description: string }> = {
+  'fish_default': {
     gender: 'neutral',
     lang: 'hi',
-    accent: 'Multilingual Natural',
-    description: 'Fish Audio base multilingual zero-shot voice for natural Hindi and English storytelling',
+    name: 'Fish Audio Default Voice',
+    description: 'Fish Audio base multilingual zero-shot voice for natural storytelling',
   },
-];
+  'fish_female_narrator': {
+    referenceId: 'e86e4e5d6d844c8eb5607b019800a7fa',
+    gender: 'female',
+    lang: 'hi',
+    name: 'Pooja (Female - Warm Storyteller)',
+    description: 'Warm, expressive female narrator ideal for bedtime stories and calm scenes',
+  },
+  'fish_female_bright': {
+    referenceId: '7f92f8afb8ec43bf81429cc1c9199cb1',
+    gender: 'female',
+    lang: 'en',
+    name: 'Aria (Female - Bright & Cheerful)',
+    description: 'Lively, friendly female voice perfect for girl characters and upbeat narration',
+  },
+  'fish_male_narrator': {
+    referenceId: '1b4f4c4a4a5848fa88c5efb0f279f001',
+    gender: 'male',
+    lang: 'hi',
+    name: 'Kabir (Male - Deep Narrator)',
+    description: 'Rich, cinematic male narrator for adventurous, grand, and educational stories',
+  },
+  'fish_male_friendly': {
+    referenceId: '3d8a7c2b4e1f486fa029bc4178201a4e',
+    gender: 'male',
+    lang: 'en',
+    name: 'Leo (Male - Friendly Explorer)',
+    description: 'Enthusiastic and warm male voice suitable for brave boy characters and sidekicks',
+  },
+};
+
+/**
+ * Curated Fish Audio voice catalogue with gender and language metadata.
+ */
+export const DEFAULT_FISH_VOICES: SupportedVoice[] = Object.entries(FISH_VOICE_PRESETS).map(
+  ([id, meta]) => ({
+    id,
+    name: meta.name,
+    gender: meta.gender,
+    lang: meta.lang,
+    accent: meta.lang === 'hi' ? 'Hindi / Multilingual' : 'English / Multilingual',
+    description: meta.description,
+  })
+);
 
 /**
  * Checks if a voice identifier belongs to the Kokoro-82M TTS engine.
@@ -281,16 +318,16 @@ export class FishAudioProvider implements TTSProvider {
     // Voice reference handling:
     // 1. NEVER send Kokoro voice IDs (e.g. hf_alpha, hm_omega) as reference_id
     // 2. 'fish_default' or 'default' omits reference_id to use base model zero-shot voice
-    // 3. Real custom model reference IDs (24-36 hex characters or verified custom IDs) are passed as reference_id
+    // 3. Preset voices map to their respective reference_ids
+    // 4. Real custom model reference IDs (24-36 hex characters or verified custom IDs) are passed as reference_id
     let referenceId: string | undefined;
-    if (
-      voice &&
-      !isKokoroVoiceId(voice) &&
-      voice !== 'fish_default' &&
-      voice !== 'default' &&
-      !voice.startsWith('fish_')
-    ) {
-      referenceId = voice;
+    if (voice && !isKokoroVoiceId(voice) && voice !== 'fish_default' && voice !== 'default') {
+      const preset = FISH_VOICE_PRESETS[voice];
+      if (preset && preset.referenceId) {
+        referenceId = preset.referenceId;
+      } else if (!voice.startsWith('fish_') || /^[a-f0-9]{24,36}$/i.test(voice)) {
+        referenceId = voice;
+      }
     }
 
     const payload: Record<string, any> = {

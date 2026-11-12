@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto';
+import { z } from 'zod';
 import {
   ShotType,
   CameraAngleType,
@@ -7,6 +8,7 @@ import {
   DirectedCharacterPlacement,
   ShotComposition,
   PromptVersionRecord,
+  normalizeCameraMovement,
 } from './scene-director.types.js';
 import { PromptSynthesizer } from '../story-generation/parser/prompt-synthesizer.js';
 import {
@@ -39,15 +41,46 @@ export interface PlanSceneShotsParams {
   visualBible?: any;
   aspectRatio?: string;
   visualStyle?: string;
+  existingShots?: CinematicShotData[];
 }
+
+const ShotAiOutputSchema = z.object({
+  shots: z.array(
+    z.object({
+      number: z.number().optional(),
+      title: z.string().optional(),
+      description: z.string().optional(),
+      durationMs: z.number().optional(),
+      shotType: z.string().optional(),
+      cameraAngle: z.string().optional(),
+      cameraMovement: z.string().optional(),
+      lighting: z.string().optional(),
+      backgroundPrompt: z.string(),
+      videoPrompt: z.string().optional(),
+      characterPlacements: z.array(
+        z.object({
+          characterId: z.string().optional(),
+          instanceId: z.string().optional(),
+          name: z.string().optional(),
+          x: z.number().optional(),
+          y: z.number().optional(),
+          scale: z.number().optional(),
+          flipX: z.boolean().optional(),
+          action: z.string().optional(),
+          expression: z.string().optional(),
+        })
+      ).optional(),
+    })
+  ).min(1),
+});
 
 export class ShotDirectorService {
   /**
-   * Generates a multi-shot cinematic breakdown for a single scene (2-4 shots).
+   * Generates a multi-shot cinematic breakdown for a single scene (2-4 shots) via deterministic rule engine.
    * Ensures non-destructive character vector staging, separate environment-only background prompts,
    * and dedicated video prompts for optional manual Flow/Veo workflows.
    */
-  public static planShotsForScene(params: PlanSceneShotsParams): CinematicShotData[] {
+  public static planShotsRuleEngine(params: PlanSceneShotsParams): CinematicShotData[] {
     const {
       storyId,
       sceneId,
@@ -305,9 +338,344 @@ export class ShotDirectorService {
   }
 
   /**
-   * Plans and persists cinematic shot breakdowns for all scenes in a story.
+   * Maps AI-generated structured shots into CinematicShotData contracts with complete defaults.
    */
-  public static async planShotsForStory(storyId: string, options?: { forceRegenerate?: boolean }): Promise<CinematicShotData[]> {
+  private static mapAiShotsToCinematicData(
+    rawShots: Array<any>,
+    params: PlanSceneShotsParams
+  ): CinematicShotData[] {
+    const { storyId, sceneId, sceneTitle, visualPrompt = '', durationMs = 15000, characterInstances = [] } = params;
+    const cleanLocation = PromptSynthesizer.normalizeLocationName(visualPrompt) ||
+      PromptSynthesizer.normalizeLocationName(sceneTitle) ||
+      sceneTitle;
+
+    let cursorMs = 0;
+    const totalDuration = Math.max(3000, durationMs);
+
+    return rawShots.map((st, idx) => {
+      const shotNum = st.number || idx + 1;
+      const sDur = typeof st.durationMs === 'number' && st.durationMs > 0
+        ? st.durationMs
+        : Math.round(totalDuration / rawShots.length);
+      const sStart = cursorMs;
+      const sEnd = idx === rawShots.length - 1 ? totalDuration : sStart + sDur;
+      cursorMs = sEnd;
+
+      const normalizedMove = normalizeCameraMovement(st.cameraMovement || 'slow_zoom_in');
+      const shotType = (st.shotType as ShotType) || (shotNum === 1 ? 'wide_establishing' : 'medium_twoshot');
+      const cameraAngle = (st.cameraAngle as CameraAngleType) || 'eye_level';
+
+      // Reconcile character placements
+      const placements: DirectedCharacterPlacement[] = characterInstances.map((ci, cIdx) => {
+        const found = (st.characterPlacements || []).find((p: any) =>
+          p.characterId === ci.characterId || p.instanceId === ci.instanceId || p.name === ci.name
+        );
+        return {
+          instanceId: ci.instanceId,
+          characterId: ci.characterId,
+          name: ci.name || `Character ${cIdx + 1}`,
+          x: found?.x ?? (characterInstances.length === 2 ? (cIdx === 0 ? 460 : 820) : (ci.x ?? 640)),
+          y: found?.y ?? (ci.y ?? 470),
+          scale: found?.scale ?? (ci.scale ?? 1.0),
+          flipX: found?.flipX ?? (characterInstances.length === 2 && cIdx === 1),
+          zIndex: cIdx + 1,
+          action: (found?.action as any) || (shotNum === 1 && cIdx === 0 ? 'walk' : 'idle'),
+          expression: (found?.expression as any) || 'happy',
+        };
+      });
+
+      const bgPrompt = PromptSynthesizer.synthesizeBackgroundPrompt({
+        explicitPrompt: st.backgroundPrompt || visualPrompt,
+        sceneTitle,
+        locationName: cleanLocation,
+        cameraDirection: shotType === 'wide_establishing' ? 'Eye-level wide shot' : `${shotType.replace(/_/g, ' ')} view`,
+      });
+
+      const vidPrompt = st.videoPrompt || PromptSynthesizer.synthesizeVideoPrompt({
+        locationName: cleanLocation,
+        cameraMovement: normalizedMove,
+        cameraAngle,
+        shotType,
+      });
+
+      const initialHistory: PromptVersionRecord[] = [
+        {
+          version: 1,
+          backgroundPrompt: bgPrompt,
+          videoPrompt: vidPrompt,
+          createdAt: new Date().toISOString(),
+          approved: false,
+          notes: 'AI Production Planning',
+        },
+      ];
+
+      return {
+        shotId: `shot-${sceneId}-${shotNum}-${randomUUID().slice(0, 6)}`,
+        sceneId,
+        storyId,
+        number: shotNum,
+        order: shotNum,
+        title: st.title || `Shot ${shotNum}: ${cleanLocation}`,
+        description: st.description || `Cinematic shot ${shotNum}`,
+        durationMs: sDur,
+        shotType,
+        cameraAngle,
+        cameraMovement: normalizedMove,
+        lighting: st.lighting || 'Soft warm storybook illumination with gentle fill lighting',
+        composition: {
+          foreground: 'Open ground framed by natural atmosphere',
+          middleground: 'Character staging area',
+          background: `Scenic panorama of ${cleanLocation}`,
+          depthOfField: 'deep',
+        },
+        characterPlacements: placements,
+        requiredProps: [],
+        requiredEffects: [],
+        startMs: sStart,
+        endMs: sEnd,
+        transition: {
+          type: shotNum === 1 ? 'fade' : 'cut',
+          durationMs: shotNum === 1 ? 500 : 300,
+        },
+        backgroundPrompt: bgPrompt,
+        videoPrompt: vidPrompt,
+        promptHistory: initialHistory,
+        backgroundUrl: null,
+        videoUrl: null,
+        assetStatus: 'pending',
+        approvalStatus: 'pending',
+        productionStatus: 'draft',
+      };
+    });
+  }
+
+  /**
+   * Plans cinematic shots using active AI model (Gemini or OpenAI) with bounded repair & fallback.
+   */
+  public static async planShotsWithAI(params: PlanSceneShotsParams): Promise<{ shots: CinematicShotData[]; provider: string }> {
+    const geminiKey = process.env.GOOGLE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
+    const openaiKey = process.env.OPENAI_API_KEY;
+
+    if (!geminiKey && !openaiKey) {
+      return { shots: this.planShotsRuleEngine(params), provider: 'fallback_rule_engine' };
+    }
+
+    const {
+      sceneTitle,
+      narration = '',
+      visualPrompt = '',
+      durationMs = 15000,
+      dialogueLines = [],
+      characterInstances = [],
+    } = params;
+
+    const promptText = `You are a cinematic animation director directing Scene ${params.sceneNumber}: "${sceneTitle}".
+Scene Duration: ${durationMs}ms
+Narration: "${narration}"
+Visual Prompt: "${visualPrompt}"
+Characters Present: ${characterInstances.map(c => `${c.name || 'Character'} (id: ${c.characterId})`).join(', ') || 'None'}
+Dialogue Lines:
+${dialogueLines.map(d => `- ${d.characterName}: "${d.text}" (${d.emotion || 'neutral'})`).join('\n') || 'None'}
+
+Direct this scene into 2 to 4 distinct cinematic shots.
+CRITICAL RULES:
+1. Divide the total duration (${durationMs}ms) across the shots so their durations sum to ${durationMs}.
+2. shotType MUST be one of: "wide_establishing", "medium_twoshot", "closeup_speaker", "character_focus", "extreme_wide", "medium", "closeup", "over_the_shoulder".
+3. cameraMovement MUST be one of: "slow_zoom_in", "zoom_out", "pan_left", "pan_right", "tilt_up", "tilt_down", "tracking", "dolly", "push_in", "pull_out", "static".
+4. cameraAngle MUST be one of: "eye_level", "low_angle", "high_angle", "birds_eye".
+5. backgroundPrompt: MUST BE STRICTLY ENVIRONMENT ONLY! Describe scenery, landscape, lighting, colors, props, time of day. NEVER include characters, children, faces, animals, or humans in backgroundPrompt.
+6. videoPrompt: Describe camera motion through this environment for video generation.
+7. characterPlacements: Provide coordinates (x: 100-1180, y: 400-520), scale (0.8-1.4), action ("idle", "walk", "wave", "jump", "point"), expression ("happy", "excited", "curious", "surprised", "neutral").
+
+Return ONLY a valid JSON object matching this structure:
+{
+  "shots": [
+    {
+      "number": 1,
+      "title": "Shot 1 Title",
+      "description": "Shot summary",
+      "durationMs": 7500,
+      "shotType": "wide_establishing",
+      "cameraAngle": "eye_level",
+      "cameraMovement": "slow_zoom_in",
+      "lighting": "Warm morning sunlight with soft rim light",
+      "backgroundPrompt": "A lush storybook meadow with rolling green hills...",
+      "videoPrompt": "Slow cinematic push-in towards rolling green meadow under sunlit sky...",
+      "characterPlacements": []
+    }
+  ]
+}`;
+
+    try {
+      let rawJson = '';
+      let usedProvider = 'gemini';
+
+      if (geminiKey) {
+        const model = process.env.GEMINI_TEXT_MODEL || 'gemini-2.0-flash';
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`;
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: promptText }] }],
+            generationConfig: {
+              responseMimeType: 'application/json',
+              temperature: 0.4,
+            },
+          }),
+        });
+        if (res.ok) {
+          const data: any = await res.json();
+          rawJson = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+          usedProvider = `gemini:${model}`;
+        }
+      }
+
+      if (!rawJson && openaiKey) {
+        const res = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${openaiKey}`,
+          },
+          body: JSON.stringify({
+            model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+            messages: [
+              { role: 'system', content: 'You are an expert cinematic animation director. Output only valid JSON.' },
+              { role: 'user', content: promptText },
+            ],
+            response_format: { type: 'json_object' },
+            temperature: 0.4,
+          }),
+        });
+        if (res.ok) {
+          const data: any = await res.json();
+          rawJson = data.choices?.[0]?.message?.content || '';
+          usedProvider = 'openai:gpt-4o-mini';
+        }
+      }
+
+      if (rawJson) {
+        const cleaned = rawJson.replace(/```(?:json)?/gi, '').replace(/```/g, '').trim();
+        const parsed = JSON.parse(cleaned);
+        const validated = ShotAiOutputSchema.safeParse(parsed);
+        if (validated.success && validated.data.shots.length > 0) {
+          const mapped = this.mapAiShotsToCinematicData(validated.data.shots, params);
+          return { shots: mapped, provider: usedProvider };
+        }
+      }
+    } catch (err: any) {
+      console.warn('[ShotDirectorService] AI planning failed, utilizing fallback rule engine:', err.message);
+    }
+
+    return { shots: this.planShotsRuleEngine(params), provider: 'fallback_rule_engine' };
+  }
+
+  /**
+   * Reconciles freshly planned shots with existing shots to preserve user work:
+   * - Preserves user-edited titles and descriptions
+   * - Preserves custom/edited prompts, history, approvals, and attached assets (backgroundUrl, videoUrl)
+   * - Preserves manual character placement adjustments
+   * - Re-aligns startMs and endMs timeline cursors cleanly
+   */
+  public static reconcileShots(
+    newShots: CinematicShotData[],
+    existingShots: CinematicShotData[]
+  ): CinematicShotData[] {
+    if (!existingShots || existingShots.length === 0) {
+      return newShots;
+    }
+
+    let cursorMs = 0;
+    return newShots.map((ns, idx) => {
+      // Find matching existing shot by order/number or shotId
+      const existing = existingShots.find((es) => es.number === ns.number || es.shotId === ns.shotId) ||
+        existingShots[idx];
+
+      if (!existing) {
+        const sEnd = cursorMs + ns.durationMs;
+        const res = { ...ns, startMs: cursorMs, endMs: sEnd };
+        cursorMs = sEnd;
+        return res;
+      }
+
+      const isApproved = existing.approvalStatus === 'approved';
+      const hasCustomPrompt = existing.promptHistory && existing.promptHistory.length > 1;
+      const hasAsset = Boolean(existing.backgroundUrl || existing.videoUrl);
+
+      // Preserve stable shot ID
+      const preservedId = existing.shotId || ns.shotId;
+
+      // Preserve background and video prompt if user approved or regenerated
+      const backgroundPrompt = (isApproved || hasCustomPrompt) && existing.backgroundPrompt
+        ? existing.backgroundPrompt
+        : ns.backgroundPrompt;
+
+      const videoPrompt = (isApproved || hasCustomPrompt) && existing.videoPrompt
+        ? existing.videoPrompt
+        : ns.videoPrompt;
+
+      const promptHistory = existing.promptHistory && existing.promptHistory.length > 0
+        ? existing.promptHistory
+        : ns.promptHistory;
+
+      // Retain asset references
+      const backgroundUrl = existing.backgroundUrl || ns.backgroundUrl;
+      const videoUrl = existing.videoUrl || ns.videoUrl;
+      const assetStatus = hasAsset ? existing.assetStatus : ns.assetStatus;
+      const approvalStatus = existing.approvalStatus || ns.approvalStatus;
+
+      // Re-align timeline cursors
+      const durationMs = existing.durationMs || ns.durationMs;
+      const sStart = cursorMs;
+      const sEnd = cursorMs + durationMs;
+      cursorMs = sEnd;
+
+      return {
+        ...ns,
+        shotId: preservedId,
+        title: existing.title || ns.title,
+        description: existing.description || ns.description,
+        durationMs,
+        startMs: sStart,
+        endMs: sEnd,
+        shotType: existing.shotType || ns.shotType,
+        cameraAngle: existing.cameraAngle || ns.cameraAngle,
+        cameraMovement: existing.cameraMovement || ns.cameraMovement,
+        lighting: existing.lighting || ns.lighting,
+        backgroundPrompt,
+        videoPrompt,
+        promptHistory,
+        backgroundUrl,
+        videoUrl,
+        assetStatus,
+        approvalStatus,
+        productionStatus: hasAsset || isApproved ? 'ready' : ns.productionStatus,
+        characterPlacements: existing.characterPlacements && existing.characterPlacements.length > 0
+          ? existing.characterPlacements
+          : ns.characterPlacements,
+      };
+    });
+  }
+
+  /**
+   * Plans cinematic shot breakdown for a single scene with reconciliation.
+   */
+  public static planShotsForScene(params: PlanSceneShotsParams): CinematicShotData[] {
+    const planned = this.planShotsRuleEngine(params);
+    if (params.existingShots && params.existingShots.length > 0) {
+      return this.reconcileShots(planned, params.existingShots);
+    }
+    return planned;
+  }
+
+  /**
+   * Plans and persists cinematic shot breakdowns for all scenes in a story with reconciliation.
+   */
+  public static async planShotsForStory(
+    storyId: string,
+    options?: { forceRegenerate?: boolean; useAI?: boolean }
+  ): Promise<CinematicShotData[]> {
     const story = await prisma.story.findUnique({
       where: { storyId },
       include: {
@@ -323,9 +691,9 @@ export class ShotDirectorService {
     }
 
     // Check if shots already exist
-    const existingShots = await getShotsByStoryId(storyId);
-    if (existingShots.length > 0 && !options?.forceRegenerate) {
-      return existingShots.map(this.mapPrismaRecordToShotData);
+    const existingStoryShots = await getShotsByStoryId(storyId);
+    if (existingStoryShots.length > 0 && !options?.forceRegenerate) {
+      return existingStoryShots.map(this.mapPrismaRecordToShotData);
     }
 
     const allPlannedShots: CinematicShotData[] = [];
@@ -334,8 +702,11 @@ export class ShotDirectorService {
       const animData = (sc.animationData as any) || {};
       const charInstances = animData.characterInstances || [];
       const dialogueLines = animData.dialogueLines || [];
+      const existingSceneShots = existingStoryShots
+        .filter((es: any) => es.sceneId === sc.sceneId)
+        .map(this.mapPrismaRecordToShotData);
 
-      const sceneShots = this.planShotsForScene({
+      const params: PlanSceneShotsParams = {
         storyId,
         sceneId: sc.sceneId,
         sceneNumber: sc.number,
@@ -348,7 +719,18 @@ export class ShotDirectorService {
         visualBible: story.visualBible,
         aspectRatio: (animData.background?.aspectRatio) || '16:9',
         visualStyle: story.visualStyle || undefined,
-      });
+        existingShots: existingSceneShots,
+      };
+
+      let sceneShots: CinematicShotData[];
+      if (options?.useAI) {
+        const aiResult = await this.planShotsWithAI(params);
+        sceneShots = existingSceneShots.length > 0
+          ? this.reconcileShots(aiResult.shots, existingSceneShots)
+          : aiResult.shots;
+      } else {
+        sceneShots = this.planShotsForScene(params);
+      }
 
       // Persist to database atomically per scene
       const createInputs: CreateShotInput[] = sceneShots.map((s) => ({

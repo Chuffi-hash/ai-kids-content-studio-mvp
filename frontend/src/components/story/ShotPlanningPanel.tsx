@@ -7,6 +7,7 @@ import {
   regenerateShotPrompt,
   approveShotPrompt,
   associateShotAsset,
+  uploadShotAsset,
   deleteShotRecord,
 } from '../../services/shot.service';
 import {
@@ -41,6 +42,9 @@ export const ShotPlanningPanel: React.FC<ShotPlanningPanelProps> = ({
   const [copiedShotId, setCopiedShotId] = useState<string | null>(null);
   const [copiedVideoShotId, setCopiedVideoShotId] = useState<string | null>(null);
   const [editingShotId, setEditingShotId] = useState<string | null>(null);
+  const [historyModalShot, setHistoryModalShot] = useState<CinematicShot | null>(null);
+  const [instructionModal, setInstructionModal] = useState<{ shotId: string; type: 'background' | 'video' | 'both' } | null>(null);
+  const [customInstructions, setCustomInstructions] = useState('');
 
   useEffect(() => {
     if (storyId) {
@@ -84,13 +88,36 @@ export const ShotPlanningPanel: React.FC<ShotPlanningPanelProps> = ({
     }
   };
 
-  const handleRegeneratePrompt = async (shotId: string, type: 'background' | 'video' | 'both') => {
+  const handleRegeneratePrompt = async (shotId: string, type: 'background' | 'video' | 'both', instructions?: string) => {
     try {
-      const res = await regenerateShotPrompt(shotId, type);
+      const res = await regenerateShotPrompt(shotId, type, instructions);
       setShots((prev) => prev.map((s) => (s.shotId === shotId ? res.shot : s)));
       onShotUpdated?.(res.shot);
     } catch (err: any) {
       setError(err.message || 'Failed to regenerate prompt');
+    }
+  };
+
+  const handleRegenerateWithInstructions = async () => {
+    if (!instructionModal) return;
+    try {
+      await handleRegeneratePrompt(instructionModal.shotId, instructionModal.type, customInstructions);
+      setInstructionModal(null);
+      setCustomInstructions('');
+    } catch (err: any) {
+      setError(err.message || 'Failed to regenerate prompt with instructions');
+    }
+  };
+
+  const handleRestoreVersion = async (shot: CinematicShot, version: any) => {
+    try {
+      await handleUpdateField(shot.shotId, {
+        backgroundPrompt: version.backgroundPrompt,
+        videoPrompt: version.videoPrompt,
+      });
+      setHistoryModalShot(null);
+    } catch (err: any) {
+      setError(err.message || 'Failed to restore prompt version');
     }
   };
 
@@ -127,17 +154,15 @@ export const ShotPlanningPanel: React.FC<ShotPlanningPanelProps> = ({
     if (!file) return;
 
     const isVideo = file.type.startsWith('video');
-    const objectUrl = URL.createObjectURL(file);
-
+    setLoading(true);
     try {
-      const res = await associateShotAsset(shotId, {
-        type: isVideo ? 'video' : 'image',
-        url: objectUrl,
-      });
+      const res = await uploadShotAsset(shotId, file, isVideo ? 'video' : 'image');
       setShots((prev) => prev.map((s) => (s.shotId === shotId ? res.shot : s)));
       onShotUpdated?.(res.shot);
     } catch (err: any) {
-      setError(err.message || 'Failed to associate uploaded asset');
+      setError(err.message || 'Failed to upload asset');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -331,15 +356,16 @@ export const ShotPlanningPanel: React.FC<ShotPlanningPanelProps> = ({
 
               {/* Background Prompt Card (Environment Only) */}
               <div style={{ background: 'var(--ed-surface-elevated, #f8fafc)', border: '1px solid var(--ed-border, #e2e8f0)', borderRadius: '6px', padding: '10px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px', flexWrap: 'wrap', gap: '6px' }}>
                   <span style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--ed-text, #0f172a)' }}>
                     🌄 Environment Background Prompt (No Characters)
                   </span>
-                  <div style={{ display: 'flex', gap: '6px' }}>
+                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                     <button
                       type="button"
                       onClick={() => handleCopyPrompt(shot.shotId, shot.backgroundPrompt, false)}
                       style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '4px', border: '1px solid var(--ed-border, #cbd5e1)', background: '#fff', cursor: 'pointer' }}
+                      title="Copy environment prompt to clipboard"
                     >
                       {copiedShotId === shot.shotId ? '✓ Copied' : 'Copy Prompt'}
                     </button>
@@ -348,7 +374,23 @@ export const ShotPlanningPanel: React.FC<ShotPlanningPanelProps> = ({
                       onClick={() => handleRegeneratePrompt(shot.shotId, 'background')}
                       style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '4px', border: '1px solid var(--ed-border, #cbd5e1)', background: '#fff', cursor: 'pointer' }}
                     >
-                      ↻ Regenerate (v{shot.promptHistory?.length || 1})
+                      ↻ Regen BG
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setInstructionModal({ shotId: shot.shotId, type: 'background' })}
+                      style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '4px', border: '1px solid var(--ed-border, #cbd5e1)', background: '#fff', cursor: 'pointer' }}
+                      title="Regenerate with custom creative instructions"
+                    >
+                      + Instructions
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setHistoryModalShot(shot)}
+                      style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '4px', border: '1px solid var(--ed-border, #cbd5e1)', background: '#fff', cursor: 'pointer' }}
+                      title="View past prompt versions and restore"
+                    >
+                      📜 History (v{shot.promptHistory?.length || 1})
                     </button>
                   </div>
                 </div>
@@ -356,29 +398,49 @@ export const ShotPlanningPanel: React.FC<ShotPlanningPanelProps> = ({
                   rows={2}
                   value={shot.backgroundPrompt}
                   onChange={(e) => handleUpdateField(shot.shotId, { backgroundPrompt: e.target.value })}
+                  placeholder="Describe environment scenery, foliage, weather, and lighting..."
                   style={{ width: '100%', boxSizing: 'border-box', fontSize: '12px', padding: '6px 8px', borderRadius: '4px', border: '1px solid var(--ed-border, #cbd5e1)', background: 'var(--ed-surface, #fff)', fontFamily: 'inherit', resize: 'vertical' }}
                 />
               </div>
 
               {/* Video Prompt Card (For Google Flow / Veo) */}
               <div style={{ background: 'rgba(56, 189, 248, 0.05)', border: '1px solid rgba(56, 189, 248, 0.2)', borderRadius: '6px', padding: '10px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px', flexWrap: 'wrap', gap: '6px' }}>
                   <span style={{ fontSize: '11.5px', fontWeight: 600, color: '#0369a1' }}>
                     🎥 Video Generation Prompt (Google Flow / Veo)
                   </span>
-                  <div style={{ display: 'flex', gap: '6px' }}>
+                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                     <button
                       type="button"
                       onClick={() => handleCopyPrompt(shot.shotId, shot.videoPrompt, true)}
                       style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '4px', border: '1px solid rgba(56, 189, 248, 0.3)', background: '#fff', color: '#0284c7', cursor: 'pointer' }}
+                      title="Copy video prompt for Google Flow or Veo"
                     >
                       {copiedVideoShotId === shot.shotId ? '✓ Copied' : 'Copy Video Prompt'}
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => handleRegeneratePrompt(shot.shotId, 'video')}
+                      style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '4px', border: '1px solid rgba(56, 189, 248, 0.3)', background: '#fff', color: '#0284c7', cursor: 'pointer' }}
+                    >
+                      ↻ Regen Video
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setInstructionModal({ shotId: shot.shotId, type: 'video' })}
+                      style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '4px', border: '1px solid rgba(56, 189, 248, 0.3)', background: '#fff', color: '#0284c7', cursor: 'pointer' }}
+                    >
+                      + Instructions
+                    </button>
                   </div>
                 </div>
-                <p style={{ margin: 0, fontSize: '11.5px', color: '#334155', lineHeight: 1.4 }}>
-                  {shot.videoPrompt}
-                </p>
+                <textarea
+                  rows={2}
+                  value={shot.videoPrompt}
+                  onChange={(e) => handleUpdateField(shot.shotId, { videoPrompt: e.target.value })}
+                  placeholder="Describe camera movement and environmental dynamics for video models..."
+                  style={{ width: '100%', boxSizing: 'border-box', fontSize: '12px', padding: '6px 8px', borderRadius: '4px', border: '1px solid rgba(56, 189, 248, 0.3)', background: 'var(--ed-surface, #fff)', fontFamily: 'inherit', resize: 'vertical' }}
+                />
               </div>
 
               {/* Asset Attachment / Import Footer */}
@@ -390,6 +452,11 @@ export const ShotPlanningPanel: React.FC<ShotPlanningPanelProps> = ({
                       alt="Shot Asset"
                       style={{ width: '48px', height: '28px', objectFit: 'cover', borderRadius: '4px', border: '1px solid #cbd5e1' }}
                     />
+                  )}
+                  {shot.videoUrl && (
+                    <span style={{ fontSize: '11px', background: 'rgba(56, 189, 248, 0.15)', color: '#0284c7', padding: '2px 6px', borderRadius: '4px', fontWeight: 600 }}>
+                      ▶ Video Background
+                    </span>
                   )}
                   <span style={{ fontSize: '11px', color: hasAsset ? '#059669' : '#64748b' }}>
                     {hasAsset ? '✓ Custom Asset Linked' : 'Using default stage backdrop'}
@@ -413,6 +480,113 @@ export const ShotPlanningPanel: React.FC<ShotPlanningPanelProps> = ({
           );
         })}
       </div>
+
+      {/* Custom Instruction Modal */}
+      {instructionModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, padding: '16px' }}>
+          <div style={{ background: 'var(--ed-surface, #fff)', borderRadius: '12px', padding: '20px', maxWidth: '480px', width: '100%', display: 'flex', flexDirection: 'column', gap: '14px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.2)' }}>
+            <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 700 }}>
+              Regenerate {instructionModal.type === 'background' ? 'Background' : instructionModal.type === 'video' ? 'Video' : 'Shot'} Prompt
+            </h4>
+            <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>
+              Add specific creative notes or instructions (e.g. "Add volumetric sunset rays, remove dense trees, more whimsical fairy glow"):
+            </p>
+            <textarea
+              rows={3}
+              value={customInstructions}
+              onChange={(e) => setCustomInstructions(e.target.value)}
+              placeholder="Enter creative direction..."
+              style={{ width: '100%', boxSizing: 'border-box', padding: '8px', borderRadius: '6px', border: '1px solid var(--ed-border, #cbd5e1)', fontFamily: 'inherit', fontSize: '12.5px' }}
+              autoFocus
+            />
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+              <button
+                type="button"
+                className="ed-btn-action"
+                onClick={() => { setInstructionModal(null); setCustomInstructions(''); }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="ed-btn-action primary"
+                onClick={handleRegenerateWithInstructions}
+              >
+                Regenerate Variant
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Prompt Version History Modal */}
+      {historyModalShot && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, padding: '16px' }}>
+          <div style={{ background: 'var(--ed-surface, #fff)', borderRadius: '12px', padding: '20px', maxWidth: '640px', width: '100%', maxHeight: '80vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '16px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.2)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 700 }}>
+                Prompt Version History: Shot {historyModalShot.number} ({historyModalShot.title})
+              </h4>
+              <button
+                type="button"
+                onClick={() => setHistoryModalShot(null)}
+                style={{ background: 'none', border: 'none', fontSize: '16px', cursor: 'pointer', color: '#64748b' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {(historyModalShot.promptHistory || []).map((v, vIdx) => (
+                <div
+                  key={v.version || vIdx}
+                  style={{
+                    border: '1px solid var(--ed-border, #e2e8f0)',
+                    borderRadius: '8px',
+                    padding: '12px',
+                    background: 'var(--ed-surface-elevated, #f8fafc)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '8px',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontWeight: 700, fontSize: '12px', color: '#7c3aed' }}>
+                        Version {v.version || vIdx + 1}
+                      </span>
+                      <span style={{ fontSize: '11px', color: '#94a3b8' }}>
+                        {new Date(v.createdAt).toLocaleString()}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      className="ed-btn-action primary"
+                      style={{ fontSize: '11px', padding: '3px 8px' }}
+                      onClick={() => handleRestoreVersion(historyModalShot, v)}
+                    >
+                      Restore This Version
+                    </button>
+                  </div>
+                  {v.notes && (
+                    <div style={{ fontSize: '11px', color: '#64748b', fontStyle: 'italic' }}>
+                      Note: {v.notes}
+                    </div>
+                  )}
+                  <div style={{ fontSize: '11.5px', background: '#fff', border: '1px solid #e2e8f0', padding: '6px 8px', borderRadius: '4px' }}>
+                    <strong>Background:</strong> {v.backgroundPrompt}
+                  </div>
+                  {v.videoPrompt && (
+                    <div style={{ fontSize: '11.5px', background: '#f0fdf4', border: '1px solid #bbf7d0', padding: '6px 8px', borderRadius: '4px' }}>
+                      <strong>Video:</strong> {v.videoPrompt}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

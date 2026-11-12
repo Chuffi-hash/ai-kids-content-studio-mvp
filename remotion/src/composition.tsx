@@ -16,6 +16,7 @@ import {
   frames,
   Scene,
   VideoManifest,
+  normalizeCameraMovement,
 } from './manifest';
 import { evaluateCharacterPose } from './characters/animation-evaluator';
 import { getVectorRig } from './characters/rigs';
@@ -57,7 +58,7 @@ function computeCameraTransform(opts: {
     height,
   } = opts;
 
-  const moveStr = movement.toLowerCase().trim();
+  const canonicalMove = normalizeCameraMovement(movement);
   const rotStr = rotation.toLowerCase().trim();
 
   let scale = 1.0;
@@ -65,23 +66,30 @@ function computeCameraTransform(opts: {
   let dy = 0;
   let rotationDeg = 0;
 
-  // Zoom, pan, tilt
-  if (moveStr.includes('zoom in') || moveStr === 'zoom-in' || moveStr === 'slow zoom in') {
+  // Zoom, pan, tilt, tracking, dolly
+  if (canonicalMove === 'slow_zoom_in') {
     scale = 1.0 + 0.15 * t;
-  } else if (moveStr.includes('zoom out') || moveStr === 'zoom-out' || moveStr === 'slow zoom out') {
+  } else if (canonicalMove === 'zoom_out') {
     scale = 1.15 - 0.15 * t;
-  } else if (moveStr.includes('pan left') || moveStr === 'pan-left') {
+  } else if (canonicalMove === 'pan_left') {
     scale = 1.12;
     dx = (t - 0.5) * (width * 0.08);
-  } else if (moveStr.includes('pan right') || moveStr === 'pan-right') {
+  } else if (canonicalMove === 'pan_right') {
     scale = 1.12;
     dx = (0.5 - t) * (width * 0.08);
-  } else if (moveStr.includes('tilt up') || moveStr === 'tilt-up') {
+  } else if (canonicalMove === 'tilt_up') {
     scale = 1.12;
     dy = (t - 0.5) * (height * 0.08);
-  } else if (moveStr.includes('tilt down') || moveStr === 'tilt-down') {
+  } else if (canonicalMove === 'tilt_down') {
     scale = 1.12;
     dy = (0.5 - t) * (height * 0.08);
+  } else if (canonicalMove === 'tracking') {
+    scale = 1.10;
+    dx = (t - 0.5) * (width * 0.10);
+  } else if (canonicalMove === 'dolly' || canonicalMove === 'push_in') {
+    scale = 1.0 + 0.20 * t;
+  } else if (canonicalMove === 'pull_out') {
+    scale = 1.20 - 0.20 * t;
   }
 
   // 2D Roll Rotation
@@ -449,13 +457,155 @@ function SceneView({
   const charOverrides = formatVariant?.characterOverrides;
   const overlayOverrides = formatVariant?.overlayOverrides;
 
-  // Dynamically map motion paths of animation clips to current format dimensions
+  // Coordinate adaptation for non-16:9 formats and storybook character scaling
+  const instances = (scene.characterInstances || []).map((inst, instIdx, arr) => {
+    let targetFlipX = inst.flipX;
+    if (arr.length === 2 && targetFlipX === undefined) {
+      const other = arr[1 - instIdx];
+      if (other && inst.x > other.x) {
+        targetFlipX = true;
+      }
+    }
+
+    // Active shot character placement override (if defined)
+    const shotPlacement = activeShot?.characterPlacements?.find(
+      (cp) => cp.instanceId === inst.instanceId || cp.characterId === inst.characterId
+    );
+
+    const baseInst = {
+      ...inst,
+      x: shotPlacement?.x ?? inst.x,
+      y: shotPlacement?.y ?? inst.y,
+      scale: shotPlacement?.scale ?? inst.scale,
+      flipX: shotPlacement?.flipX ?? targetFlipX ?? inst.flipX,
+    };
+
+    const override = charOverrides?.[inst.instanceId];
+    if (override) {
+      let ox = override.x !== undefined ? override.x : baseInst.x;
+      let oy = override.y !== undefined ? override.y : baseInst.y;
+      // Auto-recovery across all aspect ratios
+      if (format === '9:16' && (oy < 680 || oy > 1150)) {
+        oy = Math.round(height * 0.65);
+      } else if (format === '1:1' && (oy < 350 || oy > 650)) {
+        oy = Math.round(height * 0.68);
+      } else if (format === '4:5' && (oy < 450 || oy > 850)) {
+        oy = Math.round(height * 0.68);
+      }
+      return {
+        ...baseInst,
+        x: ox,
+        y: oy,
+        scale: override.scale !== undefined ? override.scale : (baseInst.scale ?? 1.0),
+        flipX: targetFlipX ?? baseInst.flipX,
+      };
+    }
+
+    const rawScale = baseInst.scale ?? 1.0;
+    const isSingleChar = arr.length === 1;
+
+    if (format === '16:9' || (width === 1280 && height === 720)) {
+      const s = width / 1280;
+      return {
+        ...baseInst,
+        x: Math.round(baseInst.x * s),
+        y: Math.round(baseInst.y * s),
+        scale: Number((rawScale * s).toFixed(2)),
+        flipX: targetFlipX ?? baseInst.flipX,
+      };
+    }
+
+    if (format === '9:16' || width < height) {
+      // 9:16 Portrait Reel:
+      const scaleMult = isSingleChar ? 1.55 : 1.35;
+      const boostedScale = Number((rawScale * scaleMult).toFixed(2));
+      const xOffset = baseInst.x - 640;
+      let newX = width / 2 + (xOffset * (width / 1280));
+      let newY = Math.round(baseInst.y * (height / 720));
+      if (newY < 680 || newY > 1150) {
+        newY = Math.round(height * 0.65);
+      }
+      if (arr.length === 2) {
+        newX = instIdx === 0 ? Math.round(width * 0.35) : Math.round(width * 0.65);
+      }
+
+      return {
+        ...baseInst,
+        x: Math.round(newX),
+        y: newY,
+        scale: boostedScale,
+        flipX: targetFlipX ?? baseInst.flipX,
+      };
+    }
+
+    if (format === '1:1') {
+      const xOffset = baseInst.x - 640;
+      let newX = width / 2 + (xOffset * (width / 1280));
+      let newY = Math.round(baseInst.y * (height / 720));
+      if (newY < 350 || newY > 650) {
+        newY = Math.round(height * 0.68);
+      }
+      if (arr.length === 2) {
+        newX = instIdx === 0 ? Math.round(width * 0.36) : Math.round(width * 0.64);
+      }
+      const scaleMult = isSingleChar ? 1.25 : 1.15;
+      return {
+        ...baseInst,
+        x: Math.round(newX),
+        y: newY,
+        scale: Number((rawScale * scaleMult).toFixed(2)),
+        flipX: targetFlipX ?? baseInst.flipX,
+      };
+    }
+
+    if (format === '4:5') {
+      const xOffset = baseInst.x - 640;
+      let newX = width / 2 + (xOffset * (width / 1280));
+      let newY = Math.round(baseInst.y * (height / 720));
+      if (newY < 450 || newY > 850) {
+        newY = Math.round(height * 0.68);
+      }
+      if (arr.length === 2) {
+        newX = instIdx === 0 ? Math.round(width * 0.35) : Math.round(width * 0.65);
+      }
+      const scaleMult = isSingleChar ? 1.35 : 1.22;
+      return {
+        ...baseInst,
+        x: Math.round(newX),
+        y: newY,
+        scale: Number((rawScale * scaleMult).toFixed(2)),
+        flipX: targetFlipX ?? baseInst.flipX,
+      };
+    }
+
+    return baseInst;
+  });
+
+  // Dynamically map motion paths of animation clips to current format dimensions and anchored instance coordinates
   const scaledClips = useMemo(() => {
     if (format === '16:9' || (width === 1280 && height === 720)) {
       return scene.animationClips || [];
     }
     return (scene.animationClips || []).map((clip) => {
       if (clip.motionPath) {
+        const baseInst = (scene.characterInstances || []).find((i) => i.instanceId === clip.instanceId);
+        const curInst = instances.find((i) => i.instanceId === clip.instanceId);
+        if (baseInst && curInst) {
+          const deltaStartX = (clip.motionPath.startX - baseInst.x) * (width / 1280);
+          const deltaEndX = (clip.motionPath.endX - baseInst.x) * (width / 1280);
+          const deltaStartY = (clip.motionPath.startY - baseInst.y) * (height / 720);
+          const deltaEndY = (clip.motionPath.endY - baseInst.y) * (height / 720);
+          return {
+            ...clip,
+            motionPath: {
+              ...clip.motionPath,
+              startX: Math.round(curInst.x + deltaStartX),
+              startY: Math.round(curInst.y + deltaStartY),
+              endX: Math.round(curInst.x + deltaEndX),
+              endY: Math.round(curInst.y + deltaEndY),
+            },
+          };
+        }
         const xOffsetStart = clip.motionPath.startX - 640;
         const xOffsetEnd = clip.motionPath.endX - 640;
         return {
@@ -471,102 +621,7 @@ function SceneView({
       }
       return clip;
     });
-  }, [scene.animationClips, format, width, height]);
-
-  // Coordinate adaptation for non-16:9 formats and storybook character scaling
-  const instances = (scene.characterInstances || []).map((inst, instIdx, arr) => {
-    let targetFlipX = inst.flipX;
-    if (arr.length === 2 && targetFlipX === undefined) {
-      const other = arr[1 - instIdx];
-      if (other && inst.x > other.x) {
-        targetFlipX = true;
-      }
-    }
-
-    const override = charOverrides?.[inst.instanceId];
-    if (override) {
-      let ox = override.x !== undefined ? override.x : inst.x;
-      let oy = override.y !== undefined ? override.y : inst.y;
-      // Auto-recovery: if a previous drag placed character in the sky in 9:16 (y < 450), anchor safely
-      if (format === '9:16' && oy < 450) {
-        oy = Math.round(height * 0.63);
-      }
-      return {
-        ...inst,
-        x: ox,
-        y: oy,
-        scale: override.scale !== undefined ? override.scale : (inst.scale ?? 1.0),
-        flipX: targetFlipX ?? inst.flipX,
-      };
-    }
-
-    const rawScale = inst.scale ?? 1.0;
-    const isSingleChar = arr.length === 1;
-
-    if (format === '16:9' || (width === 1280 && height === 720)) {
-      const s = width / 1280;
-      return {
-        ...inst,
-        x: Math.round(inst.x * s),
-        y: Math.round(inst.y * s),
-        scale: Number((rawScale * s).toFixed(2)),
-        flipX: targetFlipX ?? inst.flipX,
-      };
-    }
-
-    if (format === '9:16' || width < height) {
-      // 9:16 Portrait Reel:
-      // Characters stand safely anchored above subtitle safe area (Y ~ 63% height).
-      const scaleMult = isSingleChar ? 1.55 : 1.35;
-      const boostedScale = Number((rawScale * scaleMult).toFixed(2));
-
-      let newX = width / 2;
-      if (arr.length === 2) {
-        newX = instIdx === 0 ? Math.round(width * 0.32) : Math.round(width * 0.68);
-      } else if (!isSingleChar) {
-        const xOffset = inst.x - 640;
-        newX = width / 2 + (xOffset * (width / 1280));
-      }
-
-      const newY = Math.round(height * 0.63);
-
-      return {
-        ...inst,
-        x: Math.round(newX),
-        y: newY,
-        scale: boostedScale,
-        flipX: targetFlipX ?? inst.flipX,
-      };
-    }
-
-    if (format === '1:1') {
-      const xOffset = inst.x - 640;
-      const newX = width / 2 + (xOffset * (width / 1280));
-      const scaleMult = isSingleChar ? 1.25 : 1.15;
-      return {
-        ...inst,
-        x: Math.round(newX),
-        y: Math.round(inst.y * (height / 720)),
-        scale: Number((rawScale * scaleMult).toFixed(2)),
-        flipX: targetFlipX ?? inst.flipX,
-      };
-    }
-
-    if (format === '4:5') {
-      const xOffset = inst.x - 640;
-      const newX = width / 2 + (xOffset * (width / 1280));
-      const scaleMult = isSingleChar ? 1.35 : 1.22;
-      return {
-        ...inst,
-        x: Math.round(newX),
-        y: Math.round(inst.y * (height / 720)),
-        scale: Number((rawScale * scaleMult).toFixed(2)),
-        flipX: targetFlipX ?? inst.flipX,
-      };
-    }
-
-    return inst;
-  });
+  }, [scene.animationClips, instances, scene.characterInstances, format, width, height]);
 
   const sortedInstances = [...instances].sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
 
@@ -683,10 +738,13 @@ function SceneView({
         }}
       >
         {/* Background Layer: Video Clip, Image Sequence, Background Image, or Storybook Scenic Canvas */}
-        {scene.videoSrc ? (
+        {activeShot?.videoUrl || scene.videoSrc ? (
           <AbsoluteFill>
             <Video
-              src={scene.videoSrc.startsWith('http') || scene.videoSrc.startsWith('data:') ? scene.videoSrc : staticFile(scene.videoSrc)}
+              src={(() => {
+                const vSrc = activeShot?.videoUrl || scene.videoSrc!;
+                return vSrc.startsWith('http') || vSrc.startsWith('data:') ? vSrc : staticFile(vSrc);
+              })()}
               style={{
                 width: '100%',
                 height: '100%',

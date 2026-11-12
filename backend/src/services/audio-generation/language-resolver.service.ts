@@ -149,8 +149,8 @@ export function isVoiceCompatibleWithLanguage(voiceId?: string | null, lang: Sup
 
   const v = voiceId.toLowerCase().trim();
 
-  // Fish Audio voice conventions
-  if (v === 'fish_default') {
+  // Fish Audio voice conventions (multilingual support across presets and custom models)
+  if (v === 'fish_default' || v.startsWith('fish_')) {
     return true;
   }
   // Generic custom reference ID (e.g. 24-36 hex characters) from Fish Audio model library
