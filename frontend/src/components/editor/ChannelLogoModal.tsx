@@ -74,7 +74,7 @@ export const ChannelLogoModal: React.FC<ChannelLogoModalProps> = ({
     }
 
     // Validate type
-    const validTypes = ['image/png', 'image/svg+xml', 'image/webp', 'image/jpeg'];
+    const validTypes = ['image/png', 'image/svg+xml', 'image/webp', 'image/jpeg', 'image/jpg'];
     if (!validTypes.includes(file.type) && !file.name.endsWith('.svg')) {
       setErrorMessage('Unsupported format. Please upload a PNG, SVG, WebP, or JPEG image.');
       return;
@@ -92,7 +92,7 @@ export const ChannelLogoModal: React.FC<ChannelLogoModalProps> = ({
         height: res.height ? Math.min(100, Math.round(res.height / 2)) : prev.height || 50,
       }));
       setSuccessMessage('Logo uploaded successfully!');
-      setTimeout(() => setSuccessMessage(null), 3000);
+      setTimeout(() => setSuccessMessage(null), 3500);
     } catch (err: any) {
       setErrorMessage(err.message || 'Failed to upload logo image');
     } finally {
@@ -148,8 +148,9 @@ export const ChannelLogoModal: React.FC<ChannelLogoModalProps> = ({
         left: 0,
         right: 0,
         bottom: 0,
-        backgroundColor: 'rgba(0, 0, 0, 0.72)',
-        backdropFilter: 'blur(5px)',
+        backgroundColor: 'rgba(2, 6, 23, 0.78)',
+        backdropFilter: 'blur(8px)',
+        WebkitBackdropFilter: 'blur(8px)',
         zIndex: 9999,
         display: 'flex',
         alignItems: 'center',
@@ -160,14 +161,14 @@ export const ChannelLogoModal: React.FC<ChannelLogoModalProps> = ({
     >
       <div
         style={{
-          width: '680px',
+          width: '700px',
           maxWidth: '96vw',
-          maxHeight: '90vh',
-          backgroundColor: 'var(--ed-surface, #1e293b)',
-          color: 'var(--ed-text, #f8fafc)',
-          borderRadius: '12px',
-          border: '1px solid var(--ed-border, rgba(255, 255, 255, 0.12))',
-          boxShadow: '0 20px 40px rgba(0, 0, 0, 0.5)',
+          maxHeight: '92vh',
+          backgroundColor: '#0f172a',
+          color: '#f8fafc',
+          borderRadius: '14px',
+          border: '1px solid #334155',
+          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.75)',
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
@@ -177,20 +178,22 @@ export const ChannelLogoModal: React.FC<ChannelLogoModalProps> = ({
         {/* Header */}
         <div
           style={{
-            padding: '16px 20px',
-            borderBottom: '1px solid var(--ed-border, rgba(255, 255, 255, 0.08))',
+            padding: '18px 24px',
+            borderBottom: '1px solid #1e293b',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.1), rgba(30, 41, 59, 0.8))',
+            background: 'linear-gradient(135deg, rgba(124, 58, 237, 0.22), #0f172a)',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ fontSize: '20px' }}>🏷️</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <span style={{ fontSize: '22px' }}>🏷️</span>
             <div>
-              <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 600 }}>Channel Identity & Logo Overlay</h3>
-              <p style={{ margin: 0, fontSize: '11.5px', color: 'var(--ed-text-muted, #94a3b8)' }}>
-                Upload your channel branding and customize its overlay placement across all 4 formats.
+              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: '#f8fafc', letterSpacing: '-0.01em' }}>
+                Channel Identity & Logo Overlay
+              </h3>
+              <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: '#94a3b8' }}>
+                Upload your channel branding and customize overlay placement across all 4 formats.
               </p>
             </div>
           </div>
@@ -200,76 +203,97 @@ export const ChannelLogoModal: React.FC<ChannelLogoModalProps> = ({
             style={{
               background: 'transparent',
               border: 'none',
-              color: 'var(--ed-text-muted, #94a3b8)',
-              fontSize: '18px',
+              color: '#94a3b8',
+              fontSize: '20px',
               cursor: 'pointer',
-              padding: '4px 8px',
+              padding: '6px 10px',
+              borderRadius: '6px',
+              lineHeight: 1,
+              transition: 'color 0.15s, background 0.15s',
             }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.color = '#ffffff';
+              e.currentTarget.style.backgroundColor = '#1e293b';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.color = '#94a3b8';
+              e.currentTarget.style.backgroundColor = 'transparent';
+            }}
+            title="Close"
           >
             ✕
           </button>
         </div>
 
         {/* Modal Body */}
-        <div style={{ padding: '20px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '18px' }}>
+        <div style={{ padding: '22px 24px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '20px' }}>
           {errorMessage && (
             <div
               style={{
-                padding: '10px 14px',
-                borderRadius: '6px',
+                padding: '12px 16px',
+                borderRadius: '8px',
                 backgroundColor: 'rgba(239, 68, 68, 0.15)',
                 border: '1px solid #ef4444',
                 color: '#fca5a5',
-                fontSize: '12px',
+                fontSize: '12.5px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
               }}
             >
-              ⚠️ {errorMessage}
+              <span>⚠️</span>
+              <span>{errorMessage}</span>
             </div>
           )}
 
           {successMessage && (
             <div
               style={{
-                padding: '10px 14px',
-                borderRadius: '6px',
+                padding: '12px 16px',
+                borderRadius: '8px',
                 backgroundColor: 'rgba(16, 185, 129, 0.15)',
                 border: '1px solid #10b981',
                 color: '#6ee7b7',
-                fontSize: '12px',
+                fontSize: '12.5px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
               }}
             >
-              ✓ {successMessage}
+              <span>✓</span>
+              <span>{successMessage}</span>
             </div>
           )}
 
           {/* Section 1: Logo File & Status */}
           <div
             style={{
-              padding: '14px',
-              borderRadius: '8px',
-              backgroundColor: 'rgba(255, 255, 255, 0.03)',
-              border: '1px solid rgba(255, 255, 255, 0.06)',
+              padding: '16px',
+              borderRadius: '10px',
+              backgroundColor: '#1e293b',
+              border: '1px solid #334155',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
               gap: '16px',
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
               <div
                 style={{
-                  width: '90px',
-                  height: '60px',
-                  borderRadius: '6px',
+                  width: '96px',
+                  height: '64px',
+                  borderRadius: '8px',
                   backgroundColor: config.showBackgroundContainer
-                    ? (config.containerBgColor || 'rgba(15, 23, 42, 0.7)')
-                    : 'rgba(0, 0, 0, 0.3)',
-                  border: '1px dashed rgba(255, 255, 255, 0.2)',
+                    ? (config.containerBgColor || '#0f172a')
+                    : '#0b0f19',
+                  border: '1.5px dashed #475569',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   overflow: 'hidden',
-                  padding: '4px',
+                  padding: '6px',
+                  flexShrink: 0,
                 }}
               >
                 {config.logoUrl ? (
@@ -279,39 +303,54 @@ export const ChannelLogoModal: React.FC<ChannelLogoModalProps> = ({
                     style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
                   />
                 ) : (
-                  <span style={{ fontSize: '11px', color: '#94a3b8', textAlign: 'center' }}>No Logo</span>
+                  <span style={{ fontSize: '11.5px', color: '#94a3b8', fontWeight: 500, textAlign: 'center' }}>
+                    No Logo
+                  </span>
                 )}
               </div>
 
               <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: 600 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13.5px', fontWeight: 600, color: '#f8fafc' }}>
                     <input
                       type="checkbox"
                       checked={config.enabled}
                       onChange={(e) => setConfig((prev) => ({ ...prev, enabled: e.target.checked }))}
+                      style={{ width: '16px', height: '16px', accentColor: '#8b5cf6', cursor: 'pointer' }}
                     />
                     <span>Enable Channel Logo in Video</span>
                   </label>
                 </div>
-                <div style={{ fontSize: '11px', color: '#94a3b8' }}>
-                  {config.logoUrl ? 'Logo configured • Displays over video frame' : 'Upload transparent PNG, SVG, WebP or JPEG (Max 5MB)'}
+                <div style={{ fontSize: '12px', color: '#94a3b8' }}>
+                  {config.logoUrl
+                    ? 'Logo configured • Automatically positioned & rendered'
+                    : 'Upload transparent PNG, SVG, WebP or JPEG (Max 5MB)'}
                 </div>
               </div>
             </div>
 
-            <div style={{ display: 'flex', gap: '8px' }}>
+            <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="image/png,image/svg+xml,image/webp,image/jpeg"
+                accept="image/png,image/svg+xml,image/webp,image/jpeg,image/jpg"
                 style={{ display: 'none' }}
                 onChange={handleFileUpload}
               />
               <button
                 type="button"
-                className="ed-btn-action"
-                style={{ padding: '6px 12px', fontSize: '12px', background: '#8b5cf6', borderColor: '#8b5cf6', color: '#ffffff' }}
+                style={{
+                  padding: '8px 16px',
+                  fontSize: '12.5px',
+                  fontWeight: 600,
+                  background: 'linear-gradient(135deg, #8b5cf6, #7c3aed)',
+                  border: 'none',
+                  borderRadius: '6px',
+                  color: '#ffffff',
+                  cursor: isUploading ? 'not-allowed' : 'pointer',
+                  boxShadow: '0 2px 8px rgba(124, 58, 237, 0.35)',
+                  transition: 'opacity 0.15s, transform 0.15s',
+                }}
                 disabled={isUploading}
                 onClick={() => fileInputRef.current?.click()}
               >
@@ -320,8 +359,16 @@ export const ChannelLogoModal: React.FC<ChannelLogoModalProps> = ({
               {config.logoUrl && (
                 <button
                   type="button"
-                  className="ed-tool-btn"
-                  style={{ padding: '6px 10px', fontSize: '12px', color: '#f87171' }}
+                  style={{
+                    padding: '8px 12px',
+                    fontSize: '12px',
+                    fontWeight: 500,
+                    background: 'rgba(239, 68, 68, 0.15)',
+                    border: '1px solid rgba(239, 68, 68, 0.35)',
+                    borderRadius: '6px',
+                    color: '#fca5a5',
+                    cursor: 'pointer',
+                  }}
                   onClick={handleRemoveLogo}
                 >
                   Remove
@@ -331,110 +378,151 @@ export const ChannelLogoModal: React.FC<ChannelLogoModalProps> = ({
           </div>
 
           {/* Section 2: Channel Info */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
             <div>
-              <label style={{ fontSize: '11px', fontWeight: 600, color: '#94a3b8', display: 'block', marginBottom: '4px' }}>
+              <label style={{ fontSize: '12px', fontWeight: 600, color: '#e2e8f0', display: 'block', marginBottom: '6px' }}>
                 Channel / Creator Name (Optional)
               </label>
               <input
                 type="text"
-                className="studio-input"
                 placeholder="e.g. Kids Magic Studio"
                 value={config.channelName || ''}
                 onChange={(e) => setConfig((prev) => ({ ...prev, channelName: e.target.value }))}
-                style={{ width: '100%', fontSize: '12px', padding: '6px 10px' }}
+                style={{
+                  width: '100%',
+                  fontSize: '12.5px',
+                  padding: '8px 12px',
+                  backgroundColor: '#0b0f19',
+                  border: '1px solid #334155',
+                  borderRadius: '6px',
+                  color: '#f8fafc',
+                  outline: 'none',
+                  boxSizing: 'border-box',
+                }}
               />
             </div>
             <div>
-              <label style={{ fontSize: '11px', fontWeight: 600, color: '#94a3b8', display: 'block', marginBottom: '4px' }}>
+              <label style={{ fontSize: '12px', fontWeight: 600, color: '#e2e8f0', display: 'block', marginBottom: '6px' }}>
                 Social Handle / Watermark Tag (Optional)
               </label>
               <input
                 type="text"
-                className="studio-input"
                 placeholder="e.g. @KidsStoryTV"
                 value={config.socialHandle || ''}
                 onChange={(e) => setConfig((prev) => ({ ...prev, socialHandle: e.target.value }))}
-                style={{ width: '100%', fontSize: '12px', padding: '6px 10px' }}
+                style={{
+                  width: '100%',
+                  fontSize: '12.5px',
+                  padding: '8px 12px',
+                  backgroundColor: '#0b0f19',
+                  border: '1px solid #334155',
+                  borderRadius: '6px',
+                  color: '#f8fafc',
+                  outline: 'none',
+                  boxSizing: 'border-box',
+                }}
               />
             </div>
           </div>
 
           {/* Section 3: Format Configuration Tabs */}
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-              <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--ed-text)' }}>
+          <div
+            style={{
+              padding: '16px',
+              borderRadius: '10px',
+              backgroundColor: '#1e293b',
+              border: '1px solid #334155',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+              <label style={{ fontSize: '13px', fontWeight: 700, color: '#f8fafc' }}>
                 Format-Specific Positioning & Size
               </label>
-              <span style={{ fontSize: '11px', color: '#94a3b8' }}>
-                Active Target: <strong>{selectedFormat}</strong>
+              <span style={{ fontSize: '12px', color: '#94a3b8' }}>
+                Active Target: <strong style={{ color: '#a78bfa' }}>{selectedFormat}</strong>
               </span>
             </div>
 
-            <div style={{ display: 'flex', gap: '6px', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', paddingBottom: '6px', marginBottom: '14px' }}>
-              {FORMAT_TABS.map((f) => (
-                <button
-                  key={f.id}
-                  type="button"
-                  onClick={() => setSelectedFormat(f.id)}
-                  style={{
-                    padding: '6px 12px',
-                    borderRadius: '6px',
-                    fontSize: '11.5px',
-                    fontWeight: selectedFormat === f.id ? 600 : 400,
-                    backgroundColor: selectedFormat === f.id ? 'rgba(139, 92, 246, 0.2)' : 'transparent',
-                    border: selectedFormat === f.id ? '1px solid #8b5cf6' : '1px solid transparent',
-                    color: selectedFormat === f.id ? '#c4b5fd' : '#94a3b8',
-                    cursor: 'pointer',
-                  }}
-                >
-                  {f.label} <span style={{ opacity: 0.7, fontSize: '10px' }}>({f.dim})</span>
-                </button>
-              ))}
+            <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid #334155', paddingBottom: '10px', marginBottom: '16px', overflowX: 'auto' }}>
+              {FORMAT_TABS.map((f) => {
+                const isActive = selectedFormat === f.id;
+                return (
+                  <button
+                    key={f.id}
+                    type="button"
+                    onClick={() => setSelectedFormat(f.id)}
+                    style={{
+                      padding: '8px 14px',
+                      borderRadius: '6px',
+                      fontSize: '12px',
+                      fontWeight: isActive ? 700 : 500,
+                      backgroundColor: isActive ? '#7c3aed' : '#0f172a',
+                      border: isActive ? '1px solid #a78bfa' : '1px solid #334155',
+                      color: isActive ? '#ffffff' : '#cbd5e1',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      transition: 'all 0.15s ease',
+                      boxShadow: isActive ? '0 2px 8px rgba(124, 58, 237, 0.4)' : 'none',
+                    }}
+                  >
+                    <span>{f.label}</span>
+                    <span style={{ opacity: isActive ? 0.9 : 0.6, fontSize: '10.5px' }}>({f.dim})</span>
+                  </button>
+                );
+              })}
             </div>
 
             {/* Placement Controls */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               {/* Position Presets */}
               <div>
-                <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '6px' }}>
+                <label style={{ fontSize: '12px', fontWeight: 600, color: '#e2e8f0', display: 'block', marginBottom: '8px' }}>
                   Overlay Position
                 </label>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '6px' }}>
-                  {POSITION_OPTIONS.map((p) => (
-                    <button
-                      key={p.id}
-                      type="button"
-                      onClick={() => {
-                        updateFormatPreset({ position: p.id });
-                        setConfig((prev) => ({ ...prev, position: p.id }));
-                      }}
-                      style={{
-                        padding: '6px 8px',
-                        borderRadius: '6px',
-                        fontSize: '11px',
-                        backgroundColor: currentPos === p.id ? 'rgba(139, 92, 246, 0.2)' : 'rgba(255, 255, 255, 0.04)',
-                        border: currentPos === p.id ? '1px solid #8b5cf6' : '1px solid rgba(255, 255, 255, 0.08)',
-                        color: currentPos === p.id ? '#c4b5fd' : '#cbd5e1',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        gap: '2px',
-                      }}
-                    >
-                      <span style={{ fontSize: '14px' }}>{p.icon}</span>
-                      <span>{p.label}</span>
-                    </button>
-                  ))}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '8px' }}>
+                  {POSITION_OPTIONS.map((p) => {
+                    const isSelected = currentPos === p.id;
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => {
+                          updateFormatPreset({ position: p.id });
+                          setConfig((prev) => ({ ...prev, position: p.id }));
+                        }}
+                        style={{
+                          padding: '10px 8px',
+                          borderRadius: '8px',
+                          fontSize: '11.5px',
+                          fontWeight: isSelected ? 700 : 500,
+                          backgroundColor: isSelected ? 'rgba(124, 58, 237, 0.28)' : '#0f172a',
+                          border: isSelected ? '1.5px solid #8b5cf6' : '1px solid #334155',
+                          color: isSelected ? '#ffffff' : '#cbd5e1',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          gap: '4px',
+                          transition: 'all 0.15s ease',
+                          boxShadow: isSelected ? '0 2px 8px rgba(139, 92, 246, 0.3)' : 'none',
+                        }}
+                      >
+                        <span style={{ fontSize: '16px', color: isSelected ? '#a78bfa' : '#94a3b8' }}>{p.icon}</span>
+                        <span>{p.label}</span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
               {/* Sliders: Size, Padding, Opacity */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
                 <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#94a3b8', marginBottom: '4px' }}>
-                    <span>Width: {currentWidth}px</span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11.5px', marginBottom: '6px' }}>
+                    <span style={{ color: '#e2e8f0', fontWeight: 600 }}>Width</span>
+                    <span style={{ color: '#a78bfa', fontWeight: 600 }}>{currentWidth}px</span>
                   </div>
                   <input
                     type="range"
@@ -448,13 +536,14 @@ export const ChannelLogoModal: React.FC<ChannelLogoModalProps> = ({
                       updateFormatPreset({ width: val, height: Math.round(val * ratio) });
                       setConfig((prev) => ({ ...prev, width: val, height: Math.round(val * ratio) }));
                     }}
-                    style={{ width: '100%' }}
+                    style={{ width: '100%', accentColor: '#8b5cf6', cursor: 'pointer' }}
                   />
                 </div>
 
                 <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#94a3b8', marginBottom: '4px' }}>
-                    <span>Edge Padding: {currentPadding}px</span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11.5px', marginBottom: '6px' }}>
+                    <span style={{ color: '#e2e8f0', fontWeight: 600 }}>Edge Padding</span>
+                    <span style={{ color: '#a78bfa', fontWeight: 600 }}>{currentPadding}px</span>
                   </div>
                   <input
                     type="range"
@@ -467,13 +556,14 @@ export const ChannelLogoModal: React.FC<ChannelLogoModalProps> = ({
                       updateFormatPreset({ padding: val });
                       setConfig((prev) => ({ ...prev, padding: val }));
                     }}
-                    style={{ width: '100%' }}
+                    style={{ width: '100%', accentColor: '#8b5cf6', cursor: 'pointer' }}
                   />
                 </div>
 
                 <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#94a3b8', marginBottom: '4px' }}>
-                    <span>Opacity: {Math.round(currentOpacity * 100)}%</span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11.5px', marginBottom: '6px' }}>
+                    <span style={{ color: '#e2e8f0', fontWeight: 600 }}>Opacity</span>
+                    <span style={{ color: '#a78bfa', fontWeight: 600 }}>{Math.round(currentOpacity * 100)}%</span>
                   </div>
                   <input
                     type="range"
@@ -486,36 +576,56 @@ export const ChannelLogoModal: React.FC<ChannelLogoModalProps> = ({
                       updateFormatPreset({ opacity: val });
                       setConfig((prev) => ({ ...prev, opacity: val }));
                     }}
-                    style={{ width: '100%' }}
+                    style={{ width: '100%', accentColor: '#8b5cf6', cursor: 'pointer' }}
                   />
                 </div>
               </div>
 
               {/* Custom Coordinates (if custom position chosen) */}
               {currentPos === 'custom' && (
-                <div style={{ padding: '10px', borderRadius: '6px', backgroundColor: 'rgba(139, 92, 246, 0.08)', border: '1px solid rgba(139, 92, 246, 0.2)' }}>
-                  <div style={{ fontSize: '11px', color: '#c4b5fd', marginBottom: '8px' }}>
+                <div style={{ padding: '12px 14px', borderRadius: '8px', backgroundColor: 'rgba(139, 92, 246, 0.12)', border: '1px solid rgba(139, 92, 246, 0.3)' }}>
+                  <div style={{ fontSize: '12px', color: '#c4b5fd', fontWeight: 600, marginBottom: '8px' }}>
                     ✥ Drag logo on the video preview canvas, or adjust precise coordinates:
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                     <div>
-                      <label style={{ fontSize: '10.5px', color: '#94a3b8' }}>X Coordinate (px): {config.customX || 0}</label>
+                      <label style={{ fontSize: '11px', color: '#cbd5e1', display: 'block', marginBottom: '4px' }}>
+                        X Coordinate (px): {config.customX || 0}
+                      </label>
                       <input
                         type="number"
-                        className="studio-input"
                         value={config.customX || 0}
                         onChange={(e) => setConfig((prev) => ({ ...prev, customX: Number(e.target.value) }))}
-                        style={{ width: '100%', fontSize: '11px', padding: '4px 8px' }}
+                        style={{
+                          width: '100%',
+                          fontSize: '12px',
+                          padding: '6px 10px',
+                          backgroundColor: '#0b0f19',
+                          border: '1px solid #334155',
+                          borderRadius: '6px',
+                          color: '#f8fafc',
+                          boxSizing: 'border-box',
+                        }}
                       />
                     </div>
                     <div>
-                      <label style={{ fontSize: '10.5px', color: '#94a3b8' }}>Y Coordinate (px): {config.customY || 0}</label>
+                      <label style={{ fontSize: '11px', color: '#cbd5e1', display: 'block', marginBottom: '4px' }}>
+                        Y Coordinate (px): {config.customY || 0}
+                      </label>
                       <input
                         type="number"
-                        className="studio-input"
                         value={config.customY || 0}
                         onChange={(e) => setConfig((prev) => ({ ...prev, customY: Number(e.target.value) }))}
-                        style={{ width: '100%', fontSize: '11px', padding: '4px 8px' }}
+                        style={{
+                          width: '100%',
+                          fontSize: '12px',
+                          padding: '6px 10px',
+                          backgroundColor: '#0b0f19',
+                          border: '1px solid #334155',
+                          borderRadius: '6px',
+                          color: '#f8fafc',
+                          boxSizing: 'border-box',
+                        }}
                       />
                     </div>
                   </div>
@@ -525,78 +635,121 @@ export const ChannelLogoModal: React.FC<ChannelLogoModalProps> = ({
           </div>
 
           {/* Section 4: Styling Options */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', paddingTop: '10px', borderTop: '1px solid rgba(255, 255, 255, 0.06)' }}>
+          <div
+            style={{
+              padding: '16px',
+              borderRadius: '10px',
+              backgroundColor: '#1e293b',
+              border: '1px solid #334155',
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr',
+              gap: '16px',
+            }}
+          >
             <div>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', marginBottom: '8px' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: 600, color: '#f8fafc', cursor: 'pointer', marginBottom: '6px' }}>
                 <input
                   type="checkbox"
                   checked={config.showBackgroundContainer ?? false}
                   onChange={(e) => setConfig((prev) => ({ ...prev, showBackgroundContainer: e.target.checked }))}
+                  style={{ width: '16px', height: '16px', accentColor: '#8b5cf6', cursor: 'pointer' }}
                 />
                 <span>Background Container Plate</span>
               </label>
+              <div style={{ fontSize: '11.5px', color: '#94a3b8', marginBottom: '8px' }}>
+                Adds a solid background behind non-transparent or JPEG logos.
+              </div>
               {config.showBackgroundContainer && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <input
                     type="color"
                     value={config.containerBgColor?.startsWith('#') ? config.containerBgColor : '#0f172a'}
                     onChange={(e) => setConfig((prev) => ({ ...prev, containerBgColor: e.target.value }))}
-                    style={{ width: '32px', height: '24px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                    style={{ width: '36px', height: '28px', border: '1px solid #334155', borderRadius: '4px', cursor: 'pointer', backgroundColor: 'transparent' }}
                   />
-                  <span style={{ fontSize: '11px', color: '#94a3b8' }}>Solid container for non-transparent logos</span>
+                  <span style={{ fontSize: '11.5px', color: '#cbd5e1' }}>Container Color</span>
                 </div>
               )}
             </div>
 
             <div>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', marginBottom: '8px' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: 600, color: '#f8fafc', cursor: 'pointer', marginBottom: '6px' }}>
                 <input
                   type="checkbox"
                   checked={config.showShadow ?? true}
                   onChange={(e) => setConfig((prev) => ({ ...prev, showShadow: e.target.checked }))}
+                  style={{ width: '16px', height: '16px', accentColor: '#8b5cf6', cursor: 'pointer' }}
                 />
                 <span>Soft Drop Shadow</span>
               </label>
-              <div style={{ fontSize: '11px', color: '#94a3b8' }}>
-                Adds contrast so logo stands out over bright or shifting background scenes.
+              <div style={{ fontSize: '11.5px', color: '#94a3b8' }}>
+                Adds contrast so the logo stands out over bright or shifting backgrounds.
               </div>
             </div>
           </div>
 
           {/* Section 5: Timing & Duration */}
-          <div style={{ paddingTop: '10px', borderTop: '1px solid rgba(255, 255, 255, 0.06)' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', marginBottom: '6px' }}>
+          <div
+            style={{
+              padding: '16px',
+              borderRadius: '10px',
+              backgroundColor: '#1e293b',
+              border: '1px solid #334155',
+            }}
+          >
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: 600, color: '#f8fafc', cursor: 'pointer', marginBottom: '6px' }}>
               <input
                 type="checkbox"
                 checked={config.alwaysVisible ?? true}
                 onChange={(e) => setConfig((prev) => ({ ...prev, alwaysVisible: e.target.checked }))}
+                style={{ width: '16px', height: '16px', accentColor: '#8b5cf6', cursor: 'pointer' }}
               />
               <span>Visible for Entire Video (Default)</span>
             </label>
             {!config.alwaysVisible && (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '8px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginTop: '12px' }}>
                 <div>
-                  <label style={{ fontSize: '10.5px', color: '#94a3b8', display: 'block', marginBottom: '2px' }}>Start Time (ms)</label>
+                  <label style={{ fontSize: '11.5px', color: '#cbd5e1', display: 'block', marginBottom: '4px' }}>
+                    Start Time (ms)
+                  </label>
                   <input
                     type="number"
                     min="0"
                     step="500"
-                    className="studio-input"
                     value={config.startTimeMs || 0}
                     onChange={(e) => setConfig((prev) => ({ ...prev, startTimeMs: Number(e.target.value) }))}
-                    style={{ width: '100%', fontSize: '11px', padding: '4px 8px' }}
+                    style={{
+                      width: '100%',
+                      fontSize: '12px',
+                      padding: '6px 10px',
+                      backgroundColor: '#0b0f19',
+                      border: '1px solid #334155',
+                      borderRadius: '6px',
+                      color: '#f8fafc',
+                      boxSizing: 'border-box',
+                    }}
                   />
                 </div>
                 <div>
-                  <label style={{ fontSize: '10.5px', color: '#94a3b8', display: 'block', marginBottom: '2px' }}>End Time (ms)</label>
+                  <label style={{ fontSize: '11.5px', color: '#cbd5e1', display: 'block', marginBottom: '4px' }}>
+                    End Time (ms)
+                  </label>
                   <input
                     type="number"
                     min="0"
                     step="500"
-                    className="studio-input"
                     value={config.endTimeMs || 10000}
                     onChange={(e) => setConfig((prev) => ({ ...prev, endTimeMs: Number(e.target.value) }))}
-                    style={{ width: '100%', fontSize: '11px', padding: '4px 8px' }}
+                    style={{
+                      width: '100%',
+                      fontSize: '12px',
+                      padding: '6px 10px',
+                      backgroundColor: '#0b0f19',
+                      border: '1px solid #334155',
+                      borderRadius: '6px',
+                      color: '#f8fafc',
+                      boxSizing: 'border-box',
+                    }}
                   />
                 </div>
               </div>
@@ -607,35 +760,49 @@ export const ChannelLogoModal: React.FC<ChannelLogoModalProps> = ({
         {/* Footer */}
         <div
           style={{
-            padding: '14px 20px',
-            borderTop: '1px solid var(--ed-border, rgba(255, 255, 255, 0.08))',
+            padding: '16px 24px',
+            borderTop: '1px solid #1e293b',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'flex-end',
-            gap: '10px',
-            backgroundColor: 'rgba(0, 0, 0, 0.2)',
+            gap: '12px',
+            backgroundColor: '#0b0f19',
           }}
         >
           <button
             type="button"
-            className="ed-tool-btn"
             onClick={onClose}
-            style={{ padding: '6px 14px', fontSize: '12px' }}
+            style={{
+              padding: '8px 16px',
+              fontSize: '12.5px',
+              fontWeight: 500,
+              background: '#1e293b',
+              border: '1px solid #334155',
+              borderRadius: '6px',
+              color: '#cbd5e1',
+              cursor: 'pointer',
+              transition: 'background 0.15s',
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#334155')}
+            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#1e293b')}
           >
             Cancel
           </button>
           <button
             type="button"
-            className="ed-btn-action"
             disabled={isSaving}
             onClick={handleSave}
             style={{
-              padding: '6px 18px',
-              fontSize: '12px',
-              background: '#8b5cf6',
-              borderColor: '#8b5cf6',
-              color: '#ffffff',
+              padding: '8px 22px',
+              fontSize: '12.5px',
               fontWeight: 600,
+              background: 'linear-gradient(135deg, #8b5cf6, #7c3aed)',
+              border: 'none',
+              borderRadius: '6px',
+              color: '#ffffff',
+              cursor: isSaving ? 'not-allowed' : 'pointer',
+              boxShadow: '0 2px 10px rgba(124, 58, 237, 0.4)',
+              transition: 'transform 0.15s, opacity 0.15s',
             }}
           >
             {isSaving ? 'Saving...' : 'Save & Apply Branding'}

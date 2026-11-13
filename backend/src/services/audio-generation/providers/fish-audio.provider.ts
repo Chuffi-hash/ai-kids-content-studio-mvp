@@ -483,7 +483,7 @@ export class FishAudioProvider implements TTSProvider {
           );
         }
 
-        // 400 Bad Request / 404 Not Found: do NOT retry invalid inputs
+        // 400 Bad Request / 404 Not Found:
         if (statusCode === 400 || statusCode === 404) {
           if (
             errorBody.toLowerCase().includes("model") ||
@@ -493,6 +493,24 @@ export class FishAudioProvider implements TTSProvider {
               `Fish Audio free model "${model}" rejected: ${errorBody}. Free-model policy prevents falling back to paid models.`,
             );
           }
+
+          // If a reference ID was requested but is not found/active on Fish Audio,
+          // automatically fall back to the base model zero-shot voice without reference_id.
+          if (
+            referenceId &&
+            (errorBody.toLowerCase().includes("reference not found") ||
+              errorBody.toLowerCase().includes("reference") ||
+              errorBody.includes("Reference not found"))
+          ) {
+            console.warn(
+              `[FishAudioProvider] Voice reference "${referenceId}" for voice "${voice}" was not found or is inactive on Fish Audio (${statusCode}). Automatically falling back to zero-shot base voice...`,
+            );
+            delete payload.reference_id;
+            referenceId = undefined;
+            // Retry immediately without reference_id using the base multilingual model
+            continue;
+          }
+
           if (
             errorBody.toLowerCase().includes("reference not found") ||
             errorBody.toLowerCase().includes("reference")

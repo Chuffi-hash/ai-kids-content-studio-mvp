@@ -646,7 +646,11 @@ export function resolveDirectionalRig(
   }
 
   if (tailShapes.length > 0) {
-    torsoShapes = [...tailShapes, ...torsoShapes];
+    if (facing === 'back' || facing === 'back-left' || facing === 'back-right') {
+      torsoShapes = [...torsoShapes, ...tailShapes];
+    } else {
+      torsoShapes = [...tailShapes, ...torsoShapes];
+    }
   }
 
   // ---------------------------------------------------------------------------

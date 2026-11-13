@@ -694,9 +694,15 @@ export function resolveDirectionalRig(
     torsoShapes = torsoShapesRaw;
   }
 
-  // Append tail to torso shapes so it moves and rotates with the torso
+  // Append tail to torso shapes so it moves and rotates with the torso.
+  // In rear views (back, back-left, back-right), the tail sits on top of the back torso surface.
+  // In side profile views (left, right), the tail protrudes from behind the body edge.
   if (tailShapes.length > 0) {
-    torsoShapes = [...tailShapes, ...torsoShapes];
+    if (facing === 'back' || facing === 'back-left' || facing === 'back-right') {
+      torsoShapes = [...torsoShapes, ...tailShapes];
+    } else {
+      torsoShapes = [...tailShapes, ...torsoShapes];
+    }
   }
 
   // ---------------------------------------------------------------------------

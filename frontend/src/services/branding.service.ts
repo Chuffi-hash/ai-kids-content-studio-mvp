@@ -1,12 +1,14 @@
 import { ChannelBrandingConfig, DEFAULT_BRANDING_CONFIG, AspectRatioKey, BrandingPosition } from '../../../backend/src/services/branding/branding.types';
+import { getApiUrl } from '../utils/urlHelper';
 
 export type { ChannelBrandingConfig, BrandingPosition, AspectRatioKey };
 export { DEFAULT_BRANDING_CONFIG };
 
-const API_BASE = '/api/branding';
+const getApiBase = () => `${getApiUrl()}/api/branding`;
 
 export async function fetchBrandingConfig(storyId?: string): Promise<ChannelBrandingConfig> {
-  const url = storyId ? `${API_BASE}?storyId=${encodeURIComponent(storyId)}` : API_BASE;
+  const base = getApiBase();
+  const url = storyId ? `${base}?storyId=${encodeURIComponent(storyId)}` : base;
   const res = await fetch(url);
   if (!res.ok) {
     throw new Error(`Failed to load branding: ${res.statusText}`);
@@ -19,7 +21,8 @@ export async function saveBrandingConfig(
   config: ChannelBrandingConfig,
   storyId?: string
 ): Promise<ChannelBrandingConfig> {
-  const url = storyId ? `${API_BASE}?storyId=${encodeURIComponent(storyId)}` : API_BASE;
+  const base = getApiBase();
+  const url = storyId ? `${base}?storyId=${encodeURIComponent(storyId)}` : base;
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -46,7 +49,7 @@ export async function uploadBrandingFile(
     reader.readAsDataURL(file);
   });
 
-  const res = await fetch(`${API_BASE}/upload`, {
+  const res = await fetch(`${getApiBase()}/upload`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({

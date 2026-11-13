@@ -168,4 +168,57 @@ describe('Dynamic Visual Generation, Branding & Rights Management', () => {
     const layout45 = BrandingService.calculatePlacement(testBranding, '4:5', 1080, 1350);
     assert.ok(layout45.visible);
   });
+
+  test('Part B.2: Channel Branding Upload format validation (PNG, SVG, WebP, JPEG)', async () => {
+    const service = new BrandingService();
+    const dummyBuffer = Buffer.from('test-image-content');
+
+    // Allowed formats: PNG, SVG, WebP, JPEG, JPG
+    const pngResult = await service.uploadBrandingAsset({
+      buffer: dummyBuffer,
+      originalFilename: 'channel-logo.png',
+      mimeType: 'image/png',
+    });
+    assert.ok(pngResult.url.includes('logo-'));
+    assert.ok(pngResult.filename.endsWith('.png'));
+
+    const svgResult = await service.uploadBrandingAsset({
+      buffer: dummyBuffer,
+      originalFilename: 'channel-vector.svg',
+      mimeType: 'image/svg+xml',
+    });
+    assert.ok(svgResult.filename.endsWith('.svg'));
+
+    const jpegResult = await service.uploadBrandingAsset({
+      buffer: dummyBuffer,
+      originalFilename: 'channel-photo.jpg',
+      mimeType: 'image/jpeg',
+    });
+    assert.ok(jpegResult.filename.endsWith('.jpg'));
+
+    // Disallowed format should throw
+    await assert.rejects(
+      async () => {
+        await service.uploadBrandingAsset({
+          buffer: dummyBuffer,
+          originalFilename: 'malicious.exe',
+          mimeType: 'application/x-msdownload',
+        });
+      },
+      /Invalid branding asset format/
+    );
+  });
+
+  test('Part B.3: Data URI regex safely strips SVG XML and standard image headers', () => {
+    const stripPrefix = (data: string) => data.replace(/^data:[^;]+;base64,/, '');
+
+    const svgDataUri = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0...';
+    assert.equal(stripPrefix(svgDataUri), 'PHN2ZyB4bWxucz0...');
+
+    const pngDataUri = 'data:image/png;base64,iVBORw0KGgoAAAANSUh...';
+    assert.equal(stripPrefix(pngDataUri), 'iVBORw0KGgoAAAANSUh...');
+
+    const jpegDataUri = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQ...';
+    assert.equal(stripPrefix(jpegDataUri), '/9j/4AAQSkZJRgABAQ...');
+  });
 });

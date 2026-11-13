@@ -113,11 +113,12 @@ test('3. Directional Rig Resolver - Back View has NO eyes, nose, snout, mouth, v
   const belly = resolved.torsoShapes.find((s: any) => s.tag === 'belly' || s.fill === '#fed7aa');
   assert.strictEqual(belly, undefined, 'Back view must NEVER have front belly patch');
 
-  // Torso MUST have cute round tail centered on lower back
-  const allTorsoShapes = [...resolved.torsoShapes, ...(resolved.tailShapes || [])];
-  const tail = allTorsoShapes.find((s: any) => s.tag === 'tail');
+  // Torso MUST have cute round tail centered on lower back and rendered on top of torso
+  const tail = resolved.torsoShapes.find((s: any) => s.tag === 'tail');
   assert.ok(tail, 'Back view MUST have cute round tail visible on lower back');
   assert.strictEqual(tail?.cx, 0, 'Back view tail must be centered (cx=0)');
+  const tailIdx = resolved.torsoShapes.findIndex((s: any) => s.tag === 'tail');
+  assert.ok(tailIdx > 0, 'Tail must render on top of back torso base layer');
 });
 
 test('4. Directional Rig Resolver - Rear 3/4 (Back-Left & Back-Right) has perspective tail and no facial features', () => {

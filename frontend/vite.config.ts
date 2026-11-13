@@ -4,6 +4,18 @@ import path from 'path';
 
 export default defineConfig({
   plugins: [react()],
+  server: {
+    proxy: {
+      '/api': {
+        target: 'http://localhost:5001',
+        changeOrigin: true,
+      },
+      '/storage': {
+        target: 'http://localhost:5001',
+        changeOrigin: true,
+      },
+    },
+  },
   resolve: {
     dedupe: ['remotion', '@remotion/player', 'react', 'react-dom'],
     alias: {

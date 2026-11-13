@@ -1,31 +1,39 @@
-import React from 'react';
-import { VectorRigDefinition, VectorPartShape } from '../manifest';
-import { EvaluatedCharacterPose } from './animation-evaluator';
-import { resolveDirectionalRig } from './directional-rig-resolver';
+import React from "react";
+import { VectorRigDefinition, VectorPartShape } from "../manifest";
+import { EvaluatedCharacterPose } from "./animation-evaluator";
+import { resolveDirectionalRig } from "./directional-rig-resolver";
 
 interface VectorCharacterProps {
   rig: VectorRigDefinition;
   pose: EvaluatedCharacterPose;
 }
 
-function renderShape(shape: VectorPartShape, key: string | number): React.ReactElement {
-  const opacity = shape.opacity !== undefined ? shape.opacity : (shape.transform?.includes('opacity') ? 0.5 : undefined);
+function renderShape(
+  shape: VectorPartShape,
+  key: string | number,
+): React.ReactElement {
+  const opacity =
+    shape.opacity !== undefined
+      ? shape.opacity
+      : shape.transform?.includes("opacity")
+        ? 0.5
+        : undefined;
 
   switch (shape.type) {
-    case 'circle':
+    case "circle":
       return (
         <circle
           key={key}
           cx={shape.cx ?? 0}
           cy={shape.cy ?? 0}
           r={shape.r ?? 0}
-          fill={shape.fill || 'none'}
+          fill={shape.fill || "none"}
           stroke={shape.stroke}
           strokeWidth={shape.strokeWidth}
           opacity={opacity}
         />
       );
-    case 'ellipse':
+    case "ellipse":
       return (
         <ellipse
           key={key}
@@ -33,13 +41,13 @@ function renderShape(shape: VectorPartShape, key: string | number): React.ReactE
           cy={shape.cy ?? 0}
           rx={shape.rx ?? 0}
           ry={shape.ry ?? 0}
-          fill={shape.fill || 'none'}
+          fill={shape.fill || "none"}
           stroke={shape.stroke}
           strokeWidth={shape.strokeWidth}
           opacity={opacity}
         />
       );
-    case 'rect':
+    case "rect":
       return (
         <rect
           key={key}
@@ -47,19 +55,19 @@ function renderShape(shape: VectorPartShape, key: string | number): React.ReactE
           y={shape.y ?? 0}
           width={shape.width ?? 0}
           height={shape.height ?? 0}
-          fill={shape.fill || 'none'}
+          fill={shape.fill || "none"}
           stroke={shape.stroke}
           strokeWidth={shape.strokeWidth}
           opacity={opacity}
         />
       );
-    case 'path':
+    case "path":
     default:
       return (
         <path
           key={key}
-          d={shape.d || ''}
-          fill={shape.fill || 'none'}
+          d={shape.d || ""}
+          fill={shape.fill || "none"}
           stroke={shape.stroke}
           strokeWidth={shape.strokeWidth}
           strokeLinecap={shape.strokeLinecap}
@@ -70,7 +78,10 @@ function renderShape(shape: VectorPartShape, key: string | number): React.ReactE
   }
 }
 
-export const VectorCharacter: React.FC<VectorCharacterProps> = ({ rig, pose }) => {
+export const VectorCharacter: React.FC<VectorCharacterProps> = ({
+  rig,
+  pose,
+}) => {
   const { parts } = rig;
 
   // Root transform: placement (x, y), scale (with flipX), rotation
@@ -109,89 +120,126 @@ export const VectorCharacter: React.FC<VectorCharacterProps> = ({ rig, pose }) =
           <ellipse
             cx={pose.x}
             cy={pose.y - 10 * pose.scale}
-            rx={Math.round((rig.baseWidth * 0.58) * pose.scale)}
-            ry={Math.round((rig.baseHeight * 0.52) * pose.scale)}
+            rx={Math.round(rig.baseWidth * 0.58 * pose.scale)}
+            ry={Math.round(rig.baseHeight * 0.52 * pose.scale)}
             fill="none"
-            stroke={pose.speaking ? 'rgba(56, 189, 248, 0.45)' : 'rgba(250, 204, 21, 0.35)'}
+            stroke={
+              pose.speaking
+                ? "rgba(56, 189, 248, 0.45)"
+                : "rgba(250, 204, 21, 0.35)"
+            }
             strokeWidth={Math.max(2, Math.round(2.5 * pose.scale))}
-            strokeDasharray={pose.speaking ? '6 4' : undefined}
+            strokeDasharray={pose.speaking ? "6 4" : undefined}
             opacity={0.85}
           />
           {pose.speaking &&
-            pose.facingDirection !== 'back' &&
-            pose.facingDirection !== 'back-left' &&
-            pose.facingDirection !== 'back-right' && (
-            <g transform={`translate(${pose.x + (pose.flipX ? -40 : 40) * pose.scale}, ${pose.y - (rig.baseHeight * 0.45) * pose.scale})`}>
-              <path
-                d="M 0 -8 A 12 12 0 0 1 0 8"
-                fill="none"
-                stroke="#38bdf8"
-                strokeWidth={2.5}
-                strokeLinecap="round"
-                opacity={0.9}
-              />
-              <path
-                d="M 6 -14 A 18 18 0 0 1 6 14"
-                fill="none"
-                stroke="#38bdf8"
-                strokeWidth={2.5}
-                strokeLinecap="round"
-                opacity={0.65}
-              />
-            </g>
-          )}
+            pose.facingDirection !== "back" &&
+            pose.facingDirection !== "back-left" &&
+            pose.facingDirection !== "back-right" && (
+              <g
+                transform={`translate(${pose.x + (pose.flipX ? -40 : 40) * pose.scale}, ${pose.y - rig.baseHeight * 0.45 * pose.scale})`}
+              >
+                <path
+                  d="M 0 -8 A 12 12 0 0 1 0 8"
+                  fill="none"
+                  stroke="#38bdf8"
+                  strokeWidth={2.5}
+                  strokeLinecap="round"
+                  opacity={0.9}
+                />
+                <path
+                  d="M 6 -14 A 18 18 0 0 1 6 14"
+                  fill="none"
+                  stroke="#38bdf8"
+                  strokeWidth={2.5}
+                  strokeLinecap="round"
+                  opacity={0.65}
+                />
+              </g>
+            )}
         </g>
       )}
 
       {/* Articulated vector rig */}
       <g transform={rootTransform}>
         {/* Left Leg */}
-        <g id={parts.leftLeg.id} transform={leftLegTransform} opacity={directional.leftLegOpacity}>
-          {directional.leftLegShapes.map((s, idx) => renderShape(s, `lleg-${idx}`))}
+        <g
+          id={parts.leftLeg.id}
+          transform={leftLegTransform}
+          opacity={directional.leftLegOpacity}
+        >
+          {directional.leftLegShapes.map((s, idx) =>
+            renderShape(s, `lleg-${idx}`),
+          )}
         </g>
 
         {/* Right Leg */}
-        <g id={parts.rightLeg.id} transform={rightLegTransform} opacity={directional.rightLegOpacity}>
-          {directional.rightLegShapes.map((s, idx) => renderShape(s, `rleg-${idx}`))}
+        <g
+          id={parts.rightLeg.id}
+          transform={rightLegTransform}
+          opacity={directional.rightLegOpacity}
+        >
+          {directional.rightLegShapes.map((s, idx) =>
+            renderShape(s, `rleg-${idx}`),
+          )}
         </g>
 
         {/* Left Arm & Forearm */}
-        <g id={parts.leftArm.id} transform={leftArmTransform} opacity={directional.leftArmOpacity}>
-          {directional.leftArmShapes.map((s, idx) => renderShape(s, `larm-${idx}`))}
+        <g
+          id={parts.leftArm.id}
+          transform={leftArmTransform}
+          opacity={directional.leftArmOpacity}
+        >
+          {directional.leftArmShapes.map((s, idx) =>
+            renderShape(s, `larm-${idx}`),
+          )}
           {directional.leftForearmShapes && parts.leftForearm && (
             <g
               id={parts.leftForearm.id}
               transform={`rotate(${pose.leftForearmAngle}, ${parts.leftForearm.pivot.x}, ${parts.leftForearm.pivot.y})`}
             >
-              {directional.leftForearmShapes.map((s, idx) => renderShape(s, `lforearm-${idx}`))}
+              {directional.leftForearmShapes.map((s, idx) =>
+                renderShape(s, `lforearm-${idx}`),
+              )}
             </g>
           )}
         </g>
 
         {/* Torso with directional belly patch & tail */}
         <g id={parts.torso.id} transform={torsoTransform}>
-          {directional.torsoShapes.map((s, idx) => renderShape(s, `torso-${idx}`))}
+          {directional.torsoShapes.map((s, idx) =>
+            renderShape(s, `torso-${idx}`),
+          )}
         </g>
 
         {/* Right Arm & Forearm */}
-        <g id={parts.rightArm.id} transform={rightArmTransform} opacity={directional.rightArmOpacity}>
-          {directional.rightArmShapes.map((s, idx) => renderShape(s, `rarm-${idx}`))}
+        <g
+          id={parts.rightArm.id}
+          transform={rightArmTransform}
+          opacity={directional.rightArmOpacity}
+        >
+          {directional.rightArmShapes.map((s, idx) =>
+            renderShape(s, `rarm-${idx}`),
+          )}
           {directional.rightForearmShapes && parts.rightForearm && (
             <g
               id={parts.rightForearm.id}
               transform={`rotate(${pose.rightForearmAngle}, ${parts.rightForearm.pivot.x}, ${parts.rightForearm.pivot.y})`}
             >
-              {directional.rightForearmShapes.map((s, idx) => renderShape(s, `rforearm-${idx}`))}
+              {directional.rightForearmShapes.map((s, idx) =>
+                renderShape(s, `rforearm-${idx}`),
+              )}
             </g>
           )}
         </g>
 
         {/* Head with directional 8-way features */}
         <g id={parts.head.id} transform={headTransform}>
-          {directional.headShapes.map((s, idx) => renderShape(s, `head-${idx}`))}
+          {directional.headShapes.map((s, idx) =>
+            renderShape(s, `head-${idx}`),
+          )}
         </g>
       </g>
     </>
   );
 };
-

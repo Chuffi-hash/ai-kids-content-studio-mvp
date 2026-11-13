@@ -41,12 +41,20 @@ brandingRouter.post('/upload', async (req, res) => {
       return res.status(400).json({ message: 'base64Data is required' });
     }
 
-    const cleanBase64 = base64Data.replace(/^data:image\/\w+;base64,/, '');
+    const cleanBase64 = base64Data.replace(/^data:[^;]+;base64,/, '');
     const buffer = Buffer.from(cleanBase64, 'base64');
 
     // Extract mime type from header or fallback
     const matchMime = base64Data.match(/^data:(image\/[a-zA-Z0-9+.-]+);base64,/);
-    const mimeType = matchMime ? matchMime[1] : (filename.endsWith('.svg') ? 'image/svg+xml' : 'image/png');
+    const mimeType = matchMime
+      ? matchMime[1]
+      : (filename.endsWith('.svg')
+          ? 'image/svg+xml'
+          : filename.endsWith('.webp')
+          ? 'image/webp'
+          : (filename.endsWith('.jpg') || filename.endsWith('.jpeg'))
+          ? 'image/jpeg'
+          : 'image/png');
 
     const result = await brandingService.uploadBrandingAsset({
       buffer,

@@ -119,9 +119,16 @@ export class BrandingService {
 
     // Validate image format
     const ext = (path.extname(originalFilename).toLowerCase().replace('.', '') || 'png');
-    const allowedExts = ['png', 'svg', 'webp'];
-    if (!allowedExts.includes(ext) && !mimeType.includes('png') && !mimeType.includes('svg') && !mimeType.includes('webp')) {
-      throw new Error('Invalid branding asset format. Only transparent PNG, SVG, or WebP formats are supported.');
+    const allowedExts = ['png', 'svg', 'webp', 'jpg', 'jpeg'];
+    const isMimeAllowed =
+      mimeType.includes('png') ||
+      mimeType.includes('svg') ||
+      mimeType.includes('webp') ||
+      mimeType.includes('jpeg') ||
+      mimeType.includes('jpg');
+
+    if (!allowedExts.includes(ext) && !isMimeAllowed) {
+      throw new Error('Invalid branding asset format. Only PNG, SVG, WebP, or JPEG formats are supported.');
     }
 
     const safeFilename = `${assetType}-${Date.now()}-${randomUUID().slice(0, 6)}.${ext}`;
