@@ -1592,13 +1592,13 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
               ({activeFormat === '16:9' ? 'Canonical Base' : hasOverride ? 'Custom Override' : 'Auto Ground Layout'})
             </span>
           </div>
-          {hasOverride && onResetOverride && (
+          {onResetOverride && (
             <button
               type="button"
               className="ed-tool-btn"
               onClick={onResetOverride}
-              style={{ fontSize: '10px', padding: '2px 6px', color: '#f87171' }}
-              title="Reset manual overrides for this format and return to automatic ground-anchored layout"
+              style={{ fontSize: '10px', padding: '2px 6px', color: hasOverride ? '#f87171' : 'var(--ed-text-muted)' }}
+              title={hasOverride ? "Reset manual overrides for this format and return to automatic ground-anchored layout" : "Reset character to default ground layout"}
             >
               Reset to Auto
             </button>

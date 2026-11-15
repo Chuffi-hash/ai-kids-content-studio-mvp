@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises';
+import fsSync from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -89,11 +90,33 @@ export async function renderRemotionVideo(
     }),
   });
 
+  const resolvedBrowser = (() => {
+    const candidates = [
+      process.env.PUPPETEER_EXECUTABLE_PATH,
+      process.env.CHROME_PATH,
+      process.env.CHROME_BIN,
+      'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+      'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+      'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
+      '/usr/bin/google-chrome',
+      '/usr/bin/chromium',
+      '/usr/bin/chromium-browser',
+      '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+    ].filter(Boolean) as string[];
+    for (const c of candidates) {
+      if (fsSync.existsSync(c)) {
+        return c;
+      }
+    }
+    return undefined;
+  })();
+
   const { cancelSignal, cancel } = makeCancelSignal();
 
   try {
     const compositions = await getCompositions(serveUrl, {
       inputProps: { manifest },
+      browserExecutable: resolvedBrowser,
     });
     const composition = compositions.find((c) => c.id === 'StoryVideo');
     if (!composition) throw new Error('StoryVideo composition not found');
@@ -119,6 +142,7 @@ export async function renderRemotionVideo(
 
     const renderPromise = renderMedia({
       serveUrl,
+      browserExecutable: resolvedBrowser,
       composition: {
         ...composition,
         fps,

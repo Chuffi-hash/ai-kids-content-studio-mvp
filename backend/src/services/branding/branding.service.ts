@@ -21,6 +21,11 @@ export interface CalculatedBrandingPlacement {
   visible: boolean;
 }
 
+import {
+  calculateResolvedBrandingPlacement,
+  AspectRatioFormat,
+} from './sharedCompositionCoordinates';
+
 export class BrandingService {
   private storageDir: string;
   private brandingDir: string;
@@ -156,93 +161,25 @@ export class BrandingService {
     viewportHeight: number,
     currentMediaTimeMs = 0
   ): CalculatedBrandingPlacement {
-    if (!config || !config.enabled || !config.logoUrl) {
-      return {
-        x: 0,
-        y: 0,
-        width: 0,
-        height: 0,
-        opacity: 0,
-        borderRadius: 0,
-        showBackground: false,
-        backgroundColor: 'transparent',
-        showShadow: false,
-        visible: false,
-      };
-    }
-
-    // Check time visibility
-    const isTimeVisible = config.alwaysVisible ||
-      (currentMediaTimeMs >= (config.startTimeMs || 0) &&
-       currentMediaTimeMs <= (config.endTimeMs || Infinity));
-
-    if (!isTimeVisible) {
-      return {
-        x: 0,
-        y: 0,
-        width: 0,
-        height: 0,
-        opacity: 0,
-        borderRadius: 0,
-        showBackground: false,
-        backgroundColor: 'transparent',
-        showShadow: false,
-        visible: false,
-      };
-    }
-
-    const preset = config.formatPresets?.[format] || {};
-    const pos: BrandingPosition = preset.position || config.position || 'top-right';
-    const padding = preset.padding ?? config.padding ?? 24;
-    const baseWidth = preset.width ?? config.width ?? 140;
-    const baseHeight = preset.height ?? config.height ?? 50;
-    const opacity = preset.opacity ?? config.opacity ?? 0.9;
-
-    // Proportional scaling for high-res viewports (e.g. 1920x1080 vs 1280x720)
-    const scaleFactor = Math.min(viewportWidth / 1280, viewportHeight / 720);
-    const targetWidth = Math.round(baseWidth * Math.max(0.75, scaleFactor));
-    const targetHeight = Math.round(baseHeight * Math.max(0.75, scaleFactor));
-    const safePadding = Math.round(padding * Math.max(0.75, scaleFactor));
-
-    let x = 0;
-    let y = 0;
-
-    switch (pos) {
-      case 'top-left':
-        x = safePadding;
-        y = safePadding;
-        break;
-      case 'top-right':
-        x = viewportWidth - targetWidth - safePadding;
-        y = safePadding;
-        break;
-      case 'bottom-left':
-        x = safePadding;
-        // Keep above caption safe zone (approx bottom 16% of viewport)
-        y = viewportHeight - targetHeight - Math.max(safePadding, Math.round(viewportHeight * 0.16));
-        break;
-      case 'bottom-right':
-        x = viewportWidth - targetWidth - safePadding;
-        // Keep above caption safe zone
-        y = viewportHeight - targetHeight - Math.max(safePadding, Math.round(viewportHeight * 0.16));
-        break;
-      case 'custom':
-        x = preset.customX ?? config.customX ?? (viewportWidth - targetWidth - safePadding);
-        y = preset.customY ?? config.customY ?? safePadding;
-        break;
-    }
+    const resolved = calculateResolvedBrandingPlacement({
+      branding: config as any,
+      format: format as AspectRatioFormat,
+      containerWidth: viewportWidth,
+      containerHeight: viewportHeight,
+      currentTimeMs: currentMediaTimeMs,
+    });
 
     return {
-      x,
-      y,
-      width: targetWidth,
-      height: targetHeight,
-      opacity,
-      borderRadius: config.borderRadius ?? 8,
-      showBackground: Boolean(config.showBackgroundContainer),
-      backgroundColor: config.containerBgColor || 'rgba(15, 23, 42, 0.65)',
-      showShadow: config.showShadow ?? true,
-      visible: true,
+      x: resolved.x,
+      y: resolved.y,
+      width: resolved.width,
+      height: resolved.height,
+      opacity: resolved.opacity,
+      borderRadius: resolved.borderRadius,
+      showBackground: resolved.showBackground,
+      backgroundColor: resolved.backgroundColor,
+      showShadow: resolved.showShadow,
+      visible: resolved.visible,
     };
   }
 }

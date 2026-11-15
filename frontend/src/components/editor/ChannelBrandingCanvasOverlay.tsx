@@ -1,6 +1,10 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { ChannelBrandingConfig, AspectRatioKey, BrandingPosition } from '../../services/branding.service';
+import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
+import { ChannelBrandingConfig, AspectRatioKey } from '../../services/branding.service';
 import { resolveAssetUrl } from '../../utils/urlHelper';
+import {
+  calculateResolvedBrandingPlacement,
+  AspectRatioFormat,
+} from '../../utils/sharedCompositionCoordinates';
 
 interface ChannelBrandingCanvasOverlayProps {
   branding?: ChannelBrandingConfig | null;
@@ -20,80 +24,46 @@ export const ChannelBrandingCanvasOverlay: React.FC<ChannelBrandingCanvasOverlay
   const [isDragging, setIsDragging] = useState(false);
   const dragStartRef = useRef<{ startX: number; startY: number; initX: number; initY: number } | null>(null);
   const overlayRef = useRef<HTMLDivElement | null>(null);
+  const [containerDim, setContainerDim] = useState<{ width: number; height: number }>({ width: 854, height: 480 });
+
+  const formatKey = (format as AspectRatioKey) || '16:9';
+
+  // Measure parent container viewport
+  useLayoutEffect(() => {
+    const parent = overlayRef.current?.parentElement;
+    if (!parent) return;
+
+    const updateDim = () => {
+      const rect = parent.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        setContainerDim({ width: rect.width, height: rect.height });
+      }
+    };
+
+    updateDim();
+
+    const ro = new ResizeObserver(updateDim);
+    ro.observe(parent);
+    return () => ro.disconnect();
+  }, [formatKey]);
 
   if (!branding || !branding.enabled || !branding.logoUrl) {
     return null;
   }
 
-  // Check timing visibility
-  const isTimeVisible =
-    branding.alwaysVisible ||
-    (currentTimeMs >= (branding.startTimeMs || 0) &&
-      currentTimeMs <= (branding.endTimeMs || Infinity));
+  const placement = calculateResolvedBrandingPlacement({
+    branding: branding as any,
+    format: formatKey as AspectRatioFormat,
+    containerWidth: containerDim.width,
+    containerHeight: containerDim.height,
+    currentTimeMs,
+  });
 
-  if (!isTimeVisible) {
+  if (!placement.visible) {
     return null;
   }
 
-  const formatKey = (format as AspectRatioKey) || '16:9';
-  const preset = branding.formatPresets?.[formatKey] || {};
-  const pos: BrandingPosition = preset.position || branding.position || 'top-right';
-  const padding = preset.padding ?? branding.padding ?? 24;
-  const width = preset.width ?? branding.width ?? 140;
-  const height = preset.height ?? branding.height ?? 50;
-  const opacity = preset.opacity ?? branding.opacity ?? 0.9;
-
-  // Custom dragged coordinates
-  const customX = preset.customX ?? branding.customX;
-  const customY = preset.customY ?? branding.customY;
-
-  // Compute position styling relative to the preview viewport (0 to 100% or absolute px)
-  const style: React.CSSProperties = {
-    position: 'absolute',
-    width: `${width}px`,
-    height: `${height}px`,
-    opacity,
-    zIndex: 35, // Layer 6: above visuals/characters, below system overlays
-    cursor: isDragging ? 'grabbing' : 'grab',
-    userSelect: 'none',
-    transition: isDragging ? 'none' : 'all 0.15s ease-out',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: `${branding.borderRadius ?? 8}px`,
-    backgroundColor: branding.showBackgroundContainer
-      ? (branding.containerBgColor || 'rgba(15, 23, 42, 0.7)')
-      : 'transparent',
-    padding: branding.showBackgroundContainer ? '4px 8px' : '0px',
-    boxShadow: branding.showShadow ? '0 4px 12px rgba(0, 0, 0, 0.45)' : 'none',
-  };
-
-  if (pos === 'custom' && customX !== undefined && customY !== undefined) {
-    style.left = `${customX}px`;
-    style.top = `${customY}px`;
-  } else {
-    switch (pos) {
-      case 'top-left':
-        style.top = `${padding}px`;
-        style.left = `${padding}px`;
-        break;
-      case 'top-right':
-        style.top = `${padding}px`;
-        style.right = `${padding}px`;
-        break;
-      case 'bottom-left':
-        // Safe area above captions
-        style.bottom = `${padding + 32}px`;
-        style.left = `${padding}px`;
-        break;
-      case 'bottom-right':
-      default:
-        style.bottom = `${padding + 32}px`;
-        style.right = `${padding}px`;
-        break;
-    }
-  }
-
+  // Handle pointer drag
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     e.stopPropagation();
     e.preventDefault();
@@ -102,8 +72,8 @@ export const ChannelBrandingCanvasOverlay: React.FC<ChannelBrandingCanvasOverlay
     if (!parent) return;
 
     const parentRect = parent.getBoundingClientRect();
-    const currentLeft = overlayRef.current ? overlayRef.current.offsetLeft : 0;
-    const currentTop = overlayRef.current ? overlayRef.current.offsetTop : 0;
+    const currentLeft = overlayRef.current ? overlayRef.current.offsetLeft : placement.x;
+    const currentTop = overlayRef.current ? overlayRef.current.offsetTop : placement.y;
 
     dragStartRef.current = {
       startX: e.clientX,
@@ -114,18 +84,16 @@ export const ChannelBrandingCanvasOverlay: React.FC<ChannelBrandingCanvasOverlay
     setIsDragging(true);
 
     const onPointerMove = (moveEvent: PointerEvent) => {
-      if (!dragStartRef.current) return;
+      if (!dragStartRef.current || !overlayRef.current) return;
       const dx = moveEvent.clientX - dragStartRef.current.startX;
       const dy = moveEvent.clientY - dragStartRef.current.startY;
-      const newX = Math.max(0, Math.min(parentRect.width - width, dragStartRef.current.initX + dx));
-      const newY = Math.max(0, Math.min(parentRect.height - height, dragStartRef.current.initY + dy));
+      const newX = Math.max(0, Math.min(parentRect.width - placement.width, dragStartRef.current.initX + dx));
+      const newY = Math.max(0, Math.min(parentRect.height - placement.height, dragStartRef.current.initY + dy));
 
-      if (overlayRef.current) {
-        overlayRef.current.style.left = `${newX}px`;
-        overlayRef.current.style.top = `${newY}px`;
-        overlayRef.current.style.right = 'auto';
-        overlayRef.current.style.bottom = 'auto';
-      }
+      overlayRef.current.style.left = `${newX}px`;
+      overlayRef.current.style.top = `${newY}px`;
+      overlayRef.current.style.right = 'auto';
+      overlayRef.current.style.bottom = 'auto';
     };
 
     const onPointerUp = (upEvent: PointerEvent) => {
@@ -137,21 +105,36 @@ export const ChannelBrandingCanvasOverlay: React.FC<ChannelBrandingCanvasOverlay
         const finalX = overlayRef.current.offsetLeft;
         const finalY = overlayRef.current.offsetTop;
 
+        // Calculate precision normalized coordinates [0.0 - 1.0]
+        const normX = Number(Math.max(0, Math.min(1, finalX / parentRect.width)).toFixed(4));
+        const normY = Number(Math.max(0, Math.min(1, finalY / parentRect.height)).toFixed(4));
+
+        const baseW = formatKey === '16:9' ? 1280 : 720;
+        const baseH = formatKey === '16:9' ? 720 : (formatKey === '9:16' ? 1280 : 720);
+
         if (onUpdateBranding) {
+          const currentPresets = branding.formatPresets || {};
+          const currentPreset = currentPresets[formatKey] || {};
+
           const updatedPresets = {
-            ...(branding.formatPresets || {}),
+            ...currentPresets,
             [formatKey]: {
-              ...preset,
+              ...currentPreset,
               position: 'custom' as const,
-              customX: finalX,
-              customY: finalY,
+              normalizedX: normX,
+              normalizedY: normY,
+              customX: Math.round(normX * baseW),
+              customY: Math.round(normY * baseH),
             },
           };
+
           onUpdateBranding({
             ...branding,
             position: 'custom',
-            customX: finalX,
-            customY: finalY,
+            normalizedX: normX,
+            normalizedY: normY,
+            customX: Math.round(normX * baseW),
+            customY: Math.round(normY * baseH),
             formatPresets: updatedPresets,
           });
         }
@@ -166,7 +149,26 @@ export const ChannelBrandingCanvasOverlay: React.FC<ChannelBrandingCanvasOverlay
   return (
     <div
       ref={overlayRef}
-      style={style}
+      style={{
+        position: 'absolute',
+        left: isDragging ? undefined : `${placement.x}px`,
+        top: isDragging ? undefined : `${placement.y}px`,
+        width: `${placement.width}px`,
+        height: `${placement.height}px`,
+        opacity: placement.opacity,
+        zIndex: 35, // Layer 6: above visuals/characters, below system overlays
+        cursor: isDragging ? 'grabbing' : 'grab',
+        userSelect: 'none',
+        transition: isDragging ? 'none' : 'all 0.15s ease-out',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: '6px',
+        borderRadius: `${placement.borderRadius}px`,
+        backgroundColor: placement.backgroundColor,
+        padding: placement.showBackground ? '4px 8px' : '0px',
+        boxShadow: placement.showShadow ? '0 4px 12px rgba(0, 0, 0, 0.45)' : 'none',
+      }}
       onPointerDown={handlePointerDown}
       onDoubleClick={(e) => {
         e.stopPropagation();
@@ -185,20 +187,38 @@ export const ChannelBrandingCanvasOverlay: React.FC<ChannelBrandingCanvasOverlay
           pointerEvents: 'none',
         }}
       />
-      {branding.socialHandle && (
-        <span
-          style={{
-            position: 'absolute',
-            bottom: '-14px',
-            fontSize: '9px',
-            color: 'rgba(255, 255, 255, 0.75)',
-            textShadow: '0 1px 3px rgba(0,0,0,0.8)',
-            whiteSpace: 'nowrap',
-            pointerEvents: 'none',
-          }}
-        >
-          {branding.socialHandle}
-        </span>
+
+      {(placement.showChannelName || placement.showSocialHandle) && (
+        <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+          {placement.showChannelName && placement.channelName && (
+            <span
+              style={{
+                fontSize: `${Math.max(10, Math.round(placement.height * 0.28))}px`,
+                fontWeight: 800,
+                color: '#ffffff',
+                textShadow: '0 1px 4px rgba(0,0,0,0.85)',
+                lineHeight: 1.1,
+                whiteSpace: 'nowrap',
+                pointerEvents: 'none',
+              }}
+            >
+              {placement.channelName}
+            </span>
+          )}
+          {placement.showSocialHandle && placement.socialHandle && (
+            <span
+              style={{
+                fontSize: `${Math.max(9, Math.round(placement.height * 0.22))}px`,
+                color: 'rgba(255, 255, 255, 0.8)',
+                textShadow: '0 1px 3px rgba(0,0,0,0.8)',
+                whiteSpace: 'nowrap',
+                pointerEvents: 'none',
+              }}
+            >
+              {placement.socialHandle}
+            </span>
+          )}
+        </div>
       )}
     </div>
   );

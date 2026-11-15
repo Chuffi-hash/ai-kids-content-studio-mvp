@@ -159,10 +159,12 @@ export function calculateResponsiveCharacterPlacement(options: {
       const xNorm = (inst.x - 640) / 640;
       responsiveX = Math.round(canvasWidth / 2 + xNorm * (safeWidth / 2));
     } else if (autoCount === 2) {
-      // Two characters: balanced side-by-side placement
+      // Two characters: dynamic balanced placement based on rig width & safe margins
+      const charWidth = baseWidth * scale;
+      const spacing = Math.max(40, (safeWidth - charWidth * 2) / 3);
       responsiveX = orderRank === 0
-        ? Math.round(canvasWidth * 0.35)
-        : Math.round(canvasWidth * 0.65);
+        ? Math.round(safeMarginX + charWidth / 2 + spacing)
+        : Math.round(canvasWidth - safeMarginX - charWidth / 2 - spacing);
     } else {
       // 3+ characters: evenly distributed across safe area in left-to-right order
       const step = safeWidth / Math.max(1, autoCount - 1);
@@ -218,3 +220,176 @@ export function resolveEffectiveCharacterInstance(
     isAutoPlaced: false,
   };
 }
+
+export interface CharacterTransformUpdates {
+  x?: number;
+  y?: number;
+  scale?: number;
+  rotation?: number;
+  facingDirection?: any;
+  flipX?: boolean;
+  zIndex?: number;
+}
+
+/**
+ * Centralized character transform mutator.
+ * Guarantees unified transform behavior across inspector and canvas gizmo:
+ * - 16:9 updates canonical scene characterInstance (and adjusts any motion paths proportionally)
+ * - 9:16, 1:1, 4:5 updates format-specific characterOverrides
+ * Never overwrites another format's manual placement.
+ */
+export function applyCharacterTransform(options: {
+  animationData: VectorSceneData;
+  instanceId: string;
+  updates: CharacterTransformUpdates;
+  format: AspectRatioType;
+  canvasWidth?: number;
+  canvasHeight?: number;
+}): VectorSceneData {
+  const { animationData, instanceId, updates, format } = options;
+  const dims = getCanvasDimensions(format);
+  const canvasWidth = options.canvasWidth || dims.width;
+  const canvasHeight = options.canvasHeight || dims.height;
+
+  if (format === '16:9') {
+    const rawInstances = animationData.characterInstances || [];
+    const baseInst = rawInstances.find((i) => i.instanceId === instanceId);
+
+    let updatedClips = animationData.animationClips || [];
+    if (baseInst && (updates.x !== undefined || updates.y !== undefined)) {
+      const dx = (updates.x !== undefined ? updates.x : baseInst.x) - baseInst.x;
+      const dy = (updates.y !== undefined ? updates.y : baseInst.y) - baseInst.y;
+      if (dx !== 0 || dy !== 0) {
+        updatedClips = updatedClips.map((c) => {
+          if (c.instanceId === instanceId && c.motionPath) {
+            return {
+              ...c,
+              motionPath: {
+                ...c.motionPath,
+                startX: Math.round(c.motionPath.startX + dx),
+                startY: Math.round(c.motionPath.startY + dy),
+                endX: Math.round(c.motionPath.endX + dx),
+                endY: Math.round(c.motionPath.endY + dy),
+              },
+            };
+          }
+          return c;
+        });
+      }
+    }
+
+    const updatedInstances = rawInstances.map((inst) =>
+      inst.instanceId === instanceId
+        ? {
+            ...inst,
+            ...(updates.x !== undefined ? { x: updates.x } : {}),
+            ...(updates.y !== undefined ? { y: updates.y } : {}),
+            ...(updates.scale !== undefined ? { scale: updates.scale } : {}),
+            ...(updates.rotation !== undefined ? { rotation: updates.rotation } : {}),
+            ...(updates.facingDirection !== undefined ? { facingDirection: updates.facingDirection } : {}),
+            ...(updates.flipX !== undefined ? { flipX: updates.flipX } : {}),
+            ...(updates.zIndex !== undefined ? { zIndex: updates.zIndex } : {}),
+          }
+        : inst
+    );
+
+    return {
+      ...animationData,
+      characterInstances: updatedInstances,
+      animationClips: updatedClips,
+    };
+  } else {
+    // Non-16:9 format override
+    const currentVariants = animationData.formatVariants || {};
+    const currentVariant = currentVariants[format] || {
+      aspectRatio: format,
+      width: canvasWidth,
+      height: canvasHeight,
+      characterOverrides: {},
+    };
+    const currentOverrides = currentVariant.characterOverrides || {};
+    const existingOverride = currentOverrides[instanceId] || {};
+
+    const updatedOverrides = {
+      ...currentOverrides,
+      [instanceId]: {
+        ...existingOverride,
+        ...(updates.x !== undefined ? { x: updates.x } : {}),
+        ...(updates.y !== undefined ? { y: updates.y } : {}),
+        ...(updates.scale !== undefined ? { scale: updates.scale } : {}),
+        ...(updates.rotation !== undefined ? { rotation: updates.rotation } : {}),
+        ...(updates.facingDirection !== undefined ? { facingDirection: updates.facingDirection } : {}),
+        ...(updates.flipX !== undefined ? { flipX: updates.flipX } : {}),
+        ...(updates.zIndex !== undefined ? { zIndex: updates.zIndex } : {}),
+      },
+    };
+
+    return {
+      ...animationData,
+      formatVariants: {
+        ...currentVariants,
+        [format]: {
+          ...currentVariant,
+          aspectRatio: format,
+          width: canvasWidth,
+          height: canvasHeight,
+          characterOverrides: updatedOverrides,
+        },
+      },
+    };
+  }
+}
+
+/**
+ * Resets a character's placement to automatic ground-anchored layout.
+ * For non-16:9: removes the format override for the instance.
+ * For 16:9: recalculates natural ground contact position.
+ */
+export function resetCharacterToAutoLayout(options: {
+  animationData: VectorSceneData;
+  instanceId: string;
+  format: AspectRatioType;
+  rigsMap?: Record<string, VectorRigDefinition>;
+}): VectorSceneData {
+  const { animationData, instanceId, format } = options;
+
+  if (format !== '16:9') {
+    const currentVariants = animationData.formatVariants || {};
+    const currentVariant = currentVariants[format];
+    if (!currentVariant || !currentVariant.characterOverrides?.[instanceId]) {
+      return animationData;
+    }
+
+    const { [instanceId]: _, ...remainingOverrides } = currentVariant.characterOverrides;
+
+    return {
+      ...animationData,
+      formatVariants: {
+        ...currentVariants,
+        [format]: {
+          ...currentVariant,
+          characterOverrides: remainingOverrides,
+        },
+      },
+    };
+  } else {
+    // In 16:9: reset position to default ground line (y = ~480, x spaced evenly)
+    const rawInstances = animationData.characterInstances || [];
+    const idx = rawInstances.findIndex((i) => i.instanceId === instanceId);
+    if (idx < 0) return animationData;
+
+    const total = rawInstances.length;
+    const defaultX = total === 1 ? 640 : Math.round(320 + (idx / Math.max(1, total - 1)) * 640);
+    const defaultY = 480;
+
+    const updatedInstances = rawInstances.map((inst, i) =>
+      i === idx ? { ...inst, x: defaultX, y: defaultY, scale: 1.0, rotation: 0 } : inst
+    );
+
+    return {
+      ...animationData,
+      characterInstances: updatedInstances,
+    };
+  }
+}
+

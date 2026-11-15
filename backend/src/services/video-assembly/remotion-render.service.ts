@@ -24,6 +24,7 @@ export interface RemotionRenderJobOptions {
   targetDurationSec?: number;
   templateId?: string;
   subtitleTheme?: 'classic' | 'karaoke' | 'speech-bubble' | 'minimal';
+  branding?: any;
   finalOutputPath: string;
   onProgress?: (progress: number, stage: string) => void;
 }
@@ -126,6 +127,18 @@ export class RemotionRenderService {
 
     onProgress?.(5, 'Building Remotion animation manifest...');
 
+    // Resolve channel branding if not explicitly provided
+    const storyId = story.storyId || story.id;
+    let resolvedBranding = options.branding;
+    if (!resolvedBranding && storyId) {
+      try {
+        const { BrandingService } = await import('../branding/branding.service.js');
+        resolvedBranding = await new BrandingService().getBrandingConfig(storyId);
+      } catch (bErr) {
+        console.warn('[RemotionRender] Notice loading branding for story:', bErr);
+      }
+    }
+
     // 1. Build and validate manifest (exclude music from Remotion so speech can be ducked in mastering)
     const manifest: RemotionManifest = await this.adapter.buildManifest(
       story,
@@ -140,6 +153,7 @@ export class RemotionRenderService {
         targetDurationSec,
         templateId,
         subtitleTheme,
+        branding: resolvedBranding,
         embedBase64Images: true,
         embedBase64Audio: true,
         excludeMusicFromRemotion: true,
@@ -355,8 +369,11 @@ export class RemotionRenderService {
     return new Promise((resolve, reject) => {
       const { jobId, manifestPath, outputPath, onProgress } = options;
       const isWin = process.platform === 'win32';
-      const cmd = isWin ? 'npx.cmd' : 'npx';
-      const args = ['tsx', 'src/render.ts', manifestPath, outputPath];
+      const localTsxCmd = path.resolve(this.remotionDir, 'node_modules', '.bin', isWin ? 'tsx.cmd' : 'tsx');
+      const cmd = fs.existsSync(localTsxCmd) ? localTsxCmd : (isWin ? 'npx.cmd' : 'npx');
+      const args = fs.existsSync(localTsxCmd)
+        ? ['src/render.ts', manifestPath, outputPath]
+        : ['tsx', 'src/render.ts', manifestPath, outputPath];
       const timeoutMs = Number(process.env.REMOTION_RENDER_TIMEOUT_MS) || 600000;
 
       console.log(`[RemotionRender] Spawning: ${cmd} ${args.join(' ')} in ${this.remotionDir}`);

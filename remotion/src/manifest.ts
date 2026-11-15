@@ -475,12 +475,16 @@ export interface ChannelBrandingConfig {
   id?: string;
   storyId?: string;
   channelName?: string;
+  showChannelName?: boolean;
   logoUrl?: string;
   secondaryLogoUrl?: string;
   subscribeBadgeUrl?: string;
   socialHandle?: string;
+  showSocialHandle?: boolean;
   enabled: boolean;
   position?: BrandingPosition;
+  normalizedX?: number;
+  normalizedY?: number;
   customX?: number;
   customY?: number;
   width?: number;

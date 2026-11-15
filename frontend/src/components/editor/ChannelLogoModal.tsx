@@ -380,9 +380,20 @@ export const ChannelLogoModal: React.FC<ChannelLogoModalProps> = ({
           {/* Section 2: Channel Info */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
             <div>
-              <label style={{ fontSize: '12px', fontWeight: 600, color: '#e2e8f0', display: 'block', marginBottom: '6px' }}>
-                Channel / Creator Name (Optional)
-              </label>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                <label style={{ fontSize: '12px', fontWeight: 600, color: '#e2e8f0' }}>
+                  Channel / Creator Name (Optional)
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11px', color: '#94a3b8', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={Boolean(config.showChannelName)}
+                    onChange={(e) => setConfig((prev) => ({ ...prev, showChannelName: e.target.checked }))}
+                    style={{ accentColor: '#8b5cf6', cursor: 'pointer' }}
+                  />
+                  <span>Show in video</span>
+                </label>
+              </div>
               <input
                 type="text"
                 placeholder="e.g. Kids Magic Studio"
@@ -402,9 +413,20 @@ export const ChannelLogoModal: React.FC<ChannelLogoModalProps> = ({
               />
             </div>
             <div>
-              <label style={{ fontSize: '12px', fontWeight: 600, color: '#e2e8f0', display: 'block', marginBottom: '6px' }}>
-                Social Handle / Watermark Tag (Optional)
-              </label>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                <label style={{ fontSize: '12px', fontWeight: 600, color: '#e2e8f0' }}>
+                  Social Handle / Watermark Tag (Optional)
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11px', color: '#94a3b8', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={Boolean(config.showSocialHandle)}
+                    onChange={(e) => setConfig((prev) => ({ ...prev, showSocialHandle: e.target.checked }))}
+                    style={{ accentColor: '#8b5cf6', cursor: 'pointer' }}
+                  />
+                  <span>Show in video</span>
+                </label>
+              </div>
               <input
                 type="text"
                 placeholder="e.g. @KidsStoryTV"
@@ -489,8 +511,15 @@ export const ChannelLogoModal: React.FC<ChannelLogoModalProps> = ({
                         key={p.id}
                         type="button"
                         onClick={() => {
-                          updateFormatPreset({ position: p.id });
-                          setConfig((prev) => ({ ...prev, position: p.id }));
+                          const posUpdates = {
+                            position: p.id,
+                            customX: undefined,
+                            customY: undefined,
+                            normalizedX: undefined,
+                            normalizedY: undefined,
+                          };
+                          updateFormatPreset(posUpdates);
+                          setConfig((prev) => ({ ...prev, ...posUpdates }));
                         }}
                         style={{
                           padding: '10px 8px',

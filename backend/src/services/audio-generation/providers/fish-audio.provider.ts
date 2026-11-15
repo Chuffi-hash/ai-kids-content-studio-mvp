@@ -497,13 +497,13 @@ export class FishAudioProvider implements TTSProvider {
           // If a reference ID was requested but is not found/active on Fish Audio,
           // automatically fall back to the base model zero-shot voice without reference_id.
           if (
-            referenceId &&
+            (payload.reference_id || referenceId) &&
             (errorBody.toLowerCase().includes("reference not found") ||
               errorBody.toLowerCase().includes("reference") ||
               errorBody.includes("Reference not found"))
           ) {
             console.warn(
-              `[FishAudioProvider] Voice reference "${referenceId}" for voice "${voice}" was not found or is inactive on Fish Audio (${statusCode}). Automatically falling back to zero-shot base voice...`,
+              `[FishAudioProvider] Voice reference "${payload.reference_id || referenceId}" for voice "${voice}" was not found or is inactive on Fish Audio (${statusCode}). Automatically falling back to zero-shot base voice...`,
             );
             delete payload.reference_id;
             referenceId = undefined;
@@ -515,8 +515,13 @@ export class FishAudioProvider implements TTSProvider {
             errorBody.toLowerCase().includes("reference not found") ||
             errorBody.toLowerCase().includes("reference")
           ) {
+            if (payload.reference_id) {
+              delete payload.reference_id;
+              referenceId = undefined;
+              continue;
+            }
             throw new Error(
-              `Fish Audio voice "${voice}" reference (${referenceId || 'unknown'}) was not found or is no longer accessible on the provider. Please select "Fish Audio Default Voice (Zero-Shot)" or a verified voice preset.`,
+              `Fish Audio voice "${voice}" reference was not found or is no longer accessible on the provider. Please select "Fish Audio Default Voice (Zero-Shot)" or a verified voice preset.`,
             );
           }
           throw new Error(

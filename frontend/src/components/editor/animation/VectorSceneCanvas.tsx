@@ -12,7 +12,7 @@ import { buildRigFromAppearance } from "../../../utils/customCharacterRig";
 import { evaluateCharacterPose } from "../../../utils/animationEngine";
 import { VectorCharacterRenderer } from "./VectorCharacterRenderer";
 import { RasterCharacterRenderer } from "./RasterCharacterRenderer";
-import { calculateResponsiveCharacterPlacement } from "../../../utils/characterPlacementEngine";
+import { calculateResponsiveCharacterPlacement, applyCharacterTransform } from "../../../utils/characterPlacementEngine";
 import { TransformGizmo } from "./TransformGizmo";
 import { OverlayGizmo } from "./OverlayGizmo";
 import { renderEducationalOverlayXml } from "../../../utils/educationalOverlayRenderer";
@@ -275,75 +275,17 @@ export const VectorSceneCanvas: React.FC<VectorSceneCanvasProps> = ({
     instanceId: string,
     updates: Partial<CharacterInstance>,
   ) => {
-    if (effectiveFormat !== "16:9") {
-      const currentVariants = animationData.formatVariants || {};
-      const currentVariant = currentVariants[effectiveFormat] || {
-        aspectRatio: effectiveFormat,
-        width: canvasWidth,
-        height: canvasHeight,
-        characterOverrides: {},
-      };
-      const currentOverrides = currentVariant.characterOverrides || {};
-      const updatedOverrides = {
-        ...currentOverrides,
-        [instanceId]: {
-          ...(currentOverrides[instanceId] || {}),
-          ...(updates.x !== undefined ? { x: updates.x } : {}),
-          ...(updates.y !== undefined ? { y: updates.y } : {}),
-          ...(updates.scale !== undefined ? { scale: updates.scale } : {}),
-          ...(updates.flipX !== undefined ? { flipX: updates.flipX } : {}),
-          ...(updates.rotation !== undefined ? { rotation: updates.rotation } : {}),
-          ...(updates.facingDirection !== undefined ? { facingDirection: updates.facingDirection } : {}),
-        },
-      };
-      if (onUpdateAnimationData) {
-        onUpdateAnimationData({
-          ...animationData,
-          formatVariants: {
-            ...currentVariants,
-            [effectiveFormat]: {
-              ...currentVariant,
-              aspectRatio: effectiveFormat,
-              width: canvasWidth,
-              height: canvasHeight,
-              characterOverrides: updatedOverrides,
-            },
-          },
-        });
-      }
+    if (onUpdateAnimationData) {
+      const updated = applyCharacterTransform({
+        animationData,
+        instanceId,
+        updates,
+        format: effectiveFormat,
+        canvasWidth,
+        canvasHeight,
+      });
+      onUpdateAnimationData(updated);
     } else {
-      // In 16:9 mode: update instance, and if character has a motion path, shift motion path by (dx, dy)
-      const baseInst = rawInstances.find((i) => i.instanceId === instanceId);
-      if (baseInst && onUpdateAnimationData && (updates.x !== undefined || updates.y !== undefined)) {
-        const dx = (updates.x !== undefined ? updates.x : baseInst.x) - baseInst.x;
-        const dy = (updates.y !== undefined ? updates.y : baseInst.y) - baseInst.y;
-        if (dx !== 0 || dy !== 0) {
-          const updatedClips = clips.map((c) => {
-            if (c.instanceId === instanceId && c.motionPath) {
-              return {
-                ...c,
-                motionPath: {
-                  ...c.motionPath,
-                  startX: Math.round(c.motionPath.startX + dx),
-                  startY: Math.round(c.motionPath.startY + dy),
-                  endX: Math.round(c.motionPath.endX + dx),
-                  endY: Math.round(c.motionPath.endY + dy),
-                },
-              };
-            }
-            return c;
-          });
-          const updatedInstances = rawInstances.map((i) =>
-            i.instanceId === instanceId ? { ...i, ...updates } : i
-          );
-          onUpdateAnimationData({
-            ...animationData,
-            characterInstances: updatedInstances,
-            animationClips: updatedClips,
-          });
-          return;
-        }
-      }
       onUpdateInstance(instanceId, updates);
     }
   };

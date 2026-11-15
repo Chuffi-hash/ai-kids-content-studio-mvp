@@ -142,9 +142,12 @@ export function calculateResponsiveCharacterPlacement(options: {
       const xNorm = (inst.x - 640) / 640;
       responsiveX = Math.round(canvasWidth / 2 + xNorm * (safeWidth / 2));
     } else if (autoCount === 2) {
+      // Two characters: dynamic balanced placement based on rig width & safe margins
+      const charWidth = baseWidth * scale;
+      const spacing = Math.max(40, (safeWidth - charWidth * 2) / 3);
       responsiveX = orderRank === 0
-        ? Math.round(canvasWidth * 0.35)
-        : Math.round(canvasWidth * 0.65);
+        ? Math.round(safeMarginX + charWidth / 2 + spacing)
+        : Math.round(canvasWidth - safeMarginX - charWidth / 2 - spacing);
     } else {
       const step = safeWidth / Math.max(1, autoCount - 1);
       responsiveX = Math.round(safeMarginX + orderRank * step);

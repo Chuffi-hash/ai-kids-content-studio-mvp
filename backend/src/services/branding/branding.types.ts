@@ -15,6 +15,8 @@ export type AspectRatioKey = '16:9' | '9:16' | '1:1' | '4:5';
 
 export interface BrandingLayoutPreset {
   position?: BrandingPosition;
+  normalizedX?: number;
+  normalizedY?: number;
   customX?: number;
   customY?: number;
   width?: number;
@@ -27,12 +29,16 @@ export interface ChannelBrandingConfig {
   id?: string;
   storyId?: string;
   channelName?: string;
+  showChannelName?: boolean;
   logoUrl?: string;
   secondaryLogoUrl?: string;
   subscribeBadgeUrl?: string;
   socialHandle?: string;
+  showSocialHandle?: boolean;
   enabled: boolean;
   position: BrandingPosition;
+  normalizedX?: number;
+  normalizedY?: number;
   customX?: number;
   customY?: number;
   width?: number;

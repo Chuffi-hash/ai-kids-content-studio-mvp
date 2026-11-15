@@ -640,14 +640,16 @@ export const PreviewCanvas: React.FC<PreviewCanvasProps> = ({
             )}
           </div>
         )}
-        {/* Layer 6: Live Channel Branding Overlay (zIndex: 35) */}
-        <ChannelBrandingCanvasOverlay
-          branding={branding}
-          format={activeFormat}
-          currentTimeMs={currentTimeMs}
-          onUpdateBranding={onUpdateBranding}
-          onOpenModal={onOpenBrandingModal}
-        />
+        {/* Layer 6: Live Channel Branding Overlay (zIndex: 35) - rendered in 2D / Scene mode; Remotion Player renders its own composition branding overlay */}
+        {previewMode !== "remotion" && (
+          <ChannelBrandingCanvasOverlay
+            branding={branding}
+            format={activeFormat}
+            currentTimeMs={currentTimeMs}
+            onUpdateBranding={onUpdateBranding}
+            onOpenModal={onOpenBrandingModal}
+          />
+        )}
       </div>
 
       {/* Preview Transport Scrubber Bar - only displayed for scene/export modes; Remotion Player renders its own transport bar */}

@@ -62,6 +62,7 @@ export const TransformGizmo: React.FC<TransformGizmoProps> = ({
     startRotation: number;
     startDistFromCenter: number;
     startAngleFromCenter: number;
+    corner?: string;
     pathStartX?: number;
     pathStartY?: number;
     pathEndX?: number;
@@ -69,8 +70,16 @@ export const TransformGizmo: React.FC<TransformGizmoProps> = ({
   } | null>(null);
 
   const scale = instance.scale || 1.0;
-  const halfW = (rig.baseWidth * scale) / 2 + 10;
-  const halfH = (rig.baseHeight * scale) / 2 + 20;
+  const isRaster = (instance as any).characterType === 'raster' || Boolean((instance as any).imageUrl) || Boolean((instance as any).directionalViews);
+
+  // Determine accurate rig bounds
+  // Vector characters: waist at y=0, head extends up to -160, feet down to +80
+  // Raster characters: center at y=0, extends -180 to +180
+  const halfW = isRaster ? 140 * scale + 10 : (rig.baseWidth * scale) / 2 + 10;
+  const topY = isRaster ? -180 * scale - 10 : -160 * scale - 10;
+  const bottomY = isRaster ? 180 * scale + 10 : 80 * scale + 10;
+  const boxHeight = bottomY - topY;
+  const visualCenterY = instance.y + (topY + bottomY) / 2;
 
   // Start dragging translation (move character)
   const handlePointerDownMove = (e: React.PointerEvent) => {
@@ -80,13 +89,12 @@ export const TransformGizmo: React.FC<TransformGizmoProps> = ({
 
     const svgEl = (e.target as Element).closest('svg');
     const pt = getSvgPoint(e, svgEl, viewportWidth, viewportHeight);
-    const base = baseInstance || instance;
 
     dragStartRef.current = {
       pointerSvgX: pt.x,
       pointerSvgY: pt.y,
-      startInstX: base.x,
-      startInstY: base.y,
+      startInstX: instance.x,
+      startInstY: instance.y,
       startScale: scale,
       startRotation: instance.rotation || 0,
       startDistFromCenter: 0,
@@ -142,7 +150,7 @@ export const TransformGizmo: React.FC<TransformGizmoProps> = ({
     };
   };
 
-  // Start scaling from corner handle (all 4 corners outward drag)
+  // Start scaling from corner handle (respects dragged corner)
   const handlePointerDownScale = (e: React.PointerEvent, corner: string) => {
     e.stopPropagation();
     (e.target as Element).setPointerCapture(e.pointerId);
@@ -150,7 +158,7 @@ export const TransformGizmo: React.FC<TransformGizmoProps> = ({
 
     const svgEl = (e.target as Element).closest('svg');
     const pt = getSvgPoint(e, svgEl, viewportWidth, viewportHeight);
-    const dist = Math.hypot(pt.x - instance.x, pt.y - instance.y);
+    const dist = Math.hypot(pt.x - instance.x, pt.y - visualCenterY);
 
     dragStartRef.current = {
       pointerSvgX: pt.x,
@@ -159,12 +167,13 @@ export const TransformGizmo: React.FC<TransformGizmoProps> = ({
       startInstY: instance.y,
       startScale: scale,
       startRotation: instance.rotation || 0,
-      startDistFromCenter: Math.max(10, dist),
+      startDistFromCenter: Math.max(20, dist),
       startAngleFromCenter: 0,
+      corner,
     };
   };
 
-  // Start rotating from rotation handle (using pointer angle around center)
+  // Start rotating from rotation handle (using pointer angle around visual center)
   const handlePointerDownRotate = (e: React.PointerEvent) => {
     e.stopPropagation();
     (e.target as Element).setPointerCapture(e.pointerId);
@@ -172,7 +181,7 @@ export const TransformGizmo: React.FC<TransformGizmoProps> = ({
 
     const svgEl = (e.target as Element).closest('svg');
     const pt = getSvgPoint(e, svgEl, viewportWidth, viewportHeight);
-    const angle = Math.atan2(pt.y - instance.y, pt.x - instance.x) * (180 / Math.PI);
+    const angle = Math.atan2(pt.y - visualCenterY, pt.x - instance.x) * (180 / Math.PI);
 
     dragStartRef.current = {
       pointerSvgX: pt.x,
@@ -220,12 +229,27 @@ export const TransformGizmo: React.FC<TransformGizmoProps> = ({
         endY: Math.round(endY + dy),
       });
     } else if (activeDrag.startsWith('scale')) {
-      const curDist = Math.hypot(curSvg.x - dragStartRef.current.startInstX, curSvg.y - dragStartRef.current.startInstY);
-      const ratio = curDist / dragStartRef.current.startDistFromCenter;
+      const corner = dragStartRef.current.corner || 'se';
+      // Unit corner direction vector in unrotated character space
+      let dirX = 1;
+      let dirY = 1;
+      if (corner === 'nw') { dirX = -1; dirY = -1; }
+      else if (corner === 'ne') { dirX = 1; dirY = -1; }
+      else if (corner === 'sw') { dirX = -1; dirY = 1; }
+
+      // Rotate direction vector by character rotation angle
+      const rotRad = ((instance.rotation || 0) * Math.PI) / 180;
+      const worldDirX = (dirX * Math.cos(rotRad) - dirY * Math.sin(rotRad)) / Math.SQRT2;
+      const worldDirY = (dirX * Math.sin(rotRad) + dirY * Math.cos(rotRad)) / Math.SQRT2;
+
+      // Project pointer displacement onto corner axis
+      const projDelta = dx * worldDirX + dy * worldDirY;
+      const ratio = 1 + projDelta / dragStartRef.current.startDistFromCenter;
       const newScale = Math.max(0.2, Math.min(3.5, dragStartRef.current.startScale * ratio));
+
       onUpdateInstance({ scale: Math.round(newScale * 100) / 100 });
     } else if (activeDrag === 'rotate') {
-      const curAngle = Math.atan2(curSvg.y - dragStartRef.current.startInstY, curSvg.x - dragStartRef.current.startInstX) * (180 / Math.PI);
+      const curAngle = Math.atan2(curSvg.y - visualCenterY, curSvg.x - instance.x) * (180 / Math.PI);
       const deltaAngle = curAngle - dragStartRef.current.startAngleFromCenter;
       let newRot = Math.round(dragStartRef.current.startRotation + deltaAngle);
       while (newRot > 180) newRot -= 360;
@@ -313,12 +337,12 @@ export const TransformGizmo: React.FC<TransformGizmoProps> = ({
       <g
         transform={`translate(${instance.x}, ${instance.y}) rotate(${instance.rotation || 0})`}
       >
-        {/* Transparent drag body to move */}
+        {/* Transparent drag body to move - accurately covers from ears to feet */}
         <rect
           x={-halfW}
-          y={-halfH}
+          y={topY}
           width={halfW * 2}
-          height={halfH * 2}
+          height={boxHeight}
           fill="rgba(139, 92, 246, 0.1)"
           stroke="#8b5cf6"
           strokeWidth={1.5}
@@ -327,11 +351,11 @@ export const TransformGizmo: React.FC<TransformGizmoProps> = ({
           onPointerDown={handlePointerDownMove}
         />
 
-        {/* Top rotation stem and handle */}
-        <line x1={0} y1={-halfH} x2={0} y2={-halfH - 24} stroke="#8b5cf6" strokeWidth={1.5} />
+        {/* Top rotation stem and handle - positioned above the head */}
+        <line x1={0} y1={topY} x2={0} y2={topY - 24} stroke="#8b5cf6" strokeWidth={1.5} />
         <circle
           cx={0}
-          cy={-halfH - 24}
+          cy={topY - 24}
           r={7}
           fill="#8b5cf6"
           stroke="#ffffff"
@@ -344,7 +368,7 @@ export const TransformGizmo: React.FC<TransformGizmoProps> = ({
         {/* Top-Left */}
         <rect
           x={-halfW - 5}
-          y={-halfH - 5}
+          y={topY - 5}
           width={10}
           height={10}
           fill="#ffffff"
@@ -356,7 +380,7 @@ export const TransformGizmo: React.FC<TransformGizmoProps> = ({
         {/* Top-Right */}
         <rect
           x={halfW - 5}
-          y={-halfH - 5}
+          y={topY - 5}
           width={10}
           height={10}
           fill="#ffffff"
@@ -368,7 +392,7 @@ export const TransformGizmo: React.FC<TransformGizmoProps> = ({
         {/* Bottom-Left */}
         <rect
           x={-halfW - 5}
-          y={halfH - 5}
+          y={bottomY - 5}
           width={10}
           height={10}
           fill="#ffffff"
@@ -380,7 +404,7 @@ export const TransformGizmo: React.FC<TransformGizmoProps> = ({
         {/* Bottom-Right */}
         <rect
           x={halfW - 5}
-          y={halfH - 5}
+          y={bottomY - 5}
           width={10}
           height={10}
           fill="#ffffff"

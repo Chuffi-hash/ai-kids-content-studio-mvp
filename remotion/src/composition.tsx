@@ -568,16 +568,16 @@ function SceneView({
     }
     return {
       ...inst,
-      x: currPlacement?.x ?? inst.x,
-      y: currPlacement?.y ?? inst.y,
-      scale: currPlacement?.scale ?? inst.scale ?? 1.0,
-      rotation: currPlacement?.rotation ?? inst.rotation ?? 0,
-      flipX: currPlacement?.flipX ?? targetFlipX ?? inst.flipX,
-      facingDirection: currPlacement?.facingDirection || inst.facingDirection || 'front',
-      action: currPlacement?.action || inst.action || 'idle',
-      expression: (currPlacement?.expression || inst.expression) as FacialExpression | undefined,
-      zIndex: currPlacement?.zIndex ?? inst.zIndex ?? (instIdx + 1),
-      isSpeaker: currPlacement?.isSpeaker ?? inst.isSpeaker,
+      x: typeof inst.x === 'number' ? inst.x : (currPlacement?.x ?? 640),
+      y: typeof inst.y === 'number' ? inst.y : (currPlacement?.y ?? 480),
+      scale: typeof inst.scale === 'number' ? inst.scale : (currPlacement?.scale ?? 1.0),
+      rotation: typeof inst.rotation === 'number' ? inst.rotation : (currPlacement?.rotation ?? 0),
+      flipX: typeof inst.flipX === 'boolean' ? inst.flipX : (currPlacement?.flipX ?? targetFlipX),
+      facingDirection: inst.facingDirection || currPlacement?.facingDirection || 'front',
+      action: inst.action || currPlacement?.action || 'idle',
+      expression: (inst.expression || currPlacement?.expression) as FacialExpression | undefined,
+      zIndex: typeof inst.zIndex === 'number' ? inst.zIndex : (currPlacement?.zIndex ?? (instIdx + 1)),
+      isSpeaker: typeof inst.isSpeaker === 'boolean' ? inst.isSpeaker : Boolean(currPlacement?.isSpeaker),
     };
   });
 
@@ -604,16 +604,16 @@ function SceneView({
         }
         return {
           ...inst,
-          x: prevPlacement?.x ?? inst.x,
-          y: prevPlacement?.y ?? inst.y,
-          scale: prevPlacement?.scale ?? inst.scale ?? 1.0,
-          rotation: prevPlacement?.rotation ?? inst.rotation ?? 0,
-          flipX: prevPlacement?.flipX ?? targetFlipX ?? inst.flipX,
-          facingDirection: prevPlacement?.facingDirection || inst.facingDirection || 'front',
-          action: prevPlacement?.action || inst.action || 'idle',
-          expression: (prevPlacement?.expression || inst.expression) as FacialExpression | undefined,
-          zIndex: prevPlacement?.zIndex ?? inst.zIndex ?? (instIdx + 1),
-          isSpeaker: prevPlacement?.isSpeaker ?? inst.isSpeaker,
+          x: typeof inst.x === 'number' ? inst.x : (prevPlacement?.x ?? 640),
+          y: typeof inst.y === 'number' ? inst.y : (prevPlacement?.y ?? 480),
+          scale: typeof inst.scale === 'number' ? inst.scale : (prevPlacement?.scale ?? 1.0),
+          rotation: typeof inst.rotation === 'number' ? inst.rotation : (prevPlacement?.rotation ?? 0),
+          flipX: typeof inst.flipX === 'boolean' ? inst.flipX : (prevPlacement?.flipX ?? targetFlipX),
+          facingDirection: inst.facingDirection || prevPlacement?.facingDirection || 'front',
+          action: inst.action || prevPlacement?.action || 'idle',
+          expression: (inst.expression || prevPlacement?.expression) as FacialExpression | undefined,
+          zIndex: typeof inst.zIndex === 'number' ? inst.zIndex : (prevPlacement?.zIndex ?? (instIdx + 1)),
+          isSpeaker: typeof inst.isSpeaker === 'boolean' ? inst.isSpeaker : Boolean(prevPlacement?.isSpeaker),
         };
       })
     : [];
