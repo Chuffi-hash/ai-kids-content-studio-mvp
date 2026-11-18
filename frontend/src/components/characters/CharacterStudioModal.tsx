@@ -21,6 +21,7 @@ import {
   ImageIcon,
 } from '../common/Icons';
 import './CharacterStudioModal.css';
+import GoogleFlowCharacterPanel from './GoogleFlowCharacterPanel';
 
 interface CharacterStudioModalProps {
   isOpen: boolean;
@@ -429,6 +430,29 @@ export default function CharacterStudioModal({
     reader.readAsDataURL(file);
   };
 
+  const refreshFlowAssets = async () => {
+    if (activeCharacterId === 'new') return;
+
+    try {
+      const [assetResult, refreshedCharacters] = await Promise.all([
+        getCharacterStudioAssets(activeCharacterId),
+        getAllCharacters(),
+      ]);
+
+      if (assetResult.success && Array.isArray(assetResult.assets)) {
+        setSavedAssets(assetResult.assets);
+      }
+
+      setCharacterList(refreshedCharacters);
+      const refreshedCharacter = refreshedCharacters.find((item) => item.id === activeCharacterId);
+      if (refreshedCharacter?.referenceImageUrl) {
+        setMasterReferenceUrl(refreshedCharacter.referenceImageUrl);
+      }
+    } catch (refreshError) {
+      console.error('Failed to refresh imported Google Flow character assets:', refreshError);
+    }
+  };
+
   return (
     <div className="char-studio-overlay" onClick={onClose}>
       <div className="char-studio-modal" onClick={(e) => e.stopPropagation()}>
@@ -817,6 +841,13 @@ export default function CharacterStudioModal({
                 </div>
               )}
             </div>
+
+            {/* Google Flow — authenticated local Playwright companion */}
+            <GoogleFlowCharacterPanel
+              characterId={activeCharacterId === 'new' ? '' : activeCharacterId}
+              characterName={name}
+              onImported={refreshFlowAssets}
+            />
 
             {/* Directly Editable Combined Prompt */}
             <div className="studio-form-group">
