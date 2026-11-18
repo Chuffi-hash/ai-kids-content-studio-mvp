@@ -374,7 +374,7 @@ export default function GoogleFlowCharacterPanel({
       {job && (
         <div className="google-flow-job-card">
           <div className="google-flow-job-title">
-            <strong>Job: {job.status.replaceAll('_', ' ')}</strong>
+            <strong>Job: {job.status.replace(/_/g, ' ')}</strong>
             <button type="button" className="btn btn-ghost btn-sm" onClick={handleRefreshJob} disabled={busy}>Refresh</button>
           </div>
           <p>{job.message}</p>
