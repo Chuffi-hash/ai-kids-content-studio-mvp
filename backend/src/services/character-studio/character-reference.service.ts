@@ -119,6 +119,25 @@ export class CharacterReferenceService {
       updatedRefs.poseUrl = asset.url;
     }
 
+    // Keep individually imported Google Flow views discoverable without requiring
+    // a full turnaround sheet. Only authored view keys are registered here.
+    const supportedDirections = new Set([
+      'front',
+      'front-left',
+      'front-right',
+      'left',
+      'right',
+      'back-left',
+      'back-right',
+      'back',
+    ]);
+    if (asset.direction && supportedDirections.has(asset.direction)) {
+      updatedRefs.directionalViews = {
+        ...(existingRefs.directionalViews || {}),
+        [asset.direction]: asset.url,
+      };
+    }
+
     const updatedCanonical = {
       ...canonical,
       references: updatedRefs,
@@ -229,8 +248,26 @@ export class CharacterReferenceService {
 
     const remaining = assets.filter((a) => a.id !== assetId);
 
+    const existingRefs = canonical.references || {};
+    const updatedDirectionalViews = { ...(existingRefs.directionalViews || {}) };
+
+    // Remove a directional pointer only when it still points to the deleted file.
+    // If another asset for the same direction remains, use the newest remaining one.
+    if (target.direction && updatedDirectionalViews[target.direction] === target.url) {
+      const replacement = remaining.find((asset) => asset.direction === target.direction);
+      if (replacement) {
+        updatedDirectionalViews[target.direction] = replacement.url;
+      } else {
+        delete updatedDirectionalViews[target.direction];
+      }
+    }
+
     const updatedCanonical = {
       ...canonical,
+      references: {
+        ...existingRefs,
+        directionalViews: updatedDirectionalViews,
+      },
       assets: remaining,
     };
 
