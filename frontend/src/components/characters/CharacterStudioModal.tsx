@@ -846,6 +846,10 @@ export default function CharacterStudioModal({
             <GoogleFlowCharacterPanel
               characterId={activeCharacterId === 'new' ? '' : activeCharacterId}
               characterName={name}
+              characterDescription={visualDescription}
+              species={species}
+              clothing={clothing}
+              artStyle={artStyle === '2d_cartoon' ? '2D cartoon' : artStyle === '3d_pixar' ? '3D animated' : 'storybook illustrated'}
               onImported={refreshFlowAssets}
             />
 
