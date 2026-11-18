@@ -1,0 +1,19 @@
+{
+  "name": "ai-kids-content-studio-flow-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Local, human-in-the-loop Playwright companion for Google Flow character asset generation.",
+  "engines": {
+    "node": ">=20.19"
+  },
+  "scripts": {
+    "start": "node src/server.mjs",
+    "dev": "node --watch src/server.mjs",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "playwright": "^1.56.1",
+    "dotenv": "^16.4.7"
+  }
+}
