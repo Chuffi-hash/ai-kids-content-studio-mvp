@@ -1,23 +1,23 @@
-import fs from 'fs';
-import path from 'path';
+import fs from "fs";
+import path from "path";
 // @ts-ignore
-import * as googleTTS from 'google-tts-api';
+import * as googleTTS from "google-tts-api";
 import {
   TTSProvider,
   SupportedVoice,
   TTSGenerationOptions,
   TTSGenerationResult,
-} from './tts-provider.interface.js';
-import { AudioEffectsService } from './audio-effects.service.js';
+} from "./tts-provider.interface.js";
+import { AudioEffectsService } from "./audio-effects.service.js";
 import {
   resolveEffectiveLanguage,
   resolveEffectiveVoice,
   toTTSLanguageCode,
   isVoiceCompatibleWithLanguage,
-} from './language-resolver.service.js';
+} from "./language-resolver.service.js";
 
 export class GoogleTTSProvider implements TTSProvider {
-  name = 'google';
+  name = "google";
   private effectsService: AudioEffectsService;
 
   constructor() {
@@ -30,53 +30,103 @@ export class GoogleTTSProvider implements TTSProvider {
 
   async getSupportedVoices(): Promise<SupportedVoice[]> {
     return [
-      { id: 'en-US-Standard', name: 'Google English (Standard)', gender: 'neutral', lang: 'en', accent: 'American' },
-      { id: 'en-GB-Standard', name: 'Google British (Standard)', gender: 'neutral', lang: 'en-gb', accent: 'British' },
-      { id: 'hi-IN-Standard', name: 'Google Hindi (Standard)', gender: 'neutral', lang: 'hi', accent: 'Indian' },
-      { id: 'es-ES-Standard', name: 'Google Spanish (Standard)', gender: 'neutral', lang: 'es', accent: 'Spanish' },
-      { id: 'fr-FR-Standard', name: 'Google French (Standard)', gender: 'neutral', lang: 'fr', accent: 'French' },
+      {
+        id: "en-US-Standard",
+        name: "Google English (Standard)",
+        gender: "neutral",
+        lang: "en",
+        accent: "American",
+      },
+      {
+        id: "en-GB-Standard",
+        name: "Google British (Standard)",
+        gender: "neutral",
+        lang: "en-gb",
+        accent: "British",
+      },
+      {
+        id: "hi-IN-Standard",
+        name: "Google Hindi (Standard)",
+        gender: "neutral",
+        lang: "hi",
+        accent: "Indian",
+      },
+      {
+        id: "es-ES-Standard",
+        name: "Google Spanish (Standard)",
+        gender: "neutral",
+        lang: "es",
+        accent: "Spanish",
+      },
+      {
+        id: "fr-FR-Standard",
+        name: "Google French (Standard)",
+        gender: "neutral",
+        lang: "fr",
+        accent: "French",
+      },
     ];
   }
 
   async generateSpeech(
     text: string,
-    options?: TTSGenerationOptions
+    options?: TTSGenerationOptions,
   ): Promise<TTSGenerationResult> {
     if (!text || text.trim().length === 0) {
-      throw new Error('Text is required for Google TTS speech synthesis');
+      throw new Error("Text is required for Google TTS speech synthesis");
     }
 
-    const effectiveLang = resolveEffectiveLanguage({ lang: options?.lang, text });
+    const effectiveLang = resolveEffectiveLanguage({
+      lang: options?.lang,
+      text,
+    });
 
-    if (options?.voice && options.voice !== 'default' && !isVoiceCompatibleWithLanguage(options.voice, effectiveLang)) {
-      throw new Error(`Google voice "${options.voice}" does not support target language "${effectiveLang}"`);
+    if (
+      options?.voice &&
+      options.voice !== "default" &&
+      !isVoiceCompatibleWithLanguage(options.voice, effectiveLang)
+    ) {
+      throw new Error(
+        `Google voice "${options.voice}" does not support target language "${effectiveLang}"`,
+      );
     }
 
     const voice = resolveEffectiveVoice({
       requestedVoice: options?.voice,
       lang: effectiveLang,
-      provider: 'google',
+      provider: "google",
     });
 
-    const lang = toTTSLanguageCode(effectiveLang, 'google');
-    const effect = options?.effect || 'normal';
+    const lang = toTTSLanguageCode(effectiveLang, "google");
+    const effect = options?.effect || "normal";
 
-    const tempDir = path.join(process.cwd(), 'storage', 'temp');
+    const tempDir = path.join(process.cwd(), "storage", "temp");
     if (!fs.existsSync(tempDir)) {
       fs.mkdirSync(tempDir, { recursive: true });
     }
 
-    const rawFile = path.join(tempDir, `google-raw-${Date.now()}-${Math.random().toString(36).substring(7)}.mp3`);
-    const processedFile = path.join(tempDir, `google-proc-${Date.now()}-${Math.random().toString(36).substring(7)}.mp3`);
+    const rawFile = path.join(
+      tempDir,
+      `google-raw-${Date.now()}-${Math.random().toString(36).substring(7)}.mp3`,
+    );
+    const processedFile = path.join(
+      tempDir,
+      `google-proc-${Date.now()}-${Math.random().toString(36).substring(7)}.mp3`,
+    );
 
     try {
+      const googleApiLang = lang.startsWith("hi")
+        ? "hi"
+        : lang.startsWith("en")
+          ? "en"
+          : lang;
       const audioChunks = await googleTTS.getAllAudioBase64(text.trim(), {
-        lang,
+        lang: googleApiLang,
         slow: false,
         timeout: 15000,
       });
       const rawBuffer = Buffer.concat(
-        audioChunks.map((chunk: any) => Buffer.from(chunk.base64, 'base64'))
+        audioChunks.map((chunk: any) => Buffer.from(chunk.base64, "base64")),
       );
       await fs.promises.writeFile(rawFile, rawBuffer);
 
@@ -84,14 +134,14 @@ export class GoogleTTSProvider implements TTSProvider {
       const { durationMs } = await this.effectsService.applyEffect(
         rawFile,
         processedFile,
-        effect
+        effect,
       );
 
       const finalBuffer = await fs.promises.readFile(processedFile);
 
       return {
         audioBuffer: finalBuffer,
-        format: 'mp3',
+        format: "mp3",
         durationMs,
         sampleRate: 24000,
         provider: this.name,
@@ -99,9 +149,12 @@ export class GoogleTTSProvider implements TTSProvider {
         effect,
       };
     } finally {
-      try { if (fs.existsSync(rawFile)) fs.unlinkSync(rawFile); } catch {}
-      try { if (fs.existsSync(processedFile)) fs.unlinkSync(processedFile); } catch {}
+      try {
+        if (fs.existsSync(rawFile)) fs.unlinkSync(rawFile);
+      } catch {}
+      try {
+        if (fs.existsSync(processedFile)) fs.unlinkSync(processedFile);
+      } catch {}
     }
   }
 }
-

@@ -126,11 +126,9 @@ test('End-to-End Remotion Visual Regression & Export Verification', async (t) =>
         },
       },
     },
-    narration: {
-      audioUrl: testAudio,
-      text: 'Deep in the enchanted forest, Pip and Sammy discovered something amazing.',
-      durationMs: 2000,
-    },
+    narration: 'Deep in the enchanted forest, Pip and Sammy discovered something amazing.',
+    audioUrl: testAudio,
+    actualAudioDurationMs: 2000,
   };
 
   const branding = {

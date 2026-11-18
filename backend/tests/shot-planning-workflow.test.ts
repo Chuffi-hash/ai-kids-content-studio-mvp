@@ -10,6 +10,7 @@ import { ShotDirectorService, PlanSceneShotsParams } from '../src/services/scene
 import { normalizeCameraMovement, CinematicShotData } from '../src/services/scene-director/scene-director.types.js';
 import { shotRouter } from '../src/routes/shots.js';
 import { RemotionManifestAdapter } from '../src/services/video-assembly/remotion-manifest.adapter.js';
+import { createStory, createScene, createShot, deleteStory } from '../src/services/database/database.service.js';
 
 async function createTestServer() {
   const app = express();
@@ -185,7 +186,25 @@ test('Non-Destructive Reconciliation Preserves User Edits & Approved Assets', ()
 });
 
 test('Real Shot Asset Upload & File Magic Byte Validation', async () => {
-  // 1. Create a valid 1x1 PNG buffer with magic bytes
+  // 1. Create a valid test story, scene, and shot in database
+  const story = await createStory({ title: 'Shot Upload Test Story' });
+  const sceneId = `scene-shot-upload-${Date.now()}`;
+  const scene = await createScene({
+    storyId: story.storyId,
+    sceneId,
+    title: 'Shot Upload Test Scene',
+    number: 1,
+    narration: 'Test narration for shot upload verification',
+  });
+  const shot = await createShot({
+    sceneId: scene.sceneId,
+    storyId: story.storyId,
+    number: 1,
+    title: 'Test Shot for Upload',
+    durationMs: 3000,
+  });
+
+  // 2. Create a valid 1x1 PNG buffer with magic bytes
   const validPngBuffer = Buffer.from([
     0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, // PNG magic bytes
     0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52, // IHDR chunk
@@ -205,8 +224,8 @@ test('Real Shot Asset Upload & File Magic Byte Validation', async () => {
 
   const mockReq: any = {
     method: 'POST',
-    url: '/test-shot-asset-upload/asset/upload',
-    params: { shotId: 'test-shot-asset-upload' },
+    url: `/${shot.shotId}/asset/upload`,
+    params: { shotId: shot.shotId },
     body: {
       fileData: base64Png,
       filename: 'storybook-shot-bg.png',
@@ -226,32 +245,65 @@ test('Real Shot Asset Upload & File Magic Byte Validation', async () => {
     },
   };
 
-  // Test the upload handler route directly
-  await new Promise<void>((resolve, reject) => {
-    // Find upload route layer in shotRouter
-    const layer = (shotRouter.stack as any[]).find(
-      (l) => l.route && l.route.path === '/:shotId/asset/upload'
-    );
-    assert.ok(layer, 'Upload route /:shotId/asset/upload must be registered on shotRouter');
-    layer.route.stack[0].handle(mockReq, mockRes, (err: any) => {
-      if (err) reject(err);
-      else resolve();
-    }).then(() => resolve()).catch(reject);
-  });
-
-  assert.strictEqual(statusCode, 200, `Expected 200, got ${statusCode}`);
-  assert.strictEqual(responseData?.success, true);
-  assert.ok(
-    responseData?.url && responseData.url.startsWith('/storage/shots/'),
-    `Expected /storage/shots/... path, got ${responseData?.url}`
+  // Find upload route layer in shotRouter
+  const layer = (shotRouter.stack as any[]).find(
+    (l) => l.route && l.route.path === '/:shotId/asset/upload'
   );
+  assert.ok(layer, 'Upload route /:shotId/asset/upload must be registered on shotRouter');
 
-  // Verify file actually exists on local filesystem
-  const diskPath = path.join(process.cwd(), responseData.url.replace(/^\//, ''));
-  assert.strictEqual(fs.existsSync(diskPath), true, `Uploaded file must exist on disk at ${diskPath}`);
+  try {
+    // Test the upload handler route directly with valid shot
+    await new Promise<void>((resolve, reject) => {
+      layer.route.stack[0].handle(mockReq, mockRes, (err: any) => {
+        if (err) reject(err);
+        else resolve();
+      }).then(() => resolve()).catch(reject);
+    });
 
-  // Clean up test file
-  try { fs.unlinkSync(diskPath); } catch {}
+    assert.strictEqual(statusCode, 200, `Expected 200 for valid shot, got ${statusCode}`);
+    assert.strictEqual(responseData?.success, true);
+    assert.ok(
+      responseData?.url && responseData.url.startsWith('/storage/shots/'),
+      `Expected /storage/shots/... path, got ${responseData?.url}`
+    );
+
+    // Verify file actually exists on local filesystem
+    const diskPath = path.join(process.cwd(), responseData.url.replace(/^\//, ''));
+    assert.strictEqual(fs.existsSync(diskPath), true, `Uploaded file must exist on disk at ${diskPath}`);
+
+    // Clean up test file
+    try { fs.unlinkSync(diskPath); } catch {}
+
+    // Verify non-existent shot correctly returns 404
+    let notFoundStatusCode = 0;
+    let notFoundResponse: any = null;
+    const mockNotFoundReq: any = {
+      ...mockReq,
+      params: { shotId: 'non-existent-shot-99999' },
+    };
+    const mockNotFoundRes: any = {
+      status(code: number) {
+        notFoundStatusCode = code;
+        return this;
+      },
+      json(data: any) {
+        notFoundResponse = data;
+        return this;
+      },
+    };
+
+    await new Promise<void>((resolve, reject) => {
+      layer.route.stack[0].handle(mockNotFoundReq, mockNotFoundRes, (err: any) => {
+        if (err) reject(err);
+        else resolve();
+      }).then(() => resolve()).catch(reject);
+    });
+
+    assert.strictEqual(notFoundStatusCode, 404, `Non-existent shot must return 404, got ${notFoundStatusCode}`);
+    assert.ok(notFoundResponse?.error?.includes('not found'), '404 response must report shot not found');
+  } finally {
+    await deleteStory(story.storyId).catch(() => {});
+  }
 });
 
 test('Remotion Manifest Adapter integrates Multi-Shot Breakdowns', async () => {

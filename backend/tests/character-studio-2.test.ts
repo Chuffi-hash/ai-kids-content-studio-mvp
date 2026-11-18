@@ -93,9 +93,15 @@ test('Character Studio 2.0 - Provider capabilities check and error handling', ()
 
   const geminiCap = genService.getProviderCapabilities('gemini');
   assert.equal(geminiCap.provider, 'gemini');
-  assert.equal(geminiCap.model, 'imagen-3.0-generate-002');
-  assert.equal(geminiCap.supportsReferenceImage, false);
-  assert.ok(geminiCap.notes.includes('Direct image-to-image conditioning is not supported'), 'Notes should clearly inform user of provider limitations');
+  assert.equal(geminiCap.model, process.env.GEMINI_IMAGE_MODEL || 'gemini-2.5-flash-image');
+  assert.equal(geminiCap.supportsReferenceImage, true);
+  assert.ok(geminiCap.notes.includes('Gemini Nano Banana'), 'Notes should clearly inform user of Gemini model capabilities');
+
+  const imagenCap = genService.getProviderCapabilities('imagen');
+  assert.equal(imagenCap.provider, 'gemini');
+  assert.equal(imagenCap.model, 'imagen-3.0-generate-002');
+  assert.equal(imagenCap.supportsReferenceImage, false);
+  assert.ok(imagenCap.notes.includes('Direct image-to-image conditioning is not supported'), 'Notes should clearly inform user of provider limitations');
 
   const pollinationsCap = genService.getProviderCapabilities('pollinations');
   assert.equal(pollinationsCap.provider, 'pollinations');

@@ -28,6 +28,18 @@ export class CharacterGenerationService {
    * Returns provider capabilities and limitations.
    */
   public getProviderCapabilities(provider: string): ProviderCapabilities {
+    if (provider === 'imagen' || (provider === 'gemini' && process.env.GEMINI_IMAGE_MODEL?.startsWith('imagen-'))) {
+      return {
+        provider: 'gemini',
+        model: 'imagen-3.0-generate-002',
+        supportsReferenceImage: false,
+        supportsNegativePrompt: true,
+        supportsCustomAspectRatio: true,
+        notes:
+          'Official Google Imagen 3 diffusion model. High-fidelity character illustrations using canonical appearance prompt injection. Direct image-to-image conditioning is not supported on this endpoint.',
+      };
+    }
+
     if (provider === 'gemini') {
       const model = process.env.GEMINI_IMAGE_MODEL || 'gemini-2.5-flash-image';
       return {

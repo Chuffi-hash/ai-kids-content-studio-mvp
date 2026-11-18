@@ -172,6 +172,7 @@ export class VideoAssemblyService {
       templateId,
       subtitleTheme,
     }).catch((err) => {
+      if ((job.status as string) === 'cancelled') return;
       console.error(`[VideoAssembly] Unhandled error in job ${jobId}:`, err);
       job.status = 'failed';
       job.error = err.message || String(err);
@@ -194,6 +195,10 @@ export class VideoAssemblyService {
 
     console.log(`[VideoAssembly] Cancelling export job ${jobId} (status: ${job.status}, renderer: ${job.renderer})...`);
 
+    job.status = 'cancelled';
+    job.stage = 'Export cancelled by user';
+    job.completedAt = new Date();
+
     if (job.renderer === 'remotion') {
       await this.remotionRenderService.cancelJob(jobId);
     } else {
@@ -204,14 +209,12 @@ export class VideoAssemblyService {
       }
     }
 
-    job.status = 'cancelled';
-    job.stage = 'Export cancelled by user';
-    job.completedAt = new Date();
-
-    // Clean up temporary job directory
+    // Clean up temporary job directories
     const jobTempDir = path.join(this.tempDir, `export-${jobId}`);
+    const remotionJobTempDir = path.join(this.tempDir, `remotion-export-${jobId}`);
     try {
       await fs.promises.rm(jobTempDir, { recursive: true, force: true }).catch(() => {});
+      await fs.promises.rm(remotionJobTempDir, { recursive: true, force: true }).catch(() => {});
     } catch {
       // ignore
     }
@@ -801,6 +804,7 @@ export class VideoAssemblyService {
         },
       });
 
+      if ((job.status as string) === 'cancelled') return;
       const downloadUrl = `/storage/exports/${finalFilename}`;
       job.status = 'completed';
       job.progress = 100;
@@ -812,6 +816,7 @@ export class VideoAssemblyService {
 
       console.log(`[VideoAssembly] Remotion export job ${jobId} completed successfully: ${downloadUrl}`);
     } catch (error: any) {
+      if ((job.status as string) === 'cancelled') return;
       console.error(`[VideoAssembly] Remotion export job ${jobId} failed:`, error);
       job.status = 'failed';
       job.error = error.message || 'Remotion video assembly failed';

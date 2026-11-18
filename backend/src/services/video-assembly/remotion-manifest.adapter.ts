@@ -643,16 +643,33 @@ export class RemotionManifestAdapter {
         ? animData.dialogueLines
         : (Array.isArray(animData.dialogues) ? animData.dialogues : []);
 
+      // Validate scene narration according to Prisma schema (narration must be a string if defined)
+      let canonNarrationText: string | undefined = undefined;
+      if (scene.narration !== undefined && scene.narration !== null) {
+        if (typeof scene.narration !== 'string') {
+          throw new TypeError(
+            `Invalid scene narration for scene ${scene.sceneId || scene.number || sceneNum}: expected string, received ${typeof scene.narration}`
+          );
+        }
+        canonNarrationText = scene.narration;
+      }
+
+      let canonNarrationAudioUrl: string | undefined = scene.audioUrl;
+      let canonNarrationDurationMs: number = scene.actualAudioDurationMs || 0;
+      let canonNarrationStartMs: number | undefined = scene.narrationStartMs;
+
+      const estNarrationDuration = canonNarrationDurationMs > 0
+        ? canonNarrationDurationMs
+        : (canonNarrationText ? Math.max(1500, Math.round(canonNarrationText.length * 75)) : 2500);
+
       const effectiveSchedule = (animData.speechSchedule && Array.isArray(animData.speechSchedule.items))
         ? animData.speechSchedule
         : calculateAuthoritativeSpeechSchedule({
-            narration: scene.audioUrl || scene.narration ? {
-              text: scene.narration,
-              audioUrl: scene.audioUrl,
-              durationMs: scene.actualAudioDurationMs && scene.actualAudioDurationMs > 0
-                ? scene.actualAudioDurationMs
-                : (scene.narration ? Math.max(1500, Math.round(scene.narration.length * 75)) : 2500),
-              startMs: typeof scene.narrationStartMs === 'number' ? scene.narrationStartMs : INITIAL_PAUSE_MS,
+            narration: (canonNarrationAudioUrl || canonNarrationText) ? {
+              text: canonNarrationText,
+              audioUrl: canonNarrationAudioUrl,
+              durationMs: estNarrationDuration,
+              startMs: typeof canonNarrationStartMs === 'number' ? canonNarrationStartMs : INITIAL_PAUSE_MS,
             } : null,
             dialogues: rawDialogues.map((d: any, idx: number) => ({
               id: d.id || `dlg-${sceneNum}-${idx + 1}`,
@@ -663,7 +680,7 @@ export class RemotionManifestAdapter {
               durationMs: d.durationMs && d.durationMs > 0
                 ? d.durationMs
                 : (d.text ? Math.max(1200, Math.round(d.text.length * 70)) : 2000),
-              startMs: d.startMs,
+              startMs: typeof d.startMs === 'number' ? d.startMs : undefined,
               allowSimultaneous: d.allowSimultaneous,
             })),
             initialPauseMs: INITIAL_PAUSE_MS,
@@ -677,15 +694,13 @@ export class RemotionManifestAdapter {
       let narrationDurationMs = effectiveSchedule.narrationDurationMs ?? 0;
       let narrEndMs = narrStartMs + narrationDurationMs;
 
-      if (scene.audioUrl) {
+      if (canonNarrationAudioUrl) {
         const resolvedNarrationAudio = embedBase64Audio
-          ? this.convertLocalAudioToDataUri(scene.audioUrl)
-          : this.resolveAssetUrl(scene.audioUrl);
+          ? this.convertLocalAudioToDataUri(canonNarrationAudioUrl)
+          : this.resolveAssetUrl(canonNarrationAudioUrl);
 
         if (!narrationDurationMs) {
-          narrationDurationMs = scene.actualAudioDurationMs && scene.actualAudioDurationMs > 0
-            ? scene.actualAudioDurationMs
-            : (scene.narration ? Math.max(1500, Math.round(scene.narration.length * 75)) : 2500);
+          narrationDurationMs = estNarrationDuration;
           narrEndMs = narrStartMs + narrationDurationMs;
         }
 
@@ -694,8 +709,8 @@ export class RemotionManifestAdapter {
           startMs: narrStartMs,
           durationMs: narrationDurationMs,
           volume: 1.0,
-          text: scene.narration,
-          wordTimings: scene.narration ? estimateWordTimings(scene.narration, narrationDurationMs) : undefined,
+          text: canonNarrationText,
+          wordTimings: canonNarrationText ? estimateWordTimings(canonNarrationText, narrationDurationMs) : undefined,
         };
       }
 
@@ -706,7 +721,7 @@ export class RemotionManifestAdapter {
         audioSchedule.push({
           speakerId: 'narrator',
           speakerType: 'narrator',
-          text: scene.narration || '',
+          text: canonNarrationText || '',
           audioSrc: narrationConfig.url,
           startMs: narrStartMs,
           endMs: narrEndMs,
@@ -931,7 +946,7 @@ export class RemotionManifestAdapter {
         sceneNumber: sceneNum,
         durationMs,
         title: scene.title || `Scene ${sceneNum}`,
-        caption: scene.caption || '',
+        caption: scene.caption || canonNarrationText || '',
         shotType: scene.shotType || animData.shotType || 'wide_establishing',
         shots: adaptedShots,
         background: backgroundConfig,

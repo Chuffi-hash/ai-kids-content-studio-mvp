@@ -1557,11 +1557,12 @@ export type DirectorLifecycleState =
   | 'RENDER_QUEUED'
   | 'RENDERING'
   | 'COMPLETED'
+  | 'CANCELLED'
   | 'FAILED';
 
 export interface DirectorJob {
   id: string;
-  status: DirectorLifecycleState | 'processing' | 'completed' | 'failed';
+  status: DirectorLifecycleState | 'processing' | 'completed' | 'failed' | 'cancelled';
   lifecycleState: DirectorLifecycleState;
   stage: string;
   progress: number;
@@ -1767,9 +1768,33 @@ contentRouter.post("/story/director", async (req, res) => {
       });
       job.exportJobId = exportJob.id;
 
-      // Poll export job until completion or failure
+      // Poll export job until completion or failure with bounded deadline
+      const POLL_INTERVAL_MS = 800;
+      const MAX_EXPORT_WAIT_MS = Number(process.env.DIRECTOR_EXPORT_TIMEOUT_MS) || 300000; // 5 min default
+      const pollStartTime = Date.now();
+
       while (true) {
-        await new Promise((r) => setTimeout(r, 800));
+        if ((job.status as string) === 'CANCELLED' || (job.lifecycleState as string) === 'CANCELLED') {
+          if (exportJob.id) {
+            await videoAssemblyService.cancelExportJob(exportJob.id).catch(() => {});
+          }
+          break;
+        }
+
+        if (Date.now() - pollStartTime > MAX_EXPORT_WAIT_MS) {
+          console.error(`[AIDirector] Job ${directorJobId} export timed out after ${MAX_EXPORT_WAIT_MS}ms`);
+          if (exportJob.id) {
+            await videoAssemblyService.cancelExportJob(exportJob.id).catch(() => {});
+          }
+          job.status = 'FAILED';
+          job.lifecycleState = 'FAILED';
+          job.stage = 'Render job exceeded maximum timeout';
+          job.error = `Render job timed out after ${Math.round(MAX_EXPORT_WAIT_MS / 1000)}s`;
+          job.updatedAt = new Date();
+          break;
+        }
+
+        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
         const currentExportJob = videoAssemblyService.getJob(exportJob.id);
         if (!currentExportJob) {
           job.status = 'FAILED';
@@ -1801,6 +1826,12 @@ contentRouter.post("/story/director", async (req, res) => {
           job.downloadUrl = currentExportJob.downloadUrl;
           job.updatedAt = new Date();
           break;
+        } else if (currentExportJob.status === 'cancelled') {
+          job.status = 'CANCELLED';
+          job.lifecycleState = 'CANCELLED';
+          job.stage = 'Render export was cancelled';
+          job.updatedAt = new Date();
+          break;
         } else if (currentExportJob.status === 'failed') {
           job.status = 'FAILED';
           job.lifecycleState = 'FAILED';
@@ -1811,6 +1842,9 @@ contentRouter.post("/story/director", async (req, res) => {
         }
       }
     } catch (error: any) {
+      if (job.status === 'CANCELLED' || job.lifecycleState === 'CANCELLED') {
+        return;
+      }
       console.error(`[AIDirector] Job ${directorJobId} failed:`, error);
       job.status = 'FAILED';
       job.lifecycleState = 'FAILED';
@@ -1832,6 +1866,25 @@ contentRouter.get("/story/director/:jobId", (req, res) => {
   if (!job) return res.status(404).json({ message: 'AI Director job not found' });
   const exportJob = job.exportJobId ? videoAssemblyService.getJob(job.exportJobId) : undefined;
   return res.json({ ...job, exportJob });
+});
+
+contentRouter.post("/story/director/:jobId/cancel", async (req, res) => {
+  const job = directorJobs.get(req.params.jobId);
+  if (!job) return res.status(404).json({ message: 'AI Director job not found' });
+  if (job.status === 'COMPLETED' || job.status === 'FAILED' || job.status === 'CANCELLED') {
+    return res.status(400).json({ message: `Cannot cancel job in terminal state: ${job.status}` });
+  }
+
+  job.status = 'CANCELLED';
+  job.lifecycleState = 'CANCELLED';
+  job.stage = 'AI Director job cancelled by user';
+  job.updatedAt = new Date();
+
+  if (job.exportJobId) {
+    await videoAssemblyService.cancelExportJob(job.exportJobId).catch(() => {});
+  }
+
+  return res.json({ success: true, directorJobId: job.id, status: 'CANCELLED' });
 });
 
 

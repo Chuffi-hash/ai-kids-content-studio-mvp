@@ -87,7 +87,14 @@ export function calculateAuthoritativeSpeechSchedule(
   let narrDurationMs = 0;
   let narrEndMs = 0;
 
-  if (input.narration && (input.narration.audioUrl || (input.narration.text && input.narration.text.trim().length > 0))) {
+  const narrText = input.narration?.text;
+  if (narrText !== undefined && narrText !== null && typeof narrText !== 'string') {
+    throw new TypeError(
+      `CalculateScheduleInput.narration.text must be a string if provided, received ${typeof narrText}`
+    );
+  }
+
+  if (input.narration && (input.narration.audioUrl || (narrText && narrText.trim().length > 0))) {
     narrStartMs = typeof input.narration.startMs === 'number' ? input.narration.startMs : initialPause;
     narrDurationMs = Math.max(0, input.narration.durationMs || 0);
     narrEndMs = narrStartMs + narrDurationMs;
@@ -108,6 +115,7 @@ export function calculateAuthoritativeSpeechSchedule(
 
   // Cursor for sequential dialogue turns
   let currentCursorMs = narrEndMs > 0 ? narrEndMs + gap : initialPause;
+  let previousEndMs = narrEndMs;
 
   for (let i = 0; i < input.dialogues.length; i++) {
     const dlg = input.dialogues[i];
@@ -120,9 +128,9 @@ export function calculateAuthoritativeSpeechSchedule(
       startMs = typeof dlg.startMs === 'number' ? Math.max(0, dlg.startMs) : currentCursorMs;
     } else {
       // Normal sequential dialogue:
-      // If user specified a manual later start time that is >= currentCursor, respect it.
-      // Otherwise, position after previous speech turn + gap.
-      if (typeof dlg.startMs === 'number' && dlg.startMs >= currentCursorMs) {
+      // If user specified a manual start time that does not collide with previous speech, respect it.
+      // Otherwise, position sequentially at currentCursorMs.
+      if (typeof dlg.startMs === 'number' && dlg.startMs >= previousEndMs) {
         startMs = dlg.startMs;
       } else {
         startMs = currentCursorMs;
@@ -131,6 +139,7 @@ export function calculateAuthoritativeSpeechSchedule(
     }
 
     const endMs = startMs + duration;
+    previousEndMs = Math.max(previousEndMs, endMs);
 
     items.push({
       id: dlgId,

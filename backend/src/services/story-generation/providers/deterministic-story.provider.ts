@@ -21,7 +21,7 @@ export class DeterministicStoryProvider implements StoryGenerationProvider {
 
     // Determine scene count based on duration or explicit input
     let sceneCount = input.sceneCount;
-    if (!sceneCount || sceneCount < 2 || sceneCount > 8) {
+    if (!sceneCount || sceneCount < 1 || sceneCount > 8) {
       if (totalDurationSeconds <= 30) sceneCount = 3;
       else if (totalDurationSeconds <= 60) sceneCount = 4;
       else if (totalDurationSeconds <= 120) sceneCount = 5;

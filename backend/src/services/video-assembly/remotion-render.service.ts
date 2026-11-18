@@ -43,6 +43,7 @@ export class RemotionRenderService {
   private storageDir: string;
   private adapter: RemotionManifestAdapter;
   private activeProcesses = new Map<string, () => Promise<void>>();
+  private cancelledJobs = new Set<string>();
 
   constructor(options?: { remotionDir?: string; tempDir?: string; storageDir?: string }) {
     if (options?.remotionDir) {
@@ -67,6 +68,7 @@ export class RemotionRenderService {
    * Cancels a running Remotion render or removes it from queue if queued.
    */
   public async cancelJob(jobId: string): Promise<boolean> {
+    this.cancelledJobs.add(jobId);
     const queueCancelled = RemotionRenderQueue.getInstance().cancel(jobId);
     const killer = this.activeProcesses.get(jobId);
     if (killer) {
@@ -76,9 +78,21 @@ export class RemotionRenderService {
         console.warn(`[RemotionRender] Error cancelling process for job ${jobId}:`, err);
       }
       this.activeProcesses.delete(jobId);
-      return true;
     }
-    return queueCancelled;
+
+    // Clean up temporary files on cancellation
+    const jobTempDir = path.join(this.tempDir, `remotion-export-${jobId}`);
+    try {
+      await fs.promises.rm(jobTempDir, { recursive: true, force: true }).catch(() => {});
+    } catch {
+      // ignore
+    }
+
+    return Boolean(killer || queueCancelled);
+  }
+
+  public isJobCancelled(jobId: string): boolean {
+    return this.cancelledJobs.has(jobId);
   }
 
   private resolveLocalPath(urlOrPath: string): string {
@@ -235,7 +249,7 @@ export class RemotionRenderService {
           `[speech_main][bgm_ducked]amix=inputs=2:duration=first:dropout_transition=2,volume=1.5,aformat=channel_layouts=stereo,loudnorm=I=-16:TP=-1.5:LRA=11[aout]`,
         ].join(';');
 
-        await execFileAsync(ffmpegPath, [
+        await this.executeFfmpegMastering(jobId, ffmpegPath, [
           '-nostdin',
           '-y',
           '-thread_queue_size', '512',
@@ -255,7 +269,7 @@ export class RemotionRenderService {
       } else if (musicPath && fs.existsSync(musicPath) && !hasSpeechAudio) {
         // Case B: Background music only -> normalise BGM to -16 LUFS
         const effectiveMusicVol = Math.max(0.01, Math.min(1.0, musicVolume));
-        await execFileAsync(ffmpegPath, [
+        await this.executeFfmpegMastering(jobId, ffmpegPath, [
           '-nostdin',
           '-y',
           '-thread_queue_size', '512',
@@ -275,7 +289,7 @@ export class RemotionRenderService {
         ]);
       } else if (hasSpeechAudio) {
         // Case C: Speech audio only -> normalise speech to broadcast -16 LUFS
-        await execFileAsync(ffmpegPath, [
+        await this.executeFfmpegMastering(jobId, ffmpegPath, [
           '-nostdin',
           '-y',
           '-thread_queue_size', '512',
@@ -291,7 +305,7 @@ export class RemotionRenderService {
         ]);
       } else {
         // Case D: No speech audio and no music -> synthesize silent AAC track so output always has audio stream
-        await execFileAsync(ffmpegPath, [
+        await this.executeFfmpegMastering(jobId, ffmpegPath, [
           '-nostdin',
           '-y',
           '-thread_queue_size', '512',
@@ -307,6 +321,10 @@ export class RemotionRenderService {
           '-shortest',
           masteredOutputPath,
         ]);
+      }
+
+      if (this.cancelledJobs.has(jobId)) {
+        throw new Error(`Remotion render job ${jobId} was cancelled before validation`);
       }
 
       onProgress?.(92, 'Validating rendered video streams with ffprobe...');
@@ -333,6 +351,10 @@ export class RemotionRenderService {
         );
       }
 
+      if (this.cancelledJobs.has(jobId)) {
+        throw new Error(`Remotion render job ${jobId} was cancelled before final export copying`);
+      }
+
       onProgress?.(96, 'Moving final video to exports storage...');
 
       // 5. Move mastered file to final destination
@@ -347,13 +369,66 @@ export class RemotionRenderService {
         durationSec: outputDurationSec,
       };
     } finally {
-      // 6. Clean up temporary directory
+      this.activeProcesses.delete(jobId);
+      // 6. Clean up temporary directory and ensure no output exists if cancelled
       try {
-        await fs.promises.rm(jobTempDir, { recursive: true, force: true });
+        await fs.promises.rm(jobTempDir, { recursive: true, force: true }).catch(() => {});
+        if (this.cancelledJobs.has(jobId) && fs.existsSync(finalOutputPath)) {
+          await fs.promises.unlink(finalOutputPath).catch(() => {});
+        }
       } catch (cleanupErr) {
         console.warn(`[RemotionRender] Failed to clean up temp dir ${jobTempDir}:`, cleanupErr);
       }
     }
+  }
+
+  /**
+   * Executes an FFmpeg audio mastering process with cancellation tracking.
+   * If the job is cancelled while FFmpeg is running, the process tree is terminated immediately.
+   */
+  private executeFfmpegMastering(jobId: string, ffmpegPath: string, args: string[]): Promise<void> {
+    if (this.cancelledJobs.has(jobId)) {
+      return Promise.reject(new Error(`Remotion render job ${jobId} was cancelled before audio mastering`));
+    }
+
+    return new Promise((resolve, reject) => {
+      const proc = spawn(ffmpegPath, args, { windowsHide: true });
+      let stderrOutput = '';
+
+      const killFfmpeg = async () => {
+        try {
+          if (process.platform === 'win32') {
+            await execFileAsync('taskkill', ['/pid', String(proc.pid), '/T', '/F']).catch(() => {});
+          } else {
+            proc.kill('SIGKILL');
+          }
+        } catch {
+          // ignore
+        }
+      };
+
+      this.activeProcesses.set(jobId, killFfmpeg);
+
+      proc.stderr.on('data', (chunk: Buffer) => {
+        stderrOutput += chunk.toString();
+      });
+
+      proc.on('error', (err) => {
+        this.activeProcesses.delete(jobId);
+        reject(err);
+      });
+
+      proc.on('close', (code) => {
+        this.activeProcesses.delete(jobId);
+        if (this.cancelledJobs.has(jobId)) {
+          reject(new Error(`Remotion render job ${jobId} was cancelled during audio mastering`));
+        } else if (code === 0) {
+          resolve();
+        } else {
+          reject(new Error(`FFmpeg audio mastering failed with exit code ${code}: ${stderrOutput.slice(-400)}`));
+        }
+      });
+    });
   }
 
   /**
@@ -366,8 +441,12 @@ export class RemotionRenderService {
     outputPath: string;
     onProgress?: (rendered: number, total: number, pct: number) => void;
   }): Promise<void> {
+    const { jobId, manifestPath, outputPath, onProgress } = options;
+    if (this.cancelledJobs.has(jobId)) {
+      return Promise.reject(new Error(`Remotion render job ${jobId} was cancelled before execution`));
+    }
+
     return new Promise((resolve, reject) => {
-      const { jobId, manifestPath, outputPath, onProgress } = options;
       const isWin = process.platform === 'win32';
       const localTsxCmd = path.resolve(this.remotionDir, 'node_modules', '.bin', isWin ? 'tsx.cmd' : 'tsx');
       const cmd = fs.existsSync(localTsxCmd) ? localTsxCmd : (isWin ? 'npx.cmd' : 'npx');
@@ -451,7 +530,9 @@ export class RemotionRenderService {
         isDone = true;
         clearTimeout(timer);
         this.activeProcesses.delete(jobId);
-        if (code === 0) {
+        if (this.cancelledJobs.has(jobId)) {
+          reject(new Error(`Remotion render job ${jobId} was cancelled during execution`));
+        } else if (code === 0) {
           resolve();
         } else {
           await killProcessTree();

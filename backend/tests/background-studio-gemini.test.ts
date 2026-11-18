@@ -68,8 +68,8 @@ describe('BackgroundStudioService - Gemini & Google Flow Integration', () => {
 
       assert.strictEqual(asset.provider, 'gemini');
       assert.strictEqual(asset.aspectRatio, '16:9');
-      assert.strictEqual(asset.width, 1280);
-      assert.strictEqual(asset.height, 720);
+      assert.strictEqual(asset.width, 1920);
+      assert.strictEqual(asset.height, 1080);
       assert.ok(asset.imageUrl.includes('/storage/backgrounds/'));
       assert.ok(asset.prompt.includes('NO characters') && asset.prompt.includes('NO text'));
     } finally {
