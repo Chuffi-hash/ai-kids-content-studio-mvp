@@ -10,7 +10,7 @@
   "scripts": {
     "start": "node src/server.mjs",
     "dev": "node --watch src/server.mjs",
-    "test": "node --test"
+    "test": "node --check src/server.mjs && node --check src/flow-browser.mjs && node --test"
   },
   "dependencies": {
     "playwright": "^1.56.1",
