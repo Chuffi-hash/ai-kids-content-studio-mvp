@@ -1,0 +1,33 @@
+name: Google Flow Worker
+
+on:
+  push:
+    branches:
+      - feat/google-flow-playwright-worker-latest
+    paths:
+      - "flow-worker/**"
+      - ".github/workflows/google-flow-worker.yml"
+  pull_request:
+    branches:
+      - feat/remotion-renderer-pilot
+    paths:
+      - "flow-worker/**"
+      - ".github/workflows/google-flow-worker.yml"
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: flow-worker
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install worker dependencies
+        run: npm install
+      - name: Run worker unit tests
+        run: npm test
