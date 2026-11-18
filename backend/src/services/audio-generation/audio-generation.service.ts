@@ -19,8 +19,25 @@ import {
   isVoiceCompatibleWithLanguage,
   containsDevanagari,
 } from './language-resolver.service.js';
+import {
+  calculateAuthoritativeSpeechSchedule,
+  INITIAL_PAUSE_MS,
+  SPEECH_GAP_MS,
+  SceneSpeechSchedule,
+} from './speech-schedule.types.js';
 
 const execFileAsync = promisify(execFile);
+
+/**
+ * Sanitizes error messages by redacting API keys, secrets, hashes, and bearer tokens.
+ */
+export function sanitizeErrorMessage(msg: string): string {
+  if (!msg) return '';
+  return msg
+    .replace(/Bearer\s+[a-zA-Z0-9_\-\.]+/gi, 'Bearer [REDACTED]')
+    .replace(/(?:key|token|secret|password)=["']?[a-zA-Z0-9_\-\.]+["']?/gi, '$1=[REDACTED]')
+    .replace(/[a-f0-9]{32,64}/gi, '[HASH_REDACTED]');
+}
 
 /**
  * Rigorously sanitizes text before speech synthesis (TTS) to ensure:
@@ -252,6 +269,10 @@ export class AudioGenerationService {
     filename: string;
     provider: string;
     voice: string;
+    requestedVoice?: string;
+    actualVoice?: string;
+    isFallback?: boolean;
+    fallbackReason?: string;
     effect: AudioEffectType;
     emotion: SpeakingEmotion;
     emotionIntensity: number;
@@ -294,6 +315,10 @@ export class AudioGenerationService {
     const providerInstance = await TTSProviderFactory.getProvider(provider);
 
     let ttsResult;
+    let isFallback = false;
+    let fallbackReason: string | undefined;
+    let actualVoice = selectedVoice;
+
     try {
       ttsResult = await providerInstance.generateSpeech(textToSpeak, {
         voice: selectedVoice,
@@ -307,14 +332,42 @@ export class AudioGenerationService {
         pitchShiftSemitones: delivery.pitchShiftSemitones,
         presenceGainDb: delivery.presenceGainDb,
       });
+      actualVoice = ttsResult.voice || selectedVoice;
     } catch (err: any) {
       console.warn(`[AudioGeneration] TTS generation with provider "${providerInstance.name}" failed:`, err);
-      // For Fish Audio: do NOT silently fallback to Google or paid models. Throw clear descriptive error.
+      // For Fish Audio: transparently fall back to Kokoro TTS without exposing API keys
       if (providerInstance.name === 'fish_audio') {
-        throw new Error(`Fish Audio narration speech generation failed: ${err.message || String(err)}`);
-      }
-      // Graceful fallback to Google TTS if Kokoro fails
-      if (providerInstance.name !== 'google') {
+        const sanitizedErr = sanitizeErrorMessage(err.message || String(err));
+        console.warn(`[AudioGeneration] Fish Audio failed, transparently falling back to Kokoro TTS: ${sanitizedErr}`);
+        try {
+          const fallbackProvider = await TTSProviderFactory.getProvider('kokoro_82m');
+          const fallbackVoice = effectiveLang === 'hi' ? 'hf_alpha' : 'af_heart';
+          ttsResult = await fallbackProvider.generateSpeech(textToSpeak, {
+            voice: fallbackVoice,
+            speed: delivery.calibratedSpeed,
+            effect: delivery.effectiveEffect,
+            lang: effectiveLang,
+            emotion,
+            emotionIntensity: delivery.intensity,
+          });
+          isFallback = true;
+          fallbackReason = `Fish Audio reference or service unavailable (${sanitizedErr}). Safely fell back to Kokoro TTS.`;
+          actualVoice = fallbackVoice;
+        } catch (fallbackErr: any) {
+          console.warn('[AudioGeneration] Kokoro TTS fallback failed, attempting Google TTS:', fallbackErr);
+          const googleFallback = await TTSProviderFactory.getProvider('google');
+          const googleVoice = effectiveLang === 'hi' ? 'hi-IN-Standard' : 'en-US-Standard';
+          ttsResult = await googleFallback.generateSpeech(textToSpeak, {
+            voice: googleVoice,
+            speed: delivery.calibratedSpeed,
+            effect: delivery.effectiveEffect,
+            lang: toTTSLanguageCode(effectiveLang, 'google'),
+          });
+          isFallback = true;
+          fallbackReason = `Fish Audio & Kokoro unavailable. Safely fell back to Google TTS.`;
+          actualVoice = googleVoice;
+        }
+      } else if (providerInstance.name !== 'google') {
         console.log('[AudioGeneration] Attempting fallback to Google TTS...');
         const fallbackProvider = await TTSProviderFactory.getProvider('google');
         const fallbackVoice = effectiveLang === 'hi' ? 'hi-IN-Standard' : 'en-US-Standard';
@@ -325,11 +378,14 @@ export class AudioGenerationService {
             effect: delivery.effectiveEffect,
             lang: toTTSLanguageCode(effectiveLang, 'google'),
           });
+          isFallback = true;
+          fallbackReason = `Primary provider unavailable. Safely fell back to Google TTS.`;
+          actualVoice = fallbackVoice;
         } catch (fallbackErr: any) {
-          throw new Error(`Narration speech generation failed for language "${effectiveLang}": ${err.message || String(err)} (fallback: ${fallbackErr.message || String(fallbackErr)})`);
+          throw new Error(`Narration speech generation failed for language "${effectiveLang}": ${sanitizeErrorMessage(err.message || String(err))} (fallback: ${sanitizeErrorMessage(fallbackErr.message || String(fallbackErr))})`);
         }
       } else {
-        throw new Error(`Narration speech generation failed for language "${effectiveLang}": ${err.message || String(err)}`);
+        throw new Error(`Narration speech generation failed for language "${effectiveLang}": ${sanitizeErrorMessage(err.message || String(err))}`);
       }
     }
 
@@ -381,7 +437,11 @@ export class AudioGenerationService {
       durationMs,
       filename,
       provider: ttsResult.provider,
-      voice: ttsResult.voice,
+      voice: actualVoice,
+      requestedVoice: selectedVoice,
+      actualVoice,
+      isFallback,
+      fallbackReason,
       effect: ttsResult.effect,
       emotion,
       emotionIntensity: delivery.intensity,
@@ -414,6 +474,7 @@ export class AudioGenerationService {
     startMs?: number;
     provider?: string;
     lang?: string;
+    allowSimultaneous?: boolean;
   }): Promise<SceneDialogue> {
     const {
       sceneId,
@@ -429,6 +490,7 @@ export class AudioGenerationService {
       effect = 'normal',
       volume = 1.0,
       provider,
+      allowSimultaneous,
     } = options;
 
     if (!text || text.trim().length === 0) {
@@ -579,6 +641,10 @@ export class AudioGenerationService {
     // 2. Synthesize speech using TTS provider (Kokoro-82M by default or Fish Audio)
     const providerInstance = await TTSProviderFactory.getProvider(effectiveProvider);
     let ttsResult;
+    let isFallback = false;
+    let fallbackReason: string | undefined;
+    let actualVoice = effectiveVoice;
+
     try {
       ttsResult = await providerInstance.generateSpeech(textToSpeak, {
         voice: effectiveVoice,
@@ -592,13 +658,42 @@ export class AudioGenerationService {
         pitchShiftSemitones: delivery.pitchShiftSemitones,
         presenceGainDb: delivery.presenceGainDb,
       });
+      actualVoice = ttsResult.voice || effectiveVoice;
     } catch (err: any) {
       console.warn(`[AudioGeneration] Dialogue TTS with provider "${providerInstance.name}" failed:`, err);
-      // For Fish Audio: do NOT silently fallback to Google or paid models. Throw clear error.
+      // For Fish Audio: transparently fall back to Kokoro TTS without leaking keys
       if (providerInstance.name === 'fish_audio') {
-        throw new Error(`Fish Audio dialogue speech generation failed: ${err.message || String(err)}`);
-      }
-      if (providerInstance.name !== 'google') {
+        const sanitizedErr = sanitizeErrorMessage(err.message || String(err));
+        console.warn(`[AudioGeneration] Falling back from Fish Audio to Kokoro TTS for dialogue: ${sanitizedErr}`);
+        try {
+          const fallbackProvider = await TTSProviderFactory.getProvider('kokoro_82m');
+          const fallbackVoice = effectiveLang === 'hi' ? 'hf_alpha' : 'af_heart';
+          ttsResult = await fallbackProvider.generateSpeech(textToSpeak, {
+            voice: fallbackVoice,
+            speed: delivery.calibratedSpeed,
+            effect: delivery.effectiveEffect,
+            lang: effectiveLang,
+            emotion: effectiveEmotion,
+            emotionIntensity: delivery.intensity,
+          });
+          isFallback = true;
+          fallbackReason = `Fish Audio unavailable (${sanitizedErr}). Safely fell back to Kokoro TTS.`;
+          actualVoice = fallbackVoice;
+        } catch (fallbackErr: any) {
+          console.warn('[AudioGeneration] Kokoro TTS fallback failed, attempting Google TTS for dialogue:', fallbackErr);
+          const fallback = await TTSProviderFactory.getProvider('google');
+          const fallbackVoice = effectiveLang === 'hi' ? 'hi-IN-Standard' : 'en-US-Standard';
+          ttsResult = await fallback.generateSpeech(textToSpeak, {
+            voice: fallbackVoice,
+            speed: delivery.calibratedSpeed,
+            effect: delivery.effectiveEffect,
+            lang: toTTSLanguageCode(effectiveLang, 'google'),
+          });
+          isFallback = true;
+          fallbackReason = `Fish Audio & Kokoro unavailable. Safely fell back to Google TTS.`;
+          actualVoice = fallbackVoice;
+        }
+      } else if (providerInstance.name !== 'google') {
         console.log('[AudioGeneration] Falling back to Google TTS for dialogue...');
         const fallback = await TTSProviderFactory.getProvider('google');
         const fallbackVoice = effectiveLang === 'hi' ? 'hi-IN-Standard' : 'en-US-Standard';
@@ -609,11 +704,14 @@ export class AudioGenerationService {
             effect: delivery.effectiveEffect,
             lang: toTTSLanguageCode(effectiveLang, 'google'),
           });
+          isFallback = true;
+          fallbackReason = `Primary provider unavailable. Safely fell back to Google TTS.`;
+          actualVoice = fallbackVoice;
         } catch (fallbackErr: any) {
-          throw new Error(`Dialogue speech generation failed for language "${effectiveLang}": ${err.message || String(err)} (fallback: ${fallbackErr.message || String(fallbackErr)})`);
+          throw new Error(`Dialogue speech generation failed for language "${effectiveLang}": ${sanitizeErrorMessage(err.message || String(err))} (fallback: ${sanitizeErrorMessage(fallbackErr.message || String(fallbackErr))})`);
         }
       } else {
-        throw new Error(`Dialogue speech generation failed for language "${effectiveLang}": ${err.message || String(err)}`);
+        throw new Error(`Dialogue speech generation failed for language "${effectiveLang}": ${sanitizeErrorMessage(err.message || String(err))}`);
       }
     }
 
@@ -654,10 +752,15 @@ export class AudioGenerationService {
       audioUrl: `/storage/audio/${filename}`,
       provider: ttsResult.provider || effectiveProvider,
       model: (ttsResult.provider || effectiveProvider) === 'fish_audio' ? 's2.1-pro-free' : undefined,
+      isFallback,
+      fallbackReason,
+      requestedVoice: effectiveVoice,
+      actualVoice,
+      allowSimultaneous: Boolean(allowSimultaneous),
       audioMeta: {
         text: textToSpeak,
         lang: effectiveLang,
-        voice: ttsResult.voice || effectiveVoice,
+        voice: actualVoice,
         provider: ttsResult.provider || effectiveProvider,
         model: (ttsResult.provider || effectiveProvider) === 'fish_audio' ? 's2.1-pro-free' : undefined,
         emotion: effectiveEmotion,
@@ -989,6 +1092,212 @@ export class AudioGenerationService {
       filename: finalFilename,
       durationMs,
       name: cleanName.replace(ext, ''),
+    };
+  }
+
+  /**
+   * Generates and orchestrates all speech audio (narration + character dialogues) for a scene,
+   * calculates the authoritative non-overlapping speech schedule, applies start times,
+   * expands scene duration if speech exceeds current duration, and saves everything to the database.
+   */
+  async generateSceneSpeechAudio(
+    sceneId: string,
+    options?: {
+      forceRegenerate?: boolean;
+      provider?: string;
+    }
+  ): Promise<{
+    success: boolean;
+    sceneId: string;
+    scene: any;
+    narration: any;
+    dialogues: SceneDialogue[];
+    speechSchedule: SceneSpeechSchedule;
+    partialFailures: Array<{ type: 'narration' | 'dialogue'; id: string; error: string }>;
+  }> {
+    const scene = await getSceneBySceneId(sceneId);
+    if (!scene) {
+      throw new Error(`Scene not found: ${sceneId}`);
+    }
+
+    const forceRegenerate = Boolean(options?.forceRegenerate);
+    const provider = options?.provider;
+    const partialFailures: Array<{ type: 'narration' | 'dialogue'; id: string; error: string }> = [];
+
+    // 1. Narration audio generation
+    let narrationResult: any = null;
+    let narrationDurationMs = 0;
+    const hasNarrationText = Boolean(scene.narration && scene.narration.trim().length > 0);
+
+    if (hasNarrationText) {
+      if (forceRegenerate || !scene.audioUrl) {
+        try {
+          narrationResult = await this.generateNarrationAudio({
+            sceneId,
+            narration: scene.narration,
+            provider,
+          });
+          narrationDurationMs = narrationResult.durationMs;
+        } catch (err: any) {
+          console.error(`[AudioGeneration] Failed to generate narration in generateSceneSpeechAudio:`, err);
+          partialFailures.push({
+            type: 'narration',
+            id: 'narration',
+            error: sanitizeErrorMessage(err.message || String(err)),
+          });
+        }
+      } else if (scene.audioUrl) {
+        narrationDurationMs = scene.actualAudioDurationMs || 0;
+        if (!narrationDurationMs && scene.audioUrl) {
+          try {
+            const diskPath = path.join(process.cwd(), scene.audioUrl.startsWith('/') ? scene.audioUrl.slice(1) : scene.audioUrl);
+            narrationDurationMs = await this.probeAudioDuration(diskPath);
+          } catch {
+            narrationDurationMs = 2500;
+          }
+        }
+        narrationResult = {
+          audioUrl: scene.audioUrl,
+          durationMs: narrationDurationMs,
+        };
+      }
+    }
+
+    // 2. Dialogue lines generation
+    const animData = (scene.animationData as any) || {
+      version: 1,
+      viewport: { width: 1280, height: 720 },
+      characterInstances: [],
+      animationClips: [],
+      dialogueLines: [],
+    };
+    const rawDialogues: SceneDialogue[] = Array.isArray(animData.dialogueLines) ? animData.dialogueLines : [];
+    const updatedDialogues: SceneDialogue[] = [];
+
+    for (let i = 0; i < rawDialogues.length; i++) {
+      const dlg = rawDialogues[i];
+      if (forceRegenerate || !dlg.audioUrl) {
+        try {
+          const generatedDlg = await this.generateCharacterDialogueAudio({
+            sceneId,
+            characterId: dlg.characterId,
+            characterInstanceId: dlg.characterInstanceId,
+            characterName: dlg.characterName,
+            text: dlg.text,
+            voice: dlg.voice,
+            speakingDirection: dlg.speakingDirection,
+            emotion: dlg.emotion,
+            emotionIntensity: dlg.emotionIntensity,
+            facialExpression: dlg.facialExpression,
+            speed: dlg.speed,
+            effect: dlg.effect,
+            volume: dlg.volume,
+            startMs: dlg.startMs,
+            provider: dlg.provider || provider,
+            lang: dlg.lang,
+            allowSimultaneous: dlg.allowSimultaneous,
+          });
+          updatedDialogues.push({
+            ...dlg,
+            ...generatedDlg,
+            id: dlg.id || generatedDlg.id,
+            allowSimultaneous: dlg.allowSimultaneous,
+          });
+        } catch (err: any) {
+          console.error(`[AudioGeneration] Failed to generate dialogue ${dlg.id}:`, err);
+          partialFailures.push({
+            type: 'dialogue',
+            id: dlg.id,
+            error: sanitizeErrorMessage(err.message || String(err)),
+          });
+          updatedDialogues.push(dlg);
+        }
+      } else {
+        updatedDialogues.push(dlg);
+      }
+    }
+
+    // 3. Calculate authoritative speech schedule
+    const scheduleInput = {
+      narration: hasNarrationText ? {
+        text: scene.narration,
+        audioUrl: narrationResult?.audioUrl || scene.audioUrl,
+        durationMs: narrationDurationMs,
+        isEstimate: false,
+      } : null,
+      dialogues: updatedDialogues.map((d) => ({
+        id: d.id,
+        characterId: d.characterId,
+        characterInstanceId: d.characterInstanceId,
+        characterName: d.characterName,
+        text: d.text,
+        audioUrl: d.audioUrl,
+        durationMs: d.durationMs || 3000,
+        startMs: d.startMs,
+        allowSimultaneous: d.allowSimultaneous,
+        isEstimate: !Boolean(d.audioUrl),
+      })),
+      initialPauseMs: INITIAL_PAUSE_MS,
+      speechGapMs: SPEECH_GAP_MS,
+    };
+
+    const speechSchedule = calculateAuthoritativeSpeechSchedule(scheduleInput);
+
+    // 4. Align dialogue startMs with authoritative schedule
+    const scheduledMap = new Map(speechSchedule.items.map((it) => [it.id, it]));
+    const finalDialogues = updatedDialogues.map((dlg) => {
+      const scheduled = scheduledMap.get(dlg.id);
+      if (scheduled) {
+        return {
+          ...dlg,
+          startMs: scheduled.startMs,
+          durationMs: scheduled.durationMs,
+        };
+      }
+      return dlg;
+    });
+
+    // 5. Expand scene duration if speech exceeds current duration
+    const currentSceneDuration = scene.endMs - scene.startMs;
+    const neededDuration = speechSchedule.totalSpeechDurationMs + 500; // 500ms scene tail buffer
+    const shouldExpand = neededDuration > currentSceneDuration;
+    const newEndMs = shouldExpand ? scene.startMs + Math.max(neededDuration, 3000) : scene.endMs;
+
+    // 6. Update database record
+    const updatedAnimData = {
+      ...animData,
+      dialogueLines: finalDialogues,
+      speechSchedule,
+    };
+
+    const updatedScene = await updateScene(scene.sceneId, {
+      audioUrl: narrationResult?.audioUrl || scene.audioUrl,
+      actualAudioDurationMs: narrationDurationMs > 0 ? narrationDurationMs : scene.actualAudioDurationMs,
+      endMs: newEndMs,
+      animationData: updatedAnimData,
+      generationStatus: 'completed',
+    });
+
+    await createSceneVersion({
+      id: randomUUID(),
+      sceneId: scene.sceneId,
+      narration: scene.narration,
+      audioUrl: narrationResult?.audioUrl || scene.audioUrl,
+      durationMs: narrationDurationMs,
+      prompt: scene.visualPrompt,
+      cameraDirection: scene.cameraDirection,
+      imageUrl: scene.imageUrl,
+      videoUrl: scene.videoUrl,
+    });
+
+    return {
+      success: true,
+      sceneId,
+      scene: updatedScene,
+      narration: narrationResult,
+      dialogues: finalDialogues,
+      speechSchedule,
+      partialFailures,
     };
   }
 

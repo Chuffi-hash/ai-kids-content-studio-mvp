@@ -140,6 +140,11 @@ export interface SceneDialogue {
   speed?: number;
   effect?: AudioEffectType;
   volume?: number; // 0.0 - 2.0 (default 1.0)
+  allowSimultaneous?: boolean;
+  isFallback?: boolean;
+  fallbackReason?: string;
+  requestedVoice?: string;
+  actualVoice?: string;
   audioUrl?: string;
   audioMeta?: {
     text: string;

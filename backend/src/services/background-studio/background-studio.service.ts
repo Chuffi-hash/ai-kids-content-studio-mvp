@@ -83,6 +83,8 @@ export class BackgroundStudioService {
     sceneDescription?: string;
     aspectRatio?: '16:9' | '9:16' | '1:1' | '4:5';
     provider?: BackgroundProviderType;
+    referenceImageBuffer?: Buffer;
+    referenceImageMimeType?: string;
   }): Promise<BackgroundAsset> {
     await this.ensureStorage();
     const {
@@ -134,6 +136,8 @@ export class BackgroundStudioService {
         width,
         height,
         aspectRatio,
+        referenceImageBuffer: options.referenceImageBuffer,
+        referenceImageMimeType: options.referenceImageMimeType,
       });
       imageBuffer = generated.imageBuffer;
       mimeType = generated.mimeType;
@@ -333,6 +337,30 @@ export class BackgroundStudioService {
           ? `Outpainted extension of ${sourceAsset.environmentType || 'scenic background'} seamlessly extending margins to ${options.targetAspectRatio}. Maintain exact central features, lighting, textures and atmosphere.`
           : sourceAsset.description || sourceAsset.prompt;
 
+      let referenceImageBuffer: Buffer | undefined;
+      let referenceImageMimeType = 'image/png';
+      if (options.adaptationMode === 'ai_extend') {
+        const candidatePaths = [
+          sourceAsset.storagePath,
+          path.join(this.backgroundsDir, path.basename(sourceAsset.imageUrl)),
+          path.join(process.cwd(), sourceAsset.imageUrl.startsWith('/') ? sourceAsset.imageUrl.slice(1) : sourceAsset.imageUrl),
+        ].filter(Boolean) as string[];
+
+        for (const p of candidatePaths) {
+          if (fs.existsSync(p)) {
+            try {
+              referenceImageBuffer = await fs.promises.readFile(p);
+              const ext = path.extname(p).toLowerCase();
+              if (ext === '.jpg' || ext === '.jpeg') referenceImageMimeType = 'image/jpeg';
+              else if (ext === '.webp') referenceImageMimeType = 'image/webp';
+              break;
+            } catch (err) {
+              console.warn('[BackgroundStudio] Could not read reference image file:', p, err);
+            }
+          }
+        }
+      }
+
       const newAsset = await this.generateBackground({
         name: `${sourceAsset.name} (${options.targetAspectRatio} ${options.adaptationMode === 'ai_extend' ? 'Extended' : 'Variant'})`,
         environmentType: sourceAsset.environmentType,
@@ -343,6 +371,8 @@ export class BackgroundStudioService {
         mode: sourceAsset.mode || 'environment_only',
         aspectRatio: options.targetAspectRatio,
         provider: sourceAsset.provider === 'gemini' ? 'gemini' : 'pollinations',
+        referenceImageBuffer,
+        referenceImageMimeType,
       });
 
       newAsset.derivedFromAssetId = sourceAsset.id;

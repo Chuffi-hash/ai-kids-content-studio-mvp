@@ -5,6 +5,11 @@ import { getVectorRig, VectorRigDefinition } from '../animation/templates/defaul
 import { buildRigFromAppearance } from '../animation/templates/custom-character-rig.js';
 import { BrandingService } from '../branding/branding.service.js';
 import { ChannelBrandingConfig } from '../branding/branding.types.js';
+import {
+  calculateAuthoritativeSpeechSchedule,
+  INITIAL_PAUSE_MS,
+  SPEECH_GAP_MS,
+} from '../audio-generation/speech-schedule.types.js';
 
 export type AspectRatio = '16:9' | '9:16' | '1:1' | '4:5';
 
@@ -632,27 +637,57 @@ export class RemotionManifestAdapter {
         });
       }
 
-      // 2. Audio Scheduling & Overlap Prevention Model
-      const INITIAL_PAUSE_MS = 250;
-      const SPEECH_TURN_GAP_MS = 380;
+      // 2. Authoritative Audio Scheduling & Overlap Prevention Model
       const SCENE_END_BUFFER_MS = 500;
+      const rawDialogues = Array.isArray(animData.dialogueLines)
+        ? animData.dialogueLines
+        : (Array.isArray(animData.dialogues) ? animData.dialogues : []);
+
+      const effectiveSchedule = (animData.speechSchedule && Array.isArray(animData.speechSchedule.items))
+        ? animData.speechSchedule
+        : calculateAuthoritativeSpeechSchedule({
+            narration: scene.audioUrl || scene.narration ? {
+              text: scene.narration,
+              audioUrl: scene.audioUrl,
+              durationMs: scene.actualAudioDurationMs && scene.actualAudioDurationMs > 0
+                ? scene.actualAudioDurationMs
+                : (scene.narration ? Math.max(1500, Math.round(scene.narration.length * 75)) : 2500),
+              startMs: typeof scene.narrationStartMs === 'number' ? scene.narrationStartMs : INITIAL_PAUSE_MS,
+            } : null,
+            dialogues: rawDialogues.map((d: any, idx: number) => ({
+              id: d.id || `dlg-${sceneNum}-${idx + 1}`,
+              characterId: d.characterId,
+              characterName: d.characterName,
+              text: d.text,
+              audioUrl: d.audioUrl || d.url,
+              durationMs: d.durationMs && d.durationMs > 0
+                ? d.durationMs
+                : (d.text ? Math.max(1200, Math.round(d.text.length * 70)) : 2000),
+              startMs: d.startMs,
+              allowSimultaneous: d.allowSimultaneous,
+            })),
+            initialPauseMs: INITIAL_PAUSE_MS,
+            speechGapMs: SPEECH_GAP_MS,
+          });
+
+      const scheduledItemMap = new Map<string, any>((effectiveSchedule.items || []).map((it: any) => [it.id, it]));
 
       let narrationConfig: RemotionScene['narration'] = undefined;
-      let narrationDurationMs = 0;
-      let narrStartMs = 0;
-      let narrEndMs = 0;
+      let narrStartMs = effectiveSchedule.narrationStartMs ?? INITIAL_PAUSE_MS;
+      let narrationDurationMs = effectiveSchedule.narrationDurationMs ?? 0;
+      let narrEndMs = narrStartMs + narrationDurationMs;
 
       if (scene.audioUrl) {
         const resolvedNarrationAudio = embedBase64Audio
           ? this.convertLocalAudioToDataUri(scene.audioUrl)
           : this.resolveAssetUrl(scene.audioUrl);
 
-        narrationDurationMs = scene.actualAudioDurationMs && scene.actualAudioDurationMs > 0
-          ? scene.actualAudioDurationMs
-          : (scene.narration ? Math.max(1500, Math.round(scene.narration.length * 75)) : 2500);
-
-        narrStartMs = typeof scene.narrationStartMs === 'number' ? scene.narrationStartMs : INITIAL_PAUSE_MS;
-        narrEndMs = narrStartMs + narrationDurationMs;
+        if (!narrationDurationMs) {
+          narrationDurationMs = scene.actualAudioDurationMs && scene.actualAudioDurationMs > 0
+            ? scene.actualAudioDurationMs
+            : (scene.narration ? Math.max(1500, Math.round(scene.narration.length * 75)) : 2500);
+          narrEndMs = narrStartMs + narrationDurationMs;
+        }
 
         narrationConfig = {
           url: resolvedNarrationAudio,
@@ -663,12 +698,6 @@ export class RemotionManifestAdapter {
           wordTimings: scene.narration ? estimateWordTimings(scene.narration, narrationDurationMs) : undefined,
         };
       }
-
-      // Schedule dialogue lines sequentially after narration (or from INITIAL_PAUSE_MS if no narration)
-      let currentAudioCursorMs = narrEndMs > 0 ? narrEndMs + SPEECH_TURN_GAP_MS : INITIAL_PAUSE_MS;
-      const rawDialogues = Array.isArray(animData.dialogueLines)
-        ? animData.dialogueLines
-        : (Array.isArray(animData.dialogues) ? animData.dialogues : []);
 
       const adaptedDialogues: NonNullable<RemotionScene['dialogues']> = [];
       const audioSchedule: AudioSegment[] = [];
@@ -691,31 +720,21 @@ export class RemotionManifestAdapter {
 
       for (let dIdx = 0; dIdx < rawDialogues.length; dIdx++) {
         const line = rawDialogues[dIdx];
+        const lineId = line.id || `dlg-${sceneNum}-${dIdx + 1}`;
         const rawAudio = line.audioUrl || line.url;
         const resolvedAudio = rawAudio
           ? (embedBase64Audio ? this.convertLocalAudioToDataUri(rawAudio) : this.resolveAssetUrl(rawAudio))
           : undefined;
 
-        const lineDurationMs = line.durationMs && line.durationMs > 0
+        const scheduledItem = scheduledItemMap.get(lineId);
+        const lineDurationMs = scheduledItem?.durationMs ?? (line.durationMs && line.durationMs > 0
           ? line.durationMs
-          : (line.text ? Math.max(1200, Math.round(line.text.length * 70)) : 2000);
-
-        let lineStartMs: number;
-        if (line.allowSimultaneous) {
-          lineStartMs = typeof line.startMs === 'number' ? line.startMs : currentAudioCursorMs;
-        } else {
-          if (typeof line.startMs === 'number' && line.startMs >= currentAudioCursorMs) {
-            lineStartMs = line.startMs;
-          } else {
-            lineStartMs = currentAudioCursorMs;
-          }
-        }
-
+          : (line.text ? Math.max(1200, Math.round(line.text.length * 70)) : 2000));
+        const lineStartMs = scheduledItem?.startMs ?? (typeof line.startMs === 'number' ? line.startMs : 0);
         const lineEndMs = lineStartMs + lineDurationMs;
-        currentAudioCursorMs = Math.max(currentAudioCursorMs, lineEndMs + SPEECH_TURN_GAP_MS);
 
         const adaptedLine = {
-          id: line.id || `dlg-${sceneNum}-${dIdx + 1}`,
+          id: lineId,
           characterName: line.characterName || 'Character',
           characterInstanceId: line.characterInstanceId,
           characterId: line.characterId,

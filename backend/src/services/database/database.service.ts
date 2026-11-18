@@ -30,7 +30,10 @@ const prisma = new PrismaClient({ adapter });
 export async function initializeDatabase() {
   try {
     await prisma.$queryRaw`SELECT 1`;
+    // Verify core schema tables readiness without destructive resets
+    await prisma.story.findFirst({ select: { id: true } });
     console.log('[Database] Database initialized with Prisma (PostgreSQL) - Schema verified & connection healthy');
+    return true;
   } catch (err: any) {
     if (err.code === 'P1001') {
       console.warn('[Database] Warning: PostgreSQL database is unreachable at localhost. Please verify that Postgres is running on the configured port.');
@@ -39,6 +42,7 @@ export async function initializeDatabase() {
     } else {
       console.warn('[Database] Database connection notice:', err.message);
     }
+    return false;
   }
 }
 

@@ -26,6 +26,7 @@ import {
 } from '../../../utils/emotionSuggester';
 import { formatDurationHuman } from '../../../utils/timingEngine';
 import { FISH_VOICES_CATALOG } from '../../characters/CharacterBuilderModal';
+import { previewCoordinator } from '../../../utils/previewPlaybackCoordinator';
 
 interface DialogueInspectorProps {
   scene: EditorScene;
@@ -282,30 +283,17 @@ export const DialogueInspector: React.FC<DialogueInspectorProps> = ({
     if (!selectedDialogue?.audioUrl) return;
 
     if (isPlayingAudio) {
-      if (audioPlayerRef.current) {
-        audioPlayerRef.current.pause();
-        audioPlayerRef.current = null;
-      }
+      previewCoordinator.stopAll();
       setIsPlayingAudio(false);
     } else {
-      if (audioPlayerRef.current) {
-        audioPlayerRef.current.pause();
-      }
-      const audio = new Audio(resolveAssetUrl(selectedDialogue.audioUrl));
-      audioPlayerRef.current = audio;
       setIsPlayingAudio(true);
-      audio.onended = () => {
-        setIsPlayingAudio(false);
-        audioPlayerRef.current = null;
-      };
-      audio.onerror = () => {
-        setIsPlayingAudio(false);
-        audioPlayerRef.current = null;
-        setErrorMsg('Failed to play dialogue audio');
-      };
-      audio.play().catch(() => {
-        setIsPlayingAudio(false);
-        audioPlayerRef.current = null;
+      previewCoordinator.play({
+        url: resolveAssetUrl(selectedDialogue.audioUrl),
+        onEnd: () => setIsPlayingAudio(false),
+        onError: () => {
+          setIsPlayingAudio(false);
+          setErrorMsg('Failed to play dialogue audio');
+        },
       });
     }
   };
@@ -328,15 +316,12 @@ export const DialogueInspector: React.FC<DialogueInspectorProps> = ({
         emotionIntensity: selectedDialogue?.emotionIntensity ?? (selectedDialogue?.emotion === 'neutral' ? 0 : 15),
       });
       if (res?.audioUrl) {
-        if (previewAudioRef.current) {
-          previewAudioRef.current.pause();
-        }
-        const audio = new Audio(resolveAssetUrl(res.audioUrl));
-        previewAudioRef.current = audio;
         setPlayingPreview(true);
-        audio.onended = () => setPlayingPreview(false);
-        audio.onerror = () => setPlayingPreview(false);
-        await audio.play();
+        await previewCoordinator.play({
+          url: resolveAssetUrl(res.audioUrl),
+          onEnd: () => setPlayingPreview(false),
+          onError: () => setPlayingPreview(false),
+        });
       }
     } catch (err: any) {
       console.warn('Voice preview error:', err);

@@ -26,6 +26,44 @@ import {
   AspectRatioFormat,
 } from './sharedCompositionCoordinates';
 
+export function verifyImageMagicBytes(buffer: Buffer, expectedFormat: string): boolean {
+  if (buffer.length < 4) return false;
+
+  if (expectedFormat === 'png') {
+    return buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47;
+  }
+  if (expectedFormat === 'jpg' || expectedFormat === 'jpeg') {
+    return buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
+  }
+  if (expectedFormat === 'webp') {
+    if (buffer.length < 12) return false;
+    const riff = buffer.toString('ascii', 0, 4);
+    const webp = buffer.toString('ascii', 8, 12);
+    return riff === 'RIFF' && webp === 'WEBP';
+  }
+  if (expectedFormat === 'svg') {
+    const head = buffer.toString('utf8', 0, Math.min(buffer.length, 1024)).trim().toLowerCase();
+    return head.includes('<svg') || (head.includes('<?xml') && head.includes('<svg'));
+  }
+  return false;
+}
+
+export function sanitizeSvg(svgContent: string): string {
+  // Strip <script>...</script>
+  let clean = svgContent.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+  // Strip dangerous event handler attributes
+  clean = clean.replace(/\s*on[a-zA-Z]+\s*=\s*(?:'[^']*'|"[^"]*"|[^\s>]+)/gi, '');
+  // Strip javascript: uris
+  clean = clean.replace(/href\s*=\s*["']?javascript:[^"'>\s]+/gi, 'href=""');
+  clean = clean.replace(/xlink:href\s*=\s*["']?javascript:[^"'>\s]+/gi, 'xlink:href=""');
+  // Strip embedded objects
+  clean = clean.replace(/<object\b[^<]*(?:(?!<\/object>)<[^<]*)*<\/object>/gi, '');
+  clean = clean.replace(/<embed\b[^>]*>/gi, '');
+  clean = clean.replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, '');
+  clean = clean.replace(/<foreignObject\b[^<]*(?:(?!<\/foreignObject>)<[^<]*)*<\/foreignObject>/gi, '');
+  return clean;
+}
+
 export class BrandingService {
   private storageDir: string;
   private brandingDir: string;
@@ -114,32 +152,69 @@ export class BrandingService {
     storyId?: string;
   }): Promise<{ url: string; storagePath: string; mimeType: string; filename: string }> {
     await this.ensureStorage();
-    const { buffer, originalFilename, mimeType, assetType = 'logo' } = options;
+    const { buffer, originalFilename, mimeType, assetType = 'logo', storyId } = options;
 
-    // Validate size (max 5MB)
+    // 1. Path traversal / storyId validation
+    if (storyId && !/^[a-zA-Z0-9_-]+$/.test(storyId)) {
+      throw new Error('Invalid storyId: contains illegal characters or path traversal sequences.');
+    }
+
+    // 2. AssetType whitelist
+    const allowedAssetTypes = ['logo', 'secondary_logo', 'subscribe_badge'];
+    if (!allowedAssetTypes.includes(assetType)) {
+      throw new Error(`Invalid assetType "${assetType}". Allowed types: ${allowedAssetTypes.join(', ')}`);
+    }
+
+    // 3. Validate size (max 5MB)
     const MAX_SIZE = 5 * 1024 * 1024;
     if (buffer.length > MAX_SIZE) {
       throw new Error('Branding image size exceeds maximum permitted limit of 5MB.');
     }
 
-    // Validate image format
+    // 4. Validate image extension & MIME match
     const ext = (path.extname(originalFilename).toLowerCase().replace('.', '') || 'png');
     const allowedExts = ['png', 'svg', 'webp', 'jpg', 'jpeg'];
-    const isMimeAllowed =
-      mimeType.includes('png') ||
-      mimeType.includes('svg') ||
-      mimeType.includes('webp') ||
-      mimeType.includes('jpeg') ||
-      mimeType.includes('jpg');
-
-    if (!allowedExts.includes(ext) && !isMimeAllowed) {
-      throw new Error('Invalid branding asset format. Only PNG, SVG, WebP, or JPEG formats are supported.');
+    if (!allowedExts.includes(ext)) {
+      throw new Error(`Invalid file extension ".${ext}". Only PNG, SVG, WebP, or JPEG formats are supported.`);
     }
 
-    const safeFilename = `${assetType}-${Date.now()}-${randomUUID().slice(0, 6)}.${ext}`;
-    const filePath = path.join(this.brandingDir, safeFilename);
+    const mimeLower = (mimeType || '').toLowerCase();
+    const validMimeMap: Record<string, string[]> = {
+      png: ['image/png'],
+      jpg: ['image/jpeg', 'image/jpg'],
+      jpeg: ['image/jpeg', 'image/jpg'],
+      webp: ['image/webp'],
+      svg: ['image/svg+xml', 'image/svg'],
+    };
 
-    await fs.promises.writeFile(filePath, buffer);
+    const validMimes = validMimeMap[ext] || [];
+    if (!validMimes.some((m) => mimeLower.includes(m))) {
+      throw new Error(`MIME type "${mimeType}" does not match file extension ".${ext}".`);
+    }
+
+    // 5. File magic byte signature verification
+    if (!verifyImageMagicBytes(buffer, ext)) {
+      throw new Error(`File contents do not match the expected image signature for ".${ext}".`);
+    }
+
+    // 6. SVG sanitization (strip scripts, handlers, embed objects)
+    let finalBuffer = buffer;
+    if (ext === 'svg') {
+      const rawSvg = buffer.toString('utf8');
+      const cleanSvg = sanitizeSvg(rawSvg);
+      finalBuffer = Buffer.from(cleanSvg, 'utf8');
+    }
+
+    // 7. Storage directory containment check
+    const safeFilename = `${assetType}-${Date.now()}-${randomUUID().slice(0, 6)}.${ext}`;
+    const resolvedBrandingDir = path.resolve(this.brandingDir);
+    const filePath = path.resolve(resolvedBrandingDir, safeFilename);
+
+    if (!filePath.startsWith(resolvedBrandingDir)) {
+      throw new Error('Storage path containment violation: Attempted directory traversal.');
+    }
+
+    await fs.promises.writeFile(filePath, finalBuffer);
 
     const rel = path.relative(path.resolve(process.cwd(), this.storageDir), filePath);
     return {

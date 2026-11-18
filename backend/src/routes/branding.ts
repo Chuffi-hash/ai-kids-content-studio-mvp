@@ -9,6 +9,9 @@ const brandingService = new BrandingService();
 brandingRouter.get('/', async (req, res) => {
   try {
     const storyId = req.query.storyId ? String(req.query.storyId) : undefined;
+    if (storyId && !/^[a-zA-Z0-9_-]+$/.test(storyId)) {
+      return res.status(400).json({ message: 'Invalid storyId parameter' });
+    }
     const config = await brandingService.getBrandingConfig(storyId);
     res.json(config);
   } catch (err: any) {
@@ -21,6 +24,9 @@ brandingRouter.get('/', async (req, res) => {
 brandingRouter.post('/', async (req, res) => {
   try {
     const storyId = req.query.storyId ? String(req.query.storyId) : undefined;
+    if (storyId && !/^[a-zA-Z0-9_-]+$/.test(storyId)) {
+      return res.status(400).json({ message: 'Invalid storyId parameter' });
+    }
     const config = await brandingService.saveBrandingConfig(req.body, storyId);
     res.json({
       success: true,
@@ -39,6 +45,10 @@ brandingRouter.post('/upload', async (req, res) => {
 
     if (!base64Data) {
       return res.status(400).json({ message: 'base64Data is required' });
+    }
+
+    if (storyId && !/^[a-zA-Z0-9_-]+$/.test(storyId)) {
+      return res.status(400).json({ message: 'Invalid storyId parameter' });
     }
 
     const cleanBase64 = base64Data.replace(/^data:[^;]+;base64,/, '');

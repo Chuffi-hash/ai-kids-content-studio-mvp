@@ -103,6 +103,7 @@ export class GeminiImageProvider implements ImageGenerationProvider {
       negativePrompt,
       inlineRefBase64,
       refMimeType: referenceImageMimeType,
+      aspectRatio,
     });
   }
 
@@ -115,8 +116,9 @@ export class GeminiImageProvider implements ImageGenerationProvider {
     negativePrompt?: string;
     inlineRefBase64?: string;
     refMimeType: string;
+    aspectRatio?: string;
   }): Promise<{ imageBuffer: Buffer; mimeType: string }> {
-    const { apiKey, prompt, negativePrompt, inlineRefBase64, refMimeType } = options;
+    const { apiKey, prompt, negativePrompt, inlineRefBase64, refMimeType, aspectRatio } = options;
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent?key=${apiKey}`;
 
     const parts: any[] = [];
@@ -138,7 +140,13 @@ export class GeminiImageProvider implements ImageGenerationProvider {
 
     parts.push({ text: finalPromptText });
 
-    const requestBody = {
+    // Map ratios to standard Gemini/Imagen aspect ratio formats: 1:1, 16:9, 9:16, 4:3, 3:4
+    let standardRatio = aspectRatio || '16:9';
+    if (standardRatio === '4:5') {
+      standardRatio = '3:4'; // Nearest vertical equivalent supported by Gemini imageConfig
+    }
+
+    const requestBody: any = {
       contents: [
         {
           parts,
@@ -146,6 +154,9 @@ export class GeminiImageProvider implements ImageGenerationProvider {
       ],
       generationConfig: {
         responseModalities: ['IMAGE'],
+        imageConfig: {
+          aspectRatio: standardRatio,
+        },
       },
     };
 

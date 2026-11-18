@@ -167,6 +167,11 @@ export interface SceneDialogue {
   speed?: number;
   effect?: 'normal' | 'cartoon' | 'robot' | 'whisper' | 'shout';
   volume?: number; // 0.0 - 2.0 (default 1.0)
+  allowSimultaneous?: boolean;
+  isFallback?: boolean;
+  fallbackReason?: string;
+  requestedVoice?: string;
+  actualVoice?: string;
   audioUrl?: string;
   audioMeta?: {
     text: string;
@@ -285,6 +290,7 @@ export interface FormatVariantPresentation {
     rotation?: number;
     flipX?: boolean;
     facingDirection?: CharacterFacingDirection;
+    zIndex?: number;
   }>;
   background?: {
     fit?: 'cover' | 'contain' | 'fill';
@@ -326,6 +332,7 @@ export interface VectorSceneData {
   dialogueLines?: SceneDialogue[];
   overlays?: EducationalOverlay[];
   characterPerformances?: Record<string, CharacterPerformanceOverride>;
+  speechSchedule?: any;
 }
 
 export interface EvaluatedCharacterPose {

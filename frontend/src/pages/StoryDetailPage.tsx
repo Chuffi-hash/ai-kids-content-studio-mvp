@@ -26,7 +26,8 @@ import { ImportScriptModal } from '../components/editor/ImportScriptModal';
 import { CharacterBuilderModal } from '../components/characters/CharacterBuilderModal';
 import GoogleFlowProjectModal from '../components/common/GoogleFlowProjectModal';
 import { ChannelLogoModal } from '../components/editor/ChannelLogoModal';
-import { fetchBrandingConfig, ChannelBrandingConfig, DEFAULT_BRANDING_CONFIG } from '../services/branding.service';
+import { fetchBrandingConfig, saveBrandingConfig, ChannelBrandingConfig, DEFAULT_BRANDING_CONFIG } from '../services/branding.service';
+import { previewCoordinator } from '../utils/previewPlaybackCoordinator';
 import { buildRigFromAppearance } from '../utils/customCharacterRig';
 import { applyCharacterTransform, resetCharacterToAutoLayout } from '../utils/characterPlacementEngine';
 import { createCharacter, updateCharacter, updateCharacterVoice } from '../services/character.service';
@@ -835,8 +836,10 @@ export default function StoryDetailPage() {
 
   const handlePreviewNarration = useCallback((scene: EditorScene) => {
     if (scene.audioUrl) {
-      const audio = new Audio(scene.audioUrl);
-      audio.play().catch((err) => console.warn('Narration audio preview failed:', err));
+      previewCoordinator.play({
+        url: scene.audioUrl,
+        onError: (err) => console.warn('Narration audio preview failed:', err),
+      });
     }
   }, []);
 
@@ -1091,6 +1094,21 @@ export default function StoryDetailPage() {
       const defaultCharId = (defaultChar as any).characterId || (defaultChar as any).instanceId || (defaultChar as any).id;
       const isEarth = (defaultChar.name || '').toLowerCase().includes('earth');
 
+      // Calculate non-overlapping start after narration and previous dialogues + 350ms gap
+      let calculatedStartMs = 250;
+      if (startOffsetMs !== undefined) {
+        calculatedStartMs = Math.max(0, startOffsetMs - targetScene.startMs);
+      } else {
+        const narrDuration = targetScene.actualAudioDurationMs || (targetScene.audioUrl ? 2500 : 0);
+        let maxEnd = narrDuration > 0 ? (250 + narrDuration) : 0;
+        const existingDlgs = currentAnimData.dialogueLines || [];
+        for (const d of existingDlgs) {
+          const dEnd = (d.startMs || 0) + (d.durationMs || 3000);
+          if (dEnd > maxEnd) maxEnd = dEnd;
+        }
+        calculatedStartMs = maxEnd > 0 ? maxEnd + 350 : 250;
+      }
+
       const newDlg: SceneDialogue = {
         id: `dlg-${Date.now().toString(36)}`,
         characterId: defaultCharId,
@@ -1098,7 +1116,7 @@ export default function StoryDetailPage() {
         text: isEarth ? 'नमस्ते बच्चों, मैं पृथ्वी हूँ!' : 'नमस्ते, हमारी कहानी में आपका स्वागत है!',
         lang: 'hi',
         voice: 'hf_alpha',
-        startMs: startOffsetMs !== undefined ? Math.max(0, startOffsetMs - targetScene.startMs) : 0,
+        startMs: calculatedStartMs,
         durationMs: 3000,
         emotion: 'neutral',
         emotionIntensity: 0,
@@ -1159,8 +1177,10 @@ export default function StoryDetailPage() {
   const handlePreviewDialogue = useCallback(
     (dlg: SceneDialogue) => {
       if (dlg.audioUrl) {
-        const audio = new Audio(dlg.audioUrl);
-        audio.play().catch((err) => console.warn('Dialogue audio preview failed:', err));
+        previewCoordinator.play({
+          url: dlg.audioUrl,
+          onError: (err) => console.warn('Dialogue audio preview failed:', err),
+        });
       }
     },
     []
@@ -1628,6 +1648,59 @@ export default function StoryDetailPage() {
     }
   };
 
+  const handleGenerateAllSpeech = async (
+    sceneId: string,
+    options?: { forceRegenerate?: boolean; provider?: string }
+  ) => {
+    const targetScene = scenes.find((s) => s.sceneId === sceneId);
+    if (!targetScene) return;
+
+    try {
+      setGeneratingVoiceForScene(sceneId);
+      const result = await editorService.generateSceneAllSpeech(sceneId, options);
+
+      if (result.scene) {
+        let updatedList = scenes.map((s) => {
+          if (s.sceneId !== sceneId) return s;
+          return {
+            ...s,
+            ...result.scene,
+            audioUrl: result.scene.audioUrl,
+            actualAudioDurationMs: result.scene.actualAudioDurationMs,
+            animationData: result.scene.animationData,
+            endMs: result.scene.endMs,
+          };
+        });
+
+        updatedList = recalculateContiguousTimeline(updatedList);
+        setScenes(updatedList);
+        triggerDebouncedSave(updatedList);
+
+        const vers = await editorService.getSceneVersions(sceneId);
+        setActiveVersions(vers);
+      }
+    } catch (err: any) {
+      console.error('Batch speech generation error:', err);
+      alert(`Speech generation failed: ${err.message || 'TTS service error'}`);
+    } finally {
+      setGeneratingVoiceForScene(null);
+    }
+  };
+
+  const handleUpdateBranding = useCallback(
+    async (newB: ChannelBrandingConfig) => {
+      setBranding(newB);
+      if (storyId) {
+        try {
+          await saveBrandingConfig(newB, storyId);
+        } catch (err) {
+          console.warn('[StoryDetailPage] Failed to auto-persist branding:', err);
+        }
+      }
+    },
+    [storyId]
+  );
+
   const handleRemoveVoice = async (sceneId: string) => {
     try {
       pushHistorySnapshot(scenes);
@@ -1986,7 +2059,7 @@ export default function StoryDetailPage() {
             onFormatChange={setPreviewFormat}
             onUpdateAnimationData={(newData) => activeSceneId && handleUpdateAnimationData(activeSceneId, newData)}
             branding={branding}
-            onUpdateBranding={(newB) => setBranding(newB)}
+            onUpdateBranding={handleUpdateBranding}
             onOpenBrandingModal={() => setIsChannelLogoOpen(true)}
           />
         ) : (
@@ -2052,6 +2125,7 @@ export default function StoryDetailPage() {
           onRemoveBackground={handleRemoveBackground}
           onGenerateImage={(scId, prompt, options) => handleGenerateImage(scId, prompt, options)}
           onGenerateVoice={(scId, opts) => handleGenerateVoice(scId, opts)}
+          onGenerateAllSpeech={(scId, opts) => handleGenerateAllSpeech(scId, opts)}
           onRemoveVoice={handleRemoveVoice}
           onGenerateVideo={(scId) => handleGenerateVideo(scId)}
           onSplitScene={handleSplitScene}
@@ -2135,7 +2209,7 @@ export default function StoryDetailPage() {
         onRegenerateNarration={handleRegenerateNarration}
         onSelectTrack={handleSelectTrack}
         branding={branding}
-        onUpdateBranding={(newB) => setBranding(newB)}
+        onUpdateBranding={handleUpdateBranding}
         onOpenBrandingModal={() => setIsChannelLogoOpen(true)}
       />
 

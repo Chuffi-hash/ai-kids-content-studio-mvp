@@ -149,7 +149,7 @@ function packClipsIntoSubLanes<T>(
   for (const clip of sorted) {
     let assignedLane = -1;
     for (let l = 0; l < laneEndTimes.length; l++) {
-      if (laneEndTimes[l] <= clip.startMs + 30) {
+      if (laneEndTimes[l] <= clip.startMs) {
         assignedLane = l;
         laneEndTimes[l] = clip.endMs;
         break;
@@ -1294,6 +1294,11 @@ export const Timeline: React.FC<TimelineProps> = ({
               const isSelected = dlg.id === selectedDialogueId;
               const sceneDuration = scene.endMs - scene.startMs;
               const isOverflow = (dlg.startMs || 0) + durationMs > sceneDuration;
+              const speechSchedule = scene.animationData?.speechSchedule;
+              const isSimultaneous = Boolean(dlg.allowSimultaneous);
+              const isColliding = !isSimultaneous && Boolean(
+                speechSchedule?.overlaps?.some((o: any) => !o.isIntentional && (o.item1Id === dlg.id || o.item2Id === dlg.id))
+              );
               const hasAudio = Boolean(dlg.audioUrl);
               const visemeCount = dlg.visemeCues?.length || 0;
               const topPx = 3 + lane * 26;
@@ -1301,7 +1306,7 @@ export const Timeline: React.FC<TimelineProps> = ({
               return (
                 <div
                   key={`dlg-clip-${dlg.id}`}
-                  className={`ed-dialogue-block ${isSelected ? 'selected' : ''} ${isOverflow ? 'overflow' : ''}`}
+                  className={`ed-dialogue-block ${isSelected ? 'selected' : ''} ${isOverflow || isColliding ? 'overflow' : ''}`}
                   style={{
                     left: `${leftPx}px`,
                     width: `${Math.max(28, widthPx)}px`,
@@ -1309,13 +1314,17 @@ export const Timeline: React.FC<TimelineProps> = ({
                     top: `${topPx}px`,
                     height: '22px',
                     borderRadius: '4px',
-                    background: isOverflow
+                    background: isOverflow || isColliding
                       ? 'rgba(239, 68, 68, 0.25)'
+                      : isSimultaneous
+                      ? 'rgba(147, 51, 234, 0.28)'
                       : isSelected
                       ? 'var(--ed-dialogue-border)'
                       : 'var(--ed-dialogue-bg)',
-                    border: isOverflow
+                    border: isOverflow || isColliding
                       ? '2px solid #ef4444'
+                      : isSimultaneous
+                      ? '1px dashed #c084fc'
                       : isSelected
                       ? '2px solid var(--ed-dialogue-border)'
                       : '1px solid var(--ed-dialogue-border)',
@@ -1324,7 +1333,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                     padding: '0 6px',
                     gap: '5px',
                     fontSize: '11px',
-                    color: isOverflow ? '#ef4444' : isSelected ? 'var(--ed-dialogue-text-dim)' : 'var(--ed-dialogue-text)',
+                    color: isOverflow || isColliding ? '#ef4444' : isSelected ? 'var(--ed-dialogue-text-dim)' : 'var(--ed-dialogue-text)',
                     overflow: 'hidden',
                     whiteSpace: 'nowrap',
                     boxShadow: isSelected ? '0 0 10px rgba(236, 72, 153, 0.5)' : undefined,
@@ -1355,9 +1364,19 @@ export const Timeline: React.FC<TimelineProps> = ({
                       target: { type: 'dialogue', scene, dialogue: dlg },
                     });
                   }}
-                  title={`${dlg.characterName}: "${dlg.text}" (Offset: +${formatDurationHuman(dlg.startMs || 0)}, Dur: ${formatDurationHuman(durationMs)})${isOverflow ? ' - EXCEEDS SCENE DURATION!' : ''}`}
+                  title={`${dlg.characterName}: "${dlg.text}" (Offset: +${formatDurationHuman(dlg.startMs || 0)}, Dur: ${formatDurationHuman(durationMs)})${isOverflow ? ' - EXCEEDS SCENE DURATION!' : ''}${isColliding ? ' - UNINTENDED OVERLAP COLLISION!' : ''}${isSimultaneous ? ' - (Simultaneous Speech)' : ''}`}
                 >
                   <span style={{ fontSize: '12px', flexShrink: 0 }}>👄</span>
+                  {isSimultaneous && (
+                    <span style={{ fontSize: '8px', fontWeight: 800, padding: '0px 3px', borderRadius: '2px', background: '#9333ea', color: '#fff', flexShrink: 0 }}>
+                      SIMUL
+                    </span>
+                  )}
+                  {isColliding && (
+                    <span title="Speech collision with previous clip" style={{ fontSize: '11px', flexShrink: 0, color: '#ef4444' }}>
+                      ⚠️
+                    </span>
+                  )}
                   {widthPx >= 60 && (
                     <span
                       style={{

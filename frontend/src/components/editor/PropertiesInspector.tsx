@@ -121,6 +121,13 @@ interface PropertiesInspectorProps {
       emotionIntensity?: number;
     }
   ) => Promise<void>;
+  onGenerateAllSpeech?: (
+    sceneId: string,
+    options?: {
+      forceRegenerate?: boolean;
+      provider?: string;
+    }
+  ) => Promise<void>;
   onRemoveVoice?: (sceneId: string) => Promise<void>;
   onGenerateVideo: (sceneId: string, workflow?: 'ffmpeg' | 'ai') => Promise<void>;
   onSplitScene: (sceneId: string, splitMs: number) => void;
@@ -176,6 +183,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
   onRemoveBackground,
   onGenerateImage,
   onGenerateVoice,
+  onGenerateAllSpeech,
   onRemoveVoice,
   onGenerateVideo,
   onSplitScene,
@@ -270,6 +278,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
   } | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showRemoveVoiceConfirm, setShowRemoveVoiceConfirm] = useState(false);
+  const [isGeneratingAllSpeech, setIsGeneratingAllSpeech] = useState<boolean>(false);
 
   // Scene Background State (Phase 1 & Background Studio)
   const bgFileInputRef = useRef<HTMLInputElement | null>(null);
@@ -554,6 +563,20 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
       onUpdateAnimationData(scene.sceneId, updatedAnim as any);
     }
     onUpdateScene(scene.sceneId, { animationData: updatedAnim as any });
+  };
+
+  const handleGenerateAllSpeechClick = async () => {
+    if (!onGenerateAllSpeech) return;
+    try {
+      setIsGeneratingAllSpeech(true);
+      await onGenerateAllSpeech(scene.sceneId, {
+        provider: selectedProvider,
+      });
+    } catch (err: any) {
+      alert(`Speech generation failed: ${err.message || String(err)}`);
+    } finally {
+      setIsGeneratingAllSpeech(false);
+    }
   };
 
 
@@ -2438,20 +2461,51 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
               </div>
             </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-            <span style={{ fontSize: '11px', color: 'var(--ed-text-muted)' }}>
-              {scene.actualAudioDurationMs
-                ? `Actual voice: ${formatDurationHuman(scene.actualAudioDurationMs)}`
-                : 'No audio generated'}
-            </span>
-            <button
-              className="ed-btn-action primary"
-              style={{ fontSize: '11px', padding: '6px 12px' }}
-              onClick={handleGenerateVoiceClick}
-              disabled={isGeneratingVoice || !localNarration.trim()}
-            >
-              {isGeneratingVoice ? 'Generating...' : scene.audioUrl ? 'Regenerate Voice' : 'Generate Voice (TTS)'}
-            </button>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+              <span style={{ fontSize: '11px', color: 'var(--ed-text-muted)' }}>
+                {scene.actualAudioDurationMs
+                  ? `Actual voice: ${formatDurationHuman(scene.actualAudioDurationMs)}`
+                  : 'No audio generated'}
+              </span>
+              <button
+                className="ed-btn-action"
+                style={{ fontSize: '11px', padding: '6px 12px' }}
+                onClick={handleGenerateVoiceClick}
+                disabled={isGeneratingVoice || !localNarration.trim()}
+              >
+                {isGeneratingVoice ? 'Generating...' : scene.audioUrl ? 'Regenerate Narration' : 'Generate Narration (TTS)'}
+              </button>
+            </div>
+            {onGenerateAllSpeech && (
+              <button
+                className="ed-btn-action primary"
+                style={{
+                  fontSize: '11px',
+                  padding: '8px 12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  background: 'linear-gradient(135deg, #6366f1 0%, #a855f7 100%)',
+                  color: '#ffffff',
+                  fontWeight: 600,
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: isGeneratingAllSpeech ? 'not-allowed' : 'pointer',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                }}
+                onClick={handleGenerateAllSpeechClick}
+                disabled={isGeneratingAllSpeech || isGeneratingVoice}
+                title="Generates speech audio for narration and all character dialogues in this scene with unified non-overlapping scheduling"
+              >
+                {isGeneratingAllSpeech ? (
+                  <span>⏳ Orchestrating Scene Speech...</span>
+                ) : (
+                  <span>✨ Generate All Speech Audio (Narration + Dialogues)</span>
+                )}
+              </button>
+            )}
           </div>
         </CollapsibleSection>
 

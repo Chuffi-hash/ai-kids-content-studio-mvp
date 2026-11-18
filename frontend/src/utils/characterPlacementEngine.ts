@@ -79,7 +79,16 @@ export function calculateResponsiveCharacterPlacement(options: {
 
   instances.forEach((inst, idx) => {
     const override = overrides[inst.instanceId];
-    if (override && (override.x !== undefined || override.y !== undefined || override.scale !== undefined || override.facingDirection !== undefined)) {
+    if (
+      override &&
+      (override.x !== undefined ||
+        override.y !== undefined ||
+        override.scale !== undefined ||
+        override.rotation !== undefined ||
+        override.flipX !== undefined ||
+        override.facingDirection !== undefined ||
+        override.zIndex !== undefined)
+    ) {
       placedResults[idx] = {
         ...inst,
         x: override.x !== undefined ? Math.round(override.x * scaleRatioX) : Math.round(inst.x * scaleRatioX),
@@ -88,6 +97,7 @@ export function calculateResponsiveCharacterPlacement(options: {
         rotation: override.rotation !== undefined ? override.rotation : (inst.rotation ?? 0),
         flipX: override.flipX !== undefined ? override.flipX : Boolean(inst.flipX),
         facingDirection: override.facingDirection || inst.facingDirection || 'front',
+        zIndex: override.zIndex !== undefined ? override.zIndex : (inst.zIndex ?? idx),
         isOverridden: true,
         isAutoPlaced: false,
       };

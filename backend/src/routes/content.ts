@@ -1198,6 +1198,10 @@ contentRouter.post("/scenes/:sceneId/voice", async (req, res) => {
       durationMs: result.durationMs,
       provider: result.provider,
       voice: result.voice,
+      requestedVoice: result.requestedVoice,
+      actualVoice: result.actualVoice,
+      isFallback: result.isFallback,
+      fallbackReason: result.fallbackReason,
       effect: result.effect,
       emotion: result.emotion,
       emotionIntensity: result.emotionIntensity,
@@ -1205,6 +1209,29 @@ contentRouter.post("/scenes/:sceneId/voice", async (req, res) => {
   } catch (error: any) {
     console.error(`[Content] Voice generation failed for scene ${req.params.sceneId}:`, error);
     return res.status(500).json({ message: error.message || "Failed to generate voice narration" });
+  }
+});
+
+// Generate and orchestrate all speech audio (narration + dialogues) for a scene with authoritative scheduling
+contentRouter.post("/scenes/:sceneId/speech/generate-all", async (req, res) => {
+  try {
+    const { sceneId } = req.params;
+    const { forceRegenerate, provider } = req.body || {};
+
+    const scene = await getSceneBySceneId(sceneId);
+    if (!scene) {
+      return res.status(404).json({ message: "Scene not found" });
+    }
+
+    const result = await audioGenerationService.generateSceneSpeechAudio(sceneId, {
+      forceRegenerate: Boolean(forceRegenerate),
+      provider,
+    });
+
+    return res.json(result);
+  } catch (error: any) {
+    console.error(`[Content] Batch speech generation failed for scene ${req.params.sceneId}:`, error);
+    return res.status(500).json({ message: error.message || "Failed to generate speech audio" });
   }
 });
 
@@ -1240,6 +1267,7 @@ contentRouter.post("/scenes/:sceneId/dialogue/generate", async (req, res) => {
       volume,
       provider,
       lang,
+      allowSimultaneous,
     } = req.body;
 
     if (!text || !text.trim()) {
@@ -1268,6 +1296,7 @@ contentRouter.post("/scenes/:sceneId/dialogue/generate", async (req, res) => {
       volume: volume !== undefined ? parseFloat(volume) : undefined,
       provider,
       lang,
+      allowSimultaneous: Boolean(allowSimultaneous),
     });
 
     // Update scene animationData.dialogueLines if animationData exists

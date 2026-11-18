@@ -11,9 +11,6 @@ import { shotRouter } from "./routes/shots.js";
 import { brandingRouter } from "./routes/branding.js";
 import { initializeDatabase } from "./services/database/database.service.js";
 
-// Initialize database
-initializeDatabase();
-
 const app = express();
 const port = Number(process.env.PORT ?? 5001);
 const storageDir = process.env.STORAGE_DIR || "./storage";
@@ -59,6 +56,15 @@ app.use("/api/scene-director", sceneDirectorRouter);
 app.use("/api/shots", shotRouter);
 app.use("/api/branding", brandingRouter);
 
-app.listen(port, () => {
-  console.log(`API running on http://localhost:${port}`);
+async function startServer() {
+  await initializeDatabase();
+
+  app.listen(port, () => {
+    console.log(`API running on http://localhost:${port}`);
+  });
+}
+
+startServer().catch((err) => {
+  console.error('[Server] Fatal startup error:', err);
+  process.exit(1);
 });

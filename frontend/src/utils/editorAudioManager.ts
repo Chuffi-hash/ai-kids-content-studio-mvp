@@ -120,24 +120,31 @@ export class EditorAudioManager {
     const scheduledClips: ScheduledClip[] = [];
 
     for (const scene of scenes) {
+      const speechSchedule = scene.animationData?.speechSchedule;
+      const narrStartMs = speechSchedule?.narrationStartMs ?? 250;
+
       // Narration
       if (scene.audioUrl) {
-        const narrDuration = scene.actualAudioDurationMs || (scene.endMs - scene.startMs);
+        const narrDuration = scene.actualAudioDurationMs || (speechSchedule?.narrationDurationMs ?? (scene.endMs - scene.startMs));
         scheduledClips.push({
           id: `narr-${scene.sceneId}`,
           type: 'narration',
           rawUrl: scene.audioUrl,
-          globalStartMs: scene.startMs,
+          globalStartMs: scene.startMs + narrStartMs,
           durationMs: narrDuration,
         });
       }
 
       // Character Dialogues
       const dialogues = scene.animationData?.dialogueLines || [];
+      const scheduledMap = new Map<string, any>((speechSchedule?.items || []).map((it: any) => [it.id, it]));
+
       for (const dlg of dialogues) {
         if (dlg.audioUrl) {
-          const dlgStartMs = scene.startMs + (dlg.startMs || 0);
-          const dlgDuration = dlg.durationMs || 3000;
+          const scheduled = scheduledMap.get(dlg.id);
+          const localStart = scheduled ? scheduled.startMs : (dlg.startMs || 0);
+          const dlgStartMs = scene.startMs + localStart;
+          const dlgDuration = scheduled ? scheduled.durationMs : (dlg.durationMs || 3000);
           scheduledClips.push({
             id: `dlg-${dlg.id}`,
             type: 'dialogue',

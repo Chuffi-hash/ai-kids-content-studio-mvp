@@ -155,7 +155,7 @@ export function evaluateCharacterPose(
       rightArmAngle = -6 - 2 * Math.sin(2 * Math.PI * 0.6 * tSec);
     }
   } else {
-    activeAction = activeClip ? activeClip.action : fallbackAction;
+    // Preserve resolved activeAction (prevents ambient default idle clip from wiping explicit fallbackAction)
     const clipOffsetMs = activeClip ? sceneRelativeMs - activeClip.startMs : sceneRelativeMs;
     const durationMs = activeClip ? Math.max(100, activeClip.durationMs) : 1200;
     const speed = activeClip?.speedMultiplier || 1.0;

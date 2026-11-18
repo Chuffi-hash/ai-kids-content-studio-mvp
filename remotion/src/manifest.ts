@@ -376,6 +376,7 @@ export interface FormatVariantConfig {
     rotation?: number;
     flipX?: boolean;
     facingDirection?: CharacterFacingDirection;
+    zIndex?: number;
   }>;
   background?: {
     fit?: 'cover' | 'contain' | 'fill';

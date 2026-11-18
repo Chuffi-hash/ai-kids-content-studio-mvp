@@ -26,6 +26,7 @@ import {
   deleteSceneDialogue,
   previewVoice,
 } from '../../../services/editor.service';
+import { previewCoordinator } from '../../../utils/previewPlaybackCoordinator';
 import {
   updateCharacterVoice,
   getCharacterVoice,
@@ -442,13 +443,11 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
         sampleText,
       });
 
-      const audio = new Audio(resolveAssetUrl(res.audioUrl));
-      auditionAudioRef.current = audio;
-      audio.onended = () => {
-        setIsAuditioning(false);
-        auditionAudioRef.current = null;
-      };
-      await audio.play();
+      await previewCoordinator.play({
+        url: resolveAssetUrl(res.audioUrl),
+        onEnd: () => setIsAuditioning(false),
+        onError: () => setIsAuditioning(false),
+      });
     } catch (err: any) {
       console.error('Audition failed:', err);
       setIsAuditioning(false);
@@ -554,27 +553,17 @@ export const CharacterAnimationInspector: React.FC<CharacterAnimationInspectorPr
     if (!dialogue.audioUrl) return;
 
     if (activeDialogueAudioId === dialogue.id) {
-      if (dialogueAudioRef.current) {
-        dialogueAudioRef.current.pause();
-        dialogueAudioRef.current = null;
-      }
+      previewCoordinator.stopAll();
       setActiveDialogueAudioId(null);
       return;
     }
 
-    if (dialogueAudioRef.current) {
-      dialogueAudioRef.current.pause();
-    }
-
-    const audio = new Audio(resolveAssetUrl(dialogue.audioUrl));
-    dialogueAudioRef.current = audio;
     setActiveDialogueAudioId(dialogue.id);
-
-    audio.onended = () => {
-      setActiveDialogueAudioId(null);
-      dialogueAudioRef.current = null;
-    };
-    audio.play().catch(console.error);
+    previewCoordinator.play({
+      url: resolveAssetUrl(dialogue.audioUrl),
+      onEnd: () => setActiveDialogueAudioId(null),
+      onError: () => setActiveDialogueAudioId(null),
+    });
   };
 
   const handleGenerateDialogue = async () => {

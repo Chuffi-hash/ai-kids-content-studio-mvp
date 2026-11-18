@@ -359,6 +359,8 @@ export async function generateSceneVoice(
   effect?: string;
   emotion?: string;
   emotionIntensity?: number;
+  isFallback?: boolean;
+  fallbackReason?: string;
 }> {
   const res = await fetch(`${API_URL}/api/content/scenes/${sceneId}/voice`, {
     method: 'POST',
@@ -371,6 +373,33 @@ export async function generateSceneVoice(
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({}));
     throw new Error(errorData.message || 'Failed to generate voice narration');
+  }
+  return res.json();
+}
+
+export async function generateSceneAllSpeech(
+  sceneId: string,
+  options?: {
+    forceRegenerate?: boolean;
+    provider?: string;
+  }
+): Promise<{
+  success: boolean;
+  sceneId: string;
+  scene: any;
+  narration: any;
+  dialogues: any[];
+  speechSchedule: any;
+  partialFailures: Array<{ type: 'narration' | 'dialogue'; id: string; error: string }>;
+}> {
+  const res = await fetch(`${API_URL}/api/content/scenes/${sceneId}/speech/generate-all`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(options || {}),
+  });
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.message || 'Failed to generate all scene speech');
   }
   return res.json();
 }

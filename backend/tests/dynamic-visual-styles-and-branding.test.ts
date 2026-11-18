@@ -171,11 +171,13 @@ describe('Dynamic Visual Generation, Branding & Rights Management', () => {
 
   test('Part B.2: Channel Branding Upload format validation (PNG, SVG, WebP, JPEG)', async () => {
     const service = new BrandingService();
-    const dummyBuffer = Buffer.from('test-image-content');
+    const pngBuffer = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    const svgBuffer = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><rect width="10" height="10"/></svg>');
+    const jpegBuffer = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46]);
 
     // Allowed formats: PNG, SVG, WebP, JPEG, JPG
     const pngResult = await service.uploadBrandingAsset({
-      buffer: dummyBuffer,
+      buffer: pngBuffer,
       originalFilename: 'channel-logo.png',
       mimeType: 'image/png',
     });
@@ -183,14 +185,14 @@ describe('Dynamic Visual Generation, Branding & Rights Management', () => {
     assert.ok(pngResult.filename.endsWith('.png'));
 
     const svgResult = await service.uploadBrandingAsset({
-      buffer: dummyBuffer,
+      buffer: svgBuffer,
       originalFilename: 'channel-vector.svg',
       mimeType: 'image/svg+xml',
     });
     assert.ok(svgResult.filename.endsWith('.svg'));
 
     const jpegResult = await service.uploadBrandingAsset({
-      buffer: dummyBuffer,
+      buffer: jpegBuffer,
       originalFilename: 'channel-photo.jpg',
       mimeType: 'image/jpeg',
     });
@@ -200,12 +202,12 @@ describe('Dynamic Visual Generation, Branding & Rights Management', () => {
     await assert.rejects(
       async () => {
         await service.uploadBrandingAsset({
-          buffer: dummyBuffer,
+          buffer: Buffer.from('malicious-binary'),
           originalFilename: 'malicious.exe',
           mimeType: 'application/x-msdownload',
         });
       },
-      /Invalid branding asset format/
+      /Invalid file extension|Invalid branding asset format|signature/
     );
   });
 
