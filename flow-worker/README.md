@@ -34,7 +34,31 @@ npm start
 
 On Windows PowerShell, use `Copy-Item .env.example .env` instead of `cp`.
 
-The worker binds to `127.0.0.1` only. On startup it prints a bearer token. Keep the terminal private. You can set a stable `FLOW_WORKER_TOKEN` in `.env`; otherwise a random token is generated for that process.
+The worker loads `.env` automatically and binds to `127.0.0.1` only. On startup it prints a bearer token. Keep the terminal private. You can set a stable `FLOW_WORKER_TOKEN` in `.env`; otherwise a random token is generated for that process.
+
+For the Vite development app, keep `FLOW_WORKER_ALLOWED_ORIGINS` set to the exact UI origin, for example:
+
+```env
+FLOW_WORKER_ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
+```
+
+Restart the worker after changing `.env`. Add your production app's exact origin only when you run the local UI from that origin.
+
+## Character Studio integration
+
+The Character Studio modal now includes a **Google Flow character views** panel. Enter the local worker URL and the bearer token printed in the worker terminal.
+
+For a brand-new character, use the panel's initial setup prompt and complete the one-time Google Flow character creation manually:
+
+1. In Flow, open the intended project and choose **Characters → New Character**.
+2. Paste the copied setup prompt.
+3. Generate or upload 1–2 reference images.
+4. Name the character exactly as it is named in Character Studio, optionally add a voice, and select **Done**.
+5. Use the panel to generate additional authored views of that saved Flow character.
+
+The app receives imported assets and records their view in `canonicalAppearance.references.directionalViews`. The Character Studio gallery displays the direction tag. No Prisma migration is required for this JSON-backed mapping.
+
+The current UI keeps the worker token in component memory only; it is not saved in localStorage or sent to the backend.
 
 ## Workflow
 
@@ -89,7 +113,7 @@ Supported view keys:
 
 The worker fills a prompt editor only when it can identify one unambiguously. If the Flow UI changes or multiple prompt fields are visible, it stops and reports that `FLOW_PROMPT_SELECTOR` needs to be configured.
 
-The prompt includes an `@Sammy` character reference. In Google Flow, select the actual saved character suggestion from the @-mention picker. Do not proceed until the intended character reference is visibly attached.
+The prompt includes an `@Sammy` character reference. In Google Flow, select the actual saved character suggestion from the @-mention picker. Do not proceed until the intended character reference is visibly attached. Google Flow's supported character workflow requires creating the reusable character in the project first; the worker does not attempt to automate that setup form.
 
 ### 3. Confirm generation
 
