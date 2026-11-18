@@ -9,6 +9,7 @@ import {
   openFlowWorkerSession,
   prepareFlowCharacterJob,
   requestFlowCharacterGeneration,
+  retryFlowCharacterAssetRegistration,
 } from '../../services/googleFlowWorker.service';
 import './GoogleFlowCharacterPanel.css';
 
@@ -216,6 +217,19 @@ export default function GoogleFlowCharacterPanel({
     }
   }
 
+  async function handleRetryImport() {
+    if (!job) return;
+    setBusy(true);
+    setError(null);
+    try {
+      setJob(await retryFlowCharacterAssetRegistration(workerUrl, workerToken, job.id));
+    } catch (retryError: any) {
+      setError(retryError.message || 'Could not register the downloaded asset.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <section className="google-flow-panel">
       <div className="google-flow-panel-heading">
@@ -365,7 +379,10 @@ export default function GoogleFlowCharacterPanel({
             <div className="google-flow-status">Generation was submitted. Download the resulting image using Flow's normal Download control in the visible browser.</div>
           )}
           {job.status === 'import_metadata_failed' && (
-            <div className="google-flow-status google-flow-error">The file was downloaded, but registering it against this character failed. Use Refresh to inspect the error or retry-import through the worker API.</div>
+            <div className="google-flow-status google-flow-error">
+              The image file is already saved. Retry registering it with this character; do not generate or download it again.
+              <button type="button" className="btn btn-secondary btn-sm" onClick={handleRetryImport} disabled={busy}>Retry asset registration</button>
+            </div>
           )}
           {job.status === 'completed' && job.asset?.url && (
             <div className="google-flow-imported">
