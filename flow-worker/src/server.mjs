@@ -1,4 +1,4 @@
-import "node:process";
+import "dotenv/config";
 import http from "node:http";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { FlowBrowserWorker } from "./flow-browser.mjs";
