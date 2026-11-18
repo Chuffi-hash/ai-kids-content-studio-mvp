@@ -240,7 +240,7 @@ export class FlowBrowserWorker {
       this.touch(job);
       return job;
     } catch (error) {
-      await this.saveDiagnosticScreenshot(job.id);
+      job.diagnosticScreenshotPath = await this.saveDiagnosticScreenshot(job.id);
       job.status = "prompt_editor_not_found";
       job.error = error.message;
       job.message = "The Flow prompt editor could not be identified safely. Inspect the visible browser and configure FLOW_PROMPT_SELECTOR if needed.";
