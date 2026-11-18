@@ -1,4 +1,4 @@
-name: Google Flow Worker
+name: Google Flow Worker & Integration Checks
 
 on:
   push:
@@ -6,16 +6,20 @@ on:
       - feat/google-flow-playwright-worker-latest
     paths:
       - "flow-worker/**"
+      - "frontend/**"
+      - "backend/src/services/character-studio/character-reference.service.ts"
       - ".github/workflows/google-flow-worker.yml"
   pull_request:
     branches:
       - feat/remotion-renderer-pilot
     paths:
       - "flow-worker/**"
+      - "frontend/**"
+      - "backend/src/services/character-studio/character-reference.service.ts"
       - ".github/workflows/google-flow-worker.yml"
 
 jobs:
-  unit-tests:
+  worker-tests:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -29,5 +33,39 @@ jobs:
           node-version: 22
       - name: Install worker dependencies
         run: npm install
-      - name: Run worker unit tests
+      - name: Syntax-check worker entrypoints and run unit tests
         run: npm test
+
+  frontend-build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install frontend dependencies
+        run: npm install
+      - name: Build frontend and run TypeScript checks
+        run: npm run build
+
+  backend-build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install backend dependencies
+        run: npm install
+      - name: Build backend and run TypeScript checks
+        run: npm run build
