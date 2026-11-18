@@ -29,7 +29,8 @@ export function detectImageType(buffer) {
 }
 
 export function safeFilename(value, fallback = "flow-image") {
-  const basename = String(value || fallback).split(/[\\\\/]/).pop() || fallback;
+  const rawName = String(value || fallback);
+  const basename = rawName.split("/").pop().split(String.fromCharCode(92)).pop() || fallback;
   const name = basename
     .replace(/[:*?"<>|\u0000-\u001f]/g, "-")
     .replace(/^\.+/, "")
