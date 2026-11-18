@@ -340,10 +340,16 @@ export class FlowBrowserWorker {
       return job;
     }
 
-    await button.click({ timeout: 15000 });
-    job.status = "awaiting_download";
-    job.generationRequestedAt = new Date().toISOString();
-    job.message = "Generation was submitted through the visible Flow UI. When the result is ready, use Flow's normal Download action; the worker will capture and import the downloaded image.";
+    try {
+      await button.click({ timeout: 15000 });
+      job.status = "awaiting_download";
+      job.generationRequestedAt = new Date().toISOString();
+      job.message = "Generation was submitted through the visible Flow UI. When the result is ready, use Flow's normal Download action; the worker will capture and import the downloaded image.";
+    } catch (clickError) {
+      job.status = "awaiting_manual_generate";
+      job.error = clickError instanceof Error ? clickError.message : "The Flow generation button could not be clicked.";
+      job.message = "The visible Generate Image button could not be clicked reliably. Review the prepared prompt and start generation manually in Flow; the worker will still capture the subsequent download.";
+    }
     this.touch(job);
     return job;
   }
