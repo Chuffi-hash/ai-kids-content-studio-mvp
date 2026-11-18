@@ -16,6 +16,10 @@ import './GoogleFlowCharacterPanel.css';
 interface GoogleFlowCharacterPanelProps {
   characterId: string;
   characterName: string;
+  characterDescription?: string;
+  species?: string;
+  clothing?: string;
+  artStyle?: string;
   onImported?: () => void;
 }
 
@@ -41,6 +45,10 @@ const POLLING_STATUSES = new Set([
 export default function GoogleFlowCharacterPanel({
   characterId,
   characterName,
+  characterDescription = '',
+  species = '',
+  clothing = '',
+  artStyle = '2D cartoon',
   onImported,
 }: GoogleFlowCharacterPanelProps) {
   const [workerUrl, setWorkerUrl] = useState('http://127.0.0.1:4177');
@@ -107,6 +115,28 @@ export default function GoogleFlowCharacterPanel({
     setReferenceConfirmed(false);
     setGenerationConfirmed(false);
   }, [job?.id, job?.status]);
+
+  const initialCharacterPrompt = [
+    `Create one original reusable ${artStyle} animated character for a children's story studio.`,
+    `Character name: ${characterName}.`,
+    species ? `Species: ${species}.` : '',
+    characterDescription ? `Appearance and identity: ${characterDescription}.` : '',
+    clothing ? `Clothing and accessories: ${clothing}.` : '',
+    'Show a full-body front-facing view, head to feet, with a clear readable silhouette.',
+    'Use a simple clean plain background. Keep the character centered and fully inside the frame.',
+    'Use consistent colors, proportions, face shape, eyes, clothing and distinctive features.',
+    'Create a polished 2D illustration suitable as the canonical reference for a reusable animated character.',
+    'Do not include text, labels, watermarks, extra characters, multiple views or a turnaround sheet.'
+  ].filter(Boolean).join('\\n\\n');
+
+  async function handleCopyInitialPrompt() {
+    setError(null);
+    try {
+      await navigator.clipboard.writeText(initialCharacterPrompt);
+    } catch {
+      setError('Clipboard access was blocked. Select and copy the setup prompt from the preview below.');
+    }
+  }
 
   async function handleOpenSession() {
     setBusy(true);
@@ -241,14 +271,19 @@ export default function GoogleFlowCharacterPanel({
       </div>
 
       <div className="google-flow-callout">
-        <strong>Before starting</strong>
+        <strong>One-time setup for a new Flow character</strong>
         <ol>
-          <li>Start the local <code>flow-worker</code> process on this computer.</li>
-          <li>Open Google Flow and sign in manually if required.</li>
-          <li>Make sure a reusable Google Flow character named <strong>{characterName}</strong> exists in the selected project.</li>
-          <li>When the prompt is prepared, select the saved character from Flow's <code>@</code> mention picker.</li>
+          <li>Start the local <code>flow-worker</code> process and open the Google Flow browser below.</li>
+          <li>In Flow, open your project, select <strong>Characters → New Character</strong>, and paste the setup prompt below.</li>
+          <li>Generate or upload 1–2 reference images, name the Flow character <strong>{characterName}</strong>, optionally add a voice, then select <strong>Done</strong>.</li>
+          <li>For later views, prepare a job below and select the saved <code>@{characterName}</code> character from Flow's mention picker before confirming generation.</li>
         </ol>
-        <span>The worker does not create a Google Flow character automatically and does not handle Google login, MFA or CAPTCHA.</span>
+        <button type="button" className="btn btn-secondary btn-sm" onClick={handleCopyInitialPrompt}>Copy initial character setup prompt</button>
+        <details>
+          <summary>Preview initial character prompt</summary>
+          <pre>{initialCharacterPrompt}</pre>
+        </details>
+        <span>Character creation in Flow remains a manual step. The worker does not handle Google login, MFA, CAPTCHA or hidden Flow APIs.</span>
       </div>
 
       <div className="google-flow-fields">
