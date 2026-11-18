@@ -991,7 +991,7 @@ export default function CharacterStudioModal({
                     >
                       <img src={asset.url} alt={asset.prompt} />
                       <span className="saved-var-tag">
-                        {asset.isMasterReference ? '⭐ Master' : asset.action || asset.assetType}
+                        {asset.isMasterReference ? '⭐ Master' : asset.direction || asset.action || asset.assetType}
                       </span>
                       {!asset.isMasterReference && (
                         <button
