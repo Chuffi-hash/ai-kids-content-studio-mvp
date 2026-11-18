@@ -1549,6 +1549,19 @@ const storageService = new LocalStorageService();
 const providerType = process.env.IMAGE_PROVIDER || "mock";
 
 const videoAssemblyService = new VideoAssemblyService();
+
+export interface DirectorServices {
+  storyGenerationService?: any;
+  imageGenerationService?: any;
+  audioGenerationService?: any;
+  videoAssemblyService?: any;
+  getScenesByStoryId?: any;
+}
+let directorServiceOverrides: DirectorServices | null = null;
+export function setDirectorServiceOverrides(overrides: DirectorServices | null) {
+  directorServiceOverrides = overrides;
+}
+
 export type DirectorLifecycleState =
   | 'QUEUED'
   | 'GENERATING_STORY'
@@ -1576,6 +1589,34 @@ export interface DirectorJob {
 
 const directorJobs = new Map<string, DirectorJob>();
 const directorIdempotencyMap = new Map<string, string>();
+const directorAbortControllers = new Map<string, AbortController>();
+
+export function getDirectorJobs() {
+  return directorJobs;
+}
+
+/**
+ * Centrally manages atomic transitions for AI Director jobs.
+ * Enforces terminal state immutability: once COMPLETED, FAILED, or CANCELLED,
+ * the state can never be modified or overwritten.
+ */
+function transitionDirectorState(
+  job: DirectorJob,
+  newState: DirectorLifecycleState,
+  meta?: { stage?: string; progress?: number; downloadUrl?: string; error?: string }
+): boolean {
+  if (job.status === 'COMPLETED' || job.status === 'FAILED' || job.status === 'CANCELLED') {
+    return false;
+  }
+  job.status = newState;
+  job.lifecycleState = newState;
+  if (meta?.stage !== undefined) job.stage = meta.stage;
+  if (meta?.progress !== undefined) job.progress = meta.progress;
+  if (meta?.downloadUrl !== undefined) job.downloadUrl = meta.downloadUrl;
+  if (meta?.error !== undefined) job.error = meta.error;
+  job.updatedAt = new Date();
+  return true;
+}
 
 /**
  * AI Director: one prompt -> structured story -> generated scene backgrounds ->
@@ -1593,6 +1634,12 @@ contentRouter.post("/story/director", async (req, res) => {
   if (!['720p', '1080p'].includes(resolution) || !Number.isInteger(fps) || fps < 1 || fps > 60) {
     return res.status(400).json({ message: 'Invalid resolution or FPS' });
   }
+
+  const effectiveStoryGeneration = directorServiceOverrides?.storyGenerationService || StoryGenerationService;
+  const effectiveImageGeneration = directorServiceOverrides?.imageGenerationService || imageGenerationService;
+  const effectiveAudioGeneration = directorServiceOverrides?.audioGenerationService || audioGenerationService;
+  const effectiveVideoAssembly = directorServiceOverrides?.videoAssemblyService || videoAssemblyService;
+  const effectiveGetScenes = directorServiceOverrides?.getScenesByStoryId || getScenesByStoryId;
 
   const idempotencyKey = typeof req.body?.idempotencyKey === 'string' && req.body.idempotencyKey.trim()
     ? req.body.idempotencyKey.trim()
@@ -1616,6 +1663,9 @@ contentRouter.post("/story/director", async (req, res) => {
     directorIdempotencyMap.set(idempotencyKey, directorJobId);
   }
 
+  const abortController = new AbortController();
+  directorAbortControllers.set(directorJobId, abortController);
+
   const job: DirectorJob = {
     id: directorJobId,
     status: 'QUEUED',
@@ -1627,15 +1677,22 @@ contentRouter.post("/story/director", async (req, res) => {
   };
   directorJobs.set(directorJobId, job);
 
+  const isTerminated = () =>
+    (job.status as string) === 'CANCELLED' ||
+    (job.lifecycleState as string) === 'CANCELLED' ||
+    (job.status as string) === 'COMPLETED' ||
+    (job.status as string) === 'FAILED' ||
+    abortController.signal.aborted;
+
   void (async () => {
     try {
-      job.status = 'GENERATING_STORY';
-      job.lifecycleState = 'GENERATING_STORY';
-      job.stage = 'Generating structured story...';
-      job.progress = 5;
-      job.updatedAt = new Date();
+      if (isTerminated()) return;
+      transitionDirectorState(job, 'GENERATING_STORY', {
+        stage: 'Generating structured story...',
+        progress: 5,
+      });
 
-      const generated = await StoryGenerationService.generateAndPersistStory({
+      const generated = await effectiveStoryGeneration.generateAndPersistStory({
         topic: topic.trim(),
         ageGroup: req.body.ageGroup || req.body.audience || '4-7 years',
         desiredDurationSeconds: Number(req.body.desiredDurationSeconds || req.body.targetDuration || 60),
@@ -1653,19 +1710,22 @@ contentRouter.post("/story/director", async (req, res) => {
         idempotencyKey,
       });
 
+      if (isTerminated()) return;
       job.storyId = generated.storyId;
-      job.status = 'GENERATING_BACKGROUNDS';
-      job.lifecycleState = 'GENERATING_BACKGROUNDS';
-      job.stage = 'Generating scene backgrounds...';
-      job.progress = 25;
-      job.updatedAt = new Date();
+
+      transitionDirectorState(job, 'GENERATING_BACKGROUNDS', {
+        stage: 'Generating scene backgrounds...',
+        progress: 25,
+      });
 
       const scenes = generated.scenes || [];
       for (let index = 0; index < scenes.length; index += 1) {
+        if (isTerminated()) return;
         const scene = scenes[index];
-        job.stage = `Generating background ${index + 1} of ${scenes.length}...`;
-        job.progress = 25 + Math.round((index / Math.max(1, scenes.length)) * 25);
-        job.updatedAt = new Date();
+        transitionDirectorState(job, 'GENERATING_BACKGROUNDS', {
+          stage: `Generating background ${index + 1} of ${scenes.length}...`,
+          progress: 25 + Math.round((index / Math.max(1, scenes.length)) * 25),
+        });
 
         if (scene.imageUrl || scene.animationData?.background?.imageUrl) continue;
 
@@ -1683,10 +1743,12 @@ contentRouter.post("/story/director", async (req, res) => {
           : format === '4:5' ? { width: 819, height: 1024 }
           : { width: 1024, height: 576 };
         try {
-          const imageResult = await imageGenerationService.generateSceneImage({ prompt, ...size });
+          const imageResult = await effectiveImageGeneration.generateSceneImage({ prompt, ...size });
+          if (isTerminated()) return;
           const extension = getExtensionFromMimeType(imageResult.mimeType);
           const filename = `scene-${scene.sceneId}-director-${Date.now()}.${extension}`;
           const saved = await storageService.saveFile(imageResult.imageBuffer, filename, imageResult.mimeType);
+          if (isTerminated()) return;
           await createImage({
             id: randomUUID(),
             sceneId: scene.sceneId,
@@ -1705,35 +1767,44 @@ contentRouter.post("/story/director", async (req, res) => {
             generationStatus: 'completed',
           });
         } catch (imgErr) {
+          if (isTerminated()) return;
           console.warn(`[AIDirector] Background generation notice for scene ${scene.sceneId}:`, imgErr);
         }
       }
 
-      job.status = 'GENERATING_AUDIO';
-      job.lifecycleState = 'GENERATING_AUDIO';
-      job.stage = 'Generating scene narration and character dialogues...';
-      job.progress = 55;
-      job.updatedAt = new Date();
+      if (isTerminated()) return;
+
+      transitionDirectorState(job, 'GENERATING_AUDIO', {
+        stage: 'Generating scene narration and character dialogues...',
+        progress: 55,
+      });
 
       // Ensure all scenes have narration and dialogue audio generated
-      const currentScenes = await getScenesByStoryId(generated.storyId, false);
+      const currentScenes = await effectiveGetScenes(generated.storyId, false);
+      if (isTerminated()) return;
+
       for (let i = 0; i < currentScenes.length; i++) {
+        if (isTerminated()) return;
         const sc = currentScenes[i];
-        job.stage = `Generating audio for scene ${i + 1} of ${currentScenes.length}...`;
-        job.progress = 55 + Math.round((i / Math.max(1, currentScenes.length)) * 15);
-        job.updatedAt = new Date();
+        transitionDirectorState(job, 'GENERATING_AUDIO', {
+          stage: `Generating audio for scene ${i + 1} of ${currentScenes.length}...`,
+          progress: 55 + Math.round((i / Math.max(1, currentScenes.length)) * 15),
+        });
 
         if (sc.narration && !sc.audioUrl) {
           try {
-            await audioGenerationService.generateNarrationAudio({
+            await effectiveAudioGeneration.generateNarrationAudio({
               sceneId: sc.sceneId || sc.id,
               narration: sc.narration,
               lang: language,
             });
           } catch (narrErr) {
+            if (isTerminated()) return;
             console.warn(`[AIDirector] Narration audio notice for scene ${sc.sceneId}:`, narrErr);
           }
         }
+
+        if (isTerminated()) return;
 
         if (Array.isArray((sc as any).animationData?.dialogueLines)) {
           const hasUnbuiltDialogue = (sc as any).animationData.dialogueLines.some((d: any) => {
@@ -1741,21 +1812,23 @@ contentRouter.post("/story/director", async (req, res) => {
           });
           if (hasUnbuiltDialogue) {
             try {
-              await audioGenerationService.generateAllSceneDialogues(sc.sceneId || sc.id);
+              await effectiveAudioGeneration.generateAllSceneDialogues(sc.sceneId || sc.id);
             } catch (dlgErr) {
+              if (isTerminated()) return;
               console.warn(`[AIDirector] Dialogue audio notice for scene ${sc.sceneId}:`, dlgErr);
             }
           }
         }
       }
 
-      job.status = 'RENDER_QUEUED';
-      job.lifecycleState = 'RENDER_QUEUED';
-      job.stage = 'Queued for Remotion video render...';
-      job.progress = 72;
-      job.updatedAt = new Date();
+      if (isTerminated()) return;
 
-      const exportJob = videoAssemblyService.startExportJob({
+      transitionDirectorState(job, 'RENDER_QUEUED', {
+        stage: 'Queued for Remotion video render...',
+        progress: 72,
+      });
+
+      const exportJob = effectiveVideoAssembly.startExportJob({
         storyId: generated.storyId,
         resolution,
         fps,
@@ -1768,89 +1841,100 @@ contentRouter.post("/story/director", async (req, res) => {
       });
       job.exportJobId = exportJob.id;
 
+      if (isTerminated()) {
+        if (exportJob?.id) {
+          await effectiveVideoAssembly.cancelExportJob(exportJob.id).catch(() => {});
+        }
+        return;
+      }
+
       // Poll export job until completion or failure with bounded deadline
       const POLL_INTERVAL_MS = 800;
       const MAX_EXPORT_WAIT_MS = Number(process.env.DIRECTOR_EXPORT_TIMEOUT_MS) || 300000; // 5 min default
       const pollStartTime = Date.now();
 
       while (true) {
-        if ((job.status as string) === 'CANCELLED' || (job.lifecycleState as string) === 'CANCELLED') {
-          if (exportJob.id) {
-            await videoAssemblyService.cancelExportJob(exportJob.id).catch(() => {});
+        if (isTerminated()) {
+          if (exportJob?.id) {
+            await effectiveVideoAssembly.cancelExportJob(exportJob.id).catch(() => {});
           }
           break;
         }
 
         if (Date.now() - pollStartTime > MAX_EXPORT_WAIT_MS) {
           console.error(`[AIDirector] Job ${directorJobId} export timed out after ${MAX_EXPORT_WAIT_MS}ms`);
-          if (exportJob.id) {
-            await videoAssemblyService.cancelExportJob(exportJob.id).catch(() => {});
+          if (exportJob?.id) {
+            await effectiveVideoAssembly.cancelExportJob(exportJob.id).catch(() => {});
           }
-          job.status = 'FAILED';
-          job.lifecycleState = 'FAILED';
-          job.stage = 'Render job exceeded maximum timeout';
-          job.error = `Render job timed out after ${Math.round(MAX_EXPORT_WAIT_MS / 1000)}s`;
-          job.updatedAt = new Date();
+          transitionDirectorState(job, 'FAILED', {
+            stage: 'Render job exceeded maximum timeout',
+            error: `Render job timed out after ${Math.round(MAX_EXPORT_WAIT_MS / 1000)}s`,
+          });
           break;
         }
 
         await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
-        const currentExportJob = videoAssemblyService.getJob(exportJob.id);
+
+        // Re-check cancellation immediately after sleep
+        if (isTerminated()) {
+          if (exportJob?.id) {
+            await effectiveVideoAssembly.cancelExportJob(exportJob.id).catch(() => {});
+          }
+          break;
+        }
+
+        const currentExportJob = effectiveVideoAssembly.getJob(exportJob.id);
         if (!currentExportJob) {
-          job.status = 'FAILED';
-          job.lifecycleState = 'FAILED';
-          job.stage = 'Render job lost or terminated unexpectedly';
-          job.error = 'Render job lost or terminated unexpectedly';
-          job.updatedAt = new Date();
+          transitionDirectorState(job, 'FAILED', {
+            stage: 'Render job lost or terminated unexpectedly',
+            error: 'Render job lost or terminated unexpectedly',
+          });
           break;
         }
 
         if (currentExportJob.status === 'processing') {
-          job.status = 'RENDERING';
-          job.lifecycleState = 'RENDERING';
-          job.stage = currentExportJob.stage || 'Rendering frames with Remotion...';
-          // Map 0-100% of export progress to 72-99% of overall director progress
-          job.progress = Math.min(99, Math.round(72 + (currentExportJob.progress || 0) * 0.27));
-          job.updatedAt = new Date();
+          transitionDirectorState(job, 'RENDERING', {
+            stage: currentExportJob.stage || 'Rendering frames with Remotion...',
+            progress: Math.min(99, Math.round(72 + (currentExportJob.progress || 0) * 0.27)),
+          });
         } else if (currentExportJob.status === 'queued') {
-          job.status = 'RENDER_QUEUED';
-          job.lifecycleState = 'RENDER_QUEUED';
-          job.stage = currentExportJob.stage || 'Waiting in Remotion render queue...';
-          job.progress = 72;
-          job.updatedAt = new Date();
+          transitionDirectorState(job, 'RENDER_QUEUED', {
+            stage: currentExportJob.stage || 'Waiting in Remotion render queue...',
+            progress: 72,
+          });
         } else if (currentExportJob.status === 'completed') {
-          job.status = 'COMPLETED';
-          job.lifecycleState = 'COMPLETED';
-          job.stage = 'Video export completed successfully!';
-          job.progress = 100;
-          job.downloadUrl = currentExportJob.downloadUrl;
-          job.updatedAt = new Date();
+          if (isTerminated()) break;
+          transitionDirectorState(job, 'COMPLETED', {
+            stage: 'Video export completed successfully!',
+            progress: 100,
+            downloadUrl: currentExportJob.downloadUrl,
+          });
           break;
         } else if (currentExportJob.status === 'cancelled') {
-          job.status = 'CANCELLED';
-          job.lifecycleState = 'CANCELLED';
-          job.stage = 'Render export was cancelled';
-          job.updatedAt = new Date();
+          transitionDirectorState(job, 'CANCELLED', {
+            stage: 'Render export was cancelled',
+          });
           break;
         } else if (currentExportJob.status === 'failed') {
-          job.status = 'FAILED';
-          job.lifecycleState = 'FAILED';
-          job.stage = 'Remotion video render failed';
-          job.error = currentExportJob.error || 'Remotion video rendering failed';
-          job.updatedAt = new Date();
+          if (isTerminated()) break;
+          transitionDirectorState(job, 'FAILED', {
+            stage: 'Remotion video render failed',
+            error: currentExportJob.error || 'Remotion video rendering failed',
+          });
           break;
         }
       }
     } catch (error: any) {
-      if (job.status === 'CANCELLED' || job.lifecycleState === 'CANCELLED') {
+      if (isTerminated()) {
         return;
       }
       console.error(`[AIDirector] Job ${directorJobId} failed:`, error);
-      job.status = 'FAILED';
-      job.lifecycleState = 'FAILED';
-      job.stage = 'AI Director failed';
-      job.error = error?.message || 'AI Director pipeline failed';
-      job.updatedAt = new Date();
+      transitionDirectorState(job, 'FAILED', {
+        stage: 'AI Director failed',
+        error: error?.message || 'AI Director pipeline failed',
+      });
+    } finally {
+      directorAbortControllers.delete(directorJobId);
     }
   })();
 
@@ -1862,26 +1946,45 @@ contentRouter.post("/story/director", async (req, res) => {
 });
 
 contentRouter.get("/story/director/:jobId", (req, res) => {
+  const effectiveVideoAssembly = directorServiceOverrides?.videoAssemblyService || videoAssemblyService;
   const job = directorJobs.get(req.params.jobId);
   if (!job) return res.status(404).json({ message: 'AI Director job not found' });
-  const exportJob = job.exportJobId ? videoAssemblyService.getJob(job.exportJobId) : undefined;
+  const exportJob = job.exportJobId ? effectiveVideoAssembly.getJob(job.exportJobId) : undefined;
   return res.json({ ...job, exportJob });
 });
 
 contentRouter.post("/story/director/:jobId/cancel", async (req, res) => {
+  const effectiveVideoAssembly = directorServiceOverrides?.videoAssemblyService || videoAssemblyService;
   const job = directorJobs.get(req.params.jobId);
   if (!job) return res.status(404).json({ message: 'AI Director job not found' });
   if (job.status === 'COMPLETED' || job.status === 'FAILED' || job.status === 'CANCELLED') {
     return res.status(400).json({ message: `Cannot cancel job in terminal state: ${job.status}` });
   }
 
-  job.status = 'CANCELLED';
-  job.lifecycleState = 'CANCELLED';
-  job.stage = 'AI Director job cancelled by user';
-  job.updatedAt = new Date();
+  // Prevent cancelling an export that has already reached terminal completion
+  if (job.exportJobId) {
+    const exportJob = effectiveVideoAssembly.getJob(job.exportJobId);
+    if (exportJob && exportJob.status === 'completed') {
+      transitionDirectorState(job, 'COMPLETED', {
+        stage: 'Video export completed successfully!',
+        progress: 100,
+        downloadUrl: exportJob.downloadUrl,
+      });
+      return res.status(400).json({ message: 'Cannot cancel job: video export is already completed' });
+    }
+  }
+
+  const abortController = directorAbortControllers.get(req.params.jobId);
+  if (abortController) {
+    abortController.abort();
+  }
+
+  transitionDirectorState(job, 'CANCELLED', {
+    stage: 'AI Director job cancelled by user',
+  });
 
   if (job.exportJobId) {
-    await videoAssemblyService.cancelExportJob(job.exportJobId).catch(() => {});
+    await effectiveVideoAssembly.cancelExportJob(job.exportJobId).catch(() => {});
   }
 
   return res.json({ success: true, directorJobId: job.id, status: 'CANCELLED' });

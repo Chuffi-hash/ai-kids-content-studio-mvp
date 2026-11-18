@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { promisify } from 'util';
-import { execFile } from 'child_process';
+import { execFile, spawn } from 'child_process';
 import { randomUUID } from 'crypto';
 // @ts-ignore
 import ffmpegStatic from '@ffmpeg-installer/ffmpeg';
@@ -33,12 +33,16 @@ export interface ExportJob {
 // In-memory registry of export jobs
 const jobs = new Map<string, ExportJob>();
 
+export function getExportJobs(): Map<string, ExportJob> {
+  return jobs;
+}
+
 export class VideoAssemblyService {
   private storageDir: string;
   private exportsDir: string;
   private tempDir: string;
   private jobsFilePath: string;
-  private activeFfmpegProcesses = new Map<string, { kill: () => void }>();
+  private activeFfmpegProcesses = new Map<string, () => Promise<void>>();
   private audioGenerationService = new AudioGenerationService();
   private remotionRenderService = new RemotionRenderService();
 
@@ -202,25 +206,112 @@ export class VideoAssemblyService {
     if (job.renderer === 'remotion') {
       await this.remotionRenderService.cancelJob(jobId);
     } else {
-      const ffmpegProc = this.activeFfmpegProcesses.get(jobId);
-      if (ffmpegProc) {
-        ffmpegProc.kill();
+      const killer = this.activeFfmpegProcesses.get(jobId);
+      if (killer) {
+        try {
+          await killer();
+        } catch (err) {
+          console.warn(`[VideoAssembly] Error cancelling FFmpeg process for job ${jobId}:`, err);
+        }
         this.activeFfmpegProcesses.delete(jobId);
       }
     }
 
-    // Clean up temporary job directories
+    // Clean up temporary job directories and any partial files
     const jobTempDir = path.join(this.tempDir, `export-${jobId}`);
     const remotionJobTempDir = path.join(this.tempDir, `remotion-export-${jobId}`);
     try {
       await fs.promises.rm(jobTempDir, { recursive: true, force: true }).catch(() => {});
       await fs.promises.rm(remotionJobTempDir, { recursive: true, force: true }).catch(() => {});
+      if (job.filename) {
+        const finalPath = path.join(this.exportsDir, job.filename);
+        if (fs.existsSync(finalPath)) {
+          await fs.promises.unlink(finalPath).catch(() => {});
+        }
+      }
     } catch {
       // ignore
     }
 
     this.persistJobs();
     return true;
+  }
+
+  /**
+   * Executes an external process (FFmpeg or FFprobe) with process tree tracking and cancellation support.
+   * On cancellation, terminates the entire process tree safely on both Windows and Linux.
+   */
+  private runTrackedProcess(
+    jobId: string,
+    cmdPath: string,
+    args: string[]
+  ): Promise<{ stdout: string; stderr: string }> {
+    const job = jobs.get(jobId);
+    if (!job || (job.status as string) === 'cancelled') {
+      return Promise.reject(new Error(`Export job ${jobId} was cancelled before process execution`));
+    }
+
+    return new Promise((resolve, reject) => {
+      const isWin = process.platform === 'win32';
+      const proc = spawn(cmdPath, args, { windowsHide: true });
+      let stdout = '';
+      let stderr = '';
+      let isDone = false;
+
+      const killTree = async () => {
+        if (!proc.pid) return;
+        try {
+          proc.kill('SIGKILL');
+        } catch {}
+        try {
+          if (isWin) {
+            await execFileAsync('taskkill', ['/pid', String(proc.pid), '/T', '/F'], { timeout: 1500 }).catch(() => {});
+          } else {
+            try {
+              process.kill(-proc.pid, 'SIGKILL');
+            } catch {
+              proc.kill('SIGKILL');
+            }
+          }
+        } catch {
+          // ignore
+        }
+      };
+
+      this.activeFfmpegProcesses.set(jobId, killTree);
+
+      proc.stdout?.on('data', (chunk: Buffer) => {
+        stdout += chunk.toString();
+      });
+
+      proc.stderr?.on('data', (chunk: Buffer) => {
+        stderr += chunk.toString();
+      });
+
+      proc.on('error', (err) => {
+        if (isDone) return;
+        isDone = true;
+        this.activeFfmpegProcesses.delete(jobId);
+        reject(err);
+      });
+
+      const finish = (code: number | null) => {
+        if (isDone) return;
+        isDone = true;
+        this.activeFfmpegProcesses.delete(jobId);
+        const currentJob = jobs.get(jobId);
+        if (currentJob && (currentJob.status as string) === 'cancelled') {
+          reject(new Error(`Export job ${jobId} was cancelled during process execution`));
+        } else if (code === 0) {
+          resolve({ stdout, stderr });
+        } else {
+          reject(new Error(`Process ${path.basename(cmdPath)} exited with code ${code}: ${stderr.slice(-400)}`));
+        }
+      };
+
+      proc.on('exit', (code) => finish(code));
+      proc.on('close', (code) => finish(code));
+    });
   }
 
   /**
@@ -457,6 +548,7 @@ export class VideoAssemblyService {
                   : (scene as any).animationData.background;
 
           await this.renderVectorAnimationSceneSegment({
+            jobId,
             ffmpegPath,
             animationData: {
               ...(scene as any).animationData,
@@ -483,6 +575,7 @@ export class VideoAssemblyService {
         // Case 1: Pre-rendered video clip exists
         else if (videoClipPath && fs.existsSync(videoClipPath)) {
           await this.renderVideoClipSceneSegment({
+            jobId,
             ffmpegPath,
             videoPath: videoClipPath,
             audioPath: audioPath && fs.existsSync(audioPath) ? audioPath : null,
@@ -497,6 +590,7 @@ export class VideoAssemblyService {
         // Case 2: Valid image exists
         else if (imagePath && fs.existsSync(imagePath)) {
           await this.renderImageSceneSegment({
+            jobId,
             ffmpegPath,
             imagePath,
             audioPath: audioPath && fs.existsSync(audioPath) ? audioPath : null,
@@ -511,6 +605,7 @@ export class VideoAssemblyService {
         } else {
           // Case 3: No media, render a stylized card placeholder with scene info
           await this.renderCardSceneSegment({
+            jobId,
             ffmpegPath,
             title: scene.title || `Scene ${sceneNum}`,
             narration: scene.narration || '',
@@ -524,8 +619,11 @@ export class VideoAssemblyService {
           });
         }
 
+        if ((job.status as string) === 'cancelled') return;
         segmentFiles.push(segmentPath);
       }
+
+      if ((job.status as string) === 'cancelled') return;
 
       // Step 2: Concatenate segments
       job.progress = 80;
@@ -537,9 +635,8 @@ export class VideoAssemblyService {
         .join('\n');
       await fs.promises.writeFile(concatListPath, concatContent, 'utf-8');
 
-
-      // Use concat demuxer to concatenate all scene videos
-      await execFileAsync(ffmpegPath, [
+      // Use concat demuxer to concatenate all scene videos with process tracking
+      await this.runTrackedProcess(jobId, ffmpegPath, [
         '-nostdin',
         '-y',
         '-f', 'concat',
@@ -548,6 +645,8 @@ export class VideoAssemblyService {
         '-c', 'copy',
         assembledPath,
       ]);
+
+      if ((job.status as string) === 'cancelled') return;
 
       job.progress = 90;
       job.stage = 'Finalizing export format and master audio...';
@@ -587,7 +686,7 @@ export class VideoAssemblyService {
           `[speech_main][bgm_ducked]amix=inputs=2:duration=first:dropout_transition=2,volume=1.5,aformat=channel_layouts=stereo,loudnorm=I=-16:TP=-1.5:LRA=11[aout]`,
         ].join(';');
 
-        await execFileAsync(ffmpegPath, [
+        await this.runTrackedProcess(jobId, ffmpegPath, [
           '-nostdin',
           '-y',
           '-thread_queue_size', '512',
@@ -606,7 +705,7 @@ export class VideoAssemblyService {
         ]);
       } else {
         job.stage = 'Mastering audio to broadcast standard (-16 LUFS)...';
-        await execFileAsync(ffmpegPath, [
+        await this.runTrackedProcess(jobId, ffmpegPath, [
           '-nostdin',
           '-y',
           '-thread_queue_size', '512',
@@ -622,6 +721,13 @@ export class VideoAssemblyService {
         ]);
       }
 
+      if ((job.status as string) === 'cancelled') {
+        if (fs.existsSync(finalOutputPath)) {
+          await fs.promises.unlink(finalOutputPath).catch(() => {});
+        }
+        return;
+      }
+
       // Do not report success unless a non-empty output file exists and ffprobe can read it.
       const outputStat = await fs.promises.stat(finalOutputPath).catch(() => null);
       if (!outputStat || !outputStat.isFile() || outputStat.size === 0) {
@@ -629,7 +735,7 @@ export class VideoAssemblyService {
       }
 
       const ffprobePath = ffprobeStatic?.path || 'ffprobe';
-      const { stdout: probeStdout } = await execFileAsync(ffprobePath, [
+      const { stdout: probeStdout } = await this.runTrackedProcess(jobId, ffprobePath, [
         '-v', 'error',
         '-show_entries', 'format=duration:stream=codec_type,codec_name',
         '-of', 'json',
@@ -647,6 +753,13 @@ export class VideoAssemblyService {
         throw new Error('Export validation failed: expected playable H.264 video and AAC audio streams.');
       }
 
+      if ((job.status as string) === 'cancelled') {
+        if (fs.existsSync(finalOutputPath)) {
+          await fs.promises.unlink(finalOutputPath).catch(() => {});
+        }
+        return;
+      }
+
       const downloadUrl = `/storage/exports/${finalFilename}`;
 
       job.status = 'completed';
@@ -659,15 +772,26 @@ export class VideoAssemblyService {
 
       console.log(`[VideoAssembly] Export job ${jobId} completed successfully: ${downloadUrl}`);
     } catch (error: any) {
+      if ((job.status as string) === 'cancelled') {
+        console.log(`[VideoAssembly] Export job ${jobId} terminated after cancellation: ${error.message}`);
+        return;
+      }
       console.error(`[VideoAssembly] Export job ${jobId} failed:`, error);
       job.status = 'failed';
       job.error = error.message || 'Video assembly failed';
       job.completedAt = new Date();
       this.persistJobs();
     } finally {
+      this.activeFfmpegProcesses.delete(jobId);
       // Clean up temp directory
       try {
         await fs.promises.rm(jobTempDir, { recursive: true, force: true });
+        if ((job.status as string) === 'cancelled') {
+          const finalCandidate = path.join(this.exportsDir, (job.filename || ''));
+          if (job.filename && fs.existsSync(finalCandidate)) {
+            await fs.promises.unlink(finalCandidate).catch(() => {});
+          }
+        }
       } catch (cleanupErr) {
         console.warn(`[VideoAssembly] Failed to clean up temp dir ${jobTempDir}:`, cleanupErr);
       }
@@ -707,7 +831,9 @@ export class VideoAssemblyService {
       subtitleTheme,
     } = options;
 
+    let finalOutputPath = '';
     try {
+      if ((job.status as string) === 'cancelled') return;
       job.status = 'processing';
       job.progress = 5;
       job.stage = 'Loading story and scene data for Remotion...';
@@ -732,8 +858,11 @@ export class VideoAssemblyService {
         }
       }
 
+      if ((job.status as string) === 'cancelled') return;
+
       // Auto-generate missing narration audio and dialogue audio if needed
       for (let i = 0; i < scenes.length; i++) {
+        if ((job.status as string) === 'cancelled') return;
         const scene = scenes[i];
         let audioPath = '';
         if (scene.audioUrl) {
@@ -755,6 +884,8 @@ export class VideoAssemblyService {
           }
         }
 
+        if ((job.status as string) === 'cancelled') return;
+
         if ((scene.id || scene.sceneId) && Array.isArray((scene as any).animationData?.dialogueLines)) {
           const hasUnbuiltDialogue = (scene as any).animationData.dialogueLines.some((d: any) => {
             if (!d.text || !d.text.trim()) return false;
@@ -775,6 +906,8 @@ export class VideoAssemblyService {
         }
       }
 
+      if ((job.status as string) === 'cancelled') return;
+
       const timestamp = Date.now();
       const cleanTitle = (story.title || 'story')
         .toLowerCase()
@@ -782,7 +915,7 @@ export class VideoAssemblyService {
         .slice(0, 30);
       const formatTag = format === '9:16' ? 'reel-9x16' : (format === '1:1' ? 'square-1x1' : (format === '4:5' ? 'portrait-4x5' : 'landscape-16x9'));
       const finalFilename = `${cleanTitle}-${formatTag}-remotion-${timestamp}.mp4`;
-      const finalOutputPath = path.join(this.exportsDir, finalFilename);
+      finalOutputPath = path.join(this.exportsDir, finalFilename);
 
       await this.remotionRenderService.renderStoryExport({
         jobId,
@@ -804,7 +937,12 @@ export class VideoAssemblyService {
         },
       });
 
-      if ((job.status as string) === 'cancelled') return;
+      if ((job.status as string) === 'cancelled') {
+        if (fs.existsSync(finalOutputPath)) {
+          await fs.promises.unlink(finalOutputPath).catch(() => {});
+        }
+        return;
+      }
       const downloadUrl = `/storage/exports/${finalFilename}`;
       job.status = 'completed';
       job.progress = 100;
@@ -816,7 +954,12 @@ export class VideoAssemblyService {
 
       console.log(`[VideoAssembly] Remotion export job ${jobId} completed successfully: ${downloadUrl}`);
     } catch (error: any) {
-      if ((job.status as string) === 'cancelled') return;
+      if ((job.status as string) === 'cancelled') {
+        if (finalOutputPath && fs.existsSync(finalOutputPath)) {
+          await fs.promises.unlink(finalOutputPath).catch(() => {});
+        }
+        return;
+      }
       console.error(`[VideoAssembly] Remotion export job ${jobId} failed:`, error);
       job.status = 'failed';
       job.error = error.message || 'Remotion video assembly failed';
@@ -932,6 +1075,7 @@ export class VideoAssemblyService {
    * Renders an individual scene segment from vector animation data using Resvg and FFmpeg
    */
   private async renderVectorAnimationSceneSegment(options: {
+    jobId: string;
     ffmpegPath: string;
     animationData: any;
     audioPath: string | null;
@@ -947,6 +1091,7 @@ export class VideoAssemblyService {
     onProgress?: (frameIndex: number, totalFrames: number) => void;
   }): Promise<void> {
     const {
+      jobId,
       ffmpegPath,
       animationData,
       audioPath,
@@ -970,6 +1115,10 @@ export class VideoAssemblyService {
 
     // Render each frame deterministically
     for (let f = 0; f < totalFrames; f++) {
+      const currentJob = jobs.get(jobId);
+      if (currentJob && (currentJob.status as string) === 'cancelled') {
+        throw new Error(`Export job ${jobId} was cancelled during frame generation`);
+      }
       if (onProgress && (f % 5 === 0 || f === totalFrames - 1)) {
         onProgress(f, totalFrames);
       }
@@ -1034,13 +1183,14 @@ export class VideoAssemblyService {
       outputPath,
     ];
 
-    await execFileAsync(ffmpegPath, args);
+    await this.runTrackedProcess(jobId, ffmpegPath, args);
   }
 
   /**
    * Renders a scene segment from a pre-rendered video clip
    */
   private async renderVideoClipSceneSegment(options: {
+    jobId: string;
     ffmpegPath: string;
     videoPath: string;
     audioPath: string | null;
@@ -1052,6 +1202,7 @@ export class VideoAssemblyService {
     outputPath: string;
   }): Promise<void> {
     const {
+      jobId,
       ffmpegPath,
       videoPath,
       audioPath,
@@ -1093,13 +1244,14 @@ export class VideoAssemblyService {
       outputPath,
     ];
 
-    await execFileAsync(ffmpegPath, args);
+    await this.runTrackedProcess(jobId, ffmpegPath, args);
   }
 
   /**
    * Renders an individual scene segment from an image and optional audio
    */
   private async renderImageSceneSegment(options: {
+    jobId: string;
     ffmpegPath: string;
     imagePath: string;
     audioPath: string | null;
@@ -1112,6 +1264,7 @@ export class VideoAssemblyService {
     outputPath: string;
   }): Promise<void> {
     const {
+      jobId,
       ffmpegPath,
       imagePath,
       audioPath,
@@ -1194,13 +1347,14 @@ export class VideoAssemblyService {
       outputPath,
     ];
 
-    await execFileAsync(ffmpegPath, args);
+    await this.runTrackedProcess(jobId, ffmpegPath, args);
   }
 
   /**
    * Renders a clean card scene segment when no image is available
    */
   private async renderCardSceneSegment(options: {
+    jobId: string;
     ffmpegPath: string;
     title: string;
     narration: string;
@@ -1213,6 +1367,7 @@ export class VideoAssemblyService {
     outputPath: string;
   }): Promise<void> {
     const {
+      jobId,
       ffmpegPath,
       audioPath,
       dialogueAudios = [],
@@ -1250,7 +1405,7 @@ export class VideoAssemblyService {
       outputPath,
     ];
 
-    await execFileAsync(ffmpegPath, args);
+    await this.runTrackedProcess(jobId, ffmpegPath, args);
   }
 
   private resolveLocalPath(urlPath: string): string {

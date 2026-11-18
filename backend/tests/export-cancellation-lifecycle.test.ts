@@ -1,8 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+// @ts-ignore
+import ffmpegStatic from '@ffmpeg-installer/ffmpeg';
 import { RemotionRenderQueue } from '../src/services/video-assembly/remotion-render-queue.js';
 import { RemotionRenderService } from '../src/services/video-assembly/remotion-render.service.js';
-import { VideoAssemblyService } from '../src/services/video-assembly/video-assembly.service.js';
+import { VideoAssemblyService, getExportJobs } from '../src/services/video-assembly/video-assembly.service.js';
 
 test('Export Cancellation Lifecycle & Terminal State Immutability Suite', async (t) => {
   const queue = RemotionRenderQueue.getInstance();
@@ -136,5 +138,110 @@ test('Export Cancellation Lifecycle & Terminal State Immutability Suite', async 
     const cancelRes = await assemblyService.cancelExportJob(job.id);
     assert.equal(cancelRes, false, 'Completed job cannot be cancelled');
     assert.equal(assemblyService.getJob(job.id)?.status, 'completed', 'Completed status must remain untouched');
+  });
+
+  await t.test('6. Standard FFmpeg renderer cancellation: process tracking and terminal cancelled state', async () => {
+    const storyId = `ffmpeg-cancel-${Date.now()}`;
+    const job = assemblyService.startExportJob({
+      storyId,
+      renderer: 'ffmpeg',
+      format: '16:9',
+    });
+
+    assert.ok(job.id);
+    assert.equal(job.renderer, 'ffmpeg');
+
+    // Cancel while in-flight
+    const cancelled = await assemblyService.cancelExportJob(job.id);
+    assert.equal(cancelled, true, 'cancelExportJob must confirm FFmpeg job cancellation');
+
+    const statusAfter = assemblyService.getJob(job.id);
+    assert.equal(statusAfter?.status, 'cancelled', 'FFmpeg job must be in terminal cancelled state');
+
+    // Wait for background handlers to settle
+    await new Promise((r) => setTimeout(r, 200));
+
+    const statusFinal = assemblyService.getJob(job.id);
+    assert.equal(statusFinal?.status, 'cancelled', 'Catch handler must never overwrite cancelled with failed');
+  });
+
+  await t.test('7. Standard FFmpeg child process tree termination on cancellation', async () => {
+    const jobId = `ffmpeg-proc-kill-${Date.now()}`;
+    const job: any = {
+      id: jobId,
+      status: 'processing',
+      stage: 'Rendering with FFmpeg...',
+    };
+
+    // Register job in memory map
+    getExportJobs().set(jobId, job);
+
+    // Spawn a realtime FFmpeg process via runTrackedProcess
+    const ffmpegPath = ffmpegStatic?.path || 'ffmpeg';
+    const trackedPromise = (assemblyService as any).runTrackedProcess(jobId, ffmpegPath, [
+      '-nostdin',
+      '-re',
+      '-f', 'lavfi',
+      '-i', 'testsrc=size=320x240:rate=10',
+      '-t', '60',
+      '-f', 'null',
+      '-',
+    ]);
+
+    // Attach rejection listener immediately to prevent unhandled rejection in test runner
+    const assertionPromise = assert.rejects(
+      trackedPromise,
+      /cancelled|exited|killed/i
+    );
+
+    // Give process 100ms to spawn and register in activeFfmpegProcesses
+    await new Promise((r) => setTimeout(r, 100));
+    assert.ok((assemblyService as any).activeFfmpegProcesses.has(jobId), 'FFmpeg process must be registered in activeFfmpegProcesses');
+
+    // Cancel job
+    job.status = 'cancelled';
+    const killer = (assemblyService as any).activeFfmpegProcesses.get(jobId);
+    assert.ok(killer, 'Killer function must exist');
+    await killer();
+
+    // Process promise must reject with cancellation error
+    await assertionPromise;
+
+    // Process must be cleaned up from active map
+    assert.equal((assemblyService as any).activeFfmpegProcesses.has(jobId), false, 'Process must be removed from active map after termination');
+  });
+
+  await t.test('8. Cancelled jobs do not leave final output files or temp directories', async () => {
+    const jobId = `cleanup-check-${Date.now()}`;
+    const tempDir = (assemblyService as any).tempDir;
+    const exportsDir = (assemblyService as any).exportsDir;
+
+    const jobTempDir = `${tempDir}/export-${jobId}`;
+    const mockFilename = `mock-final-${jobId}.mp4`;
+    const finalOutputPath = `${exportsDir}/${mockFilename}`;
+
+    // Create mock temp dir and output file
+    const fs = await import('fs');
+    fs.mkdirSync(jobTempDir, { recursive: true });
+    fs.writeFileSync(`${jobTempDir}/part.mp4`, 'fake');
+    fs.writeFileSync(finalOutputPath, 'fake-final-mp4');
+
+    assert.ok(fs.existsSync(jobTempDir), 'Temp dir should exist before cancellation');
+    assert.ok(fs.existsSync(finalOutputPath), 'Output file should exist before cancellation');
+
+    const job = {
+      id: jobId,
+      status: 'processing',
+      filename: mockFilename,
+      renderer: 'ffmpeg',
+    };
+    // Inject job into memory map
+    getExportJobs().set(jobId, job as any);
+
+    const cancelled = await assemblyService.cancelExportJob(jobId);
+    assert.equal(cancelled, true, 'cancelExportJob must return true');
+
+    assert.equal(fs.existsSync(jobTempDir), false, 'Temp directory must be deleted on cancellation');
+    assert.equal(fs.existsSync(finalOutputPath), false, 'Final output file must be deleted on cancellation');
   });
 });

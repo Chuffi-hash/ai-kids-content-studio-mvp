@@ -73,6 +73,20 @@ jobs:
 
   backend-checks:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
     defaults:
       run:
         working-directory: backend
@@ -85,6 +99,12 @@ jobs:
           node-version: 22
       - name: Install backend dependencies
         run: npm install
+      - name: Generate Prisma client
+        run: npx prisma generate
+      - name: Apply Prisma migrations
+        run: npx prisma migrate deploy || npx prisma db push --skip-generate
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db?schema=public
       - name: Build backend and run TypeScript checks
         run: npm run build
       - name: Run deterministic unit and workflow tests
@@ -92,3 +112,7 @@ jobs:
         env:
           NODE_ENV: test
           STORAGE_DIR: ./storage
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db?schema=public
+          IMAGE_PROVIDER: mock
+          TTS_PROVIDER: mock
+          STORY_PROVIDER: deterministic

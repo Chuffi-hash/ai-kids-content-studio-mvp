@@ -88,6 +88,13 @@ export class RemotionRenderService {
       // ignore
     }
 
+    // Schedule safe cleanup if the job was cancelled while queued or idle
+    if (queueCancelled || !killer) {
+      setTimeout(() => {
+        this.cancelledJobs.delete(jobId);
+      }, 5000).unref?.();
+    }
+
     return Boolean(killer || queueCancelled);
   }
 
@@ -114,7 +121,19 @@ export class RemotionRenderService {
       onQueuePositionChange: (pos, total) => {
         options.onProgress?.(0, `Queued for Remotion render (position ${pos} of ${total})...`);
       },
-      task: () => this.executeRenderStoryExport(options),
+      task: async () => {
+        try {
+          return await this.executeRenderStoryExport(options);
+        } finally {
+          // Delay cleanup of cancelledJobs so that all in-flight cancellation checks,
+          // process cleanups, and rejection handlers have settled before removing the marker.
+          if (this.cancelledJobs.has(options.jobId)) {
+            setTimeout(() => {
+              this.cancelledJobs.delete(options.jobId);
+            }, 5000).unref?.();
+          }
+        }
+      },
     });
   }
 
@@ -397,8 +416,11 @@ export class RemotionRenderService {
 
       const killFfmpeg = async () => {
         try {
+          proc.kill('SIGKILL');
+        } catch {}
+        try {
           if (process.platform === 'win32') {
-            await execFileAsync('taskkill', ['/pid', String(proc.pid), '/T', '/F']).catch(() => {});
+            await execFileAsync('taskkill', ['/pid', String(proc.pid), '/T', '/F'], { timeout: 1500 }).catch(() => {});
           } else {
             proc.kill('SIGKILL');
           }
@@ -473,8 +495,11 @@ export class RemotionRenderService {
       const killProcessTree = async () => {
         if (!proc.pid) return;
         try {
+          proc.kill('SIGKILL');
+        } catch {}
+        try {
           if (isWin) {
-            await execFileAsync('taskkill', ['/pid', String(proc.pid), '/T', '/F']);
+            await execFileAsync('taskkill', ['/pid', String(proc.pid), '/T', '/F'], { timeout: 1500 }).catch(() => {});
           } else {
             try {
               process.kill(-proc.pid, 'SIGKILL');
