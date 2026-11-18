@@ -52,6 +52,7 @@ export class FlowBrowserWorker {
     this.browserChannel = process.env.FLOW_BROWSER_CHANNEL || "";
     this.promptSelector = process.env.FLOW_PROMPT_SELECTOR || "";
     this.downloadInProgress = false;
+    this.attachedPages = new WeakSet();
   }
 
   async launch(projectUrl) {
@@ -70,9 +71,13 @@ export class FlowBrowserWorker {
 
       this.context = await chromium.launchPersistentContext(this.profileDir, options);
       this.context.on("page", (page) => this.attachPage(page));
+    }
 
+    // A user may close the Flow tab without closing the browser context.
+    // Recover an existing tab or create a new one, and attach handlers exactly once.
+    if (!this.page || this.page.isClosed()) {
       const pages = this.context.pages();
-      this.page = pages[0] || await this.context.newPage();
+      this.page = pages.find((candidate) => isFlowUrl(candidate.url())) || pages[0] || await this.context.newPage();
       this.attachPage(this.page);
     }
 
@@ -89,6 +94,19 @@ export class FlowBrowserWorker {
   }
 
   attachPage(page) {
+    if (this.attachedPages.has(page)) return;
+    this.attachedPages.add(page);
+
+    if (!this.page || this.page.isClosed() || isFlowUrl(page.url())) {
+      this.page = page;
+    }
+
+    page.on("framenavigated", (frame) => {
+      if (frame === page.mainFrame() && isFlowUrl(page.url())) {
+        this.page = page;
+      }
+    });
+
     page.on("download", (download) => {
       this.handleDownload(download).catch((error) => {
         console.error("[FlowWorker] Download handling failed:", error.message);
