@@ -51,12 +51,8 @@ test("recognizes PNG, JPEG and WebP by file signature", () => {
     "image/jpeg"
   );
   assert.equal(
-    detectImageType(Buffer.from("RIFF0000WEBP")),
-    null
-  );
-  assert.equal(
-    detectImageType(Buffer.from("RIFF0000WEBP")),
-    null
+    detectImageType(Buffer.from("RIFF0000WEBP")).mimeType,
+    "image/webp"
   );
 });
 
