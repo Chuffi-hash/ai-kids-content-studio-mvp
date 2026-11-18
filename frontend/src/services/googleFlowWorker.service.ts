@@ -1,5 +1,3 @@
-import { getApiUrl } from '../utils/urlHelper';
-
 export interface FlowWorkerSession {
   connected: boolean;
   state: string;
@@ -165,4 +163,18 @@ export async function getFlowWorkerHealth(workerUrl: string): Promise<boolean> {
   const base = workerUrl.trim().replace(/\/+$/, '');
   const response = await fetch(`${base}/health`);
   return response.ok;
+}
+
+export async function retryFlowCharacterAssetRegistration(
+  workerUrl: string,
+  token: string,
+  jobId: string,
+): Promise<FlowWorkerJob> {
+  const payload = await workerRequest<{ job: FlowWorkerJob }>(
+    workerUrl,
+    token,
+    `/jobs/${encodeURIComponent(jobId)}/retry-import`,
+    { method: 'POST', body: JSON.stringify({}) },
+  );
+  return payload.job;
 }
