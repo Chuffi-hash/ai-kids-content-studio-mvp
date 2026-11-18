@@ -32,7 +32,7 @@ function isGoogleLoginUrl(value) {
   }
 }
 
-function isFlowUrl(value) {
+export function isFlowUrl(value) {
   try {
     const parsed = new URL(value);
     return (
@@ -40,6 +40,26 @@ function isFlowUrl(value) {
       (parsed.hostname === "labs.google" ||
         parsed.hostname === "flow.google.com")
     );
+  } catch {
+    return false;
+  }
+}
+
+export function isValidFlowDownloadSource(page, activePage, context) {
+  if (!page) return false;
+  if (typeof page.isClosed === "function" && page.isClosed()) return false;
+  if (context && typeof page.context === "function" && page.context() !== context) {
+    return false;
+  }
+  if (!activePage || (typeof activePage.isClosed === "function" && activePage.isClosed())) {
+    return false;
+  }
+  if (page !== activePage) {
+    return false;
+  }
+  try {
+    const url = typeof page.url === "function" ? page.url() : String(page.url || "");
+    return isFlowUrl(url);
   } catch {
     return false;
   }
@@ -129,7 +149,7 @@ export class FlowBrowserWorker {
     });
 
     page.on("download", (download) => {
-      this.handleDownload(download).catch((error) => {
+      this.handleDownload(download, page).catch((error) => {
         console.error("[FlowWorker] Download handling failed:", error.message);
       });
     });
@@ -333,9 +353,13 @@ export class FlowBrowserWorker {
     if (this.promptSelector) {
       const configured = this.page.locator(this.promptSelector);
       const count = await configured.count();
-      if (count !== 1 || !(await configured.isVisible())) {
+      if (
+        count !== 1 ||
+        !(await configured.isVisible()) ||
+        !(await configured.isEnabled())
+      ) {
         throw new Error(
-          "FLOW_PROMPT_SELECTOR must identify exactly one visible prompt editor; found " +
+          "FLOW_PROMPT_SELECTOR must identify exactly one visible and enabled prompt editor; found " +
             count +
             ".",
         );
@@ -357,16 +381,36 @@ export class FlowBrowserWorker {
       const ariaLabel = (await candidate.getAttribute("aria-label")) || "";
       const dataPlaceholder =
         (await candidate.getAttribute("data-placeholder")) || "";
-      const label = [placeholder, ariaLabel, dataPlaceholder]
+      const title = (await candidate.getAttribute("title")) || "";
+      const name = (await candidate.getAttribute("name")) || "";
+      const id = (await candidate.getAttribute("id")) || "";
+      const testId =
+        (await candidate.getAttribute("data-testid")) ||
+        (await candidate.getAttribute("data-test-id")) ||
+        "";
+
+      const label = [placeholder, ariaLabel, dataPlaceholder, title, name, id, testId]
         .join(" ")
         .toLowerCase();
 
-      if (/search|filter|session|collection/.test(label)) continue;
+      // Disqualify clearly unrelated inputs
+      if (/search|filter|session|collection|comment|chat|login|email|password|username|tag|url/.test(label)) {
+        continue;
+      }
 
       let score = 0;
-      if (/prompt|describe|generate|image/.test(label)) score += 5;
-      if ((await candidate.getAttribute("contenteditable")) === "true")
+      // High-confidence prompt indicators
+      if (/prompt|describe|what.*to (see|generate|create)|enter.*prompt/.test(label)) {
+        score += 10;
+      } else if (/generate|image|create|scene|character|visual/.test(label)) {
+        score += 5;
+      }
+
+      // Contenteditable bonus only if there is already prompt affinity
+      if (score > 0 && (await candidate.getAttribute("contenteditable")) === "true") {
         score += 1;
+      }
+
       scored.push({
         locator: candidate,
         score,
@@ -381,15 +425,18 @@ export class FlowBrowserWorker {
     }
 
     scored.sort((a, b) => b.score - a.score);
-    if (scored.length > 1 && scored[0].score === scored[1].score) {
+
+    // Requirement: Never accept a zero-score field
+    if (scored[0].score <= 0) {
       throw new Error(
-        "Multiple prompt-like fields are visible. Set FLOW_PROMPT_SELECTOR to a stable, unique selector.",
+        "No confident prompt editor candidate was found (top candidate score is 0). Set FLOW_PROMPT_SELECTOR to a stable, unique selector.",
       );
     }
 
-    if (scored.length > 1 && scored[0].score === 0) {
+    // Requirement: If multiple candidates are ambiguous, stop instead of guessing
+    if (scored.length > 1 && scored[0].score === scored[1].score) {
       throw new Error(
-        "The prompt editor is ambiguous. Set FLOW_PROMPT_SELECTOR to a stable, unique selector.",
+        "Multiple prompt-like fields are visible with ambiguous scores. Set FLOW_PROMPT_SELECTOR to a stable, unique selector.",
       );
     }
 
@@ -460,7 +507,16 @@ export class FlowBrowserWorker {
     return job;
   }
 
-  async handleDownload(download) {
+  async handleDownload(download, originatingPage) {
+    const page =
+      originatingPage ||
+      (typeof download?.page === "function" ? download.page() : null);
+
+    if (!isValidFlowDownloadSource(page, this.page, this.context)) {
+      // Ignore downloads from unrelated tabs, non-Flow pages, or closed sessions
+      return;
+    }
+
     if (this.downloadInProgress || !this.activeJobId) return;
 
     const job = this.jobs.get(this.activeJobId);
@@ -518,10 +574,18 @@ export class FlowBrowserWorker {
 
       await this.importDownloadedAsset(job, buffer, imageType);
     } catch (error) {
-      job.status = "failed";
-      job.error = error.message;
-      job.message =
-        "The image download or import failed. Inspect the job error before retrying.";
+      if (job.importResult) {
+        // The image file was already uploaded to backend storage, but metadata registration failed
+        job.status = "import_metadata_failed";
+        job.error = error.message;
+        job.message =
+          "The file exists in backend storage. Retry metadata registration instead of downloading the image again.";
+      } else {
+        job.status = "failed";
+        job.error = error.message;
+        job.message =
+          "The image download or import failed. Inspect the job error before retrying.";
+      }
       this.touch(job);
     } finally {
       this.downloadInProgress = false;
@@ -529,38 +593,51 @@ export class FlowBrowserWorker {
   }
 
   async importDownloadedAsset(job, buffer, imageType) {
-    const dataUri =
-      "data:" + imageType.mimeType + ";base64," + buffer.toString("base64");
-    const characterPath =
-      "/api/character-studio/characters/" +
-      encodeURIComponent(job.characterId) +
-      "/import-flow";
+    if (!job.importResult) {
+      const dataUri =
+        "data:" + imageType.mimeType + ";base64," + buffer.toString("base64");
+      const characterPath =
+        "/api/character-studio/characters/" +
+        encodeURIComponent(job.characterId) +
+        "/import-flow";
 
-    const importResponse = await fetch(this.backendUrl + characterPath, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        characterName: job.characterName,
-        assetType: job.assetType,
-        imageBufferOrBase64: dataUri,
-        filename: "flow-" + job.view + "-" + job.id + "." + imageType.extension,
-        notes: "Imported from Google Flow through the local Playwright worker.",
-      }),
-    });
+      let importResponse;
+      try {
+        importResponse = await fetch(this.backendUrl + characterPath, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            characterName: job.characterName,
+            assetType: job.assetType,
+            imageBufferOrBase64: dataUri,
+            filename:
+              "flow-" + job.view + "-" + job.id + "." + imageType.extension,
+            notes:
+              "Imported from Google Flow through the local Playwright worker.",
+          }),
+        });
+      } catch (uploadErr) {
+        throw new Error(
+          "Backend file upload network error: " +
+            (uploadErr instanceof Error ? uploadErr.message : String(uploadErr)),
+        );
+      }
 
-    const importPayload = await importResponse.json().catch(() => ({}));
-    if (
-      !importResponse.ok ||
-      importPayload.success !== true ||
-      !importPayload.result
-    ) {
-      throw new Error(
-        "Backend file import failed with HTTP " + importResponse.status + ".",
-      );
+      const importPayload = await importResponse.json().catch(() => ({}));
+      if (
+        !importResponse.ok ||
+        importPayload.success !== true ||
+        !importPayload.result
+      ) {
+        throw new Error(
+          "Backend file import failed with HTTP " + importResponse.status + ".",
+        );
+      }
+
+      job.importResult = importPayload.result;
+      job.detectedMimeType = imageType.mimeType;
+      this.touch(job);
     }
-
-    job.importResult = importPayload.result;
-    job.detectedMimeType = imageType.mimeType;
 
     await this.persistAssetMetadata(job);
   }
@@ -575,51 +652,75 @@ export class FlowBrowserWorker {
       encodeURIComponent(job.characterId) +
       "/assets";
 
-    const assetResponse = await fetch(this.backendUrl + assetPath, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        id: result.assetId,
-        assetType: job.assetType,
-        direction: job.view,
-        prompt: job.prompt,
-        provider: "google_flow",
-        model: "google_flow_ui",
-        url: result.url,
-        storagePath: result.storagePath,
-        isMasterReference: job.isMasterReference,
-        createdAt: new Date().toISOString(),
-      }),
-    });
+    try {
+      const assetResponse = await fetch(this.backendUrl + assetPath, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          id: result.assetId,
+          assetType: job.assetType,
+          direction: job.view,
+          prompt: job.prompt,
+          provider: "google_flow",
+          model: "google_flow_ui",
+          url: result.url,
+          storagePath: result.storagePath,
+          isMasterReference: job.isMasterReference,
+          createdAt: new Date().toISOString(),
+        }),
+      });
 
-    const assetPayload = await assetResponse.json().catch(() => ({}));
-    if (!assetResponse.ok || assetPayload.success !== true) {
+      const assetPayload = await assetResponse.json().catch(() => ({}));
+      if (!assetResponse.ok || assetPayload.success !== true) {
+        job.status = "import_metadata_failed";
+        job.error =
+          "The image file was saved, but character metadata registration failed with HTTP " +
+          assetResponse.status +
+          ".";
+        job.message =
+          "The file exists in backend storage. Retry metadata registration instead of downloading the image again.";
+        this.touch(job);
+        return job;
+      }
+
+      job.status = "completed";
+      job.asset = assetPayload.asset || result;
+      job.completedAt = new Date().toISOString();
+      job.message =
+        "Google Flow image imported and registered against the character.";
+      job.error = undefined;
+      this.touch(job);
+      return job;
+    } catch (networkOrParseError) {
       job.status = "import_metadata_failed";
       job.error =
-        "The image file was saved, but character metadata registration failed with HTTP " +
-        assetResponse.status +
-        ".";
+        "The image file was saved, but character metadata registration network request failed: " +
+        (networkOrParseError instanceof Error
+          ? networkOrParseError.message
+          : String(networkOrParseError));
       job.message =
         "The file exists in backend storage. Retry metadata registration instead of downloading the image again.";
       this.touch(job);
       return job;
     }
-
-    job.status = "completed";
-    job.asset = assetPayload.asset || result;
-    job.completedAt = new Date().toISOString();
-    job.message =
-      "Google Flow image imported and registered against the character.";
-    job.error = undefined;
-    this.touch(job);
-    return job;
   }
 
   async retryMetadataImport(jobId) {
     const job = this.requireJob(jobId);
-    if (job.status !== "import_metadata_failed" || !job.importResult) {
+    if (!job.importResult) {
       throw new Error(
-        "This job has no pending metadata registration to retry.",
+        "This job has no pending metadata registration to retry (no uploaded image found).",
+      );
+    }
+
+    if (
+      job.status !== "import_metadata_failed" &&
+      job.status !== "failed" &&
+      job.status !== "completed"
+    ) {
+      throw new Error(
+        "This job has no pending metadata registration to retry. Current status: " +
+          job.status,
       );
     }
 

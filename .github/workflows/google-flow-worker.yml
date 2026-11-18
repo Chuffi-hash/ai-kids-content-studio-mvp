@@ -3,11 +3,12 @@ name: Google Flow Worker & Integration Checks
 on:
   push:
     branches:
-      - feat/google-flow-playwright-worker-latest
+      - feat/remotion-renderer-pilot
     paths:
       - "flow-worker/**"
       - "frontend/**"
-      - "backend/src/services/character-studio/character-reference.service.ts"
+      - "remotion/**"
+      - "backend/**"
       - ".github/workflows/google-flow-worker.yml"
   pull_request:
     branches:
@@ -15,7 +16,8 @@ on:
     paths:
       - "flow-worker/**"
       - "frontend/**"
-      - "backend/src/services/character-studio/character-reference.service.ts"
+      - "remotion/**"
+      - "backend/**"
       - ".github/workflows/google-flow-worker.yml"
 
 jobs:
@@ -36,11 +38,11 @@ jobs:
       - name: Syntax-check worker entrypoints and run unit tests
         run: npm test
 
-  frontend-build:
+  remotion-checks:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: frontend
+        working-directory: remotion
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -48,10 +50,26 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Install frontend dependencies
+      - name: Install Remotion dependencies
         run: npm install
+      - name: Run Remotion typecheck
+        run: npm run typecheck
+
+  frontend-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install Remotion dependencies for sibling types
+        run: npm --prefix remotion install
+      - name: Install frontend dependencies
+        run: npm --prefix frontend install
       - name: Build frontend and run TypeScript checks
-        run: npm run build
+        run: npm --prefix frontend run build
 
   backend-build:
     runs-on: ubuntu-latest

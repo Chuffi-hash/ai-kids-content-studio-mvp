@@ -100,8 +100,16 @@ export class CharacterReferenceService {
       }
     }
 
-    // Prepend or add asset
-    existingAssets.unshift(fullAsset);
+    // Prepend or update existing asset by ID (idempotent registration)
+    const existingIndex = existingAssets.findIndex((a) => a.id === fullAsset.id);
+    if (existingIndex >= 0) {
+      existingAssets[existingIndex] = {
+        ...existingAssets[existingIndex],
+        ...fullAsset,
+      };
+    } else {
+      existingAssets.unshift(fullAsset);
+    }
 
     // Prepare updated canonicalAppearance object
     const existingRefs = canonical.references || {};
