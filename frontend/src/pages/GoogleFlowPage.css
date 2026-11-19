@@ -177,19 +177,24 @@
 }
 
 [data-theme="light"] .flow-diag-value,
-body.theme-light .flow-diag-value {
-  color: #0f172a;
+body.theme-light .flow-diag-value,
+html[data-theme="light"] .flow-diag-value {
+  color: #0f172a !important;
+  font-weight: 700 !important;
 }
 
 [data-theme="light"] .flow-diag-label,
-body.theme-light .flow-diag-label {
-  color: #475569;
+body.theme-light .flow-diag-label,
+html[data-theme="light"] .flow-diag-label {
+  color: #334155 !important;
+  font-weight: 600 !important;
 }
 
 [data-theme="light"] .flow-diag-item,
-body.theme-light .flow-diag-item {
-  background: #f8fafc;
-  border-color: #e2e8f0;
+body.theme-light .flow-diag-item,
+html[data-theme="light"] .flow-diag-item {
+  background: #f1f5f9 !important;
+  border-color: #cbd5e1 !important;
 }
 
 [data-theme="light"] .flow-card,
@@ -221,20 +226,23 @@ body.theme-light .flow-card-header p {
 
 [data-theme="light"] .flow-input,
 body.theme-light .flow-input,
+html[data-theme="light"] .flow-input,
 [data-theme="light"] .flow-select,
 body.theme-light .flow-select,
+html[data-theme="light"] .flow-select,
 [data-theme="light"] .flow-textarea,
-body.theme-light .flow-textarea {
-  background: #ffffff;
-  border-color: #cbd5e1;
-  color: #0f172a;
+body.theme-light .flow-textarea,
+html[data-theme="light"] .flow-textarea {
+  background: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
 }
 
 .flow-input::placeholder,
 .flow-textarea::placeholder {
   color: #94a3b8 !important;
   opacity: 1 !important;
-  font-weight: 400;
+  font-weight: 500 !important;
 }
 
 [data-theme="light"] .flow-input::placeholder,
@@ -243,9 +251,9 @@ html[data-theme="light"] .flow-input::placeholder,
 [data-theme="light"] .flow-textarea::placeholder,
 body.theme-light .flow-textarea::placeholder,
 html[data-theme="light"] .flow-textarea::placeholder {
-  color: #475569 !important;
-  opacity: 1 !important;
-  font-weight: 400;
+  color: #1e293b !important; /* Slate 800 - crisp, high-contrast, clearly legible on light/white background */
+  opacity: 0.8 !important;
+  font-weight: 500 !important;
 }
 
 [data-theme="light"] .flow-form-label,
@@ -267,8 +275,8 @@ html[data-theme="light"] .flow-form-label span.sub {
   justify-content: space-between;
   gap: 16px;
   padding: 12px 18px;
-  background: rgba(139, 92, 246, 0.14);
-  border: 1px solid rgba(139, 92, 246, 0.35);
+  background: rgba(139, 92, 246, 0.16);
+  border: 1px solid rgba(139, 92, 246, 0.4);
   border-radius: var(--radius-sm, 8px);
   font-size: 13px;
   color: #e9d5ff;
@@ -282,36 +290,47 @@ html[data-theme="light"] .flow-form-label span.sub {
 body.theme-light .flow-context-banner,
 html[data-theme="light"] .flow-context-banner {
   background: #f5f3ff !important;
-  border-color: #ddd6fe !important;
-  color: #5b21b6 !important;
+  border-color: #c4b5fd !important;
+  color: #4c1d95 !important;
+  font-weight: 600 !important;
 }
 
 [data-theme="light"] .flow-context-banner strong,
 body.theme-light .flow-context-banner strong,
 html[data-theme="light"] .flow-context-banner strong {
-  color: #3b0764 !important;
+  color: #1e1b4b !important;
+  font-weight: 800 !important;
+}
+
+[data-theme="light"] .flow-context-banner span,
+body.theme-light .flow-context-banner span,
+html[data-theme="light"] .flow-context-banner span {
+  color: #4c1d95 !important;
+  font-weight: 600 !important;
 }
 
 /* Status Badges in Dark Mode */
 .flow-status-badge.neutral {
-  border-color: #2e4163;
-  background: #151e30;
+  border-color: #334155;
+  background: #162035;
   color: #cbd5e1;
 }
 
 .flow-status-badge.selected {
-  border-color: rgba(168, 85, 247, 0.45);
-  background: rgba(168, 85, 247, 0.16);
-  color: #d8b4fe;
+  border-color: rgba(168, 85, 247, 0.55);
+  background: rgba(168, 85, 247, 0.2);
+  color: #f3e8ff;
+  font-weight: 600;
 }
 
 /* Status Badges in Light Mode */
 [data-theme="light"] .flow-status-badge.selected,
 body.theme-light .flow-status-badge.selected,
 html[data-theme="light"] .flow-status-badge.selected {
-  border-color: rgba(124, 58, 237, 0.35) !important;
-  background: rgba(124, 58, 237, 0.12) !important;
-  color: #5b21b6 !important;
+  border-color: #a855f7 !important;
+  background: #f5f3ff !important;
+  color: #581c87 !important;
+  font-weight: 700 !important;
 }
 
 [data-theme="light"] .flow-status-badge.neutral,
@@ -319,7 +338,8 @@ body.theme-light .flow-status-badge.neutral,
 html[data-theme="light"] .flow-status-badge.neutral {
   border-color: #cbd5e1 !important;
   background: #f1f5f9 !important;
-  color: #334155 !important;
+  color: #1e293b !important;
+  font-weight: 600 !important;
 }
 
 [data-theme="light"] .flow-status-badge.online,
@@ -486,24 +506,6 @@ html[data-theme="light"] label:has(input[type="checkbox"]) {
   color: #475569 !important;
 }
 
-/* Context Banner */
-.flow-context-banner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 10px 16px;
-  background: rgba(139, 92, 246, 0.12);
-  border: 1px solid rgba(139, 92, 246, 0.3);
-  border-radius: var(--radius-sm, 8px);
-  font-size: 12px;
-  color: #c084fc;
-}
-
-.flow-context-banner strong {
-  color: #fff;
-}
-
 /* Navigation Tabs */
 .flow-tabs-nav {
   display: flex;
@@ -511,6 +513,12 @@ html[data-theme="light"] label:has(input[type="checkbox"]) {
   border-bottom: 1px solid var(--color-border, #202d45);
   padding-bottom: 2px;
   overflow-x: auto;
+}
+
+[data-theme="light"] .flow-tabs-nav,
+body.theme-light .flow-tabs-nav,
+html[data-theme="light"] .flow-tabs-nav {
+  border-bottom-color: #cbd5e1 !important;
 }
 
 .flow-tab-button {
@@ -540,12 +548,43 @@ html[data-theme="light"] label:has(input[type="checkbox"]) {
   border-bottom-color: var(--color-accent, #8b5cf6);
 }
 
+[data-theme="light"] .flow-tab-button,
+body.theme-light .flow-tab-button,
+html[data-theme="light"] .flow-tab-button {
+  color: #475569 !important;
+}
+
+[data-theme="light"] .flow-tab-button:hover,
+body.theme-light .flow-tab-button:hover,
+html[data-theme="light"] .flow-tab-button:hover {
+  color: #0f172a !important;
+  background: #f1f5f9 !important;
+}
+
+[data-theme="light"] .flow-tab-button.active,
+body.theme-light .flow-tab-button.active,
+html[data-theme="light"] .flow-tab-button.active {
+  color: #7c3aed !important;
+  border-bottom-color: #7c3aed !important;
+}
+
 .flow-tab-badge {
   font-size: 10px;
-  padding: 2px 6px;
+  padding: 2px 7px;
   border-radius: var(--radius-full, 999px);
-  background: rgba(139, 92, 246, 0.2);
-  color: #c084fc;
+  background: rgba(168, 85, 247, 0.25);
+  border: 1px solid rgba(168, 85, 247, 0.45);
+  color: #f3e8ff;
+  font-weight: 700;
+}
+
+[data-theme="light"] .flow-tab-badge,
+body.theme-light .flow-tab-badge,
+html[data-theme="light"] .flow-tab-badge {
+  background: #ede9fe !important;
+  border-color: #c4b5fd !important;
+  color: #581c87 !important;
+  font-weight: 700 !important;
 }
 
 /* Tab Panels */
@@ -770,6 +809,14 @@ html[data-theme="light"] label:has(input[type="checkbox"]) {
   line-height: 1.6;
 }
 
+[data-theme="light"] .flow-code-block,
+body.theme-light .flow-code-block,
+html[data-theme="light"] .flow-code-block {
+  background: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+  color: #0369a1 !important;
+}
+
 /* Validation Pills */
 .flow-pill-group {
   display: flex;
@@ -849,4 +896,228 @@ html[data-theme="light"] label:has(input[type="checkbox"]) {
   justify-content: space-between;
   color: var(--color-text-secondary, #94a3b8);
   font-size: 10px;
+}
+
+/* ============================================================
+   Setup Wizard & Guided Onboarding
+   ============================================================ */
+
+.flow-wizard-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.flow-wizard-step {
+  border: 1px solid var(--color-border, #202d45);
+  border-radius: var(--radius, 12px);
+  background: var(--color-surface, #101726);
+  padding: 18px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  transition: border-color 0.15s ease;
+}
+
+.flow-wizard-step.completed {
+  border-color: rgba(16, 185, 129, 0.4);
+}
+
+.flow-wizard-step.active {
+  border-color: rgba(139, 92, 246, 0.5);
+  box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.3), 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+.flow-step-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.flow-step-title-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.flow-step-number {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  background: var(--color-surface-muted, #151e30);
+  border: 1px solid var(--color-border, #202d45);
+  color: var(--color-text, #ffffff);
+  flex-shrink: 0;
+}
+
+.flow-wizard-step.completed .flow-step-number {
+  background: rgba(16, 185, 129, 0.2);
+  border-color: rgba(16, 185, 129, 0.5);
+  color: #34d399;
+}
+
+.flow-step-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-text, #ffffff);
+  margin: 0;
+}
+
+.flow-step-body {
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--color-text-secondary, #cbd5e1);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-left: 40px;
+}
+
+.flow-checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.flow-checklist-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: var(--color-surface-muted, #151e30);
+  border: 1px solid var(--color-border, #202d45);
+}
+
+.flow-checklist-item.pass {
+  border-color: rgba(16, 185, 129, 0.35);
+  color: #34d399;
+}
+
+.flow-checklist-item.fail {
+  border-color: rgba(239, 68, 68, 0.35);
+  color: #f87171;
+}
+
+.flow-checklist-item.pending {
+  border-color: var(--color-border, #202d45);
+  color: var(--color-text-secondary, #94a3b8);
+}
+
+/* Modal Overlay for Profile Reset & Confirmation */
+.flow-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.flow-modal {
+  background: var(--color-surface, #101726);
+  border: 1px solid var(--color-border, #202d45);
+  border-radius: var(--radius, 12px);
+  max-width: 500px;
+  width: 100%;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+}
+
+.flow-modal h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.flow-modal p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--color-text-secondary, #cbd5e1);
+}
+
+.flow-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+/* Light Mode Overrides for Wizard & Modals */
+[data-theme="light"] .flow-wizard-step,
+body.theme-light .flow-wizard-step,
+html[data-theme="light"] .flow-wizard-step {
+  background: #ffffff;
+  border-color: #e2e8f0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+[data-theme="light"] .flow-step-number,
+body.theme-light .flow-step-number,
+html[data-theme="light"] .flow-step-number {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #0f172a;
+}
+
+[data-theme="light"] .flow-step-title,
+body.theme-light .flow-step-title,
+html[data-theme="light"] .flow-step-title {
+  color: #0f172a;
+}
+
+[data-theme="light"] .flow-step-body,
+body.theme-light .flow-step-body,
+html[data-theme="light"] .flow-step-body {
+  color: #334155;
+}
+
+[data-theme="light"] .flow-checklist-item,
+body.theme-light .flow-checklist-item,
+html[data-theme="light"] .flow-checklist-item {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+  color: #334155;
+}
+
+[data-theme="light"] .flow-modal,
+body.theme-light .flow-modal,
+html[data-theme="light"] .flow-modal {
+  background: #ffffff;
+  border-color: #cbd5e1;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+}
+
+[data-theme="light"] .flow-modal h3,
+body.theme-light .flow-modal h3,
+html[data-theme="light"] .flow-modal h3 {
+  color: #0f172a;
+}
+
+[data-theme="light"] .flow-modal p,
+body.theme-light .flow-modal p,
+html[data-theme="light"] .flow-modal p {
+  color: #334155;
 }

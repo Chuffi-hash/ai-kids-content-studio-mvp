@@ -391,15 +391,17 @@ html[data-theme="dark"] .gf-input:focus {
 }
 
 .gf-input::placeholder {
-  color: #64748b;
-  opacity: 0.8;
+  color: #334155 !important;
+  opacity: 1 !important;
+  font-weight: 500 !important;
 }
 
 [data-theme="dark"] .gf-input::placeholder,
 body.theme-dark .gf-input::placeholder,
 html[data-theme="dark"] .gf-input::placeholder {
-  color: #94a3b8;
-  opacity: 0.8;
+  color: #94a3b8 !important;
+  opacity: 1 !important;
+  font-weight: 500 !important;
 }
 
 .gf-help-text {

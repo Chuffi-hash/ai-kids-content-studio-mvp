@@ -7,6 +7,7 @@ import {
 import { VisualStylesService, VISUAL_STYLE_PRESETS } from '../services/visual-styles/visual-styles.service.js';
 import { ProviderCapabilitiesService } from '../services/image-generation/provider-capabilities.js';
 import { AssetRightsService } from '../services/asset-rights/asset-rights.service.js';
+import { GoogleFlowAssetImportService } from '../services/google-flow/google-flow-asset-import.service.js';
 
 export const backgroundStudioRouter = Router();
 const backgroundStudioService = new BackgroundStudioService();
@@ -121,10 +122,48 @@ backgroundStudioRouter.post('/generate', async (req, res) => {
 // POST import from Google Flow
 backgroundStudioRouter.post('/import-flow', async (req, res) => {
   try {
-    const { name, environmentType, imageBufferOrBase64, filename, notes, aspectRatio } = req.body;
+    const {
+      name,
+      environmentType,
+      imageBufferOrBase64,
+      filename,
+      notes,
+      aspectRatio,
+      storyId,
+      sceneId,
+      prompt,
+      fit,
+      cameraDirection,
+    } = req.body;
 
     if (!imageBufferOrBase64) {
       return res.status(400).json({ message: 'imageBufferOrBase64 is required' });
+    }
+
+    if (sceneId) {
+      const result = await GoogleFlowAssetImportService.importAsset({
+        target: 'scene_background',
+        imageData: imageBufferOrBase64,
+        filename,
+        aspectRatio,
+        storyId,
+        sceneId,
+        prompt: prompt || notes,
+        fit,
+        cameraDirection,
+      });
+
+      return res.json({
+        success: true,
+        asset: {
+          id: result.assetId,
+          imageUrl: result.imageUrl,
+          width: result.width,
+          height: result.height,
+          aspectRatio: result.aspectRatio,
+          metadata: result.metadata,
+        },
+      });
     }
 
     const asset = await backgroundStudioService.importFromGoogleFlow({

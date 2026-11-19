@@ -117,6 +117,11 @@ describe('Google Flow Database-Backed Credentials & Proxy Architecture', () => {
     EncryptionKeyManager.resetKeyPath();
     await new Promise<void>((resolve) => mockWorkerServer.close(() => resolve()));
     try {
+      await prisma.integrationCredential.deleteMany({
+        where: { provider: 'google-flow', credentialType: 'worker-bearer-token' },
+      });
+    } catch {}
+    try {
       await fs.rm(path.dirname(tempKeyFile), { recursive: true, force: true });
     } catch {}
   });

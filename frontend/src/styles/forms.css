@@ -36,34 +36,49 @@ input[type="radio"] {
   height: 18px !important;
   min-width: 18px !important;
   max-width: 18px !important;
+  min-height: 18px !important;
+  max-height: 18px !important;
   box-sizing: border-box !important;
   padding: 0 !important;
   margin: 0 !important;
-  border: 1px solid var(--color-border-strong);
-  border-radius: 4px;
+  border: 1.5px solid var(--color-border-strong) !important;
+  border-radius: 4px !important;
+  background: var(--color-surface) !important;
   box-shadow: none !important;
-  cursor: pointer;
-  accent-color: var(--color-accent, #8b5cf6);
-  flex-shrink: 0;
-  display: inline-block;
-  vertical-align: middle;
+  cursor: pointer !important;
+  accent-color: var(--color-accent, #8b5cf6) !important;
+  flex-shrink: 0 !important;
+  display: inline-block !important;
+  vertical-align: middle !important;
+  appearance: checkbox !important;
+  -webkit-appearance: checkbox !important;
+  outline: none !important;
 }
 
 label:has(input[type="checkbox"]),
-label:has(input[type="radio"]) {
+label:has(input[type="radio"]),
+.checkbox-label,
+.flow-checkbox-label,
+.google-flow-checkbox,
+.flow-checkbox-row {
   display: inline-flex !important;
   flex-direction: row !important;
   align-items: center !important;
   gap: 8px !important;
   width: auto !important;
   max-width: fit-content !important;
-  cursor: pointer;
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  cursor: pointer !important;
+  padding: 0 !important;
 }
 
 input::placeholder,
-textarea::placeholder {
-  color: #94a3b8 !important;
-  font-weight: 400;
+textarea::placeholder,
+select::placeholder {
+  color: #94a3b8 !important; /* Slate 400 in dark mode */
+  font-weight: 500;
   opacity: 1 !important;
 }
 
@@ -72,9 +87,13 @@ body.theme-light input::placeholder,
 html[data-theme="light"] input::placeholder,
 [data-theme="light"] textarea::placeholder,
 body.theme-light textarea::placeholder,
-html[data-theme="light"] textarea::placeholder {
-  color: #475569 !important;
-  opacity: 1 !important;
+html[data-theme="light"] textarea::placeholder,
+[data-theme="light"] select::placeholder,
+body.theme-light select::placeholder,
+html[data-theme="light"] select::placeholder {
+  color: #1e293b !important; /* Slate 800 - crisp, high contrast readability on white/light backgrounds */
+  font-weight: 500;
+  opacity: 0.8 !important;
 }
 
 input:not([type="checkbox"]):not([type="radio"]):hover,

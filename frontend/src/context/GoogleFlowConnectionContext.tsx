@@ -7,8 +7,12 @@ import {
   getFlowCredentialStatus,
   verifyFlowWorkerAuthentication,
   regenerateFlowCredential,
+  recoverFlowCredential,
   reconnectFlowWorker,
   updateFlowWorkerConfig,
+  resetFlowBrowserProfile,
+  importFlowAsset,
+  FlowImportAssetPayload,
   FlowWorkerSession,
   FlowWorkerHealthStatus,
   FlowCredentialStatus,
@@ -48,7 +52,10 @@ export interface GoogleFlowConnectionContextType {
   closeBrowser: () => Promise<FlowWorkerSession | null>;
   verifyAuthentication: () => Promise<{ ok: boolean; authenticated: boolean; error?: string }>;
   regenerateCredential: () => Promise<void>;
+  recoverCredential: () => Promise<void>;
   reconnectWorker: () => Promise<{ ok: boolean; message: string }>;
+  resetProfile: () => Promise<void>;
+  importAsset: (payload: FlowImportAssetPayload) => Promise<any>;
   saveConfig: () => Promise<void>;
 
   // Backwards-compatible stubs
@@ -246,6 +253,54 @@ export const GoogleFlowConnectionProvider: React.FC<{ children: React.ReactNode 
     }
   }, [workerUrl, refreshSession]);
 
+  const recoverCredential = useCallback(async () => {
+    setIsSessionBusy(true);
+    clearMessages();
+    try {
+      const res = await recoverFlowCredential();
+      setSuccess(res.message || 'Credential recovered and re-encrypted successfully.');
+      await checkHealth();
+      await reconnectWorker();
+      const newStatus = await getFlowCredentialStatus();
+      setCredentialStatus(newStatus);
+    } catch (err: any) {
+      setError(err.message || 'Credential recovery failed.');
+      throw err;
+    } finally {
+      setIsSessionBusy(false);
+    }
+  }, [clearMessages, checkHealth, reconnectWorker]);
+
+  const resetProfile = useCallback(async () => {
+    setIsSessionBusy(true);
+    clearMessages();
+    try {
+      const res = await resetFlowBrowserProfile();
+      setSuccess(res.message || 'Browser profile reset successfully.');
+      await refreshSession();
+    } catch (err: any) {
+      setError(err.message || 'Failed to reset profile.');
+      throw err;
+    } finally {
+      setIsSessionBusy(false);
+    }
+  }, [clearMessages, refreshSession]);
+
+  const importAsset = useCallback(async (payload: FlowImportAssetPayload) => {
+    setIsSessionBusy(true);
+    clearMessages();
+    try {
+      const res = await importFlowAsset(payload);
+      setSuccess(res.message || 'Asset imported successfully.');
+      return res;
+    } catch (err: any) {
+      setError(err.message || 'Failed to import asset.');
+      throw err;
+    } finally {
+      setIsSessionBusy(false);
+    }
+  }, [clearMessages]);
+
   // Initial load: fetch durable credentials & status from PostgreSQL
   useEffect(() => {
     let mounted = true;
@@ -319,7 +374,10 @@ export const GoogleFlowConnectionProvider: React.FC<{ children: React.ReactNode 
     closeBrowser,
     verifyAuthentication,
     regenerateCredential,
+    recoverCredential,
     reconnectWorker,
+    resetProfile,
+    importAsset,
     saveConfig,
 
     // Backwards-compatible stubs (token is now in PostgreSQL, not localStorage)

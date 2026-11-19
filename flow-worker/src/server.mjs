@@ -235,6 +235,26 @@ const server = http.createServer(async (request, response) => {
       return;
     }
 
+    if (request.method === "POST" && pathname === "/config") {
+      const body = await readJson(request);
+      try {
+        worker.configure(body);
+        sendJson(response, 200, {
+          success: true,
+          config: {
+            browserChannel: worker.browserChannel || "bundled-chromium",
+            profileDir: worker.profileDir,
+          },
+        });
+      } catch (configErr) {
+        sendJson(response, configErr.statusCode || 409, {
+          success: false,
+          message: configErr.message,
+        });
+      }
+      return;
+    }
+
     if (request.method === "POST" && pathname === "/session/open") {
       const body = await readJson(request);
       const session = await worker.launch(body.projectUrl);
@@ -244,6 +264,12 @@ const server = http.createServer(async (request, response) => {
 
     if (request.method === "POST" && pathname === "/session/close") {
       sendJson(response, 200, { success: true, session: await worker.close() });
+      return;
+    }
+
+    if (request.method === "POST" && pathname === "/session/reset-profile") {
+      const result = await worker.resetProfile();
+      sendJson(response, 200, { success: true, ...result });
       return;
     }
 

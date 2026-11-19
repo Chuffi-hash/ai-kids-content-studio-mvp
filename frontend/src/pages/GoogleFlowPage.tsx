@@ -42,10 +42,11 @@ import {
 import { getAllCharacters, Character } from "../services/character.service";
 import { EditorStory, EditorScene } from "../types/editor";
 import { useGoogleFlowConnection } from "../context/GoogleFlowConnectionContext";
+import { CollapsibleSection } from "../components/editor/CollapsibleSection";
 import GoogleFlowCharacterPanel from "../components/characters/GoogleFlowCharacterPanel";
 import "./GoogleFlowPage.css";
 
-type ActiveTab = "connection" | "project" | "background" | "character";
+type ActiveTab = "setup" | "connection" | "project" | "background" | "character";
 
 const ASPECT_RATIOS = [
   { value: "16:9", label: "16:9 (Landscape - YouTube/TV)" },
@@ -118,11 +119,17 @@ export default function GoogleFlowPage() {
     closeBrowser,
     verifyAuthentication,
     regenerateCredential,
+    recoverCredential,
     reconnectWorker,
+    resetProfile,
+    importAsset,
     saveConfig,
   } = useGoogleFlowConnection();
 
   const [showRegenConfirm, setShowRegenConfirm] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [isVerifyingWizard, setIsVerifyingWizard] = useState(false);
+  const [copiedCmdToast, setCopiedCmdToast] = useState(false);
 
   // ----------------------------------------------------
   // Section B: Project Management State
@@ -362,6 +369,53 @@ export default function GoogleFlowPage() {
 
   const handleReconnectWorker = async () => {
     await reconnectWorker();
+  };
+
+  const handleRecoverCredential = async () => {
+    try {
+      await recoverCredential();
+      setConnectionSuccess("Credential safely recovered and re-encrypted with active master key.");
+    } catch (err: any) {
+      setConnectionError(err.message || "Failed to recover credential.");
+    }
+  };
+
+  const handleResetProfile = async () => {
+    setShowResetConfirm(false);
+    try {
+      await resetProfile();
+      setConnectionSuccess("Dedicated Google Flow browser profile reset. Sign in again via Open Browser.");
+    } catch (err: any) {
+      setConnectionError(err.message || "Failed to reset profile.");
+    }
+  };
+
+  const handleRunWizardVerification = async () => {
+    setIsVerifyingWizard(true);
+    setConnectionError(null);
+    setConnectionSuccess(null);
+    try {
+      const health = await checkHealth();
+      if (health.online) {
+        await verifyAuthentication();
+        await refreshSession();
+        setConnectionSuccess("Verification checks complete. Worker and browser session are responsive.");
+      } else {
+        setConnectionError("Worker is offline on loopback (http://127.0.0.1:4177). Please start the worker.");
+      }
+    } catch (err: any) {
+      setConnectionError(err.message || "Verification check failed.");
+    } finally {
+      setIsVerifyingWizard(false);
+    }
+  };
+
+  const handleCopyStartupCommand = async () => {
+    try {
+      await navigator.clipboard.writeText("cd flow-worker\nnpm install\nnpm start");
+      setCopiedCmdToast(true);
+      setTimeout(() => setCopiedCmdToast(false), 2500);
+    } catch {}
   };
 
   const handleConfirmRegenerate = async () => {
@@ -657,13 +711,25 @@ export default function GoogleFlowPage() {
 
           <div
             className={`flow-status-badge ${flowProjectDetails?.isConnected || standaloneProjectUrl ? "selected" : "neutral"}`}
+            title={
+              flowProjectDetails?.flowProjectId
+                ? `Flow Project: ${flowProjectDetails.flowProjectId}`
+                : standaloneProjectUrl
+                  ? `Standalone Flow Project: ${standaloneProjectUrl}`
+                  : "No Google Flow project linked"
+            }
           >
             <span
               className={`flow-status-dot ${flowProjectDetails?.isConnected || standaloneProjectUrl ? "purple" : "gray"}`}
             />
             Project:{" "}
-            {flowProjectDetails?.flowProjectId ||
-              (standaloneProjectUrl ? "Standalone" : "Not Selected")}
+            {flowProjectDetails?.flowProjectId
+              ? flowProjectDetails.flowProjectId
+              : flowProjectDetails?.isConnected
+                ? "Linked"
+                : standaloneProjectUrl
+                  ? "Standalone"
+                  : "Not Selected"}
           </div>
         </div>
       </div>
@@ -710,6 +776,15 @@ export default function GoogleFlowPage() {
       <div className="flow-tabs-nav">
         <button
           type="button"
+          className={`flow-tab-button ${activeTab === "setup" ? "active" : ""}`}
+          onClick={() => setActiveTab("setup")}
+        >
+          <SparklesIcon size={15} />
+          <span>Setup Guide</span>
+        </button>
+
+        <button
+          type="button"
           className={`flow-tab-button ${activeTab === "connection" ? "active" : ""}`}
           onClick={() => setActiveTab("connection")}
         >
@@ -749,6 +824,320 @@ export default function GoogleFlowPage() {
       </div>
 
       {/* ==================================================== */}
+      {/* TAB 0: SETUP GUIDE WIZARD                            */}
+      {/* ==================================================== */}
+      {activeTab === "setup" && (
+        <div className="flow-tab-content">
+          <div className="flow-wizard-container">
+            {/* Step 1: Requirements Check */}
+            <div className={`flow-wizard-step ${workerHealth?.online ? "completed" : "active"}`}>
+              <div className="flow-step-header">
+                <div className="flow-step-title-group">
+                  <div className="flow-step-number">1</div>
+                  <h3 className="flow-step-title">Requirements & Loopback Networking</h3>
+                </div>
+                <span className={`flow-status-badge ${workerHealth?.online ? "online" : "neutral"}`}>
+                  <span className={`flow-status-dot ${workerHealth?.online ? "green" : "gray"}`} />
+                  {workerHealth?.online ? "Port 4177 Online" : "Loopback Ready"}
+                </span>
+              </div>
+              <div className="flow-step-body">
+                <p>
+                  Google Flow integration communicates securely via a loopback Playwright worker running locally at{" "}
+                  <code>http://127.0.0.1:4177</code>. Ensure Node.js (v18+) is installed on this laptop.
+                </p>
+                <div className="flow-checklist">
+                  <div className={`flow-checklist-item ${workerHealth?.online ? "pass" : "pending"}`}>
+                    <span>{workerHealth?.online ? "✓" : "○"}</span>
+                    <span>Loopback Worker (127.0.0.1:4177): {workerHealth?.online ? `Online (${workerHealth.latencyMs}ms)` : "Offline (Start in step 4)"}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Step 2: Browser Selection */}
+            <div className="flow-wizard-step completed">
+              <div className="flow-step-header">
+                <div className="flow-step-title-group">
+                  <div className="flow-step-number">2</div>
+                  <h3 className="flow-step-title">Choose Browser Engine Channel</h3>
+                </div>
+                <span className="flow-tab-badge">Configured</span>
+              </div>
+              <div className="flow-step-body">
+                <p>
+                  We recommend using your installed Google Chrome browser for the highest compatibility with Google Flow.
+                </p>
+                <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", marginTop: "4px" }}>
+                  <button
+                    type="button"
+                    className={`flow-btn ${browserChannel === "chrome" ? "primary" : "secondary"}`}
+                    onClick={() => {
+                      setBrowserChannel("chrome");
+                      saveConfig();
+                    }}
+                  >
+                    Google Chrome (System Installed — Recommended)
+                  </button>
+                  <button
+                    type="button"
+                    className={`flow-btn ${browserChannel === "bundled-chromium" ? "primary" : "secondary"}`}
+                    onClick={() => {
+                      setBrowserChannel("bundled-chromium");
+                      saveConfig();
+                    }}
+                  >
+                    Bundled Playwright Chromium
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Step 3: Dedicated Persistent Profile */}
+            <div className="flow-wizard-step completed">
+              <div className="flow-step-header">
+                <div className="flow-step-title-group">
+                  <div className="flow-step-number">3</div>
+                  <h3 className="flow-step-title">Dedicated Persistent Chrome Profile</h3>
+                </div>
+                <span className="flow-tab-badge">Isolated & Secure</span>
+              </div>
+              <div className="flow-step-body">
+                <p>
+                  To keep you signed in without automating passwords or CAPTCHAs, Playwright runs inside a dedicated, isolated browser directory:
+                </p>
+                <div className="flow-code-block">
+                  {session?.configuredProfileDir || workerHealth?.profileDir || "C:\\Users\\...\\AppData\\Local\\AIKidsContentStudio\\GoogleFlowChromeProfile"}
+                </div>
+                <div className="flow-callout security" style={{ marginTop: "6px" }}>
+                  <strong>🔒 Privacy Protection:</strong>
+                  <span>
+                    Your everyday personal Chrome profile and browsing history are NEVER touched or modified. Only session cookies inside this dedicated studio profile are preserved across restarts.
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Step 4: Worker Startup Command */}
+            <div className={`flow-wizard-step ${workerHealth?.online ? "completed" : "active"}`}>
+              <div className="flow-step-header">
+                <div className="flow-step-title-group">
+                  <div className="flow-step-number">4</div>
+                  <h3 className="flow-step-title">Start the Local Playwright Worker</h3>
+                </div>
+                <button
+                  type="button"
+                  className="flow-btn secondary sm"
+                  onClick={handleCopyStartupCommand}
+                >
+                  <CopyIcon size={12} />
+                  <span>{copiedCmdToast ? "Copied!" : "Copy Command"}</span>
+                </button>
+              </div>
+              <div className="flow-step-body">
+                <p>
+                  In a terminal window on your computer, navigate to the <code>flow-worker</code> directory and run:
+                </p>
+                <div className="flow-code-block" style={{ cursor: "pointer" }} onClick={handleCopyStartupCommand}>
+                  cd flow-worker<br />
+                  npm install<br />
+                  npm start
+                </div>
+                <span style={{ fontSize: "11px", color: "var(--color-text-secondary, #94a3b8)" }}>
+                  💡 The worker connects automatically to PostgreSQL to provision its encrypted authorization token on launch.
+                </span>
+              </div>
+            </div>
+
+            {/* Step 5: Manual Google Sign-In */}
+            <div className={`flow-wizard-step ${session?.googleAuthenticated ? "completed" : "active"}`}>
+              <div className="flow-step-header">
+                <div className="flow-step-title-group">
+                  <div className="flow-step-number">5</div>
+                  <h3 className="flow-step-title">Sign In to Google (One-Time Manual Step)</h3>
+                </div>
+                <span className={`flow-status-badge ${session?.googleAuthenticated ? "online" : "neutral"}`}>
+                  {session?.googleAuthenticated ? "Authenticated" : "Sign-In Required"}
+                </span>
+              </div>
+              <div className="flow-step-body">
+                <p>
+                  Google prohibits automated logins. Click below to open a visible browser window where you can sign in to your Google account directly.
+                </p>
+                <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginTop: "4px" }}>
+                  <button
+                    type="button"
+                    className="flow-btn primary"
+                    disabled={isSessionBusy}
+                    onClick={handleOpenBrowser}
+                  >
+                    <SparklesIcon size={14} />
+                    <span>Open Flow Browser for Sign-In</span>
+                  </button>
+                  {session?.browserRunning && (
+                    <button
+                      type="button"
+                      className="flow-btn secondary"
+                      disabled={isSessionBusy}
+                      onClick={handleRefreshSession}
+                    >
+                      Check Sign-In Status
+                    </button>
+                  )}
+                </div>
+                <span style={{ fontSize: "11px", color: "var(--color-text-secondary, #94a3b8)" }}>
+                  Once signed in, the session persists in your dedicated profile directory so you stay logged in.
+                </span>
+              </div>
+            </div>
+
+            {/* Step 6: Verify Setup */}
+            <div className="flow-wizard-step">
+              <div className="flow-step-header">
+                <div className="flow-step-title-group">
+                  <div className="flow-step-number">6</div>
+                  <h3 className="flow-step-title">Run Integration Health Checks</h3>
+                </div>
+                <button
+                  type="button"
+                  className="flow-btn primary sm"
+                  disabled={isVerifyingWizard}
+                  onClick={handleRunWizardVerification}
+                >
+                  <CheckIcon size={13} />
+                  <span>{isVerifyingWizard ? "Verifying..." : "Run Verification"}</span>
+                </button>
+              </div>
+              <div className="flow-step-body">
+                <p>Verify that the worker, database encryption, and browser session are functioning properly:</p>
+                <div className="flow-checklist">
+                  <div className={`flow-checklist-item ${workerHealth?.online ? "pass" : "fail"}`}>
+                    <span>{workerHealth?.online ? "✓" : "✕"}</span>
+                    <span>Local Worker Service: {workerHealth?.online ? `Online (${workerHealth.latencyMs}ms)` : "Offline"}</span>
+                  </div>
+                  <div className={`flow-checklist-item ${credentialStatus?.configured ? "pass" : "fail"}`}>
+                    <span>{credentialStatus?.configured ? "✓" : "✕"}</span>
+                    <span>Database Credential: {credentialStatus?.configured ? "Configured (PostgreSQL AES-256-GCM)" : "Unconfigured"}</span>
+                  </div>
+                  <div className={`flow-checklist-item ${workerHealth?.credentialDecryptable ? "pass" : workerHealth?.credentialError ? "fail" : "pending"}`}>
+                    <span>{workerHealth?.credentialDecryptable ? "✓" : workerHealth?.credentialError ? "✕" : "○"}</span>
+                    <span>Credential Decryption: {workerHealth?.credentialDecryptable ? "Verified" : (workerHealth?.credentialError ? "Decryption failed" : "Pending verification")}</span>
+                  </div>
+                  <div className={`flow-checklist-item ${session?.browserRunning ? "pass" : "pending"}`}>
+                    <span>{session?.browserRunning ? "✓" : "○"}</span>
+                    <span>Browser Session: {session?.browserRunning ? "Running" : "Closed (Will open on demand)"}</span>
+                  </div>
+                  <div className={`flow-checklist-item ${session?.googleAuthenticated ? "pass" : "pending"}`}>
+                    <span>{session?.googleAuthenticated ? "✓" : "○"}</span>
+                    <span>Google Authentication: {session?.googleAuthenticated ? "Authenticated" : "Sign-in needed"}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Step 7: Ready to Generate */}
+            <div className={`flow-wizard-step ${workerHealth?.online ? "completed" : ""}`}>
+              <div className="flow-step-header">
+                <div className="flow-step-title-group">
+                  <div className="flow-step-number">7</div>
+                  <h3 className="flow-step-title">Start Generating Assets</h3>
+                </div>
+                <span className="flow-tab-badge">Ready</span>
+              </div>
+              <div className="flow-step-body">
+                <p>
+                  You are all set! Use the navigation tabs above or the shortcuts below to generate environment backgrounds or character views:
+                </p>
+                <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginTop: "4px" }}>
+                  <button
+                    type="button"
+                    className="flow-btn primary"
+                    onClick={() => setActiveTab("background")}
+                  >
+                    <ImageIcon size={14} />
+                    <span>Background Studio (Workflow A)</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="flow-btn secondary"
+                    onClick={() => setActiveTab("character")}
+                  >
+                    <UsersIcon size={14} />
+                    <span>Character Studio (Flow Views)</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="flow-btn secondary"
+                    onClick={() => setActiveTab("project")}
+                  >
+                    <BookOpenIcon size={14} />
+                    <span>Link Story Project</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Troubleshooting & Emergency Recovery Panel */}
+          <div className="flow-card" style={{ marginTop: "24px" }}>
+            <div className="flow-card-header">
+              <div>
+                <h3>🛠️ Troubleshooting & Emergency Recovery</h3>
+                <p>One-click tools to resolve stalled workers, mismatched encryption keys, or profile locks.</p>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                className="flow-btn secondary"
+                disabled={isSessionBusy}
+                onClick={handleRunWizardVerification}
+              >
+                <span>Retry Setup / Verify</span>
+              </button>
+
+              <button
+                type="button"
+                className="flow-btn secondary"
+                disabled={isSessionBusy}
+                onClick={handleRefreshSession}
+              >
+                <span>Refresh Diagnostics</span>
+              </button>
+
+              <button
+                type="button"
+                className="flow-btn secondary"
+                disabled={isSessionBusy}
+                onClick={handleReconnectWorker}
+              >
+                <span>Reconnect Worker</span>
+              </button>
+
+              <button
+                type="button"
+                className="flow-btn secondary"
+                disabled={isSessionBusy}
+                onClick={handleRecoverCredential}
+              >
+                <span>Recover Credential</span>
+              </button>
+
+              <button
+                type="button"
+                className="flow-btn danger"
+                disabled={isSessionBusy}
+                onClick={() => setShowResetConfirm(true)}
+              >
+                <span>Reset Browser Profile</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==================================================== */}
       {/* TAB 1: CONNECTION & DIAGNOSTICS                       */}
       {/* ==================================================== */}
       {activeTab === "connection" && (
@@ -777,19 +1166,13 @@ export default function GoogleFlowPage() {
                   }}
                 >
                   Google rejected automated sign-in on{" "}
-                  <code>accounts.google.com/v3/signin/rejected</code>. To
-                  resolve this:
+                  <code>accounts.google.com/v3/signin/rejected</code>. To resolve this:
                   <br />
-                  1. Set <code>FLOW_BROWSER_CHANNEL=chrome</code> in{" "}
-                  <code>flow-worker/.env</code> to use your installed Google
-                  Chrome.
+                  1. Set <code>FLOW_BROWSER_CHANNEL=chrome</code> in your settings to use installed Google Chrome.
                   <br />
-                  2. Alternatively, sign in to your Google account in regular
-                  Google Chrome on this machine. Playwright reuses the
-                  persistent profile directory.
+                  2. Alternatively, sign in manually via the "Open Persistent Flow Browser" button.
                   <br />
-                  3. You can also generate manually in Google Flow and import
-                  assets via Background Studio and Character Studio tabs.
+                  3. You can also generate in Google Flow manually and import assets directly via Background Studio or Character Studio.
                 </p>
               </div>
             </div>
@@ -797,21 +1180,16 @@ export default function GoogleFlowPage() {
 
           <div className="flow-grid-2col">
             {/* Left Column: Worker Controls & Credential Management */}
-            <div
-              style={{ display: "flex", flexDirection: "column", gap: "20px" }}
-            >
-              {/* Card 1: Worker & Browser Controls */}
-              <div className="flow-card">
-                <div className="flow-card-header">
-                  <div>
-                    <h3>
-                      <SettingsIcon size={16} /> Local Worker & Browser Controls
-                    </h3>
-                    <p>
-                      Manage loopback communication and visible Playwright
-                      browser execution.
-                    </p>
-                  </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+              {/* Card 1: Worker & Browser Controls (Collapsible) */}
+              <CollapsibleSection
+                id="sec-worker-controls"
+                storageKey="flow_worker_controls"
+                variant="flow-card"
+                title="Local Worker & Browser Controls"
+                subtitle="Manage loopback communication and visible Playwright browser execution."
+                icon={<SettingsIcon size={16} />}
+                headerActions={
                   <button
                     type="button"
                     className="flow-btn secondary sm"
@@ -820,8 +1198,8 @@ export default function GoogleFlowPage() {
                   >
                     {isCheckingHealth ? "Testing..." : "Test Connection"}
                   </button>
-                </div>
-
+                }
+              >
                 {connectionError && (
                   <div className="flow-callout warning">
                     <AlertTriangleIcon size={14} />
@@ -839,9 +1217,7 @@ export default function GoogleFlowPage() {
                 <div className="flow-form-group">
                   <label className="flow-form-label">
                     Local Worker URL
-                    <span className="sub">
-                      Must bind to loopback (127.0.0.1)
-                    </span>
+                    <span className="sub">Must bind to loopback (127.0.0.1)</span>
                   </label>
                   <input
                     type="text"
@@ -855,9 +1231,7 @@ export default function GoogleFlowPage() {
                 <div className="flow-form-group">
                   <label className="flow-form-label">
                     Browser Engine Channel
-                    <span className="sub">
-                      Google Chrome installed vs Bundled Chromium
-                    </span>
+                    <span className="sub">Google Chrome installed vs Bundled Chromium</span>
                   </label>
                   <select
                     className="flow-select"
@@ -944,30 +1318,56 @@ export default function GoogleFlowPage() {
                     )}
                   </div>
                 )}
-              </div>
+              </CollapsibleSection>
 
-              {/* Card 2: Database Credential Management (PostgreSQL) */}
-              <div className="flow-card">
-                <div className="flow-card-header">
-                  <div>
-                    <h3>🔐 Integration Credential & Security</h3>
-                    <p>
-                      Bearer token is generated, encrypted with AES-256-GCM, and
-                      persisted in PostgreSQL.
-                    </p>
-                  </div>
-                </div>
-
+              {/* Card 2: Database Credential Management (Collapsible) */}
+              <CollapsibleSection
+                id="sec-credential-security"
+                storageKey="flow_credential_security"
+                variant="flow-card"
+                title="🔐 Integration Credential & Security"
+                subtitle="Bearer token is generated, encrypted with AES-256-GCM, and persisted in PostgreSQL."
+              >
                 <div className="flow-diagnostics-grid">
                   <div className="flow-diag-item">
-                    <span className="flow-diag-label">
-                      Credential Configured
-                    </span>
+                    <span className="flow-diag-label">Credential Configured</span>
                     <span
                       className="flow-diag-value"
-                      style={{ color: "#10b981" }}
+                      style={{ color: credentialStatus?.configured ? "#10b981" : "#f59e0b" }}
                     >
-                      Yes (PostgreSQL AES-256-GCM)
+                      {credentialStatus?.configured ? "Yes (PostgreSQL AES-256-GCM)" : "No"}
+                    </span>
+                  </div>
+
+                  <div className="flow-diag-item">
+                    <span className="flow-diag-label">Master Encryption Key</span>
+                    <span
+                      className="flow-diag-value"
+                      style={{
+                        color: workerHealth?.masterKeyAvailable !== false ? "#10b981" : "#ef4444",
+                      }}
+                    >
+                      {workerHealth?.masterKeyAvailable !== false ? "Healthy (Active)" : "Missing / Unreadable"}
+                    </span>
+                  </div>
+
+                  <div className="flow-diag-item">
+                    <span className="flow-diag-label">Credential Decryption</span>
+                    <span
+                      className="flow-diag-value"
+                      style={{
+                        color: workerHealth?.credentialDecryptable
+                          ? "#10b981"
+                          : workerHealth?.credentialError
+                            ? "#ef4444"
+                            : "#10b981",
+                      }}
+                    >
+                      {workerHealth?.credentialDecryptable
+                        ? "Verified"
+                        : workerHealth?.credentialError
+                          ? "Decryption failed"
+                          : "Verified"}
                     </span>
                   </div>
 
@@ -979,53 +1379,32 @@ export default function GoogleFlowPage() {
                   </div>
 
                   <div className="flow-diag-item">
-                    <span className="flow-diag-label">
-                      Credential Last Updated
-                    </span>
-                    <span className="flow-diag-value">
-                      {credentialStatus?.lastUpdated
-                        ? new Date(
-                            credentialStatus.lastUpdated,
-                          ).toLocaleString()
-                        : "Just now"}
-                    </span>
-                  </div>
-
-                  <div className="flow-diag-item">
-                    <span className="flow-diag-label">
-                      Worker Pairing Status
-                    </span>
+                    <span className="flow-diag-label">Worker Pairing Status</span>
                     <span
                       className="flow-diag-value"
                       style={{
                         color:
                           credentialStatus?.metadata?.pairingStatus === "paired"
                             ? "#10b981"
-                            : credentialStatus?.metadata?.pairingStatus ===
-                                "awaiting_provisioning"
+                            : credentialStatus?.metadata?.pairingStatus === "awaiting_provisioning"
                               ? "#f59e0b"
                               : "#94a3b8",
                       }}
                     >
                       {credentialStatus?.metadata?.pairingStatus === "paired"
                         ? "Paired (Active)"
-                        : credentialStatus?.metadata?.pairingStatus ===
-                            "awaiting_provisioning"
+                        : credentialStatus?.metadata?.pairingStatus === "awaiting_provisioning"
                           ? "Awaiting Provisioning"
                           : "Unpaired"}
                     </span>
                   </div>
 
                   <div className="flow-diag-item">
-                    <span className="flow-diag-label">
-                      Worker Authentication
-                    </span>
+                    <span className="flow-diag-label">Worker Authentication</span>
                     <span
                       className="flow-diag-value"
                       style={{
-                        color: workerHealth?.isProvisioned
-                          ? "#10b981"
-                          : "#f59e0b",
+                        color: workerHealth?.isProvisioned ? "#10b981" : "#f59e0b",
                       }}
                     >
                       {workerHealth?.isProvisioned
@@ -1034,6 +1413,33 @@ export default function GoogleFlowPage() {
                     </span>
                   </div>
                 </div>
+
+                {workerHealth?.credentialDecryptable === false && workerHealth?.credentialError && (
+                  <div
+                    className="flow-callout warning"
+                    style={{
+                      borderColor: "rgba(239, 68, 68, 0.5)",
+                      background: "rgba(239, 68, 68, 0.12)",
+                      marginTop: "12px",
+                    }}
+                  >
+                    <AlertTriangleIcon size={16} />
+                    <div>
+                      <strong style={{ color: "#f87171" }}>Decryption Recovery Required</strong>
+                      <p style={{ margin: "4px 0 8px 0", fontSize: "12px" }}>
+                        The active master key cannot decrypt the existing credential token ({workerHealth.credentialError}). Click below to safely re-encrypt a fresh token with zero impact to your browser profile.
+                      </p>
+                      <button
+                        type="button"
+                        className="flow-btn primary sm"
+                        disabled={isSessionBusy}
+                        onClick={handleRecoverCredential}
+                      >
+                        Recover Credential Now
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 {showRegenConfirm ? (
                   <div
@@ -1053,9 +1459,7 @@ export default function GoogleFlowPage() {
                           lineHeight: 1.45,
                         }}
                       >
-                        Regenerating credentials creates a new token in
-                        PostgreSQL. Any running worker sessions must be
-                        reconnected to receive the new credential.
+                        Regenerating credentials creates a new token in PostgreSQL. Any running worker sessions must be reconnected to receive the new credential.
                       </p>
                       <div style={{ display: "flex", gap: "8px" }}>
                         <button
@@ -1076,9 +1480,7 @@ export default function GoogleFlowPage() {
                     </div>
                   </div>
                 ) : (
-                  <div
-                    style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}
-                  >
+                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "12px" }}>
                     <button
                       type="button"
                       className="flow-btn secondary sm"
@@ -1101,27 +1503,32 @@ export default function GoogleFlowPage() {
                       type="button"
                       className="flow-btn secondary sm"
                       disabled={isSessionBusy}
+                      onClick={handleRecoverCredential}
+                    >
+                      Recover Credential
+                    </button>
+
+                    <button
+                      type="button"
+                      className="flow-btn secondary sm"
+                      disabled={isSessionBusy}
                       onClick={() => setShowRegenConfirm(true)}
                     >
                       Regenerate Credential
                     </button>
                   </div>
                 )}
-              </div>
+              </CollapsibleSection>
             </div>
 
-            {/* Right Column: Persistent Profile Diagnostics & Setup Guide */}
-            <div className="flow-card">
-              <div className="flow-card-header">
-                <div>
-                  <h3>🔍 Persistent Chrome Profile Diagnostics</h3>
-                  <p>
-                    Stable profile path, channel, and authentication state
-                    details.
-                  </p>
-                </div>
-              </div>
-
+            {/* Right Column: Persistent Profile Diagnostics (Collapsible) */}
+            <CollapsibleSection
+              id="sec-profile-diagnostics"
+              storageKey="flow_profile_diagnostics"
+              variant="flow-card"
+              title="🔍 Persistent Chrome Profile Diagnostics"
+              subtitle="Stable profile path, channel, and authentication state details."
+            >
               <div className="flow-diagnostics-grid">
                 <div className="flow-diag-item">
                   <span className="flow-diag-label">Browser Channel</span>
@@ -1134,9 +1541,7 @@ export default function GoogleFlowPage() {
                 </div>
 
                 <div className="flow-diag-item">
-                  <span className="flow-diag-label">
-                    Configured Profile Directory
-                  </span>
+                  <span className="flow-diag-label">Configured Profile Directory</span>
                   <span
                     className="flow-diag-value"
                     title={
@@ -1152,9 +1557,7 @@ export default function GoogleFlowPage() {
                 </div>
 
                 <div className="flow-diag-item">
-                  <span className="flow-diag-label">
-                    Profile Directory Exists
-                  </span>
+                  <span className="flow-diag-label">Profile Directory Exists</span>
                   <span className="flow-diag-value">
                     {session?.profileDirExists !== undefined
                       ? session.profileDirExists
@@ -1165,18 +1568,14 @@ export default function GoogleFlowPage() {
                 </div>
 
                 <div className="flow-diag-item">
-                  <span className="flow-diag-label">
-                    Worker Controls Active Browser
-                  </span>
+                  <span className="flow-diag-label">Worker Controls Active Browser</span>
                   <span className="flow-diag-value">
                     {session?.ownsActiveBrowser ? "Yes" : "No"}
                   </span>
                 </div>
 
                 <div className="flow-diag-item">
-                  <span className="flow-diag-label">
-                    Google Sign-in Required
-                  </span>
+                  <span className="flow-diag-label">Google Sign-in Required</span>
                   <span className="flow-diag-value">
                     {session?.manualLoginRequired ||
                     session?.authenticationStatus === "login_required"
@@ -1190,54 +1589,30 @@ export default function GoogleFlowPage() {
 
                 <div className="flow-diag-item">
                   <span className="flow-diag-label">Credential Storage</span>
-                  <span className="flow-diag-value">
-                    PostgreSQL (AES-256-GCM)
-                  </span>
+                  <span className="flow-diag-value">PostgreSQL (AES-256-GCM)</span>
                 </div>
               </div>
 
-              <div
-                className="flow-callout security"
-                style={{ marginTop: "16px" }}
-              >
+              <div className="flow-callout security" style={{ marginTop: "16px" }}>
                 <strong>🔒 Security & Privacy Architecture:</strong>
                 <span>
-                  The worker binds exclusively to loopback (
-                  <code>127.0.0.1</code>) and uses automated provisioning.
-                  Credentials are never exposed to the frontend browser or
-                  stored in plaintext. The browser session runs in a dedicated
-                  persistent profile so your Google login is remembered across
-                  studio restarts without automating passwords or CAPTCHAs.
+                  The worker binds exclusively to loopback (<code>127.0.0.1</code>) and uses automated provisioning. Credentials are never exposed to the frontend browser or stored in plaintext. The browser session runs in a dedicated persistent profile so your Google login is remembered across studio restarts without automating passwords or CAPTCHAs.
                 </span>
               </div>
 
               <div style={{ marginTop: "16px" }}>
-                <strong
-                  style={{
-                    fontSize: "12px",
-                    display: "block",
-                    marginBottom: "6px",
-                  }}
-                >
+                <strong style={{ fontSize: "12px", display: "block", marginBottom: "6px" }}>
                   1. Start the local worker process:
                 </strong>
-                <div className="flow-code-block">
-                  cd flow-worker
-                  <br />
-                  npm install
-                  <br />
+                <div className="flow-code-block" style={{ cursor: "pointer" }} onClick={handleCopyStartupCommand}>
+                  cd flow-worker<br />
+                  npm install<br />
                   npm start
                 </div>
               </div>
 
               <div>
-                <strong
-                  style={{
-                    fontSize: "12px",
-                    display: "block",
-                    marginBottom: "6px",
-                  }}
-                >
+                <strong style={{ fontSize: "12px", display: "block", marginBottom: "6px" }}>
                   2. Install Playwright Chromium (if not already installed):
                 </strong>
                 <div className="flow-code-block">
@@ -1246,23 +1621,26 @@ export default function GoogleFlowPage() {
               </div>
 
               <div>
-                <strong
-                  style={{
-                    fontSize: "12px",
-                    display: "block",
-                    marginBottom: "6px",
-                  }}
-                >
+                <strong style={{ fontSize: "12px", display: "block", marginBottom: "6px" }}>
                   3. Automated Provisioning Handshake:
                 </strong>
                 <div className="flow-code-block">
-                  # The worker automatically provisions its bearer token from
-                  PostgreSQL at startup.
-                  <br /># No manual editing of FLOW_WORKER_TOKEN in .env is
-                  required.
+                  # The worker automatically provisions its bearer token from PostgreSQL at startup.<br />
+                  # No manual editing of FLOW_WORKER_TOKEN in .env is required.
                 </div>
               </div>
-            </div>
+
+              <div style={{ marginTop: "12px" }}>
+                <button
+                  type="button"
+                  className="flow-btn danger sm"
+                  disabled={isSessionBusy}
+                  onClick={() => setShowResetConfirm(true)}
+                >
+                  Reset Dedicated Profile Directory
+                </button>
+              </div>
+            </CollapsibleSection>
           </div>
         </div>
       )}
@@ -1943,6 +2321,47 @@ export default function GoogleFlowPage() {
                 </p>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Reset Dedicated Profile Confirmation Modal */}
+      {showResetConfirm && (
+        <div className="flow-modal-overlay">
+          <div className="flow-modal">
+            <h3>
+              <AlertTriangleIcon size={20} color="#f87171" />
+              Reset Dedicated Browser Profile?
+            </h3>
+            <p>
+              This action will close any active Google Flow browser instance and completely clear the dedicated profile directory:
+            </p>
+            <div className="flow-code-block">
+              {session?.configuredProfileDir || workerHealth?.profileDir || "C:\\Users\\...\\AppData\\Local\\AIKidsContentStudio\\GoogleFlowChromeProfile"}
+            </div>
+            <p style={{ fontSize: "12px", color: "#f59e0b" }}>
+              ⚠️ You will be signed out of your Google account inside this dedicated profile and will need to log in again via "Open Persistent Flow Browser".
+            </p>
+            <div className="flow-callout security" style={{ margin: 0 }}>
+              <strong>🔒 Safe Guarantee:</strong>
+              <span>Your everyday personal Google Chrome browser and personal data are completely unaffected.</span>
+            </div>
+            <div className="flow-modal-actions">
+              <button
+                type="button"
+                className="flow-btn secondary"
+                onClick={() => setShowResetConfirm(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="flow-btn danger"
+                onClick={handleResetProfile}
+              >
+                Confirm Profile Reset
+              </button>
+            </div>
           </div>
         </div>
       )}

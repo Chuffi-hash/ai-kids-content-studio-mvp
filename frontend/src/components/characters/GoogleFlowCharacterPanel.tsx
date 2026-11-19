@@ -79,7 +79,6 @@ export default function GoogleFlowCharacterPanel({
   const flowContext = useOptionalGoogleFlowConnection();
 
   const [internalWorkerUrl, setInternalWorkerUrl] = useState('http://127.0.0.1:4177');
-  const [internalWorkerToken, setInternalWorkerToken] = useState('');
   const [internalProjectUrl, setInternalProjectUrl] = useState('');
   const [internalSession, setInternalSession] = useState<FlowWorkerSession | null>(null);
 
@@ -88,13 +87,6 @@ export default function GoogleFlowCharacterPanel({
     setInternalWorkerUrl(url);
     flowContext?.setWorkerUrl(url);
     onWorkerUrlChange?.(url);
-  };
-
-  const workerToken = propWorkerToken !== undefined ? propWorkerToken : (flowContext?.workerToken || internalWorkerToken);
-  const setWorkerToken = (token: string) => {
-    setInternalWorkerToken(token);
-    flowContext?.setWorkerToken(token);
-    onWorkerTokenChange?.(token);
   };
 
   const projectUrl = propProjectUrl !== undefined ? propProjectUrl : (flowContext?.selectedProjectUrl || internalProjectUrl);
@@ -129,13 +121,20 @@ export default function GoogleFlowCharacterPanel({
 
   const jobBelongsToCurrentCharacter = job?.characterId === characterId;
   const activeJob = job && !TERMINAL_STATUSES.has(job.status);
-  const canPrepare = Boolean(session?.connected) && !activeJob && !busy;
+  const canPrepare = Boolean(
+    (session?.canPrepareJob ?? (session?.browserRunning && session?.googleAuthenticated && session?.flowPageOpen)) &&
+    !activeJob &&
+    !busy &&
+    Boolean(characterId)
+  );
   const canGenerate = Boolean(
-    jobBelongsToCurrentCharacter &&
-    job?.status === 'prompt_ready' &&
-    referenceConfirmed &&
-    generationConfirmed &&
-    !busy
+    (session?.canGenerateJob ?? (
+      jobBelongsToCurrentCharacter &&
+      job?.status === 'prompt_ready' &&
+      referenceConfirmed &&
+      generationConfirmed &&
+      !busy
+    ))
   );
 
   useEffect(() => {
@@ -150,7 +149,7 @@ export default function GoogleFlowCharacterPanel({
       if (stopped || running) return;
       running = true;
       try {
-        const latest = await getFlowCharacterJob(workerUrl, workerToken, job.id);
+        const latest = await getFlowCharacterJob(workerUrl, undefined, job.id);
         if (!stopped) setJob(latest);
       } catch (pollError: any) {
         if (!stopped) setError(pollError.message || 'Could not refresh the Flow job.');
@@ -164,7 +163,7 @@ export default function GoogleFlowCharacterPanel({
       stopped = true;
       window.clearInterval(timer);
     };
-  }, [job?.id, job?.status, workerUrl, workerToken]);
+  }, [job?.id, job?.status, workerUrl]);
 
   useEffect(() => {
     if (job?.status === 'completed' && job.id !== importedJobRef.current) {
@@ -204,7 +203,7 @@ export default function GoogleFlowCharacterPanel({
     setBusy(true);
     setError(null);
     try {
-      const result = await openFlowWorkerSession(workerUrl, workerToken, projectUrl);
+      const result = await openFlowWorkerSession(workerUrl, undefined, projectUrl);
       setSession(result);
     } catch (openError: any) {
       setError(openError.message || 'Could not open Google Flow.');
@@ -217,9 +216,9 @@ export default function GoogleFlowCharacterPanel({
     setBusy(true);
     setError(null);
     try {
-      setSession(await getFlowWorkerSession(workerUrl, workerToken));
+      setSession(await getFlowWorkerSession(workerUrl, undefined));
       if (job) {
-        setJob(await getFlowCharacterJob(workerUrl, workerToken, job.id));
+        setJob(await getFlowCharacterJob(workerUrl, undefined, job.id));
       }
     } catch (refreshError: any) {
       setError(refreshError.message || 'Could not refresh worker status.');
@@ -232,7 +231,7 @@ export default function GoogleFlowCharacterPanel({
     setBusy(true);
     setError(null);
     try {
-      setSession(await closeFlowWorkerSession(workerUrl, workerToken));
+      setSession(await closeFlowWorkerSession(workerUrl, undefined));
     } catch (closeError: any) {
       setError(closeError.message || 'Could not close the Flow browser.');
     } finally {
@@ -250,7 +249,7 @@ export default function GoogleFlowCharacterPanel({
     setError(null);
     setJob(null);
     try {
-      const result = await createFlowCharacterJob(workerUrl, workerToken, {
+      const result = await createFlowCharacterJob(workerUrl, undefined, {
         characterId,
         characterName,
         view,
@@ -275,7 +274,7 @@ export default function GoogleFlowCharacterPanel({
     setBusy(true);
     setError(null);
     try {
-      setJob(await prepareFlowCharacterJob(workerUrl, workerToken, job.id));
+      setJob(await prepareFlowCharacterJob(workerUrl, undefined, job.id));
     } catch (prepareError: any) {
       setError(prepareError.message || 'Could not prepare the Flow prompt.');
     } finally {
@@ -288,7 +287,7 @@ export default function GoogleFlowCharacterPanel({
     setBusy(true);
     setError(null);
     try {
-      setJob(await requestFlowCharacterGeneration(workerUrl, workerToken, job.id));
+      setJob(await requestFlowCharacterGeneration(workerUrl, undefined, job.id));
     } catch (generateError: any) {
       setError(generateError.message || 'Could not request Flow generation.');
     } finally {
@@ -301,7 +300,7 @@ export default function GoogleFlowCharacterPanel({
     setBusy(true);
     setError(null);
     try {
-      setJob(await getFlowCharacterJob(workerUrl, workerToken, job.id));
+      setJob(await getFlowCharacterJob(workerUrl, undefined, job.id));
     } catch (refreshError: any) {
       setError(refreshError.message || 'Could not refresh the Flow job.');
     } finally {
@@ -314,7 +313,7 @@ export default function GoogleFlowCharacterPanel({
     setBusy(true);
     setError(null);
     try {
-      setJob(await retryFlowCharacterAssetRegistration(workerUrl, workerToken, job.id));
+      setJob(await retryFlowCharacterAssetRegistration(workerUrl, undefined, job.id));
     } catch (retryError: any) {
       setError(retryError.message || 'Could not register the downloaded asset.');
     } finally {
@@ -358,16 +357,6 @@ export default function GoogleFlowCharacterPanel({
             placeholder="http://127.0.0.1:4177"
           />
         </label>
-        <label>
-          Worker token
-          <input
-            type="password"
-            value={workerToken}
-            onChange={(event) => setWorkerToken(event.target.value)}
-            autoComplete="off"
-            placeholder="Paste token printed by the worker terminal"
-          />
-        </label>
         <label className="google-flow-project-field">
           Google Flow project URL (optional)
           <input
@@ -380,13 +369,13 @@ export default function GoogleFlowCharacterPanel({
       </div>
 
       <div className="google-flow-actions">
-        <button type="button" className="btn btn-secondary btn-sm" onClick={handleOpenSession} disabled={busy || !workerToken.trim()}>
+        <button type="button" className="btn btn-secondary btn-sm" onClick={handleOpenSession} disabled={busy}>
           {busy ? 'Working…' : 'Open Flow browser'}
         </button>
-        <button type="button" className="btn btn-secondary btn-sm" onClick={handleRefreshSession} disabled={busy || !workerToken.trim()}>
+        <button type="button" className="btn btn-secondary btn-sm" onClick={handleRefreshSession} disabled={busy}>
           Refresh session
         </button>
-        <button type="button" className="btn btn-ghost btn-sm" onClick={handleCloseSession} disabled={busy || !session?.connected}>
+        <button type="button" className="btn btn-ghost btn-sm" onClick={handleCloseSession} disabled={busy || (!session?.connected && !session?.browserRunning)}>
           Close browser
         </button>
       </div>
@@ -395,6 +384,13 @@ export default function GoogleFlowCharacterPanel({
         <div className="google-flow-status">
           <strong>Browser: {session.state}</strong>
           <span>{session.message}</span>
+          {session.browserRunning && !session.googleAuthenticated && (
+            <div style={{ marginTop: '6px', fontSize: '11px', color: '#f59e0b' }}>
+              {session.googleSigninBlocked
+                ? '⚠️ Google sign-in was blocked by Google. Complete sign-in in your standard browser or review network settings.'
+                : '🔑 Google sign-in required in the visible Flow browser before prompt preparation is enabled.'}
+            </div>
+          )}
         </div>
       )}
 

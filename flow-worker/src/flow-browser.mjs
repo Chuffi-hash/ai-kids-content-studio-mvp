@@ -128,7 +128,51 @@ export class FlowBrowserWorker {
     this.attachedPages = new WeakSet();
   }
 
-  async launch(projectUrl) {
+  configure(config = {}) {
+    if (this.context) {
+      const currentChannel = this.browserChannel === "chrome" ? "chrome" : "bundled-chromium";
+      const requestedChannel = config.browserChannel
+        ? (config.browserChannel === "chrome" ? "chrome" : "bundled-chromium")
+        : currentChannel;
+      const currentProfile = path.resolve(this.profileDir);
+      const requestedProfile = config.profileDir ? path.resolve(config.profileDir) : currentProfile;
+
+      if (requestedChannel !== currentChannel || requestedProfile !== currentProfile) {
+        const error = new Error(
+          "Cannot change browser channel or profile directory while browser session is running. Please close the active browser window first."
+        );
+        error.statusCode = 409;
+        throw error;
+      }
+    }
+
+    if (config.browserChannel !== undefined) {
+      const chan = String(config.browserChannel).trim();
+      if (chan === "chrome" || chan === "bundled-chromium" || chan === "") {
+        this.browserChannel = chan === "bundled-chromium" ? "" : chan;
+      } else {
+        const error = new Error(`Unsupported browser channel "${chan}". Only "chrome" and "bundled-chromium" are supported.`);
+        error.statusCode = 400;
+        throw error;
+      }
+    }
+
+    if (config.profileDir && typeof config.profileDir === "string" && config.profileDir.trim()) {
+      this.profileDir = path.resolve(config.profileDir.trim());
+    }
+
+    return {
+      success: true,
+      browserChannel: this.browserChannel === "chrome" ? "chrome" : "bundled-chromium",
+      profileDir: this.profileDir,
+    };
+  }
+
+  async launch(projectUrl, config = {}) {
+    if (config && Object.keys(config).length > 0) {
+      this.configure(config);
+    }
+
     if (!this.context) {
       await fs.mkdir(this.profileDir, { recursive: true });
       await fs.mkdir(this.downloadDir, { recursive: true });
@@ -140,12 +184,34 @@ export class FlowBrowserWorker {
         args: ["--start-maximized"],
       };
 
-      if (this.browserChannel) options.channel = this.browserChannel;
+      if (this.browserChannel === "chrome") {
+        options.channel = "chrome";
+      }
 
-      this.context = await chromium.launchPersistentContext(
-        this.profileDir,
-        options,
-      );
+      try {
+        this.context = await chromium.launchPersistentContext(
+          this.profileDir,
+          options,
+        );
+      } catch (launchErr) {
+        const msg = String(launchErr?.message || "");
+        if (
+          msg.includes("ProcessSingleton") ||
+          msg.includes("EBUSY") ||
+          msg.includes("Target closed") ||
+          msg.includes("already in use")
+        ) {
+          throw new Error(
+            `Google Flow profile is locked by another running browser process (${this.profileDir}). Close any active Chrome windows using this profile and try again.`
+          );
+        }
+        if (msg.includes("Executable doesn't exist") || msg.includes("Cannot find chrome")) {
+          throw new Error(
+            `Selected browser channel "${this.browserChannel}" was not found on this machine. Switch to bundled Chromium or install Google Chrome.`
+          );
+        }
+        throw launchErr;
+      }
       this.context.on("page", (page) => this.attachPage(page));
     }
 
@@ -223,6 +289,8 @@ export class FlowBrowserWorker {
         googleSigninBlocked: false,
         projectSelected: false,
         authenticationStatus: "unknown",
+        canPrepareJob: false,
+        canGenerateJob: false,
         state: "browser_not_started",
         message: "Open a persistent Google Flow browser session first.",
         browserChannel,
@@ -237,6 +305,7 @@ export class FlowBrowserWorker {
           googleSigninRequired: false,
           googleSigninBlocked: false,
           authenticationStatus: "unknown",
+          canPrepareJob: false,
         },
       };
     }
@@ -252,6 +321,8 @@ export class FlowBrowserWorker {
         googleSigninBlocked: false,
         projectSelected: false,
         authenticationStatus: "unknown",
+        canPrepareJob: false,
+        canGenerateJob: false,
         state: "browser_page_closed",
         message: "The Flow browser page is closed. Open the session again.",
         browserChannel,
@@ -266,6 +337,7 @@ export class FlowBrowserWorker {
           googleSigninRequired: false,
           googleSigninBlocked: false,
           authenticationStatus: "unknown",
+          canPrepareJob: false,
         },
       };
     }
@@ -370,6 +442,16 @@ export class FlowBrowserWorker {
       message = `Browser is open on ${currentUrl}. Navigate to Google Flow.`;
     }
 
+    const canPrepareJob = Boolean(
+      this.context &&
+      this.page &&
+      (typeof this.page.isClosed !== "function" || !this.page.isClosed()) &&
+      flowPage &&
+      googleAuthenticated &&
+      !manualLoginRequired &&
+      !googleSigninBlocked
+    );
+
     const diagnostics = {
       browserChannel,
       configuredProfileDir,
@@ -378,6 +460,7 @@ export class FlowBrowserWorker {
       googleSigninRequired: manualLoginRequired || authenticationStatus === "login_required",
       googleSigninBlocked,
       authenticationStatus,
+      canPrepareJob,
     };
 
     return {
@@ -390,6 +473,8 @@ export class FlowBrowserWorker {
       googleSigninBlocked,
       projectSelected,
       authenticationStatus,
+      canPrepareJob,
+      canGenerateJob: Boolean(canPrepareJob && this.activeJob?.status === "prompt_ready"),
       state,
       currentUrl,
       title,
@@ -410,6 +495,21 @@ export class FlowBrowserWorker {
     }
 
     return this.getSessionStatus();
+  }
+
+  async resetProfile() {
+    await this.close();
+    const defaultDir = getDefaultFlowProfileDir();
+    if (this.profileDir !== defaultDir && !this.profileDir.includes("GoogleFlowChromeProfile")) {
+      throw new Error("Refusing to reset profile: path is not a dedicated Google Flow profile.");
+    }
+    try {
+      await fs.rm(this.profileDir, { recursive: true, force: true });
+      await fs.mkdir(this.profileDir, { recursive: true, mode: 0o700 });
+      return { success: true, message: "Dedicated Google Flow browser profile reset successfully." };
+    } catch (err) {
+      throw new Error(`Failed to reset profile directory: ${err.message}`);
+    }
   }
 
   createJob(input) {

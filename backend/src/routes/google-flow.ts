@@ -1,5 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { GoogleFlowCredentialService } from '../services/google-flow/google-flow-credential.service.js';
+import { EncryptionKeyManager } from '../services/google-flow/encryption-key.manager.js';
+import { GoogleFlowAssetImportService } from '../services/google-flow/google-flow-asset-import.service.js';
 
 export const googleFlowRouter = Router();
 
@@ -19,7 +21,23 @@ async function forwardToWorker(
   body?: any,
   signal?: AbortSignal
 ): Promise<{ status: number; data: any }> {
-  const { token, metadata } = await GoogleFlowCredentialService.getOrCreateWorkerCredential();
+  let token: string;
+  let metadata: any;
+  try {
+    const cred = await GoogleFlowCredentialService.getOrCreateWorkerCredential();
+    token = cred.token;
+    metadata = cred.metadata;
+  } catch (decErr: any) {
+    return {
+      status: 503,
+      data: {
+        success: false,
+        code: 'ERR_CREDENTIAL_DECRYPT',
+        message: `Database credential decryption failed: ${decErr.message}. Use "Recover Credential" in Integration Studio.`,
+      },
+    };
+  }
+
   const workerBase = (metadata.workerUrl || 'http://127.0.0.1:4177').replace(/\/+$/, '');
 
   const headers: Record<string, string> = {
@@ -30,15 +48,26 @@ async function forwardToWorker(
     headers['Content-Type'] = 'application/json';
   }
 
-  const response = await fetch(`${workerBase}${endpoint}`, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-    signal,
-  });
+  try {
+    const response = await fetch(`${workerBase}${endpoint}`, {
+      method,
+      headers,
+      body: body ? JSON.stringify(body) : undefined,
+      signal,
+    });
 
-  const data = await response.json().catch(() => ({}));
-  return { status: response.status, data };
+    const data = await response.json().catch(() => ({}));
+    return { status: response.status, data };
+  } catch (netErr: any) {
+    return {
+      status: 502,
+      data: {
+        success: false,
+        code: 'ERR_WORKER_OFFLINE',
+        message: `Cannot reach local Flow worker at ${workerBase}. Ensure worker is running on loopback: ${netErr.message}`,
+      },
+    };
+  }
 }
 
 // ----------------------------------------------------
@@ -89,9 +118,27 @@ googleFlowRouter.post('/credential/reconnect', async (req: Request, res: Respons
 googleFlowRouter.post('/credential/config', async (req: Request, res: Response) => {
   try {
     const updated = await GoogleFlowCredentialService.updateMetadata(req.body || {});
+    try {
+      await forwardToWorker('/config', 'POST', req.body);
+    } catch {
+      // If worker is currently offline, configuration is safely persisted in DB and applied upon launch
+    }
     res.json({ success: true, metadata: updated });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+googleFlowRouter.post('/credential/recover', async (req: Request, res: Response) => {
+  try {
+    const result = await GoogleFlowCredentialService.regenerateWorkerCredential(req.body?.metadata);
+    res.json({
+      success: true,
+      message: 'Credential successfully recovered and re-encrypted with active master key.',
+      ...result,
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, code: 'ERR_RECOVERY_FAILED', message: err.message });
   }
 });
 
@@ -102,26 +149,30 @@ googleFlowRouter.post('/credential/config', async (req: Request, res: Response) 
 googleFlowRouter.post('/worker/handshake', async (req: Request, res: Response) => {
   // Enforce loopback check: handshake cannot be called across external networks
   if (!isLoopback(req)) {
-    res.status(403).json({ success: false, message: 'Worker handshake restricted to loopback networking.' });
+    res.status(403).json({ success: false, code: 'ERR_FORBIDDEN', message: 'Worker handshake restricted to loopback networking.' });
     return;
   }
 
   const { port, ticket } = req.body || {};
-  if (!port || !ticket) {
-    res.status(400).json({ success: false, message: 'Worker port and ticket are required.' });
+  const parsedPort = Number.parseInt(String(port), 10);
+  if (!parsedPort || parsedPort < 1 || parsedPort > 65535 || !ticket) {
+    res.status(400).json({ success: false, code: 'ERR_INVALID_HANDSHAKE', message: 'Valid worker port (1-65535) and ticket are required.' });
     return;
   }
 
   try {
-    const workerUrl = `http://127.0.0.1:${port}`;
-    const result = await GoogleFlowCredentialService.provisionWorker(workerUrl, ticket);
+    const workerUrl = `http://127.0.0.1:${parsedPort}`;
+    // Persist actual worker URL in PostgreSQL metadata so subsequent requests use the exact port!
+    await GoogleFlowCredentialService.updateMetadata({ workerUrl });
+
+    const result = await GoogleFlowCredentialService.provisionWorker(workerUrl, String(ticket).trim());
     if (!result.ok) {
-      res.status(400).json({ success: false, message: result.message });
+      res.status(400).json({ success: false, code: 'ERR_PROVISION_FAILED', message: result.message });
       return;
     }
-    res.json({ success: true, message: result.message });
+    res.json({ success: true, message: result.message, workerUrl });
   } catch (err: any) {
-    res.status(500).json({ success: false, message: err.message });
+    res.status(500).json({ success: false, code: 'ERR_INTERNAL', message: err.message });
   }
 });
 
@@ -131,8 +182,12 @@ googleFlowRouter.post('/worker/handshake', async (req: Request, res: Response) =
 
 googleFlowRouter.get('/worker/health', async (_req: Request, res: Response) => {
   try {
-    const { metadata } = await GoogleFlowCredentialService.getOrCreateWorkerCredential();
+    // Read non-sensitive metadata directly without attempting decryption
+    const metadata = await GoogleFlowCredentialService.readMetadataOnly();
     const workerBase = (metadata.workerUrl || 'http://127.0.0.1:4177').replace(/\/+$/, '');
+
+    const keyHealth = EncryptionKeyManager.checkKeyHealth();
+    const decTest = await GoogleFlowCredentialService.testCredentialDecryption();
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 3500);
@@ -145,11 +200,17 @@ googleFlowRouter.get('/worker/health', async (_req: Request, res: Response) => {
 
       if (!workerRes.ok) {
         res.json({
-          success: false,
+          success: true,
           online: false,
+          workerReachable: false,
           latencyMs,
           pairingStatus: metadata.pairingStatus,
+          credentialConfigured: decTest.recordExists,
+          masterKeyAvailable: keyHealth.healthy,
+          credentialDecryptable: decTest.decryptedSuccessfully,
+          credentialError: decTest.error,
           error: `Worker returned HTTP ${workerRes.status}`,
+          code: 'ERR_WORKER_HTTP',
         });
         return;
       }
@@ -158,6 +219,7 @@ googleFlowRouter.get('/worker/health', async (_req: Request, res: Response) => {
       res.json({
         success: true,
         online: true,
+        workerReachable: true,
         service: data.service,
         host: data.host,
         port: data.port,
@@ -167,20 +229,37 @@ googleFlowRouter.get('/worker/health', async (_req: Request, res: Response) => {
         browserChannel: data.browserChannel || metadata.browserChannel,
         profileDir: data.profileDir || metadata.profileDir,
         pairingStatus: metadata.pairingStatus,
+        credentialConfigured: decTest.recordExists,
+        masterKeyAvailable: keyHealth.healthy,
+        credentialDecryptable: decTest.decryptedSuccessfully,
+        credentialError: decTest.error,
       });
     } catch (fetchErr: any) {
       clearTimeout(timeout);
       const latencyMs = Math.round(performance.now() - start);
       res.json({
-        success: false,
+        success: true,
         online: false,
+        workerReachable: false,
         latencyMs,
         pairingStatus: metadata.pairingStatus,
+        credentialConfigured: decTest.recordExists,
+        masterKeyAvailable: keyHealth.healthy,
+        credentialDecryptable: decTest.decryptedSuccessfully,
+        credentialError: decTest.error,
         error: fetchErr.name === 'AbortError' ? 'Worker connection timed out.' : 'Worker is offline on loopback.',
+        code: 'ERR_WORKER_OFFLINE',
       });
     }
   } catch (err: any) {
-    res.status(500).json({ success: false, online: false, error: err.message });
+    res.status(200).json({
+      success: false,
+      online: false,
+      workerReachable: false,
+      credentialDecryptable: false,
+      error: err.message,
+      code: 'ERR_HEALTH_CHECK_FAILED',
+    });
   }
 });
 
@@ -205,6 +284,15 @@ googleFlowRouter.post('/worker/session/open', async (req: Request, res: Response
 googleFlowRouter.post('/worker/session/close', async (req: Request, res: Response) => {
   try {
     const { status, data } = await forwardToWorker('/session/close', 'POST', req.body);
+    res.status(status).json(data);
+  } catch (err: any) {
+    res.status(502).json({ success: false, message: `Worker proxy error: ${err.message}` });
+  }
+});
+
+googleFlowRouter.post('/worker/session/reset-profile', async (req: Request, res: Response) => {
+  try {
+    const { status, data } = await forwardToWorker('/session/reset-profile', 'POST', req.body);
     res.status(status).json(data);
   } catch (err: any) {
     res.status(502).json({ success: false, message: `Worker proxy error: ${err.message}` });
@@ -272,5 +360,18 @@ googleFlowRouter.delete('/worker/jobs/:id', async (req: Request, res: Response) 
     res.status(status).json(data);
   } catch (err: any) {
     res.status(502).json({ success: false, message: `Worker proxy error: ${err.message}` });
+  }
+});
+
+// ----------------------------------------------------
+// 4. Unified Asset Import
+// ----------------------------------------------------
+
+googleFlowRouter.post('/import-asset', async (req: Request, res: Response) => {
+  try {
+    const result = await GoogleFlowAssetImportService.importAsset(req.body || {});
+    res.json(result);
+  } catch (err: any) {
+    res.status(400).json({ success: false, message: err.message || 'Asset import failed' });
   }
 });

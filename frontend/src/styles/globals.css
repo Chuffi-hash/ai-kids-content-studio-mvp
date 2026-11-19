@@ -128,6 +128,85 @@ body.theme-light {
   --shadow-float: 0 10px 25px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
 }
 
+/* ============================================================
+   Global Form Placeholder & Checkbox Contrast Baseline
+   ============================================================ */
+input::placeholder,
+textarea::placeholder,
+select::placeholder {
+  color: #94a3b8 !important; /* Slate 400 in dark mode */
+  opacity: 1 !important;
+  font-weight: 500 !important;
+}
+
+[data-theme="light"] input::placeholder,
+body.theme-light input::placeholder,
+html[data-theme="light"] input::placeholder,
+[data-theme="light"] textarea::placeholder,
+body.theme-light textarea::placeholder,
+html[data-theme="light"] textarea::placeholder,
+[data-theme="light"] select::placeholder,
+body.theme-light select::placeholder,
+html[data-theme="light"] select::placeholder {
+  color: #1e293b !important; /* Slate 800 - crisp, high-contrast, clearly legible */
+  opacity: 0.8 !important;
+  font-weight: 500 !important;
+}
+
+/* Universal Checkbox Rules — Never stretch or render wide rectangular outline bars */
+input[type="checkbox"],
+input[type="radio"] {
+  width: 18px !important;
+  height: 18px !important;
+  min-width: 18px !important;
+  max-width: 18px !important;
+  min-height: 18px !important;
+  max-height: 18px !important;
+  flex: 0 0 18px !important;
+  box-sizing: border-box !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: 1.5px solid var(--color-border-strong, #2e4163) !important;
+  border-radius: 4px !important;
+  background: var(--color-surface, #101726) !important;
+  box-shadow: none !important;
+  cursor: pointer !important;
+  accent-color: var(--color-accent, #8b5cf6) !important;
+  display: inline-block !important;
+  vertical-align: middle !important;
+  appearance: checkbox !important;
+  -webkit-appearance: checkbox !important;
+  outline: none !important;
+}
+
+[data-theme="light"] input[type="checkbox"],
+body.theme-light input[type="checkbox"],
+html[data-theme="light"] input[type="checkbox"] {
+  border-color: #94a3b8 !important;
+  background: #ffffff !important;
+  accent-color: #7c3aed !important;
+}
+
+label:has(input[type="checkbox"]),
+label:has(input[type="radio"]),
+.checkbox-label,
+.flow-checkbox-label,
+.google-flow-checkbox,
+.flow-checkbox-row {
+  display: inline-flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 8px !important;
+  width: auto !important;
+  max-width: fit-content !important;
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  cursor: pointer !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
 /* ---------------------- Theme Toggle Button ---------------------- */
 .theme-toggle-btn {
   display: inline-flex;

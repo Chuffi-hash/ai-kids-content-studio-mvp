@@ -7,6 +7,7 @@ import { DynamicPromptBuilderService } from '../prompt-builder/dynamic-prompt-bu
 import { AssetRightsService } from '../asset-rights/asset-rights.service.js';
 import { PollinationsImageProvider } from '../image-generation/providers/pollinations-image.provider.js';
 import { GeminiImageProvider } from '../image-generation/providers/gemini-image.provider.js';
+import { parseImageDimensions } from '../google-flow/image-dimension-helper.js';
 
 export class BackgroundStudioService {
   private storageDir: string;
@@ -231,6 +232,7 @@ export class BackgroundStudioService {
     await fs.promises.writeFile(filePath, buffer);
 
     const rel = path.relative(path.resolve(process.cwd(), this.storageDir), filePath);
+    const dimensions = parseImageDimensions(buffer);
     const asset: BackgroundAsset = {
       id: assetId,
       name: name || `Google Flow Background (${environmentType})`,
@@ -241,8 +243,8 @@ export class BackgroundStudioService {
       storagePath: filePath,
       provider: 'google_flow',
       aspectRatio,
-      width: aspectRatio === '9:16' ? 720 : 1280,
-      height: aspectRatio === '9:16' ? 1280 : 720,
+      width: dimensions.width,
+      height: dimensions.height,
       tags: ['google_flow', environmentType, aspectRatio],
       createdAt: new Date().toISOString(),
     };

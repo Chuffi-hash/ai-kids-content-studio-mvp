@@ -54,7 +54,48 @@ export class EncryptionKeyManager {
   }
 
   /**
+   * Safe status check: inspects whether a master key is available and readable without throwing.
+   */
+  public static checkKeyHealth(): {
+    healthy: boolean;
+    source: 'env' | 'file';
+    path: string;
+    error?: string;
+  } {
+    if (process.env.INTEGRATION_MASTER_KEY?.trim()) {
+      return { healthy: true, source: 'env', path: 'process.env.INTEGRATION_MASTER_KEY' };
+    }
+
+    try {
+      if (fs.existsSync(this.keyPath)) {
+        const raw = fs.readFileSync(this.keyPath, 'utf8').trim();
+        if ((raw.length === 64 && /^[0-9a-fA-F]+$/.test(raw)) || raw.length >= 32) {
+          return { healthy: true, source: 'file', path: this.keyPath };
+        }
+        return {
+          healthy: false,
+          source: 'file',
+          path: this.keyPath,
+          error: 'Master key file is corrupted or too short (must be 32 bytes or 64 hex chars).',
+        };
+      }
+      // Check fallback location if standard path does not exist
+      const fallbackPath = path.join(process.cwd(), 'storage', '.integration-master.key');
+      if (fs.existsSync(fallbackPath)) {
+        const raw = fs.readFileSync(fallbackPath, 'utf8').trim();
+        if ((raw.length === 64 && /^[0-9a-fA-F]+$/.test(raw)) || raw.length >= 32) {
+          return { healthy: true, source: 'file', path: fallbackPath };
+        }
+      }
+      return { healthy: false, source: 'file', path: this.keyPath, error: 'Key file does not exist.' };
+    } catch (err: any) {
+      return { healthy: false, source: 'file', path: this.keyPath, error: err.message };
+    }
+  }
+
+  /**
    * Retrieve the 256-bit master key from environment or protected local OS file storage.
+   * Uses atomic creation to avoid concurrent initialization races.
    */
   public static getMasterKey(keyVersion = DEFAULT_KEY_VERSION): Buffer {
     if (this.cachedKey) {
@@ -89,7 +130,7 @@ export class EncryptionKeyManager {
         }
       }
 
-      // Generate new 256-bit random master key and save securely
+      // Generate new 256-bit random master key and save securely via atomic write
       const parentDir = path.dirname(this.keyPath);
       if (!fs.existsSync(parentDir)) {
         fs.mkdirSync(parentDir, { recursive: true, mode: 0o700 });
@@ -97,14 +138,48 @@ export class EncryptionKeyManager {
 
       const newKey = crypto.randomBytes(32);
       const hexKey = newKey.toString('hex');
-      fs.writeFileSync(this.keyPath, hexKey, { mode: 0o600, encoding: 'utf8' });
+      const tempPath = `${this.keyPath}.${crypto.randomUUID()}.tmp`;
+
+      fs.writeFileSync(tempPath, hexKey, { mode: 0o600, encoding: 'utf8' });
+      try {
+        fs.renameSync(tempPath, this.keyPath);
+      } catch (renameErr) {
+        // Fallback if cross-device or file locked: overwrite directly
+        fs.writeFileSync(this.keyPath, hexKey, { mode: 0o600, encoding: 'utf8' });
+        try { fs.unlinkSync(tempPath); } catch {}
+      }
 
       this.cachedKey = newKey;
       return newKey;
     } catch (err: any) {
-      throw new Error(
-        `Failed to access or initialize local integration master encryption key at ${this.keyPath}: ${err.message}`
-      );
+      // If OS-level path failed (e.g. permission or sandbox restriction), use fallback path in storage directory
+      try {
+        const fallbackPath = path.join(process.cwd(), 'storage', '.integration-master.key');
+        if (fs.existsSync(fallbackPath)) {
+          const raw = fs.readFileSync(fallbackPath, 'utf8').trim();
+          if (raw.length === 64 && /^[0-9a-fA-F]+$/.test(raw)) {
+            this.cachedKey = Buffer.from(raw, 'hex');
+            return this.cachedKey;
+          }
+          if (raw.length >= 32) {
+            this.cachedKey = crypto.createHash('sha256').update(raw).digest();
+            return this.cachedKey;
+          }
+        }
+        const fallbackDir = path.dirname(fallbackPath);
+        if (!fs.existsSync(fallbackDir)) {
+          fs.mkdirSync(fallbackDir, { recursive: true });
+        }
+        const newKey = crypto.randomBytes(32);
+        fs.writeFileSync(fallbackPath, newKey.toString('hex'), { mode: 0o600, encoding: 'utf8' });
+        this.cachedKey = newKey;
+        console.warn(`[EncryptionKeyManager] OS path not writable (${err.message}). Using storage fallback key at ${fallbackPath}`);
+        return newKey;
+      } catch (fallbackErr: any) {
+        throw new Error(
+          `Failed to access or initialize local integration master encryption key at ${this.keyPath}: ${err.message}`
+        );
+      }
     }
   }
 

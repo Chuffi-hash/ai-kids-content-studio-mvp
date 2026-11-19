@@ -3,15 +3,16 @@ import { ChevronDownIcon } from '../common/Icons';
 
 export interface CollapsibleSectionProps {
   id?: string;
-  title: string;
-  subtitle?: string;
+  title: string | React.ReactNode;
+  subtitle?: string | React.ReactNode;
   icon?: React.ReactNode;
   badge?: React.ReactNode;
   defaultOpen?: boolean;
   isOpen?: boolean;
   onToggle?: (isOpen: boolean) => void;
   headerActions?: React.ReactNode;
-  variant?: 'default' | 'card' | 'workflow-a' | 'workflow-b' | 'subtle';
+  variant?: 'default' | 'card' | 'workflow-a' | 'workflow-b' | 'subtle' | 'flow-card';
+  storageKey?: string;
   children: React.ReactNode;
   className?: string;
   style?: React.CSSProperties;
@@ -29,18 +30,34 @@ export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
   onToggle,
   headerActions,
   variant = 'card',
+  storageKey,
   children,
   className = '',
   style,
   bodyStyle,
 }) => {
-  const [internalIsOpen, setInternalIsOpen] = useState<boolean>(defaultOpen);
+  const [internalIsOpen, setInternalIsOpen] = useState<boolean>(() => {
+    if (storageKey) {
+      try {
+        const saved = localStorage.getItem(`collapsible_${storageKey}`);
+        if (saved !== null) {
+          return saved === 'true';
+        }
+      } catch {}
+    }
+    return defaultOpen;
+  });
   const isExpanded = controlledIsOpen !== undefined ? controlledIsOpen : internalIsOpen;
 
   const handleToggle = () => {
     const next = !isExpanded;
     if (controlledIsOpen === undefined) {
       setInternalIsOpen(next);
+      if (storageKey) {
+        try {
+          localStorage.setItem(`collapsible_${storageKey}`, String(next));
+        } catch {}
+      }
     }
     if (onToggle) {
       onToggle(next);
@@ -48,10 +65,10 @@ export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
   };
 
   // Determine variant-specific container styles
-  let variantBorder = '1px solid var(--ed-border)';
-  let variantBg = 'var(--ed-surface-elevated, #161f33)';
+  let variantBorder = '1px solid var(--ed-border, var(--color-border))';
+  let variantBg = 'var(--ed-surface-elevated, var(--color-surface, #161f33))';
   let headerBg = 'rgba(255, 255, 255, 0.02)';
-  let titleColor = 'var(--ed-text)';
+  let titleColor = 'var(--ed-text, var(--color-text))';
 
   if (variant === 'workflow-a') {
     variantBorder = '1px solid rgba(16, 185, 129, 0.35)';
@@ -67,18 +84,26 @@ export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
     variantBorder = '1px solid var(--ed-border-subtle, rgba(255, 255, 255, 0.08))';
     variantBg = 'transparent';
     headerBg = 'transparent';
+  } else if (variant === 'flow-card') {
+    variantBorder = '1px solid var(--color-border, #202d45)';
+    variantBg = 'var(--color-surface, #101726)';
+    headerBg = 'transparent';
+    titleColor = 'var(--color-text, #ffffff)';
   }
+
+  const isFlowCard = variant === 'flow-card';
 
   return (
     <div
       id={id}
-      className={`ed-collapsible-section ${className}`}
+      className={`ed-collapsible-section ${isFlowCard ? 'flow-card ' : ''}${className}`}
       style={{
         border: variantBorder,
-        borderRadius: '8px',
+        borderRadius: isFlowCard ? 'var(--radius, 12px)' : '8px',
         background: variantBg,
+        boxShadow: isFlowCard ? '0 4px 16px rgba(0, 0, 0, 0.2)' : undefined,
         overflow: 'hidden',
-        transition: 'border-color 0.15s ease',
+        transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
         ...style,
       }}
     >
@@ -99,28 +124,28 @@ export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          padding: '10px 12px',
+          padding: isFlowCard ? '16px 20px' : '10px 12px',
           background: headerBg,
           cursor: 'pointer',
           userSelect: 'none',
-          borderBottom: isExpanded ? '1px solid var(--ed-border)' : '1px solid transparent',
+          borderBottom: isExpanded ? '1px solid var(--color-border, var(--ed-border))' : '1px solid transparent',
           gap: '8px',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: isFlowCard ? '12px' : '8px', minWidth: 0, flex: 1 }}>
           {/* Chevron indicator */}
           <span
             style={{
               display: 'inline-flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: 'var(--ed-text-muted)',
+              color: 'var(--color-text-muted, var(--ed-text-muted))',
               transform: isExpanded ? 'rotate(0deg)' : 'rotate(-90deg)',
               transition: 'transform 0.18s ease',
               flexShrink: 0,
             }}
           >
-            <ChevronDownIcon size={14} />
+            <ChevronDownIcon size={isFlowCard ? 16 : 14} />
           </span>
 
           {/* Optional Icon */}
@@ -134,8 +159,8 @@ export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
           <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
             <span
               style={{
-                fontSize: '12px',
-                fontWeight: 600,
+                fontSize: isFlowCard ? '16px' : '12px',
+                fontWeight: isFlowCard ? 700 : 600,
                 color: titleColor,
                 letterSpacing: '0.01em',
                 whiteSpace: 'nowrap',
@@ -148,12 +173,12 @@ export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
             {subtitle && (
               <span
                 style={{
-                  fontSize: '10px',
-                  color: 'var(--ed-text-muted)',
+                  fontSize: isFlowCard ? '12px' : '10px',
+                  color: 'var(--color-text-secondary, var(--ed-text-muted))',
                   whiteSpace: 'nowrap',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
-                  marginTop: '1px',
+                  marginTop: isFlowCard ? '4px' : '1px',
                 }}
               >
                 {subtitle}
@@ -164,7 +189,7 @@ export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
 
         {/* Right side: Badge and optional header action buttons */}
         <div
-          style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}
+          style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}
           onClick={(e) => e.stopPropagation()}
         >
           {badge && (
@@ -176,21 +201,20 @@ export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
         </div>
       </div>
 
-      {/* Collapsible Body */}
-      {isExpanded && (
-        <div
-          className="ed-collapsible-body"
-          style={{
-            padding: '12px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '12px',
-            ...bodyStyle,
-          }}
-        >
-          {children}
-        </div>
-      )}
+      {/* Collapsible Body — hidden with CSS to guarantee form and workflow state is never destroyed */}
+      <div
+        className="ed-collapsible-body"
+        aria-hidden={!isExpanded}
+        style={{
+          display: isExpanded ? 'flex' : 'none',
+          padding: isFlowCard ? '20px' : '12px',
+          flexDirection: 'column',
+          gap: isFlowCard ? '16px' : '12px',
+          ...bodyStyle,
+        }}
+      >
+        {children}
+      </div>
     </div>
   );
 };

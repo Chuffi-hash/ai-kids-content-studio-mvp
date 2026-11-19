@@ -87,8 +87,8 @@
   grid-column: 1 / -1;
 }
 
-.google-flow-fields input,
-.google-flow-job-form input,
+.google-flow-fields input:not([type="checkbox"]):not([type="radio"]),
+.google-flow-job-form input:not([type="checkbox"]):not([type="radio"]),
 .google-flow-job-form select {
   width: 100%;
   min-width: 0;
@@ -100,6 +100,24 @@
   color: var(--color-text);
   font: inherit;
   font-size: 11px;
+}
+
+.google-flow-panel input::placeholder,
+.google-flow-panel textarea::placeholder {
+  color: #94a3b8 !important;
+  opacity: 1 !important;
+  font-weight: 500 !important;
+}
+
+[data-theme="light"] .google-flow-panel input::placeholder,
+body.theme-light .google-flow-panel input::placeholder,
+html[data-theme="light"] .google-flow-panel input::placeholder,
+[data-theme="light"] .google-flow-panel textarea::placeholder,
+body.theme-light .google-flow-panel textarea::placeholder,
+html[data-theme="light"] .google-flow-panel textarea::placeholder {
+  color: #334155 !important;
+  opacity: 1 !important;
+  font-weight: 500 !important;
 }
 
 .google-flow-actions {
@@ -138,18 +156,41 @@
 }
 
 .google-flow-checkbox {
-  display: flex !important;
+  display: inline-flex !important;
   flex-direction: row !important;
-  align-items: flex-start;
+  align-items: flex-start !important;
   gap: 8px !important;
   color: var(--color-text) !important;
   font-size: 11px !important;
   font-weight: 500 !important;
+  cursor: pointer !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  width: auto !important;
+  max-width: fit-content !important;
 }
 
+[data-theme="light"] .google-flow-checkbox,
+body.theme-light .google-flow-checkbox,
+html[data-theme="light"] .google-flow-checkbox {
+  color: #334155 !important;
+}
+
+.google-flow-checkbox input[type="checkbox"],
 .google-flow-checkbox input {
-  width: auto !important;
-  margin: 2px 0 0;
+  width: 18px !important;
+  height: 18px !important;
+  min-width: 18px !important;
+  max-width: 18px !important;
+  min-height: 18px !important;
+  max-height: 18px !important;
+  box-sizing: border-box !important;
+  padding: 0 !important;
+  margin: 2px 0 0 !important;
+  flex-shrink: 0 !important;
+  cursor: pointer !important;
+  accent-color: var(--color-accent, #8b5cf6) !important;
 }
 
 .google-flow-imported {
