@@ -46,6 +46,8 @@ export class TTSProviderFactory {
     isKokoroAvailable: boolean;
     isFishAudioAvailable: boolean;
     voices: SupportedVoice[];
+    kokoroVoices: SupportedVoice[];
+    googleVoices: SupportedVoice[];
     fishAudioVoices: SupportedVoice[];
     effects: Array<{ id: string; name: string; description: string }>;
     providers: Array<{ id: string; name: string; available: boolean; model?: string; isFree?: boolean }>;
@@ -65,6 +67,8 @@ export class TTSProviderFactory {
       { id: 'google', name: 'Google TTS (Fallback)', available: true, isFree: true },
     ];
 
+    const kokoroVoices = await this.kokoroProvider.getSupportedVoices();
+    const googleVoices = await this.googleProvider.getSupportedVoices();
     const fishAudioVoices = await this.fishAudioProvider.getSupportedVoices();
 
     const normalizedReq = (providerName || '').toLowerCase();
@@ -74,21 +78,38 @@ export class TTSProviderFactory {
         isKokoroAvailable,
         isFishAudioAvailable,
         voices: fishAudioVoices,
+        kokoroVoices,
+        googleVoices,
         fishAudioVoices,
         effects,
         providers,
       };
     }
 
+    if (normalizedReq === 'google') {
+      return {
+        activeProvider: 'google',
+        isKokoroAvailable,
+        isFishAudioAvailable,
+        voices: googleVoices,
+        kokoroVoices,
+        googleVoices,
+        fishAudioVoices,
+        effects,
+        providers,
+      };
+    }
+
+    // Default: authoritative 32-voice Kokoro catalogue, with activeProvider reflecting runtime status
     const activeProvider = isKokoroAvailable ? 'kokoro' : 'google';
-    const primaryProvider = isKokoroAvailable ? this.kokoroProvider : this.googleProvider;
-    const voices = await primaryProvider.getSupportedVoices();
 
     return {
       activeProvider,
       isKokoroAvailable,
       isFishAudioAvailable,
-      voices,
+      voices: kokoroVoices,
+      kokoroVoices,
+      googleVoices,
       fishAudioVoices,
       effects,
       providers,

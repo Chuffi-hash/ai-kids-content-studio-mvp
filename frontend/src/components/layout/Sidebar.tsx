@@ -46,14 +46,26 @@ export default function Sidebar() {
     location.pathname === "/assets" || location.pathname.startsWith("/assets/");
   const isAnyAssetActive = isAssetsActive || isCharactersActive || isBackgroundsActive;
 
-  const [assetDropdownOpen, setAssetDropdownOpen] = useState(isAnyAssetActive);
+  const isFlowActive =
+    location.pathname === "/integrations/google-flow" ||
+    location.pathname === "/google-flow" ||
+    location.pathname.startsWith("/integrations/");
 
-  // Automatically expand if navigated into any asset page
+  const [assetDropdownOpen, setAssetDropdownOpen] = useState(isAnyAssetActive);
+  const [integrationsDropdownOpen, setIntegrationsDropdownOpen] = useState(isFlowActive);
+
+  // Automatically expand if navigated into any asset or integration page
   useEffect(() => {
     if (isAnyAssetActive) {
       setAssetDropdownOpen(true);
     }
   }, [location.pathname, isAnyAssetActive]);
+
+  useEffect(() => {
+    if (isFlowActive) {
+      setIntegrationsDropdownOpen(true);
+    }
+  }, [location.pathname, isFlowActive]);
 
   const navEntries: NavEntry[] = [
     {
@@ -97,6 +109,19 @@ export default function Sidebar() {
       icon: <FilmIcon size={17} />,
       path: "/production",
     },
+    {
+      type: "dropdown",
+      label: "Integrations",
+      icon: <SparklesIcon size={17} />,
+      basePath: "/integrations/google-flow",
+      children: [
+        {
+          label: "Google Flow",
+          icon: <SparklesIcon size={15} />,
+          path: "/integrations/google-flow",
+        },
+      ],
+    },
   ];
 
   return (
@@ -128,9 +153,15 @@ export default function Sidebar() {
             );
           }
 
-          // Dropdown nav item (Asset Library containing Characters and Backgrounds)
-          const isDropdownParentDirectActive =
-            isAssetsActive && !isCharactersActive && !isBackgroundsActive;
+          // Dropdown nav item (Asset Library or Integrations)
+          const isAssetGroup = entry.basePath === "/assets";
+          const isDropdownOpen = isAssetGroup ? assetDropdownOpen : integrationsDropdownOpen;
+          const setIsDropdownOpen = isAssetGroup ? setAssetDropdownOpen : setIntegrationsDropdownOpen;
+
+          const isDropdownParentDirectActive = isAssetGroup
+            ? isAssetsActive && !isCharactersActive && !isBackgroundsActive
+            : isFlowActive;
+          const isAnyChildActive = isAssetGroup ? isAnyAssetActive : isFlowActive;
 
           return (
             <div key={entry.basePath} className="nav-dropdown-group">
@@ -138,16 +169,16 @@ export default function Sidebar() {
                 className={`nav-item nav-dropdown-trigger ${
                   isDropdownParentDirectActive
                     ? "active"
-                    : isAnyAssetActive
+                    : isAnyChildActive
                     ? "active-parent"
                     : ""
                 }`}
                 onClick={() => {
-                  if (!assetDropdownOpen) {
-                    setAssetDropdownOpen(true);
+                  if (!isDropdownOpen) {
+                    setIsDropdownOpen(true);
                     navigate(entry.basePath);
                   } else if (location.pathname === entry.basePath) {
-                    setAssetDropdownOpen(false);
+                    setIsDropdownOpen(false);
                   } else {
                     navigate(entry.basePath);
                   }
@@ -157,7 +188,7 @@ export default function Sidebar() {
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") {
                     e.preventDefault();
-                    setAssetDropdownOpen((prev) => !prev);
+                    setIsDropdownOpen((prev) => !prev);
                   }
                 }}
               >
@@ -167,19 +198,19 @@ export default function Sidebar() {
                 </div>
                 <button
                   type="button"
-                  className={`nav-dropdown-chevron-btn ${assetDropdownOpen ? "open" : ""}`}
-                  title={assetDropdownOpen ? "Collapse Asset Library menu" : "Expand Asset Library menu"}
-                  aria-label={assetDropdownOpen ? "Collapse Asset Library menu" : "Expand Asset Library menu"}
+                  className={`nav-dropdown-chevron-btn ${isDropdownOpen ? "open" : ""}`}
+                  title={isDropdownOpen ? `Collapse ${entry.label} menu` : `Expand ${entry.label} menu`}
+                  aria-label={isDropdownOpen ? `Collapse ${entry.label} menu` : `Expand ${entry.label} menu`}
                   onClick={(e) => {
                     e.stopPropagation();
-                    setAssetDropdownOpen((prev) => !prev);
+                    setIsDropdownOpen((prev) => !prev);
                   }}
                 >
                   <ChevronDownIcon size={14} />
                 </button>
               </div>
 
-              {assetDropdownOpen && (
+              {isDropdownOpen && (
                 <div className="nav-dropdown-menu">
                   {entry.children.map((child) => {
                     const isChildActive =
@@ -187,7 +218,11 @@ export default function Sidebar() {
                         ? isAssetsActive && !isCharactersActive && !isBackgroundsActive
                         : child.path === "/characters"
                         ? isCharactersActive
-                        : isBackgroundsActive;
+                        : child.path === "/backgrounds"
+                        ? isBackgroundsActive
+                        : child.path === "/integrations/google-flow"
+                        ? isFlowActive
+                        : location.pathname === child.path;
 
                     return (
                       <button

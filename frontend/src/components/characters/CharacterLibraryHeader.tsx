@@ -18,7 +18,24 @@ export default function CharacterLibraryHeader({
         <h1>Character Library</h1>
         <p className="muted">Reusable characters, AI image assets, and vector rigs for your stories</p>
       </div>
-      <div style={{ display: 'flex', gap: '8px' }}>
+      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+        <button
+          type="button"
+          className="btn btn-secondary"
+          style={{
+            borderColor: 'rgba(139, 92, 246, 0.4)',
+            color: '#c084fc',
+            background: 'rgba(139, 92, 246, 0.12)',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+          }}
+          onClick={() => window.open('/integrations/google-flow', '_blank')}
+          title="Open dedicated Google Flow workspace"
+        >
+          <span>🌊</span>
+          <span>Google Flow ↗</span>
+        </button>
         {onOpenStudio && (
           <button
             type="button"

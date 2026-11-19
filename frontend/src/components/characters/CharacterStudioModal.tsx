@@ -843,6 +843,30 @@ export default function CharacterStudioModal({
             </div>
 
             {/* Google Flow — authenticated local Playwright companion */}
+            {activeCharacterId && activeCharacterId !== 'new' && (
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '4px' }}>
+                <button
+                  type="button"
+                  className="studio-btn studio-btn-secondary"
+                  style={{
+                    fontSize: '11px',
+                    padding: '5px 10px',
+                    borderColor: 'rgba(139, 92, 246, 0.4)',
+                    color: '#c084fc',
+                    background: 'rgba(139, 92, 246, 0.12)',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    cursor: 'pointer',
+                  }}
+                  onClick={() => window.open(`/integrations/google-flow?characterId=${activeCharacterId}`, '_blank')}
+                  title="Open dedicated Google Flow workspace for this character"
+                >
+                  <SparklesIcon size={12} />
+                  <span>Open in Google Flow Workspace ↗</span>
+                </button>
+              </div>
+            )}
             <GoogleFlowCharacterPanel
               characterId={activeCharacterId === 'new' ? '' : activeCharacterId}
               characterName={name}

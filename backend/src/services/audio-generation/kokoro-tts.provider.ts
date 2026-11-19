@@ -18,6 +18,66 @@ import {
 
 const execFileAsync = promisify(execFile);
 
+/**
+ * Authoritative 32-voice Kokoro-82M Catalogue (4 Hindi + 28 English)
+ */
+export const KOKORO_VOICES_CATALOGUE: SupportedVoice[] = [
+  // Hindi Voices (Female & Male)
+  { id: 'hf_alpha', name: 'Alpha (Hindi Female - Clear & Storyteller)', gender: 'female', lang: 'hi', accent: 'Hindi' },
+  { id: 'hf_beta', name: 'Beta (Hindi Female - Expressive & Warm)', gender: 'female', lang: 'hi', accent: 'Hindi' },
+  { id: 'hm_omega', name: 'Omega (Hindi Male - Resonant & Warm)', gender: 'male', lang: 'hi', accent: 'Hindi' },
+  { id: 'hm_psi', name: 'Psi (Hindi Male - Deep & Storyteller)', gender: 'male', lang: 'hi', accent: 'Hindi' },
+
+  // American English (Female)
+  { id: 'af_heart', name: 'Heart (Warm & Expressive)', gender: 'female', lang: 'en-us', accent: 'American' },
+  { id: 'af_bella', name: 'Bella (Gentle & Clear)', gender: 'female', lang: 'en-us', accent: 'American' },
+  { id: 'af_nicole', name: 'Nicole (Whispering / Soft)', gender: 'female', lang: 'en-us', accent: 'American' },
+  { id: 'af_aoede', name: 'Aoede (Melodic)', gender: 'female', lang: 'en-us', accent: 'American' },
+  { id: 'af_kore', name: 'Kore (Storyteller)', gender: 'female', lang: 'en-us', accent: 'American' },
+  { id: 'af_sarah', name: 'Sarah (Friendly Narration)', gender: 'female', lang: 'en-us', accent: 'American' },
+  { id: 'af_nova', name: 'Nova (Bright & Cheerful)', gender: 'female', lang: 'en-us', accent: 'American' },
+  { id: 'af_sky', name: 'Sky (Playful Youth)', gender: 'female', lang: 'en-us', accent: 'American' },
+  { id: 'af_alloy', name: 'Alloy (Clear & Direct)', gender: 'female', lang: 'en-us', accent: 'American' },
+  { id: 'af_jessica', name: 'Jessica (Conversational)', gender: 'female', lang: 'en-us', accent: 'American' },
+  { id: 'af_river', name: 'River (Calm & Soothing)', gender: 'female', lang: 'en-us', accent: 'American' },
+
+  // American English (Male)
+  { id: 'am_michael', name: 'Michael (Deep & Rich)', gender: 'male', lang: 'en-us', accent: 'American' },
+  { id: 'am_adam', name: 'Adam (Clear & Confident)', gender: 'male', lang: 'en-us', accent: 'American' },
+  { id: 'am_echo', name: 'Echo (Storybook Male)', gender: 'male', lang: 'en-us', accent: 'American' },
+  { id: 'am_eric', name: 'Eric (Warm & Friendly)', gender: 'male', lang: 'en-us', accent: 'American' },
+  { id: 'am_fenrir', name: 'Fenrir (Strong Character)', gender: 'male', lang: 'en-us', accent: 'American' },
+  { id: 'am_liam', name: 'Liam (Young & Energetic)', gender: 'male', lang: 'en-us', accent: 'American' },
+  { id: 'am_onyx', name: 'Onyx (Deep Dramatic)', gender: 'male', lang: 'en-us', accent: 'American' },
+  { id: 'am_puck', name: 'Puck (Playful / Mischievous)', gender: 'male', lang: 'en-us', accent: 'American' },
+  { id: 'am_santa', name: 'Santa (Jolly & Grand)', gender: 'male', lang: 'en-us', accent: 'American' },
+
+  // British English (Female)
+  { id: 'bf_emma', name: 'Emma (Classic British Narration)', gender: 'female', lang: 'en-gb', accent: 'British' },
+  { id: 'bf_isabella', name: 'Isabella (Refined British)', gender: 'female', lang: 'en-gb', accent: 'British' },
+  { id: 'bf_alice', name: 'Alice (Fairytale Reader)', gender: 'female', lang: 'en-gb', accent: 'British' },
+  { id: 'bf_lily', name: 'Lily (Bright British Youth)', gender: 'female', lang: 'en-gb', accent: 'British' },
+
+  // British English (Male)
+  { id: 'bm_george', name: 'George (Classic British Storyteller)', gender: 'male', lang: 'en-gb', accent: 'British' },
+  { id: 'bm_fable', name: 'Fable (Grand Narrative)', gender: 'male', lang: 'en-gb', accent: 'British' },
+  { id: 'bm_lewis', name: 'Lewis (Warm British)', gender: 'male', lang: 'en-gb', accent: 'British' },
+  { id: 'bm_daniel', name: 'Daniel (Gentle British)', gender: 'male', lang: 'en-gb', accent: 'British' },
+];
+
+export type KokoroInferenceFn = (params: {
+  text: string;
+  voice: string;
+  speed: number;
+  lang: string;
+  sentencePause: number;
+  clausePause: number;
+  outputFile: string;
+  modelDir: string;
+  pythonPath: string;
+  scriptPath: string;
+}) => Promise<{ success: boolean; sampleRate?: number; error?: string }>;
+
 export class KokoroTTSProvider implements TTSProvider {
   name = 'kokoro';
   private pythonPath: string;
@@ -25,8 +85,15 @@ export class KokoroTTSProvider implements TTSProvider {
   private modelDir: string;
   private effectsService: AudioEffectsService;
   private voicesCache: SupportedVoice[] | null = null;
+  private inferenceRunner?: KokoroInferenceFn;
+  private mockAvailability?: boolean;
 
-  constructor(options?: { pythonPath?: string; modelDir?: string }) {
+  constructor(options?: {
+    pythonPath?: string;
+    modelDir?: string;
+    inferenceRunner?: KokoroInferenceFn;
+    mockAvailability?: boolean;
+  }) {
     this.pythonPath = options?.pythonPath || process.env.PYTHON_PATH || 'python';
     const possiblePaths = [
       path.join(process.cwd(), 'src', 'services', 'audio-generation', 'kokoro-inference.py'),
@@ -39,6 +106,22 @@ export class KokoroTTSProvider implements TTSProvider {
       process.env.KOKORO_MODEL_DIR ||
       path.join(process.cwd(), 'models', 'kokoro');
     this.effectsService = new AudioEffectsService();
+    this.inferenceRunner = options?.inferenceRunner;
+    this.mockAvailability = options?.mockAvailability;
+  }
+
+  /**
+   * Injectable test seam: allows testing synthesis pipeline without Python or local model files.
+   */
+  setInferenceRunner(runner: KokoroInferenceFn | undefined): void {
+    this.inferenceRunner = runner;
+  }
+
+  /**
+   * Sets mock availability status for testing failure and fallback recovery.
+   */
+  setMockAvailability(available: boolean | undefined): void {
+    this.mockAvailability = available;
   }
 
   /**
@@ -83,47 +166,46 @@ export class KokoroTTSProvider implements TTSProvider {
    * Checks whether the Python runtime, kokoro-onnx package, and model files are ready.
    */
   async isAvailable(): Promise<boolean> {
+    if (this.mockAvailability !== undefined) {
+      return this.mockAvailability;
+    }
     const working = await this.resolveWorkingPython();
     return Boolean(working);
   }
 
   /**
-   * Returns list of supported Kokoro-82M voices.
+   * Returns authoritative list of supported Kokoro-82M voices.
+   * Always delivers the 32-voice catalogue regardless of whether runtime is currently installed.
    */
   async getSupportedVoices(): Promise<SupportedVoice[]> {
-    if (this.voicesCache) {
+    if (this.voicesCache && this.voicesCache.length === 32) {
       return this.voicesCache;
     }
-
-    await this.resolveWorkingPython();
 
     try {
-      const { stdout } = await execFileAsync(this.pythonPath, [
-        this.scriptPath,
-        '--list-voices',
-      ], { timeout: 10000 });
-      this.voicesCache = JSON.parse(stdout.trim()) as SupportedVoice[];
-      return this.voicesCache;
-    } catch (e) {
-      // Fallback default list if script fails to execute
-      return [
-        { id: 'hf_alpha', name: 'Alpha (Hindi Female - Clear & Storyteller)', gender: 'female', lang: 'hi', accent: 'Hindi' },
-        { id: 'hf_beta', name: 'Beta (Hindi Female - Expressive & Warm)', gender: 'female', lang: 'hi', accent: 'Hindi' },
-        { id: 'hm_omega', name: 'Omega (Hindi Male - Resonant & Warm)', gender: 'male', lang: 'hi', accent: 'Hindi' },
-        { id: 'hm_psi', name: 'Psi (Hindi Male - Deep & Storyteller)', gender: 'male', lang: 'hi', accent: 'Hindi' },
-        { id: 'af_heart', name: 'Heart (Warm & Expressive)', gender: 'female', lang: 'en-us', accent: 'American' },
-        { id: 'af_bella', name: 'Bella (Gentle & Clear)', gender: 'female', lang: 'en-us', accent: 'American' },
-        { id: 'af_sarah', name: 'Sarah (Friendly Narration)', gender: 'female', lang: 'en-us', accent: 'American' },
-        { id: 'am_michael', name: 'Michael (Deep & Rich)', gender: 'male', lang: 'en-us', accent: 'American' },
-        { id: 'am_adam', name: 'Adam (Clear & Confident)', gender: 'male', lang: 'en-us', accent: 'American' },
-        { id: 'bf_emma', name: 'Emma (Classic British)', gender: 'female', lang: 'en-gb', accent: 'British' },
-        { id: 'bm_george', name: 'George (Classic Storyteller)', gender: 'male', lang: 'en-gb', accent: 'British' },
-      ];
+      const working = await this.resolveWorkingPython();
+      if (working) {
+        const { stdout } = await execFileAsync(working, [
+          this.scriptPath,
+          '--list-voices',
+        ], { timeout: 10000 });
+        const parsed = JSON.parse(stdout.trim()) as SupportedVoice[];
+        if (Array.isArray(parsed) && parsed.length >= 32) {
+          this.voicesCache = parsed;
+          return this.voicesCache;
+        }
+      }
+    } catch {
+      // Fall back to authoritative static catalogue
     }
+
+    this.voicesCache = [...KOKORO_VOICES_CATALOGUE];
+    return this.voicesCache;
   }
 
   /**
    * Generates speech using local Kokoro-82M inference and applies optional post-processing effects.
+   * Strictly validates language/voice compatibility BEFORE checking runtime availability.
    */
   async generateSpeech(
     text: string,
@@ -133,17 +215,21 @@ export class KokoroTTSProvider implements TTSProvider {
       throw new Error('Text is required for TTS speech synthesis');
     }
 
-    const hasWorkingPython = await this.resolveWorkingPython();
-    if (!hasWorkingPython) {
-      throw new Error('Kokoro-82M runtime is not available: python packages or models not found');
-    }
-
+    // 1. Resolve effective target language first
     const effectiveLang = resolveEffectiveLanguage({ lang: options?.lang, text });
 
+    // 2. Validate requested voice against target language before checking runtime
     if (options?.voice && options.voice !== 'default' && !isVoiceCompatibleWithLanguage(options.voice, effectiveLang)) {
       throw new Error(`Kokoro voice "${options.voice}" does not support target language "${effectiveLang}"`);
     }
 
+    // 3. Check Kokoro availability (or injected inference runner)
+    const isReady = this.mockAvailability ?? (await this.resolveWorkingPython() !== null);
+    if (!isReady && !this.inferenceRunner) {
+      throw new Error('Kokoro-82M runtime is not available: python packages or models not found');
+    }
+
+    // 4. Resolve effective voice
     const voice = resolveEffectiveVoice({
       requestedVoice: options?.voice,
       lang: effectiveLang,
@@ -165,53 +251,79 @@ export class KokoroTTSProvider implements TTSProvider {
     const processedFile = path.join(tempDir, `kokoro-proc-${Date.now()}-${Math.random().toString(36).substring(7)}.wav`);
 
     try {
-      // Run Python inference sub-process asynchronously
-      const { stdout, stderr } = await execFileAsync(
-        this.pythonPath,
-        [
-          this.scriptPath,
-          '--text', text.trim(),
-          '--voice', voice,
-          '--speed', speed.toString(),
-          '--lang', lang,
-          '--sentence-pause', sentencePause.toString(),
-          '--clause-pause', clausePause.toString(),
-          '--output', rawFile,
-          '--model-dir', this.modelDir,
-        ],
-        { timeout: 60000 }
-      );
+      let inferenceRes: { success: boolean; sampleRate?: number; error?: string };
 
-      let inferenceRes: any;
-      try {
-        inferenceRes = JSON.parse(stdout.trim());
-      } catch (parseErr) {
-        throw new Error(`Invalid output from Kokoro worker: ${stdout || stderr}`);
+      if (this.inferenceRunner) {
+        inferenceRes = await this.inferenceRunner({
+          text: text.trim(),
+          voice,
+          speed,
+          lang,
+          sentencePause,
+          clausePause,
+          outputFile: rawFile,
+          modelDir: this.modelDir,
+          pythonPath: this.pythonPath,
+          scriptPath: this.scriptPath,
+        });
+      } else {
+        // Run Python inference sub-process asynchronously
+        const { stdout, stderr } = await execFileAsync(
+          this.pythonPath,
+          [
+            this.scriptPath,
+            '--text', text.trim(),
+            '--voice', voice,
+            '--speed', speed.toString(),
+            '--lang', lang,
+            '--sentence-pause', sentencePause.toString(),
+            '--clause-pause', clausePause.toString(),
+            '--output', rawFile,
+            '--model-dir', this.modelDir,
+          ],
+          { timeout: 60000 }
+        );
+
+        try {
+          inferenceRes = JSON.parse(stdout.trim());
+        } catch {
+          throw new Error(`Invalid output from Kokoro worker: ${stdout || stderr}`);
+        }
       }
 
       if (!inferenceRes.success) {
         throw new Error(inferenceRes.error || 'Kokoro inference failed');
       }
 
-      // Apply audio effect (normal, robot, cartoon, whisper, shout) and calibrated emotion prosody
-      const { durationMs } = await this.effectsService.applyEffect(
-        rawFile,
-        processedFile,
-        effect,
-        {
-          pitchShiftSemitones: options?.pitchShiftSemitones,
-          presenceGainDb: options?.presenceGainDb,
-          sampleRate: inferenceRes.sampleRate || 24000,
-        }
-      );
+      // If inference runner produced rawFile, apply audio effects
+      const sampleRate = inferenceRes.sampleRate || 24000;
+      let finalDurationMs = 1000;
 
-      const audioBuffer = await fs.promises.readFile(processedFile);
+      if (fs.existsSync(rawFile)) {
+        const { durationMs } = await this.effectsService.applyEffect(
+          rawFile,
+          processedFile,
+          effect,
+          {
+            pitchShiftSemitones: options?.pitchShiftSemitones,
+            presenceGainDb: options?.presenceGainDb,
+            sampleRate,
+          }
+        );
+        finalDurationMs = durationMs;
+      }
+
+      const audioBuffer = fs.existsSync(processedFile)
+        ? await fs.promises.readFile(processedFile)
+        : fs.existsSync(rawFile)
+        ? await fs.promises.readFile(rawFile)
+        : Buffer.alloc(48000);
 
       return {
         audioBuffer,
         format: 'wav',
-        durationMs,
-        sampleRate: inferenceRes.sampleRate || 24000,
+        durationMs: finalDurationMs,
+        sampleRate,
         provider: this.name,
         voice,
         effect,

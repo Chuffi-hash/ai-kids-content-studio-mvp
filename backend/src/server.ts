@@ -9,7 +9,9 @@ import { backgroundStudioRouter } from "./routes/background-studio.js";
 import { sceneDirectorRouter } from "./routes/scene-director.js";
 import { shotRouter } from "./routes/shots.js";
 import { brandingRouter } from "./routes/branding.js";
+import { googleFlowRouter } from "./routes/google-flow.js";
 import { initializeDatabase } from "./services/database/database.service.js";
+import { GoogleFlowCredentialService } from "./services/google-flow/google-flow-credential.service.js";
 
 const app = express();
 const port = Number(process.env.PORT ?? 5001);
@@ -55,9 +57,18 @@ app.use("/api/background-studio", backgroundStudioRouter);
 app.use("/api/scene-director", sceneDirectorRouter);
 app.use("/api/shots", shotRouter);
 app.use("/api/branding", brandingRouter);
+app.use("/api/integrations/google-flow", googleFlowRouter);
 
 async function startServer() {
   await initializeDatabase();
+
+  // Initialize and verify Google Flow integration credentials in PostgreSQL
+  try {
+    await GoogleFlowCredentialService.getOrCreateWorkerCredential();
+    GoogleFlowCredentialService.provisionWorker().catch(() => {});
+  } catch (err: any) {
+    console.warn('[Server] Google Flow credential notice:', err.message);
+  }
 
   app.listen(port, () => {
     console.log(`API running on http://localhost:${port}`);

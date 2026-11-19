@@ -1,10 +1,36 @@
+import { getApiUrl } from '../utils/urlHelper';
+
+export type FlowAuthenticationStatus = 'authenticated' | 'login_required' | 'blocked' | 'unknown';
+
+export interface FlowProfileDiagnostics {
+  browserChannel: string;
+  configuredProfileDir: string;
+  profileDirExists: boolean;
+  ownsActiveBrowser: boolean;
+  googleSigninRequired: boolean;
+  googleSigninBlocked: boolean;
+  authenticationStatus: FlowAuthenticationStatus;
+}
+
 export interface FlowWorkerSession {
   connected: boolean;
+  workerOnline?: boolean;
+  browserRunning: boolean;
+  flowPageOpen: boolean;
+  googleAuthenticated: boolean;
+  manualLoginRequired: boolean;
+  googleSigninBlocked: boolean;
+  projectSelected: boolean;
+  authenticationStatus: FlowAuthenticationStatus;
   state: string;
   currentUrl?: string;
   title?: string;
-  manualLoginRequired?: boolean;
   message?: string;
+  browserChannel?: string;
+  configuredProfileDir?: string;
+  profileDirExists?: boolean;
+  ownsActiveBrowser?: boolean;
+  diagnostics?: FlowProfileDiagnostics;
 }
 
 export interface FlowWorkerJob {
@@ -23,28 +49,74 @@ export interface FlowWorkerJob {
   updatedAt: string;
 }
 
-async function workerRequest<T>(
-  workerUrl: string,
-  token: string,
-  endpoint: string,
-  init: RequestInit = {},
+export interface FlowCredentialMetadata {
+  workerUrl: string;
+  browserChannel: string;
+  profileDir?: string;
+  selectedProjectUrl?: string;
+  lastSelectedStoryId?: string;
+  lastSelectedCharacterId?: string;
+  pairingStatus: 'paired' | 'awaiting_provisioning' | 'unpaired';
+  lastVerifiedAt?: string;
+}
+
+export interface FlowCredentialStatus {
+  configured: boolean;
+  lastUpdated: string | null;
+  keyVersion: string;
+  metadata: FlowCredentialMetadata;
+}
+
+export interface FlowWorkerHealthStatus {
+  online: boolean;
+  service?: string;
+  host?: string;
+  port?: number;
+  hasConfiguredToken?: boolean;
+  isProvisioned?: boolean;
+  browserChannel?: string;
+  profileDir?: string;
+  latencyMs?: number;
+  pairingStatus?: string;
+  error?: string;
+}
+
+async function flowRequest<T>(
+  proxyEndpoint: string,
+  directWorkerEndpoint: string,
+  workerUrl?: string,
+  token?: string,
+  init: RequestInit = {}
 ): Promise<T> {
-  const base = workerUrl.trim().replace(/\/+$/, '');
-  if (!base) throw new Error('Local Flow worker URL is required.');
-  if (!token.trim()) throw new Error('Enter the local Flow worker token shown in its terminal.');
+  const apiUrl = getApiUrl();
+  const useDirect = Boolean(token && token.trim() && workerUrl && workerUrl.includes(':4177'));
+
+  let url: string;
+  let headers: HeadersInit = {
+    ...(init.body ? { 'Content-Type': 'application/json' } : {}),
+    ...init.headers,
+  };
+
+  if (useDirect) {
+    const base = workerUrl!.trim().replace(/\/+$/, '');
+    url = `${base}${directWorkerEndpoint}`;
+    headers = {
+      ...headers,
+      Authorization: `Bearer ${token!.trim()}`,
+    };
+  } else {
+    url = `${apiUrl}/api/integrations/google-flow${proxyEndpoint}`;
+  }
 
   let response: Response;
   try {
-    response = await fetch(`${base}${endpoint}`, {
-      ...init,
-      headers: {
-        Authorization: `Bearer ${token.trim()}`,
-        ...(init.body ? { 'Content-Type': 'application/json' } : {}),
-        ...init.headers,
-      },
-    });
-  } catch {
-    throw new Error('Cannot reach the local Flow worker. Start flow-worker on this computer and check the URL and allowed browser origin.');
+    response = await fetch(url, { ...init, headers });
+  } catch (err: any) {
+    throw new Error(
+      useDirect
+        ? 'Cannot reach the local Flow worker. Verify the process is running on loopback.'
+        : `Cannot reach studio backend: ${err.message}`
+    );
   }
 
   const payload = await response.json().catch(() => ({}));
@@ -55,14 +127,15 @@ async function workerRequest<T>(
 }
 
 export async function openFlowWorkerSession(
-  workerUrl: string,
-  token: string,
+  workerUrl?: string,
+  token?: string,
   projectUrl?: string,
 ): Promise<FlowWorkerSession> {
-  const payload = await workerRequest<{ session: FlowWorkerSession }>(
+  const payload = await flowRequest<{ session: FlowWorkerSession }>(
+    '/worker/session/open',
+    '/session/open',
     workerUrl,
     token,
-    '/session/open',
     {
       method: 'POST',
       body: JSON.stringify(projectUrl?.trim() ? { projectUrl: projectUrl.trim() } : {}),
@@ -72,30 +145,32 @@ export async function openFlowWorkerSession(
 }
 
 export async function getFlowWorkerSession(
-  workerUrl: string,
-  token: string,
+  workerUrl?: string,
+  token?: string,
 ): Promise<FlowWorkerSession> {
-  const payload = await workerRequest<{ session: FlowWorkerSession }>(
+  const payload = await flowRequest<{ session: FlowWorkerSession }>(
+    '/worker/session',
+    '/session/status',
     workerUrl,
     token,
-    '/session/status',
   );
   return payload.session;
 }
 
-export async function closeFlowWorkerSession(workerUrl: string, token: string) {
-  const payload = await workerRequest<{ session: FlowWorkerSession }>(
+export async function closeFlowWorkerSession(workerUrl?: string, token?: string) {
+  const payload = await flowRequest<{ session: FlowWorkerSession }>(
+    '/worker/session/close',
+    '/session/close',
     workerUrl,
     token,
-    '/session/close',
     { method: 'POST', body: JSON.stringify({}) },
   );
   return payload.session;
 }
 
 export async function createFlowCharacterJob(
-  workerUrl: string,
-  token: string,
+  workerUrl: string | undefined,
+  token: string | undefined,
   input: {
     characterId: string;
     characterName: string;
@@ -106,38 +181,43 @@ export async function createFlowCharacterJob(
     additionalInstructions?: string;
   },
 ): Promise<FlowWorkerJob> {
-  const payload = await workerRequest<{ job: FlowWorkerJob }>(
+  const payload = await flowRequest<{ job: FlowWorkerJob }>(
+    '/worker/jobs',
+    '/jobs',
     workerUrl,
     token,
-    '/jobs',
     { method: 'POST', body: JSON.stringify(input) },
   );
   return payload.job;
 }
 
 export async function prepareFlowCharacterJob(
-  workerUrl: string,
-  token: string,
+  workerUrl: string | undefined,
+  token: string | undefined,
   jobId: string,
 ): Promise<FlowWorkerJob> {
-  const payload = await workerRequest<{ job: FlowWorkerJob }>(
+  const encoded = encodeURIComponent(jobId);
+  const payload = await flowRequest<{ job: FlowWorkerJob }>(
+    `/worker/jobs/${encoded}/prepare`,
+    `/jobs/${encoded}/prepare`,
     workerUrl,
     token,
-    `/jobs/${encodeURIComponent(jobId)}/prepare`,
     { method: 'POST', body: JSON.stringify({}) },
   );
   return payload.job;
 }
 
 export async function requestFlowCharacterGeneration(
-  workerUrl: string,
-  token: string,
+  workerUrl: string | undefined,
+  token: string | undefined,
   jobId: string,
 ): Promise<FlowWorkerJob> {
-  const payload = await workerRequest<{ job: FlowWorkerJob }>(
+  const encoded = encodeURIComponent(jobId);
+  const payload = await flowRequest<{ job: FlowWorkerJob }>(
+    `/worker/jobs/${encoded}/generate`,
+    `/jobs/${encoded}/generate`,
     workerUrl,
     token,
-    `/jobs/${encodeURIComponent(jobId)}/generate`,
     {
       method: 'POST',
       body: JSON.stringify({ confirmGenerate: true, referenceConfirmed: true }),
@@ -147,34 +227,159 @@ export async function requestFlowCharacterGeneration(
 }
 
 export async function getFlowCharacterJob(
-  workerUrl: string,
-  token: string,
+  workerUrl: string | undefined,
+  token: string | undefined,
   jobId: string,
 ): Promise<FlowWorkerJob> {
-  const payload = await workerRequest<{ job: FlowWorkerJob }>(
+  const encoded = encodeURIComponent(jobId);
+  const payload = await flowRequest<{ job: FlowWorkerJob }>(
+    `/worker/jobs/${encoded}`,
+    `/jobs/${encoded}`,
     workerUrl,
     token,
-    `/jobs/${encodeURIComponent(jobId)}`,
   );
   return payload.job;
-}
-
-export async function getFlowWorkerHealth(workerUrl: string): Promise<boolean> {
-  const base = workerUrl.trim().replace(/\/+$/, '');
-  const response = await fetch(`${base}/health`);
-  return response.ok;
 }
 
 export async function retryFlowCharacterAssetRegistration(
-  workerUrl: string,
-  token: string,
+  workerUrl: string | undefined,
+  token: string | undefined,
   jobId: string,
 ): Promise<FlowWorkerJob> {
-  const payload = await workerRequest<{ job: FlowWorkerJob }>(
+  const encoded = encodeURIComponent(jobId);
+  const payload = await flowRequest<{ job: FlowWorkerJob }>(
+    `/worker/jobs/${encoded}/retry-import`,
+    `/jobs/${encoded}/retry-import`,
     workerUrl,
     token,
-    `/jobs/${encodeURIComponent(jobId)}/retry-import`,
     { method: 'POST', body: JSON.stringify({}) },
   );
   return payload.job;
+}
+
+export async function checkFlowWorkerHealth(workerUrl?: string): Promise<FlowWorkerHealthStatus> {
+  const apiUrl = getApiUrl();
+  const start = performance.now();
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 4000);
+    const response = await fetch(`${apiUrl}/api/integrations/google-flow/worker/health`, {
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    const latencyMs = Math.round(performance.now() - start);
+
+    if (!response.ok) {
+      return {
+        online: false,
+        latencyMs,
+        error: `Worker proxy returned HTTP ${response.status}`,
+      };
+    }
+
+    const data = await response.json().catch(() => ({}));
+    return {
+      online: Boolean(data.online),
+      service: data.service,
+      host: data.host,
+      port: data.port,
+      hasConfiguredToken: data.hasConfiguredToken,
+      isProvisioned: data.isProvisioned,
+      browserChannel: data.browserChannel,
+      profileDir: data.profileDir,
+      pairingStatus: data.pairingStatus,
+      latencyMs: data.latencyMs || latencyMs,
+      error: data.error,
+    };
+  } catch (err: any) {
+    const latencyMs = Math.round(performance.now() - start);
+    return {
+      online: false,
+      latencyMs,
+      error: err.name === 'AbortError' ? 'Worker health check timed out.' : 'Backend API is unreachable.',
+    };
+  }
+}
+
+export async function getFlowWorkerHealth(workerUrl?: string): Promise<boolean> {
+  const status = await checkFlowWorkerHealth(workerUrl);
+  return status.online;
+}
+
+// ----------------------------------------------------
+// Credential Management Service Calls
+// ----------------------------------------------------
+
+export async function getFlowCredentialStatus(): Promise<FlowCredentialStatus> {
+  const apiUrl = getApiUrl();
+  const res = await fetch(`${apiUrl}/api/integrations/google-flow/credential/status`);
+  const data = await res.json();
+  if (!res.ok || !data.success) {
+    throw new Error(data.message || 'Could not fetch credential status.');
+  }
+  return data;
+}
+
+export async function verifyFlowWorkerAuthentication(workerUrl?: string): Promise<{
+  ok: boolean;
+  workerOnline: boolean;
+  authenticated: boolean;
+  pairingStatus: string;
+  error?: string;
+}> {
+  const apiUrl = getApiUrl();
+  const res = await fetch(`${apiUrl}/api/integrations/google-flow/credential/verify`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workerUrl }),
+  });
+  return res.json();
+}
+
+export async function regenerateFlowCredential(metadataUpdates?: Partial<FlowCredentialMetadata>): Promise<{
+  success: boolean;
+  message: string;
+  keyVersion: string;
+  updatedAt: string;
+  metadata: FlowCredentialMetadata;
+}> {
+  const apiUrl = getApiUrl();
+  const res = await fetch(`${apiUrl}/api/integrations/google-flow/credential/regenerate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ metadata: metadataUpdates }),
+  });
+  const data = await res.json();
+  if (!res.ok || !data.success) {
+    throw new Error(data.message || 'Could not regenerate credential.');
+  }
+  return data;
+}
+
+export async function reconnectFlowWorker(workerUrl?: string): Promise<{
+  success: boolean;
+  ok: boolean;
+  message: string;
+}> {
+  const apiUrl = getApiUrl();
+  const res = await fetch(`${apiUrl}/api/integrations/google-flow/credential/reconnect`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workerUrl }),
+  });
+  return res.json();
+}
+
+export async function updateFlowWorkerConfig(config: Partial<FlowCredentialMetadata>): Promise<FlowCredentialMetadata> {
+  const apiUrl = getApiUrl();
+  const res = await fetch(`${apiUrl}/api/integrations/google-flow/credential/config`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(config),
+  });
+  const data = await res.json();
+  if (!res.ok || !data.success) {
+    throw new Error(data.message || 'Could not update configuration.');
+  }
+  return data.metadata;
 }

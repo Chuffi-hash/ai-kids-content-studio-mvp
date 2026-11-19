@@ -72,6 +72,11 @@ export type Image = Prisma.ImageModel
  */
 export type Character = Prisma.CharacterModel
 /**
+ * Model IntegrationCredential
+ * 
+ */
+export type IntegrationCredential = Prisma.IntegrationCredentialModel
+/**
  * Model StoryCharacter
  * 
  */

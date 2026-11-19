@@ -3319,6 +3319,25 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
             </button>
           </div>
 
+          <button
+            type="button"
+            className="ed-btn-action"
+            style={{
+              fontSize: '11px',
+              padding: '6px 10px',
+              width: '100%',
+              borderColor: 'rgba(139, 92, 246, 0.4)',
+              color: '#c084fc',
+              background: 'rgba(139, 92, 246, 0.12)',
+              fontWeight: 600,
+            }}
+            onClick={() => window.open(`/integrations/google-flow?storyId=${storyId || ''}&sceneId=${scene.sceneId}`, '_blank')}
+            title="Open the unified Google Flow workspace for this scene"
+          >
+            <SparklesIcon size={13} />
+            <span>Open in Google Flow Workspace ↗</span>
+          </button>
+
           {/* Prompt History Toggle */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '2px' }}>
             <button

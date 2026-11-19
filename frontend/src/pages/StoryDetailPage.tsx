@@ -1927,6 +1927,7 @@ export default function StoryDetailPage() {
       {/* 1. Top Workspace Toolbar */}
       <TopToolbar
         title={story.title}
+        storyId={story.storyId}
         onTitleChange={handleTitleChange}
         onBack={() => navigate('/stories')}
         canUndo={canUndo}

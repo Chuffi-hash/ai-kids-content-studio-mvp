@@ -24,9 +24,53 @@ function defaultDataDirectory(name) {
   return path.join(os.homedir(), ".ai-kids-content-studio", name);
 }
 
-function isGoogleLoginUrl(value) {
+export function getDefaultFlowProfileDir() {
+  if (process.env.FLOW_PROFILE_DIR && process.env.FLOW_PROFILE_DIR.trim()) {
+    return path.resolve(process.env.FLOW_PROFILE_DIR.trim());
+  }
+  if (process.platform === "win32") {
+    const localAppData = process.env.LOCALAPPDATA || path.join(os.homedir(), "AppData", "Local");
+    return path.join(localAppData, "AIKidsContentStudio", "GoogleFlowChromeProfile");
+  }
+  if (process.platform === "darwin") {
+    return path.join(os.homedir(), "Library", "Application Support", "AIKidsContentStudio", "GoogleFlowChromeProfile");
+  }
+  return path.join(
+    process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config"),
+    "ai-kids-content-studio",
+    "GoogleFlowChromeProfile"
+  );
+}
+
+export function isGoogleLoginUrl(value) {
   try {
-    return new URL(value).hostname === "accounts.google.com";
+    const parsed = new URL(value);
+    const host = parsed.hostname.toLowerCase();
+    const pathname = parsed.pathname.toLowerCase();
+    return (
+      host === "accounts.google.com" ||
+      (host.endsWith(".google.com") && pathname.includes("/servicelogin")) ||
+      pathname.includes("/v3/signin")
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function isGoogleSigninRejected(value) {
+  try {
+    const parsed = new URL(value);
+    const host = parsed.hostname.toLowerCase();
+    const full = (parsed.pathname + parsed.search).toLowerCase();
+    if (host.includes("accounts.google")) {
+      return (
+        full.includes("/signin/rejected") ||
+        full.includes("signin/rejected") ||
+        full.includes("rejected") ||
+        full.includes("/denied")
+      );
+    }
+    return false;
   } catch {
     return false;
   }
@@ -71,10 +115,7 @@ export class FlowBrowserWorker {
     this.page = null;
     this.jobs = new Map();
     this.activeJobId = null;
-    this.profileDir = path.resolve(
-      process.env.FLOW_PROFILE_DIR ||
-        defaultDataDirectory("google-flow-profile"),
-    );
+    this.profileDir = getDefaultFlowProfileDir();
     this.downloadDir = path.resolve(
       process.env.FLOW_DOWNLOAD_DIR || defaultDataDirectory("flow-downloads"),
     );
@@ -160,45 +201,204 @@ export class FlowBrowserWorker {
   }
 
   async getSessionStatus() {
+    let profileDirExists = false;
+    try {
+      const stat = await fs.stat(this.profileDir);
+      profileDirExists = stat.isDirectory();
+    } catch {
+      profileDirExists = false;
+    }
+
+    const browserChannel = this.browserChannel || "bundled-chromium";
+    const configuredProfileDir = this.profileDir;
+
     if (!this.context) {
       return {
         connected: false,
+        workerOnline: true,
+        browserRunning: false,
+        flowPageOpen: false,
+        googleAuthenticated: false,
+        manualLoginRequired: false,
+        googleSigninBlocked: false,
+        projectSelected: false,
+        authenticationStatus: "unknown",
         state: "browser_not_started",
-        message: "Open a visible Google Flow browser session first.",
+        message: "Open a persistent Google Flow browser session first.",
+        browserChannel,
+        configuredProfileDir,
+        profileDirExists,
+        ownsActiveBrowser: false,
+        diagnostics: {
+          browserChannel,
+          configuredProfileDir,
+          profileDirExists,
+          ownsActiveBrowser: false,
+          googleSigninRequired: false,
+          googleSigninBlocked: false,
+          authenticationStatus: "unknown",
+        },
       };
     }
 
-    if (!this.page || this.page.isClosed()) {
+    if (!this.page || (typeof this.page.isClosed === "function" && this.page.isClosed())) {
       return {
         connected: false,
+        workerOnline: true,
+        browserRunning: false,
+        flowPageOpen: false,
+        googleAuthenticated: false,
+        manualLoginRequired: false,
+        googleSigninBlocked: false,
+        projectSelected: false,
+        authenticationStatus: "unknown",
         state: "browser_page_closed",
         message: "The Flow browser page is closed. Open the session again.",
+        browserChannel,
+        configuredProfileDir,
+        profileDirExists,
+        ownsActiveBrowser: true,
+        diagnostics: {
+          browserChannel,
+          configuredProfileDir,
+          profileDirExists,
+          ownsActiveBrowser: true,
+          googleSigninRequired: false,
+          googleSigninBlocked: false,
+          authenticationStatus: "unknown",
+        },
       };
     }
 
-    const currentUrl = this.page.url();
-    const loginRequired = isGoogleLoginUrl(currentUrl);
-    let title = "";
+    const currentUrl = typeof this.page.url === "function" ? this.page.url() : String(this.page.url || "");
+    const signinBlocked = isGoogleSigninRejected(currentUrl);
+    const loginUrl = isGoogleLoginUrl(currentUrl);
+    const flowPage = isFlowUrl(currentUrl);
+    const projectSelected = Boolean(flowPage && currentUrl.match(/\/project\/[a-zA-Z0-9\-_]+/i));
 
+    let title = "";
     try {
-      title = await this.page.title();
+      if (typeof this.page.title === "function") {
+        title = await this.page.title();
+      }
     } catch {
       // The page may be navigating; status remains available without a title.
     }
 
+    let googleAuthenticated = false;
+    let manualLoginRequired = false;
+    let googleSigninBlocked = false;
+    let authenticationStatus = "unknown";
+    let state = "browser_open";
+    let message = "";
+
+    if (signinBlocked) {
+      googleSigninBlocked = true;
+      manualLoginRequired = true;
+      googleAuthenticated = false;
+      authenticationStatus = "blocked";
+      state = "google_signin_blocked";
+      message = "Google sign-in was rejected by Google (accounts.google.com/v3/signin/rejected). Please complete sign-in in your standard browser or review network/proxy configuration.";
+    } else if (loginUrl) {
+      manualLoginRequired = true;
+      googleAuthenticated = false;
+      googleSigninBlocked = false;
+      authenticationStatus = "login_required";
+      state = "manual_login_required";
+      message = "Sign in manually in the visible browser. The worker does not handle passwords, MFA, or CAPTCHA.";
+    } else if (flowPage) {
+      state = "flow_page_open";
+      try {
+        let domStatus = "unknown";
+        if (typeof this.page.evaluate === "function") {
+          domStatus = await this.page.evaluate(() => {
+            const doc = document;
+            if (!doc) return "unknown";
+
+            const signInEl = doc.querySelector(
+              'a[href*="accounts.google.com"], button[data-action="sign-in"], a[data-action="sign-in"], [aria-label*="Sign in" i]'
+            );
+
+            const accountEl = doc.querySelector(
+              'a[href*="SignOutOptions"], [aria-label*="Google Account" i], img[src*="googleusercontent.com"], [data-email]'
+            );
+
+            const workspaceEl = doc.querySelector(
+              '[data-testid="project-workspace"], textarea, [contenteditable="true"], button[aria-label*="Generate" i]'
+            );
+
+            if (signInEl && !accountEl) {
+              return "login_required";
+            }
+            if (accountEl || workspaceEl) {
+              return "authenticated";
+            }
+            return "unknown";
+          });
+        }
+
+        if (domStatus === "authenticated") {
+          googleAuthenticated = true;
+          manualLoginRequired = false;
+          googleSigninBlocked = false;
+          authenticationStatus = "authenticated";
+          message = projectSelected
+            ? "Google Flow session is authenticated with active project selected."
+            : "Google Flow session is authenticated. Ready for character and background workflows.";
+        } else if (domStatus === "login_required") {
+          googleAuthenticated = false;
+          manualLoginRequired = true;
+          googleSigninBlocked = false;
+          authenticationStatus = "login_required";
+          state = "manual_login_required";
+          message = "Sign in to your Google account in the visible browser.";
+        } else {
+          googleAuthenticated = false;
+          manualLoginRequired = false;
+          googleSigninBlocked = false;
+          authenticationStatus = "unknown";
+          message = "Authentication status unknown. Confirm your login in the visible browser.";
+        }
+      } catch {
+        googleAuthenticated = false;
+        authenticationStatus = "unknown";
+        message = "Authentication status unknown. Confirm your login in the visible browser.";
+      }
+    } else {
+      state = "browser_open";
+      authenticationStatus = "unknown";
+      message = `Browser is open on ${currentUrl}. Navigate to Google Flow.`;
+    }
+
+    const diagnostics = {
+      browserChannel,
+      configuredProfileDir,
+      profileDirExists,
+      ownsActiveBrowser: true,
+      googleSigninRequired: manualLoginRequired || authenticationStatus === "login_required",
+      googleSigninBlocked,
+      authenticationStatus,
+    };
+
     return {
-      connected: true,
-      state: loginRequired
-        ? "manual_login_required"
-        : isFlowUrl(currentUrl)
-          ? "flow_page_open"
-          : "browser_open",
+      connected: true, // for backwards compatibility
+      workerOnline: true,
+      browserRunning: true,
+      flowPageOpen: flowPage,
+      googleAuthenticated,
+      manualLoginRequired,
+      googleSigninBlocked,
+      projectSelected,
+      authenticationStatus,
+      state,
       currentUrl,
       title,
-      manualLoginRequired: loginRequired,
-      message: loginRequired
-        ? "Sign in manually in the visible browser. The worker does not handle passwords, MFA, or CAPTCHA."
-        : "Confirm that the intended Flow project and saved character are visible before preparing a generation.",
+      message,
+      browserChannel,
+      configuredProfileDir,
+      profileDirExists,
+      ownsActiveBrowser: true,
+      diagnostics,
     };
   }
 
@@ -209,7 +409,7 @@ export class FlowBrowserWorker {
       this.page = null;
     }
 
-    return { connected: false, state: "browser_closed" };
+    return this.getSessionStatus();
   }
 
   createJob(input) {

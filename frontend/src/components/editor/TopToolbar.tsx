@@ -36,6 +36,7 @@ interface TopToolbarProps {
   onOpenExport: () => void;
   onOpenStoryDetails?: () => void;
   onOpenImportScript?: () => void;
+  storyId?: string;
   flowProjectId?: string | null;
   onOpenFlowProjectModal?: () => void;
   onAutoDirect?: () => void;
@@ -66,6 +67,7 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
   onOpenExport,
   onOpenStoryDetails,
   onOpenImportScript,
+  storyId,
   flowProjectId,
   onOpenFlowProjectModal,
   onAutoDirect,
@@ -174,6 +176,29 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
           >
             <span>🌊</span>
             <span>{flowProjectId ? 'Flow Linked' : 'Google Flow'}</span>
+          </button>
+        )}
+
+        {storyId && (
+          <button
+            type="button"
+            className="ed-tool-btn"
+            onClick={() => window.open(`/integrations/google-flow?storyId=${storyId}`, '_blank')}
+            title="Open dedicated Google Flow workspace for this story in a new tab"
+            style={{
+              fontSize: '11px',
+              padding: '3px 8px',
+              borderColor: 'rgba(139, 92, 246, 0.4)',
+              color: '#c084fc',
+              background: 'rgba(139, 92, 246, 0.12)',
+              fontWeight: 600,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+            }}
+          >
+            <span>✨</span>
+            <span>Flow Workspace ↗</span>
           </button>
         )}
 

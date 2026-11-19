@@ -57,6 +57,7 @@ export const ModelName = {
   Shot: 'Shot',
   Image: 'Image',
   Character: 'Character',
+  IntegrationCredential: 'IntegrationCredential',
   StoryCharacter: 'StoryCharacter'
 } as const
 
@@ -213,6 +214,22 @@ export const CharacterScalarFieldEnum = {
 } as const
 
 export type CharacterScalarFieldEnum = (typeof CharacterScalarFieldEnum)[keyof typeof CharacterScalarFieldEnum]
+
+
+export const IntegrationCredentialScalarFieldEnum = {
+  id: 'id',
+  provider: 'provider',
+  credentialType: 'credentialType',
+  encryptedValue: 'encryptedValue',
+  iv: 'iv',
+  authTag: 'authTag',
+  keyVersion: 'keyVersion',
+  metadata: 'metadata',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type IntegrationCredentialScalarFieldEnum = (typeof IntegrationCredentialScalarFieldEnum)[keyof typeof IntegrationCredentialScalarFieldEnum]
 
 
 export const StoryCharacterScalarFieldEnum = {

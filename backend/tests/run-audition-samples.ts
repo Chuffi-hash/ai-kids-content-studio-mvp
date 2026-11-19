@@ -36,7 +36,7 @@ async function probeAudio(filePath: string) {
   }
 }
 
-async function run() {
+export async function runAuditionSamples(): Promise<any[]> {
   console.log('=== STARTING MANDATORY 4-SAMPLE HINDI EMOTION AUDITION TEST ===');
   const service = new AudioGenerationService();
 
@@ -52,6 +52,10 @@ async function run() {
   ];
 
   const results: any[] = [];
+  const audioDir = path.join(process.cwd(), 'storage', 'audio');
+  if (!fs.existsSync(audioDir)) {
+    fs.mkdirSync(audioDir, { recursive: true });
+  }
 
   for (const tc of testCases) {
     console.log(`\nGenerating ${tc.label} (${tc.expectedDesc})...`);
@@ -72,7 +76,7 @@ async function run() {
     });
 
     const filename = path.basename(preview.audioUrl);
-    const fullPath = path.join(process.cwd(), 'storage', 'audio', filename);
+    const fullPath = path.join(audioDir, filename);
     const fileBytes = fs.readFileSync(fullPath);
     const sha256 = crypto.createHash('sha256').update(fileBytes).digest('hex');
     const probe = await probeAudio(fullPath);
@@ -85,6 +89,7 @@ async function run() {
       audioUrl: preview.audioUrl,
       filename,
       fullPath,
+      relativePath: path.join('storage', 'audio', filename).replace(/\\/g, '/'),
       sha256,
       sizeBytes: probe.sizeBytes,
       durationSec: probe.durationSec,
@@ -117,15 +122,18 @@ async function run() {
 
   // Write output json summary
   fs.writeFileSync(
-    path.join(process.cwd(), 'storage', 'audio', 'audition_samples_report.json'),
+    path.join(audioDir, 'audition_samples_report.json'),
     JSON.stringify(results, null, 2),
     'utf-8'
   );
   console.log('\nAudition test completed successfully!');
+  return results;
 }
 
-run().catch((err) => {
-  console.error('Audition test failed:', err);
-  process.exit(1);
-});
-
+// When executed directly
+if (process.argv[1] && process.argv[1].includes('run-audition-samples')) {
+  runAuditionSamples().catch((err) => {
+    console.error('Audition test failed:', err);
+    process.exit(1);
+  });
+}

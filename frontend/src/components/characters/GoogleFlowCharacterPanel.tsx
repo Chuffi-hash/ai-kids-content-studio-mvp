@@ -11,7 +11,16 @@ import {
   requestFlowCharacterGeneration,
   retryFlowCharacterAssetRegistration,
 } from '../../services/googleFlowWorker.service';
+import { useGoogleFlowConnection } from '../../context/GoogleFlowConnectionContext';
 import './GoogleFlowCharacterPanel.css';
+
+function useOptionalGoogleFlowConnection() {
+  try {
+    return useGoogleFlowConnection();
+  } catch {
+    return null;
+  }
+}
 
 interface GoogleFlowCharacterPanelProps {
   characterId: string;
@@ -21,6 +30,14 @@ interface GoogleFlowCharacterPanelProps {
   clothing?: string;
   artStyle?: string;
   onImported?: () => void;
+  workerUrl?: string;
+  onWorkerUrlChange?: (url: string) => void;
+  workerToken?: string;
+  onWorkerTokenChange?: (token: string) => void;
+  projectUrl?: string;
+  onProjectUrlChange?: (url: string) => void;
+  session?: FlowWorkerSession | null;
+  onSessionChange?: (session: FlowWorkerSession | null) => void;
 }
 
 const VIEW_OPTIONS = [
@@ -50,14 +67,59 @@ export default function GoogleFlowCharacterPanel({
   clothing = '',
   artStyle = '2D cartoon',
   onImported,
+  workerUrl: propWorkerUrl,
+  onWorkerUrlChange,
+  workerToken: propWorkerToken,
+  onWorkerTokenChange,
+  projectUrl: propProjectUrl,
+  onProjectUrlChange,
+  session: propSession,
+  onSessionChange,
 }: GoogleFlowCharacterPanelProps) {
-  const [workerUrl, setWorkerUrl] = useState('http://127.0.0.1:4177');
-  const [workerToken, setWorkerToken] = useState('');
-  const [projectUrl, setProjectUrl] = useState('');
+  const flowContext = useOptionalGoogleFlowConnection();
+
+  const [internalWorkerUrl, setInternalWorkerUrl] = useState('http://127.0.0.1:4177');
+  const [internalWorkerToken, setInternalWorkerToken] = useState('');
+  const [internalProjectUrl, setInternalProjectUrl] = useState('');
+  const [internalSession, setInternalSession] = useState<FlowWorkerSession | null>(null);
+
+  const workerUrl = propWorkerUrl !== undefined ? propWorkerUrl : (flowContext?.workerUrl || internalWorkerUrl);
+  const setWorkerUrl = (url: string) => {
+    setInternalWorkerUrl(url);
+    flowContext?.setWorkerUrl(url);
+    onWorkerUrlChange?.(url);
+  };
+
+  const workerToken = propWorkerToken !== undefined ? propWorkerToken : (flowContext?.workerToken || internalWorkerToken);
+  const setWorkerToken = (token: string) => {
+    setInternalWorkerToken(token);
+    flowContext?.setWorkerToken(token);
+    onWorkerTokenChange?.(token);
+  };
+
+  const projectUrl = propProjectUrl !== undefined ? propProjectUrl : (flowContext?.selectedProjectUrl || internalProjectUrl);
+  const setProjectUrl = (url: string) => {
+    setInternalProjectUrl(url);
+    flowContext?.setSelectedProjectUrl(url);
+    onProjectUrlChange?.(url);
+  };
+
+  const session = propSession !== undefined ? propSession : (flowContext?.session !== undefined ? flowContext.session : internalSession);
+  const setSession = (s: FlowWorkerSession | null | ((prev: FlowWorkerSession | null) => FlowWorkerSession | null)) => {
+    setInternalSession(s);
+    if (typeof s === 'function') {
+      const next = s(session);
+      if (flowContext) flowContext.setSession(next);
+      onSessionChange?.(next);
+    } else {
+      if (flowContext) flowContext.setSession(s);
+      onSessionChange?.(s);
+    }
+  };
+
   const [view, setView] = useState('front-left');
   const [additionalInstructions, setAdditionalInstructions] = useState('');
   const [isMasterReference, setIsMasterReference] = useState(false);
-  const [session, setSession] = useState<FlowWorkerSession | null>(null);
   const [job, setJob] = useState<FlowWorkerJob | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -77,7 +139,7 @@ export default function GoogleFlowCharacterPanel({
   );
 
   useEffect(() => {
-    if (!job?.id || !workerToken.trim() || !POLLING_STATUSES.has(job.status)) {
+    if (!job?.id || !POLLING_STATUSES.has(job.status)) {
       return;
     }
 
@@ -156,7 +218,7 @@ export default function GoogleFlowCharacterPanel({
     setError(null);
     try {
       setSession(await getFlowWorkerSession(workerUrl, workerToken));
-      if (job && workerToken.trim()) {
+      if (job) {
         setJob(await getFlowCharacterJob(workerUrl, workerToken, job.id));
       }
     } catch (refreshError: any) {

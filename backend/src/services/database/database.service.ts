@@ -1,17 +1,17 @@
-import dotenv from 'dotenv';
-import path from 'path';
-import { randomUUID } from 'crypto';
+import dotenv from "dotenv";
+import path from "path";
+import { randomUUID } from "crypto";
 
 // Fallback to load .env if not yet loaded by bootstrap
 if (!process.env.DATABASE_URL) {
-  dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+  dotenv.config({ path: path.resolve(process.cwd(), ".env") });
   if (!process.env.DATABASE_URL) {
-    dotenv.config({ path: path.resolve(__dirname, '../../..', '.env') });
+    dotenv.config({ path: path.resolve(__dirname, "../../..", ".env") });
   }
 }
 
-import { PrismaClient } from '../../generated/client';
-import { PrismaPg } from '@prisma/adapter-pg';
+import { PrismaClient } from "../../generated/client";
+import { PrismaPg } from "@prisma/adapter-pg";
 
 let connUrl = process.env.DATABASE_URL;
 if (connUrl && (connUrl.match(/@/g) || []).length > 1) {
@@ -32,15 +32,21 @@ export async function initializeDatabase() {
     await prisma.$queryRaw`SELECT 1`;
     // Verify core schema tables readiness without destructive resets
     await prisma.story.findFirst({ select: { id: true } });
-    console.log('[Database] Database initialized with Prisma (PostgreSQL) - Schema verified & connection healthy');
+    console.log(
+      "[Database] Database initialized with Prisma (PostgreSQL) - Schema verified & connection healthy",
+    );
     return true;
   } catch (err: any) {
-    if (err.code === 'P1001') {
-      console.warn('[Database] Warning: PostgreSQL database is unreachable at localhost. Please verify that Postgres is running on the configured port.');
-    } else if (err.code === 'P2022') {
-      console.warn('[Database] Warning: Schema column mismatch detected. Run `npx prisma migrate deploy` to synchronize migrations.');
+    if (err.code === "P1001") {
+      console.warn(
+        "[Database] Warning: PostgreSQL database is unreachable at localhost. Please verify that Postgres is running on the configured port.",
+      );
+    } else if (err.code === "P2022") {
+      console.warn(
+        "[Database] Warning: Schema column mismatch detected. Run `npx prisma migrate deploy` to synchronize migrations.",
+      );
     } else {
-      console.warn('[Database] Database connection notice:', err.message);
+      console.warn("[Database] Database connection notice:", err.message);
     }
     return false;
   }
@@ -65,30 +71,39 @@ export async function createStory(data: {
   productionStage?: string | null;
 }) {
   const id = data.id || randomUUID();
-  const storyId = data.storyId || `story-${Date.now()}-${randomUUID().slice(0, 8)}`;
+  const storyId =
+    data.storyId || `story-${Date.now()}-${randomUUID().slice(0, 8)}`;
   return await prisma.story.upsert({
     where: { storyId },
     update: {
       title: data.title,
-      logline: data.logline || '',
-      lesson: data.lesson || '',
+      logline: data.logline || "",
+      lesson: data.lesson || "",
       topic: data.topic,
       ageGroup: data.ageGroup,
       audience: data.audience,
       genre: data.genre,
       visualStyle: data.visualStyle,
       targetDuration: data.targetDuration,
-      ...(data.flowProjectId !== undefined ? { flowProjectId: data.flowProjectId } : {}),
-      ...(data.originalScript !== undefined ? { originalScript: data.originalScript } : {}),
-      ...(data.productionStage !== undefined ? { productionStage: data.productionStage } : {}),
-      ...(data.visualBible !== undefined ? { visualBible: data.visualBible } : {}),
+      ...(data.flowProjectId !== undefined
+        ? { flowProjectId: data.flowProjectId }
+        : {}),
+      ...(data.originalScript !== undefined
+        ? { originalScript: data.originalScript }
+        : {}),
+      ...(data.productionStage !== undefined
+        ? { productionStage: data.productionStage }
+        : {}),
+      ...(data.visualBible !== undefined
+        ? { visualBible: data.visualBible }
+        : {}),
     },
     create: {
       id,
       storyId,
       title: data.title,
-      logline: data.logline || '',
-      lesson: data.lesson || '',
+      logline: data.logline || "",
+      lesson: data.lesson || "",
       topic: data.topic,
       ageGroup: data.ageGroup,
       audience: data.audience,
@@ -98,33 +113,39 @@ export async function createStory(data: {
       visualBible: data.visualBible || null,
       flowProjectId: data.flowProjectId || null,
       originalScript: data.originalScript || null,
-      productionStage: data.productionStage || 'script',
+      productionStage: data.productionStage || "script",
     },
   });
 }
 
-export async function updateStoryMetadata(storyId: string, data: {
-  title?: string;
-  logline?: string;
-  lesson?: string;
-  topic?: string | null;
-  ageGroup?: string | null;
-  audience?: string | null;
-  genre?: string | null;
-  visualStyle?: string | null;
-  targetDuration?: number | null;
-  visualBible?: any;
-  flowProjectId?: string | null;
-  originalScript?: string | null;
-  productionStage?: string | null;
-}) {
+export async function updateStoryMetadata(
+  storyId: string,
+  data: {
+    title?: string;
+    logline?: string;
+    lesson?: string;
+    topic?: string | null;
+    ageGroup?: string | null;
+    audience?: string | null;
+    genre?: string | null;
+    visualStyle?: string | null;
+    targetDuration?: number | null;
+    visualBible?: any;
+    flowProjectId?: string | null;
+    originalScript?: string | null;
+    productionStage?: string | null;
+  },
+) {
   return await prisma.story.update({
     where: { storyId },
     data,
   });
 }
 
-export async function updateStoryFlowProject(storyId: string, flowProjectId: string | null) {
+export async function updateStoryFlowProject(
+  storyId: string,
+  flowProjectId: string | null,
+) {
   const story = await getStoryByStoryId(storyId);
   if (!story) {
     throw new Error(`Story not found: ${storyId}`);
@@ -137,7 +158,10 @@ export async function updateStoryFlowProject(storyId: string, flowProjectId: str
   });
 }
 
-export async function updateStoryVisualBible(storyId: string, visualBible: any) {
+export async function updateStoryVisualBible(
+  storyId: string,
+  visualBible: any,
+) {
   return await prisma.story.update({
     where: { storyId },
     data: {
@@ -172,27 +196,50 @@ export async function getStoryByStoryId(storyId: string) {
     }
     return story;
   } catch (error) {
-    console.error('[Database] Error fetching story by storyId:', storyId, error);
+    console.error(
+      "[Database] Error fetching story by storyId:",
+      storyId,
+      error,
+    );
     throw error;
   }
 }
 
 export async function getAllStories() {
   return await prisma.story.findMany({
-    orderBy: { createdAt: 'desc' },
+    orderBy: { createdAt: "desc" },
   });
 }
 
 export async function deleteStory(storyId: string) {
   return await prisma.$transaction(async (tx) => {
-    // 1. Find all scenes for this story
+    // 0. Resolve canonical story
+    const targetStory = await tx.story.findFirst({
+      where: { OR: [{ storyId }, { id: storyId }] },
+    });
+    if (!targetStory) {
+      throw new Error(`Story not found: ${storyId}`);
+    }
+    const resolvedStoryId = targetStory.storyId;
+
+    // 1. Find all scenes for this story (including soft-deleted scenes)
     const scenes = await tx.scene.findMany({
-      where: { storyId },
+      where: { storyId: resolvedStoryId },
       select: { sceneId: true },
     });
     const sceneIds = scenes.map((s) => s.sceneId);
 
-    // 2. Delete child records of scenes (images and scene versions)
+    // 2. Delete all Shot records first (shots reference scenes and story)
+    await tx.shot.deleteMany({
+      where: {
+        OR: [
+          { storyId: resolvedStoryId },
+          ...(sceneIds.length > 0 ? [{ sceneId: { in: sceneIds } }] : []),
+        ],
+      },
+    });
+
+    // 3. Delete child records of scenes (images and scene versions), then scenes
     if (sceneIds.length > 0) {
       await tx.image.deleteMany({
         where: { sceneId: { in: sceneIds } },
@@ -201,18 +248,18 @@ export async function deleteStory(storyId: string) {
         where: { sceneId: { in: sceneIds } },
       });
       await tx.scene.deleteMany({
-        where: { storyId },
+        where: { storyId: resolvedStoryId },
       });
     }
 
-    // 3. Delete story-character links
+    // 4. Delete story-character links
     await tx.storyCharacter.deleteMany({
-      where: { storyId },
+      where: { storyId: resolvedStoryId },
     });
 
-    // 4. Delete the story
+    // 5. Delete the story
     return await tx.story.delete({
-      where: { storyId },
+      where: { storyId: resolvedStoryId },
     });
   });
 }
@@ -258,7 +305,7 @@ export async function createScene(data: SceneData) {
       imageUrl: data.imageUrl,
       videoUrl: data.videoUrl,
       audioUrl: data.audioUrl,
-      generationStatus: data.generationStatus ?? 'draft',
+      generationStatus: data.generationStatus ?? "draft",
       estimatedDurationMs: data.estimatedDurationMs ?? 0,
       actualAudioDurationMs: data.actualAudioDurationMs,
       generationError: data.generationError,
@@ -273,14 +320,14 @@ export async function createScene(data: SceneData) {
       order: data.order ?? data.number,
       startMs: data.startMs ?? 0,
       endMs: data.endMs ?? 0,
-      narration: data.narration || '',
+      narration: data.narration || "",
       visualPrompt: data.visualPrompt || null,
       cameraDirection: data.cameraDirection || null,
       characterIds: data.characterIds || null,
       imageUrl: data.imageUrl || null,
       videoUrl: data.videoUrl || null,
       audioUrl: data.audioUrl || null,
-      generationStatus: data.generationStatus || 'draft',
+      generationStatus: data.generationStatus || "draft",
       estimatedDurationMs: data.estimatedDurationMs || 0,
       actualAudioDurationMs: data.actualAudioDurationMs || null,
       generationError: data.generationError || null,
@@ -292,17 +339,14 @@ export async function createScene(data: SceneData) {
 export async function getSceneBySceneId(sceneId: string) {
   return await prisma.scene.findFirst({
     where: {
-      OR: [
-        { sceneId },
-        { id: sceneId },
-      ],
+      OR: [{ sceneId }, { id: sceneId }],
     },
     include: {
       versions: {
-        orderBy: { versionNumber: 'desc' },
+        orderBy: { versionNumber: "desc" },
       },
       images: {
-        orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: "desc" },
       },
     },
   });
@@ -310,43 +354,46 @@ export async function getSceneBySceneId(sceneId: string) {
 
 export const getSceneById = getSceneBySceneId;
 
-export async function getScenesByStoryId(storyId: string, includeDeleted: boolean = false) {
+export async function getScenesByStoryId(
+  storyId: string,
+  includeDeleted: boolean = false,
+) {
   return await prisma.scene.findMany({
-    where: { 
+    where: {
       storyId,
-      ...(includeDeleted ? {} : { deletedAt: null })
+      ...(includeDeleted ? {} : { deletedAt: null }),
     },
-    orderBy: [
-      { order: 'asc' },
-      { number: 'asc' },
-    ],
+    orderBy: [{ order: "asc" }, { number: "asc" }],
     include: {
       versions: {
-        orderBy: { versionNumber: 'desc' },
+        orderBy: { versionNumber: "desc" },
       },
     },
   });
 }
 
-export async function updateScene(sceneId: string, data: {
-  title?: string;
-  narration?: string;
-  number?: number;
-  order?: number;
-  startMs?: number;
-  endMs?: number;
-  visualPrompt?: string | null;
-  cameraDirection?: string | null;
-  characterIds?: string | null;
-  imageUrl?: string | null;
-  videoUrl?: string | null;
-  audioUrl?: string | null;
-  generationStatus?: string;
-  estimatedDurationMs?: number;
-  actualAudioDurationMs?: number | null;
-  generationError?: string | null;
-  animationData?: any;
-}) {
+export async function updateScene(
+  sceneId: string,
+  data: {
+    title?: string;
+    narration?: string;
+    number?: number;
+    order?: number;
+    startMs?: number;
+    endMs?: number;
+    visualPrompt?: string | null;
+    cameraDirection?: string | null;
+    characterIds?: string | null;
+    imageUrl?: string | null;
+    videoUrl?: string | null;
+    audioUrl?: string | null;
+    generationStatus?: string;
+    estimatedDurationMs?: number;
+    actualAudioDurationMs?: number | null;
+    generationError?: string | null;
+    animationData?: any;
+  },
+) {
   const existing = await getSceneBySceneId(sceneId);
   const targetKey = existing ? existing.sceneId : sceneId;
 
@@ -356,24 +403,27 @@ export async function updateScene(sceneId: string, data: {
   });
 }
 
-export async function batchUpdateSceneTimelines(storyId: string, updates: Array<{
-  sceneId: string;
-  order: number;
-  startMs: number;
-  endMs: number;
-  estimatedDurationMs?: number;
-  actualAudioDurationMs?: number | null;
-  title?: string;
-  narration?: string;
-  visualPrompt?: string | null;
-  cameraDirection?: string | null;
-  characterIds?: string | string[] | null;
-  imageUrl?: string | null;
-  videoUrl?: string | null;
-  audioUrl?: string | null;
-  generationStatus?: string;
-  animationData?: any;
-}>) {
+export async function batchUpdateSceneTimelines(
+  storyId: string,
+  updates: Array<{
+    sceneId: string;
+    order: number;
+    startMs: number;
+    endMs: number;
+    estimatedDurationMs?: number;
+    actualAudioDurationMs?: number | null;
+    title?: string;
+    narration?: string;
+    visualPrompt?: string | null;
+    cameraDirection?: string | null;
+    characterIds?: string | string[] | null;
+    imageUrl?: string | null;
+    videoUrl?: string | null;
+    audioUrl?: string | null;
+    generationStatus?: string;
+    animationData?: any;
+  }>,
+) {
   if (updates.length > 0) {
     const sceneIds = updates.map((u) => u.sceneId);
     const existing = await prisma.scene.findMany({
@@ -384,7 +434,9 @@ export async function batchUpdateSceneTimelines(storyId: string, updates: Array<
       select: { sceneId: true },
     });
     if (existing.length !== updates.length) {
-      throw new Error('One or more scenes do not belong to the story being edited');
+      throw new Error(
+        "One or more scenes do not belong to the story being edited",
+      );
     }
   }
 
@@ -394,12 +446,16 @@ export async function batchUpdateSceneTimelines(storyId: string, updates: Array<
       startMs: update.startMs,
       endMs: update.endMs,
     };
-    if (update.estimatedDurationMs !== undefined) data.estimatedDurationMs = update.estimatedDurationMs;
-    if (update.actualAudioDurationMs !== undefined) data.actualAudioDurationMs = update.actualAudioDurationMs;
+    if (update.estimatedDurationMs !== undefined)
+      data.estimatedDurationMs = update.estimatedDurationMs;
+    if (update.actualAudioDurationMs !== undefined)
+      data.actualAudioDurationMs = update.actualAudioDurationMs;
     if (update.title !== undefined) data.title = update.title;
     if (update.narration !== undefined) data.narration = update.narration;
-    if (update.visualPrompt !== undefined) data.visualPrompt = update.visualPrompt;
-    if (update.cameraDirection !== undefined) data.cameraDirection = update.cameraDirection;
+    if (update.visualPrompt !== undefined)
+      data.visualPrompt = update.visualPrompt;
+    if (update.cameraDirection !== undefined)
+      data.cameraDirection = update.cameraDirection;
     if (update.characterIds !== undefined) {
       data.characterIds = Array.isArray(update.characterIds)
         ? JSON.stringify(update.characterIds)
@@ -408,8 +464,10 @@ export async function batchUpdateSceneTimelines(storyId: string, updates: Array<
     if (update.imageUrl !== undefined) data.imageUrl = update.imageUrl;
     if (update.videoUrl !== undefined) data.videoUrl = update.videoUrl;
     if (update.audioUrl !== undefined) data.audioUrl = update.audioUrl;
-    if (update.generationStatus !== undefined) data.generationStatus = update.generationStatus;
-    if (update.animationData !== undefined) data.animationData = update.animationData;
+    if (update.generationStatus !== undefined)
+      data.generationStatus = update.generationStatus;
+    if (update.animationData !== undefined)
+      data.animationData = update.animationData;
 
     return prisma.scene.update({
       where: { sceneId: update.sceneId },
@@ -424,7 +482,7 @@ export async function deleteScene(sceneId: string) {
     const target = await tx.scene.findFirst({
       where: { OR: [{ sceneId }, { id: sceneId }] },
     });
-    if (!target) throw new Error('Scene not found');
+    if (!target) throw new Error("Scene not found");
 
     const deleted = await tx.scene.update({
       where: { sceneId: target.sceneId },
@@ -434,13 +492,16 @@ export async function deleteScene(sceneId: string) {
     // Recalculate contiguous order and start/end times for remaining active scenes
     const remainingScenes = await tx.scene.findMany({
       where: { storyId: target.storyId, deletedAt: null },
-      orderBy: [{ order: 'asc' }, { number: 'asc' }],
+      orderBy: [{ order: "asc" }, { number: "asc" }],
     });
 
     let currentStartMs = 0;
     for (let i = 0; i < remainingScenes.length; i++) {
       const sc = remainingScenes[i];
-      const dur = sc.endMs > sc.startMs ? sc.endMs - sc.startMs : (sc.estimatedDurationMs || 5000);
+      const dur =
+        sc.endMs > sc.startMs
+          ? sc.endMs - sc.startMs
+          : sc.estimatedDurationMs || 5000;
       await tx.scene.update({
         where: { sceneId: sc.sceneId },
         data: {
@@ -484,7 +545,7 @@ export async function createSceneVersion(data: {
   if (!nextVersionNumber) {
     const latest = await prisma.sceneVersion.findFirst({
       where: { sceneId: actualSceneId },
-      orderBy: { versionNumber: 'desc' },
+      orderBy: { versionNumber: "desc" },
     });
     nextVersionNumber = (latest?.versionNumber ?? 0) + 1;
   }
@@ -508,7 +569,7 @@ export async function createSceneVersion(data: {
 export async function getSceneVersions(sceneId: string) {
   return await prisma.sceneVersion.findMany({
     where: { sceneId },
-    orderBy: { versionNumber: 'desc' },
+    orderBy: { versionNumber: "desc" },
   });
 }
 
@@ -517,7 +578,7 @@ export async function restoreSceneVersion(sceneId: string, versionId: string) {
     where: { id: versionId },
   });
   if (!version || version.sceneId !== sceneId) {
-    throw new Error('Scene version not found');
+    throw new Error("Scene version not found");
   }
 
   return await prisma.scene.update({
@@ -565,7 +626,7 @@ export async function createImage(data: {
 export async function getImagesBySceneId(sceneId: string) {
   return await prisma.image.findMany({
     where: { sceneId },
-    orderBy: { createdAt: 'desc' },
+    orderBy: { createdAt: "desc" },
   });
 }
 
@@ -588,9 +649,9 @@ export class CharacterConflictError extends Error {
 
   constructor(message: string) {
     super(message);
-    this.name = 'CharacterConflictError';
+    this.name = "CharacterConflictError";
     this.statusCode = 409;
-    this.code = 'P2002';
+    this.code = "P2002";
   }
 }
 
@@ -613,13 +674,15 @@ export async function createCharacter(data: {
     where: {
       name: {
         equals: trimmedName,
-        mode: 'insensitive',
+        mode: "insensitive",
       },
     },
   });
 
   if (existing) {
-    throw new CharacterConflictError(`Character with name "${trimmedName}" already exists`);
+    throw new CharacterConflictError(
+      `Character with name "${trimmedName}" already exists`,
+    );
   }
 
   // Create new character
@@ -627,10 +690,13 @@ export async function createCharacter(data: {
     data: {
       id: data.id,
       name: trimmedName,
-      species: data.species || 'human',
-      personality: data.personality || 'friendly and curious',
-      visualDescription: data.visualDescription || (data as any).description || `${trimmedName} the ${data.species || 'character'}`,
-      distinctiveFeatures: data.distinctiveFeatures || '',
+      species: data.species || "human",
+      personality: data.personality || "friendly and curious",
+      visualDescription:
+        data.visualDescription ||
+        (data as any).description ||
+        `${trimmedName} the ${data.species || "character"}`,
+      distinctiveFeatures: data.distinctiveFeatures || "",
       canonicalAppearance: data.canonicalAppearance,
       referenceImageUrl: data.referenceImageUrl,
       referenceImagePrompt: data.referenceImagePrompt,
@@ -644,7 +710,7 @@ export async function getCharacterByName(name: string) {
     where: {
       name: {
         equals: trimmedName,
-        mode: 'insensitive',
+        mode: "insensitive",
       },
     },
   });
@@ -674,16 +740,19 @@ export async function deleteCharacter(id: string) {
   });
 }
 
-export async function updateCharacter(id: string, data: {
-  name?: string;
-  species?: string;
-  personality?: string;
-  visualDescription?: string;
-  distinctiveFeatures?: string;
-  canonicalAppearance?: any;
-  referenceImageUrl?: string;
-  referenceImagePrompt?: string;
-}) {
+export async function updateCharacter(
+  id: string,
+  data: {
+    name?: string;
+    species?: string;
+    personality?: string;
+    visualDescription?: string;
+    distinctiveFeatures?: string;
+    canonicalAppearance?: any;
+    referenceImageUrl?: string;
+    referenceImagePrompt?: string;
+  },
+) {
   const updateData = { ...data };
   if (updateData.name) {
     const trimmed = updateData.name.trim();
@@ -691,12 +760,14 @@ export async function updateCharacter(id: string, data: {
       where: {
         name: {
           equals: trimmed,
-          mode: 'insensitive',
+          mode: "insensitive",
         },
       },
     });
     if (existing && existing.id !== id) {
-      throw new CharacterConflictError(`Character with name "${trimmed}" already exists`);
+      throw new CharacterConflictError(
+        `Character with name "${trimmed}" already exists`,
+      );
     }
     updateData.name = trimmed;
   }
@@ -729,7 +800,10 @@ export async function linkStoryCharacter(data: {
   });
 }
 
-export async function unlinkStoryCharacter(storyId: string, characterId: string) {
+export async function unlinkStoryCharacter(
+  storyId: string,
+  characterId: string,
+) {
   return await prisma.storyCharacter.deleteMany({
     where: {
       storyId,
@@ -738,7 +812,10 @@ export async function unlinkStoryCharacter(storyId: string, characterId: string)
   });
 }
 
-export async function setStoryCharacters(storyId: string, characterIds: string[]) {
+export async function setStoryCharacters(
+  storyId: string,
+  characterIds: string[],
+) {
   return await prisma.$transaction(async (tx) => {
     await tx.storyCharacter.deleteMany({
       where: { storyId },
@@ -809,7 +886,9 @@ export interface CreateShotInput {
 
 export async function createShot(data: CreateShotInput) {
   const id = data.id || randomUUID();
-  const shotId = data.shotId || `shot-${data.sceneId}-${data.number}-${randomUUID().slice(0, 6)}`;
+  const shotId =
+    data.shotId ||
+    `shot-${data.sceneId}-${data.number}-${randomUUID().slice(0, 6)}`;
   return await prisma.shot.create({
     data: {
       id,
@@ -819,12 +898,12 @@ export async function createShot(data: CreateShotInput) {
       number: data.number,
       order: data.order ?? data.number,
       title: data.title || `Shot ${data.number}`,
-      description: data.description || '',
+      description: data.description || "",
       durationMs: data.durationMs || 5000,
-      shotType: data.shotType || 'wide_establishing',
-      cameraAngle: data.cameraAngle || 'eye_level',
-      cameraMovement: data.cameraMovement || 'static',
-      lighting: data.lighting || 'Natural day lighting',
+      shotType: data.shotType || "wide_establishing",
+      cameraAngle: data.cameraAngle || "eye_level",
+      cameraMovement: data.cameraMovement || "static",
+      lighting: data.lighting || "Natural day lighting",
       shotDirection: data.shotDirection ?? null,
       characterInstructions: data.characterInstructions ?? null,
       backgroundPrompt: data.backgroundPrompt || null,
@@ -832,36 +911,40 @@ export async function createShot(data: CreateShotInput) {
       promptHistory: data.promptHistory ?? [],
       backgroundUrl: data.backgroundUrl || null,
       videoUrl: data.videoUrl || null,
-      assetStatus: data.assetStatus || 'pending',
-      approvalStatus: data.approvalStatus || 'pending',
-      productionStatus: data.productionStatus || 'draft',
+      assetStatus: data.assetStatus || "pending",
+      approvalStatus: data.approvalStatus || "pending",
+      productionStatus: data.productionStatus || "draft",
     },
   });
 }
 
-export async function getShotsByStoryId(storyId: string, options?: { includeArchived?: boolean }) {
+export async function getShotsByStoryId(
+  storyId: string,
+  options?: { includeArchived?: boolean },
+) {
   return await prisma.shot.findMany({
     where: {
       storyId,
-      ...(options?.includeArchived ? {} : { productionStatus: { not: 'archived' } }),
+      ...(options?.includeArchived
+        ? {}
+        : { productionStatus: { not: "archived" } }),
     },
-    orderBy: [
-      { order: 'asc' },
-      { number: 'asc' },
-    ],
+    orderBy: [{ order: "asc" }, { number: "asc" }],
   });
 }
 
-export async function getShotsBySceneId(sceneId: string, options?: { includeArchived?: boolean }) {
+export async function getShotsBySceneId(
+  sceneId: string,
+  options?: { includeArchived?: boolean },
+) {
   return await prisma.shot.findMany({
     where: {
       sceneId,
-      ...(options?.includeArchived ? {} : { productionStatus: { not: 'archived' } }),
+      ...(options?.includeArchived
+        ? {}
+        : { productionStatus: { not: "archived" } }),
     },
-    orderBy: [
-      { order: 'asc' },
-      { number: 'asc' },
-    ],
+    orderBy: [{ order: "asc" }, { number: "asc" }],
   });
 }
 
@@ -875,40 +958,45 @@ export async function getShotById(shotId: string) {
   });
 }
 
-export async function updateShot(shotId: string, updates: Partial<{
-  title: string;
-  description: string;
-  durationMs: number;
-  order: number;
-  number: number;
-  shotType: string;
-  cameraAngle: string;
-  cameraMovement: string;
-  lighting: string;
-  shotDirection: any;
-  characterInstructions: any;
-  backgroundPrompt: string;
-  videoPrompt: string;
-  promptHistory: any;
-  backgroundUrl: string;
-  videoUrl: string;
-  assetStatus: string;
-  approvalStatus: string;
-  productionStatus: string;
-  transitionType: string;
-  transitionDurationMs: number;
-  userEditedFields: any;
-}>, options?: { isUserAction?: boolean }) {
+export async function updateShot(
+  shotId: string,
+  updates: Partial<{
+    title: string;
+    description: string;
+    durationMs: number;
+    order: number;
+    number: number;
+    shotType: string;
+    cameraAngle: string;
+    cameraMovement: string;
+    lighting: string;
+    shotDirection: any;
+    characterInstructions: any;
+    backgroundPrompt: string;
+    videoPrompt: string;
+    promptHistory: any;
+    backgroundUrl: string;
+    videoUrl: string;
+    assetStatus: string;
+    approvalStatus: string;
+    productionStatus: string;
+    transitionType: string;
+    transitionDurationMs: number;
+    userEditedFields: any;
+  }>,
+  options?: { isUserAction?: boolean },
+) {
   const existing = await prisma.shot.findUnique({
     where: { shotId },
   });
 
-  const currentEdited = (existing?.userEditedFields as Record<string, boolean>) || {};
+  const currentEdited =
+    (existing?.userEditedFields as Record<string, boolean>) || {};
   const newlyEdited: Record<string, boolean> = { ...currentEdited };
 
   if (options?.isUserAction !== false) {
     for (const key of Object.keys(updates)) {
-      if (key !== 'userEditedFields' && key !== 'updatedAt') {
+      if (key !== "userEditedFields" && key !== "updatedAt") {
         newlyEdited[key] = true;
       }
     }
@@ -932,12 +1020,12 @@ export async function deleteShot(shotId: string) {
 export async function reconcileAndUpsertSceneShots(
   storyId: string,
   sceneId: string,
-  shots: CreateShotInput[]
+  shots: CreateShotInput[],
 ) {
   return await prisma.$transaction(async (tx) => {
     const existing = await tx.shot.findMany({
       where: { sceneId },
-      orderBy: { order: 'asc' },
+      orderBy: { order: "asc" },
     });
 
     const matchedIds = new Set<string>();
@@ -947,32 +1035,52 @@ export async function reconcileAndUpsertSceneShots(
       const s = shots[i];
       // Match by shotId first, then by shot number
       const match = existing.find(
-        (e) => (s.shotId && e.shotId === s.shotId) || e.number === s.number
+        (e) => (s.shotId && e.shotId === s.shotId) || e.number === s.number,
       );
 
       if (match) {
         matchedIds.add(match.id);
-        const hasCustomPrompt = Array.isArray(match.promptHistory) && match.promptHistory.length > 1;
-        const isApproved = match.approvalStatus === 'approved';
+        const hasCustomPrompt =
+          Array.isArray(match.promptHistory) && match.promptHistory.length > 1;
+        const isApproved = match.approvalStatus === "approved";
         const hasAsset = Boolean(match.backgroundUrl || match.videoUrl);
-        const userEdits = ((match as any).userEditedFields as Record<string, boolean>) || {};
+        const userEdits =
+          ((match as any).userEditedFields as Record<string, boolean>) || {};
 
         // Preserve user edited prompts and fields if user touched them, or if approved or manually customized
-        const titleVal = userEdits['title'] || isApproved ? match.title : (s.title || match.title);
-        const descVal = userEdits['description'] || isApproved ? match.description : (s.description || match.description);
-        const durVal = userEdits['durationMs'] ? match.durationMs : (s.durationMs || match.durationMs);
-        const shotTypeVal = userEdits['shotType'] || isApproved ? match.shotType : (s.shotType || match.shotType);
-        const camAngleVal = userEdits['cameraAngle'] ? match.cameraAngle : (s.cameraAngle || match.cameraAngle);
-        const camMoveVal = userEdits['cameraMovement'] ? match.cameraMovement : (s.cameraMovement || match.cameraMovement);
-        const bgPromptVal = userEdits['backgroundPrompt'] || isApproved || hasCustomPrompt
-          ? match.backgroundPrompt
-          : (s.backgroundPrompt || match.backgroundPrompt);
-        const vidPromptVal = userEdits['videoPrompt'] || isApproved || hasCustomPrompt
-          ? match.videoPrompt
-          : (s.videoPrompt || match.videoPrompt);
-        const history = Array.isArray(match.promptHistory) && match.promptHistory.length > 0
-          ? match.promptHistory
-          : (s.promptHistory ?? []);
+        const titleVal =
+          userEdits["title"] || isApproved
+            ? match.title
+            : s.title || match.title;
+        const descVal =
+          userEdits["description"] || isApproved
+            ? match.description
+            : s.description || match.description;
+        const durVal = userEdits["durationMs"]
+          ? match.durationMs
+          : s.durationMs || match.durationMs;
+        const shotTypeVal =
+          userEdits["shotType"] || isApproved
+            ? match.shotType
+            : s.shotType || match.shotType;
+        const camAngleVal = userEdits["cameraAngle"]
+          ? match.cameraAngle
+          : s.cameraAngle || match.cameraAngle;
+        const camMoveVal = userEdits["cameraMovement"]
+          ? match.cameraMovement
+          : s.cameraMovement || match.cameraMovement;
+        const bgPromptVal =
+          userEdits["backgroundPrompt"] || isApproved || hasCustomPrompt
+            ? match.backgroundPrompt
+            : s.backgroundPrompt || match.backgroundPrompt;
+        const vidPromptVal =
+          userEdits["videoPrompt"] || isApproved || hasCustomPrompt
+            ? match.videoPrompt
+            : s.videoPrompt || match.videoPrompt;
+        const history =
+          Array.isArray(match.promptHistory) && match.promptHistory.length > 0
+            ? match.promptHistory
+            : (s.promptHistory ?? []);
 
         const updated = await tx.shot.update({
           where: { id: match.id },
@@ -985,37 +1093,45 @@ export async function reconcileAndUpsertSceneShots(
             cameraMovement: camMoveVal,
             lighting: s.lighting || match.lighting,
             shotDirection: s.shotDirection ?? match.shotDirection,
-            characterInstructions: s.characterInstructions ?? match.characterInstructions,
+            characterInstructions:
+              s.characterInstructions ?? match.characterInstructions,
             backgroundPrompt: bgPromptVal,
             videoPrompt: vidPromptVal,
             promptHistory: history,
             backgroundUrl: match.backgroundUrl || s.backgroundUrl,
             videoUrl: match.videoUrl || s.videoUrl,
-            assetStatus: hasAsset ? match.assetStatus : (s.assetStatus || match.assetStatus),
+            assetStatus: hasAsset
+              ? match.assetStatus
+              : s.assetStatus || match.assetStatus,
             approvalStatus: match.approvalStatus || s.approvalStatus,
-            productionStatus: hasAsset || isApproved ? 'ready' : (s.productionStatus || match.productionStatus),
+            productionStatus:
+              hasAsset || isApproved
+                ? "ready"
+                : s.productionStatus || match.productionStatus,
           },
         });
         results.push(updated);
       } else {
         // Create new shot non-destructively
         const id = s.id || randomUUID();
-        const shotId = s.shotId || `shot-${sceneId}-${s.number || (i + 1)}-${randomUUID().slice(0, 6)}`;
+        const shotId =
+          s.shotId ||
+          `shot-${sceneId}-${s.number || i + 1}-${randomUUID().slice(0, 6)}`;
         const created = await tx.shot.create({
           data: {
             id,
             shotId,
             storyId,
             sceneId,
-            number: s.number ?? (i + 1),
-            order: s.order ?? (i + 1),
-            title: s.title || `Shot ${s.number ?? (i + 1)}`,
-            description: s.description || '',
+            number: s.number ?? i + 1,
+            order: s.order ?? i + 1,
+            title: s.title || `Shot ${s.number ?? i + 1}`,
+            description: s.description || "",
             durationMs: s.durationMs || 5000,
-            shotType: s.shotType || 'wide_establishing',
-            cameraAngle: s.cameraAngle || 'eye_level',
-            cameraMovement: s.cameraMovement || 'static',
-            lighting: s.lighting || 'Natural day lighting',
+            shotType: s.shotType || "wide_establishing",
+            cameraAngle: s.cameraAngle || "eye_level",
+            cameraMovement: s.cameraMovement || "static",
+            lighting: s.lighting || "Natural day lighting",
             shotDirection: s.shotDirection ?? null,
             characterInstructions: s.characterInstructions ?? null,
             backgroundPrompt: s.backgroundPrompt || null,
@@ -1023,9 +1139,9 @@ export async function reconcileAndUpsertSceneShots(
             promptHistory: s.promptHistory ?? [],
             backgroundUrl: s.backgroundUrl || null,
             videoUrl: s.videoUrl || null,
-            assetStatus: s.assetStatus || 'pending',
-            approvalStatus: s.approvalStatus || 'pending',
-            productionStatus: s.productionStatus || 'draft',
+            assetStatus: s.assetStatus || "pending",
+            approvalStatus: s.approvalStatus || "pending",
+            productionStatus: s.productionStatus || "draft",
           },
         });
         results.push(created);
@@ -1036,14 +1152,16 @@ export async function reconcileAndUpsertSceneShots(
     for (const ex of existing) {
       if (!matchedIds.has(ex.id)) {
         const hasAsset = Boolean(ex.backgroundUrl || ex.videoUrl);
-        const isApproved = ex.approvalStatus === 'approved';
-        const userEdits = ((ex as any).userEditedFields as Record<string, boolean>) || {};
+        const isApproved = ex.approvalStatus === "approved";
+        const userEdits =
+          ((ex as any).userEditedFields as Record<string, boolean>) || {};
         const hasUserEdits = Object.keys(userEdits).length > 0;
-        const hasCustomPrompt = Array.isArray(ex.promptHistory) && ex.promptHistory.length > 1;
+        const hasCustomPrompt =
+          Array.isArray(ex.promptHistory) && ex.promptHistory.length > 1;
         if (hasAsset || isApproved || hasUserEdits || hasCustomPrompt) {
           const archived = await tx.shot.update({
             where: { id: ex.id },
-            data: { productionStatus: 'archived' },
+            data: { productionStatus: "archived" },
           });
           results.push(archived);
         } else {
@@ -1056,10 +1174,13 @@ export async function reconcileAndUpsertSceneShots(
   });
 }
 
-export async function replaceSceneShots(storyId: string, sceneId: string, shots: CreateShotInput[]) {
+export async function replaceSceneShots(
+  storyId: string,
+  sceneId: string,
+  shots: CreateShotInput[],
+) {
   return reconcileAndUpsertSceneShots(storyId, sceneId, shots);
 }
 
 export { prisma };
 export default prisma;
-

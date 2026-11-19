@@ -1,0 +1,852 @@
+/* ============================================================
+   AI Kids Content Studio — Google Flow Integration Studio
+   SaaS Dashboard Styling (Dark & Light Theme Compatible)
+   ============================================================ */
+
+.flow-page-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 24px 32px;
+  max-width: 1400px;
+  margin: 0 auto;
+  width: 100%;
+  box-sizing: border-box;
+  color: var(--color-text, #ffffff);
+}
+
+/* Header */
+.flow-page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 20px;
+  flex-wrap: wrap;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--color-border, #202d45);
+}
+
+.flow-header-title-group h1 {
+  font-size: 24px;
+  font-weight: 700;
+  margin: 0 0 6px 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.flow-header-title-group p {
+  font-size: 13px;
+  color: var(--color-text-secondary, #94a3b8);
+  margin: 0;
+  max-width: 650px;
+  line-height: 1.5;
+}
+
+/* Live Status Strip */
+.flow-status-strip {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.flow-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: var(--radius-full, 999px);
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid var(--color-border, #202d45);
+  background: var(--color-surface, #101726);
+  white-space: nowrap;
+}
+
+.flow-status-badge.online {
+  border-color: rgba(16, 185, 129, 0.4);
+  background: rgba(16, 185, 129, 0.12);
+  color: var(--color-success-text, #34d399);
+}
+
+.flow-status-badge.offline {
+  border-color: rgba(239, 68, 68, 0.4);
+  background: rgba(239, 68, 68, 0.12);
+  color: var(--color-danger-text, #f87171);
+}
+
+.flow-status-badge.connected {
+  border-color: rgba(59, 130, 246, 0.4);
+  background: rgba(59, 130, 246, 0.12);
+  color: #60a5fa;
+}
+
+.flow-status-badge.neutral {
+  color: var(--color-text-secondary, #94a3b8);
+}
+
+.flow-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.flow-status-dot.green {
+  background: #10b981;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.6);
+}
+
+.flow-status-dot.red {
+  background: #ef4444;
+}
+
+.flow-status-dot.blue {
+  background: #3b82f6;
+  box-shadow: 0 0 8px rgba(59, 130, 246, 0.6);
+}
+
+.flow-status-dot.yellow {
+  background: #f59e0b;
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.6);
+}
+
+.flow-status-dot.purple {
+  background: #a855f7;
+  box-shadow: 0 0 8px rgba(168, 85, 247, 0.6);
+}
+
+.flow-status-dot.gray {
+  background: #64748b;
+}
+
+.flow-status-badge.authenticated {
+  border-color: rgba(16, 185, 129, 0.4);
+  background: rgba(16, 185, 129, 0.12);
+  color: var(--color-success-text, #34d399);
+}
+
+.flow-status-badge.login_required {
+  border-color: rgba(245, 158, 11, 0.4);
+  background: rgba(245, 158, 11, 0.12);
+  color: #fbbf24;
+}
+
+.flow-status-badge.blocked {
+  border-color: rgba(239, 68, 68, 0.4);
+  background: rgba(239, 68, 68, 0.12);
+  color: var(--color-danger-text, #f87171);
+}
+
+.flow-status-badge.selected {
+  border-color: rgba(139, 92, 246, 0.4);
+  background: rgba(139, 92, 246, 0.12);
+  color: #c084fc;
+}
+
+/* Diagnostics grid */
+.flow-diagnostics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.flow-diag-item {
+  padding: 10px 14px;
+  background: var(--color-surface-muted, #151e30);
+  border: 1px solid var(--color-border, #202d45);
+  border-radius: var(--radius-xs, 6px);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.flow-diag-label {
+  font-size: 11px;
+  color: var(--color-text-secondary, #94a3b8);
+  font-weight: 500;
+}
+
+.flow-diag-value {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text, #e2e8f0);
+  word-break: break-all;
+}
+
+[data-theme="light"] .flow-diag-value,
+body.theme-light .flow-diag-value {
+  color: #0f172a;
+}
+
+[data-theme="light"] .flow-diag-label,
+body.theme-light .flow-diag-label {
+  color: #475569;
+}
+
+[data-theme="light"] .flow-diag-item,
+body.theme-light .flow-diag-item {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+}
+
+[data-theme="light"] .flow-card,
+body.theme-light .flow-card {
+  background: #ffffff;
+  border-color: #e2e8f0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+[data-theme="light"] .flow-header-title-group h1,
+body.theme-light .flow-header-title-group h1 {
+  color: #0f172a;
+}
+
+[data-theme="light"] .flow-header-title-group p,
+body.theme-light .flow-header-title-group p {
+  color: #475569;
+}
+
+[data-theme="light"] .flow-card-header h3,
+body.theme-light .flow-card-header h3 {
+  color: #0f172a;
+}
+
+[data-theme="light"] .flow-card-header p,
+body.theme-light .flow-card-header p {
+  color: #64748b;
+}
+
+[data-theme="light"] .flow-input,
+body.theme-light .flow-input,
+[data-theme="light"] .flow-select,
+body.theme-light .flow-select,
+[data-theme="light"] .flow-textarea,
+body.theme-light .flow-textarea {
+  background: #ffffff;
+  border-color: #cbd5e1;
+  color: #0f172a;
+}
+
+.flow-input::placeholder,
+.flow-textarea::placeholder {
+  color: #94a3b8 !important;
+  opacity: 1 !important;
+  font-weight: 400;
+}
+
+[data-theme="light"] .flow-input::placeholder,
+body.theme-light .flow-input::placeholder,
+html[data-theme="light"] .flow-input::placeholder,
+[data-theme="light"] .flow-textarea::placeholder,
+body.theme-light .flow-textarea::placeholder,
+html[data-theme="light"] .flow-textarea::placeholder {
+  color: #475569 !important;
+  opacity: 1 !important;
+  font-weight: 400;
+}
+
+[data-theme="light"] .flow-form-label,
+body.theme-light .flow-form-label,
+html[data-theme="light"] .flow-form-label {
+  color: #334155 !important;
+}
+
+[data-theme="light"] .flow-form-label span.sub,
+body.theme-light .flow-form-label span.sub,
+html[data-theme="light"] .flow-form-label span.sub {
+  color: #64748b !important;
+}
+
+/* Context Banner */
+.flow-context-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 18px;
+  background: rgba(139, 92, 246, 0.14);
+  border: 1px solid rgba(139, 92, 246, 0.35);
+  border-radius: var(--radius-sm, 8px);
+  font-size: 13px;
+  color: #e9d5ff;
+}
+
+.flow-context-banner strong {
+  color: #ffffff;
+}
+
+[data-theme="light"] .flow-context-banner,
+body.theme-light .flow-context-banner,
+html[data-theme="light"] .flow-context-banner {
+  background: #f5f3ff !important;
+  border-color: #ddd6fe !important;
+  color: #5b21b6 !important;
+}
+
+[data-theme="light"] .flow-context-banner strong,
+body.theme-light .flow-context-banner strong,
+html[data-theme="light"] .flow-context-banner strong {
+  color: #3b0764 !important;
+}
+
+/* Status Badges in Dark Mode */
+.flow-status-badge.neutral {
+  border-color: #2e4163;
+  background: #151e30;
+  color: #cbd5e1;
+}
+
+.flow-status-badge.selected {
+  border-color: rgba(168, 85, 247, 0.45);
+  background: rgba(168, 85, 247, 0.16);
+  color: #d8b4fe;
+}
+
+/* Status Badges in Light Mode */
+[data-theme="light"] .flow-status-badge.selected,
+body.theme-light .flow-status-badge.selected,
+html[data-theme="light"] .flow-status-badge.selected {
+  border-color: rgba(124, 58, 237, 0.35) !important;
+  background: rgba(124, 58, 237, 0.12) !important;
+  color: #5b21b6 !important;
+}
+
+[data-theme="light"] .flow-status-badge.neutral,
+body.theme-light .flow-status-badge.neutral,
+html[data-theme="light"] .flow-status-badge.neutral {
+  border-color: #cbd5e1 !important;
+  background: #f1f5f9 !important;
+  color: #334155 !important;
+}
+
+[data-theme="light"] .flow-status-badge.online,
+body.theme-light .flow-status-badge.online,
+html[data-theme="light"] .flow-status-badge.online {
+  border-color: rgba(22, 163, 74, 0.35) !important;
+  background: rgba(22, 163, 74, 0.1) !important;
+  color: #15803d !important;
+}
+
+[data-theme="light"] .flow-status-badge.connected,
+body.theme-light .flow-status-badge.connected,
+html[data-theme="light"] .flow-status-badge.connected {
+  border-color: rgba(37, 99, 235, 0.35) !important;
+  background: rgba(37, 99, 235, 0.1) !important;
+  color: #1d4ed8 !important;
+}
+
+[data-theme="light"] .flow-status-badge.authenticated,
+body.theme-light .flow-status-badge.authenticated,
+html[data-theme="light"] .flow-status-badge.authenticated {
+  border-color: rgba(22, 163, 74, 0.35) !important;
+  background: rgba(22, 163, 74, 0.1) !important;
+  color: #15803d !important;
+}
+
+[data-theme="light"] .flow-status-badge.login_required,
+body.theme-light .flow-status-badge.login_required,
+html[data-theme="light"] .flow-status-badge.login_required {
+  border-color: rgba(217, 119, 6, 0.35) !important;
+  background: rgba(217, 119, 6, 0.1) !important;
+  color: #b45309 !important;
+}
+
+[data-theme="light"] .flow-status-badge.blocked,
+body.theme-light .flow-status-badge.blocked,
+html[data-theme="light"] .flow-status-badge.blocked {
+  border-color: rgba(220, 38, 38, 0.35) !important;
+  background: rgba(220, 38, 38, 0.1) !important;
+  color: #b91c1c !important;
+}
+
+/* Callouts in Light Mode */
+[data-theme="light"] .flow-callout.info,
+body.theme-light .flow-callout.info,
+html[data-theme="light"] .flow-callout.info {
+  background: rgba(37, 99, 235, 0.08) !important;
+  border-color: rgba(37, 99, 235, 0.25) !important;
+  color: #1e40af !important;
+}
+
+[data-theme="light"] .flow-callout.info strong,
+body.theme-light .flow-callout.info strong,
+html[data-theme="light"] .flow-callout.info strong,
+[data-theme="light"] .flow-callout.info code,
+body.theme-light .flow-callout.info code,
+html[data-theme="light"] .flow-callout.info code {
+  color: #1e3a8a !important;
+}
+
+[data-theme="light"] .flow-callout.warning,
+body.theme-light .flow-callout.warning,
+html[data-theme="light"] .flow-callout.warning {
+  background: rgba(217, 119, 6, 0.08) !important;
+  border-color: rgba(217, 119, 6, 0.25) !important;
+  color: #92400e !important;
+}
+
+[data-theme="light"] .flow-callout.warning strong,
+body.theme-light .flow-callout.warning strong,
+html[data-theme="light"] .flow-callout.warning strong {
+  color: #78350f !important;
+}
+
+[data-theme="light"] .flow-callout.success,
+body.theme-light .flow-callout.success,
+html[data-theme="light"] .flow-callout.success {
+  background: rgba(22, 163, 74, 0.08) !important;
+  border-color: rgba(22, 163, 74, 0.25) !important;
+  color: #166534 !important;
+}
+
+[data-theme="light"] .flow-callout.success strong,
+body.theme-light .flow-callout.success strong,
+html[data-theme="light"] .flow-callout.success strong {
+  color: #14532d !important;
+}
+
+[data-theme="light"] .flow-callout.security,
+body.theme-light .flow-callout.security,
+html[data-theme="light"] .flow-callout.security {
+  background: #f5f3ff !important;
+  border-color: #ddd6fe !important;
+  color: #5b21b6 !important;
+}
+
+[data-theme="light"] .flow-callout.security strong,
+body.theme-light .flow-callout.security strong,
+html[data-theme="light"] .flow-callout.security strong {
+  color: #3b0764 !important;
+}
+
+/* Secondary Button in Light Mode */
+[data-theme="light"] .flow-btn.secondary,
+body.theme-light .flow-btn.secondary,
+html[data-theme="light"] .flow-btn.secondary {
+  background: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #334155 !important;
+}
+
+[data-theme="light"] .flow-btn.secondary:hover:not(:disabled),
+body.theme-light .flow-btn.secondary:hover:not(:disabled),
+html[data-theme="light"] .flow-btn.secondary:hover:not(:disabled) {
+  background: #f1f5f9 !important;
+  border-color: #94a3b8 !important;
+  color: #0f172a !important;
+}
+
+/* Strict Checkbox Constraints — Prevent Stretched Checkbox Bars */
+input[type="checkbox"],
+.flow-page-container input[type="checkbox"],
+.flow-card input[type="checkbox"],
+.flow-checkbox-row input[type="checkbox"],
+.google-flow-checkbox input[type="checkbox"] {
+  width: 18px !important;
+  height: 18px !important;
+  min-width: 18px !important;
+  max-width: 18px !important;
+  box-sizing: border-box !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: 1px solid var(--color-border-strong, #2e4163) !important;
+  border-radius: 4px !important;
+  box-shadow: none !important;
+  cursor: pointer !important;
+  accent-color: var(--color-accent, #8b5cf6) !important;
+  flex-shrink: 0 !important;
+  display: inline-block !important;
+  vertical-align: middle !important;
+}
+
+.flow-checkbox-row,
+.google-flow-checkbox,
+label:has(input[type="checkbox"]) {
+  display: inline-flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 8px !important;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--color-text-secondary, #94a3b8);
+  cursor: pointer;
+  width: auto !important;
+  max-width: fit-content !important;
+}
+
+[data-theme="light"] .flow-checkbox-row,
+body.theme-light .flow-checkbox-row,
+html[data-theme="light"] .flow-checkbox-row,
+[data-theme="light"] label:has(input[type="checkbox"]),
+body.theme-light label:has(input[type="checkbox"]),
+html[data-theme="light"] label:has(input[type="checkbox"]) {
+  color: #475569 !important;
+}
+
+/* Context Banner */
+.flow-context-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 16px;
+  background: rgba(139, 92, 246, 0.12);
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  border-radius: var(--radius-sm, 8px);
+  font-size: 12px;
+  color: #c084fc;
+}
+
+.flow-context-banner strong {
+  color: #fff;
+}
+
+/* Navigation Tabs */
+.flow-tabs-nav {
+  display: flex;
+  gap: 8px;
+  border-bottom: 1px solid var(--color-border, #202d45);
+  padding-bottom: 2px;
+  overflow-x: auto;
+}
+
+.flow-tab-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-secondary, #94a3b8);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.flow-tab-button:hover {
+  color: var(--color-text, #ffffff);
+  background: var(--color-surface-hover, rgba(255, 255, 255, 0.04));
+  border-radius: var(--radius-xs, 6px) var(--radius-xs, 6px) 0 0;
+}
+
+.flow-tab-button.active {
+  color: var(--color-accent, #8b5cf6);
+  border-bottom-color: var(--color-accent, #8b5cf6);
+}
+
+.flow-tab-badge {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: var(--radius-full, 999px);
+  background: rgba(139, 92, 246, 0.2);
+  color: #c084fc;
+}
+
+/* Tab Panels */
+.flow-tab-content {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* Grid Layouts */
+.flow-grid-2col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+@media (max-width: 960px) {
+  .flow-grid-2col {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Cards */
+.flow-card {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px;
+  border: 1px solid var(--color-border, #202d45);
+  border-radius: var(--radius, 12px);
+  background: var(--color-surface, #101726);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+.flow-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.flow-card-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.flow-card-header p {
+  margin: 4px 0 0 0;
+  font-size: 12px;
+  color: var(--color-text-secondary, #94a3b8);
+  line-height: 1.4;
+}
+
+/* Forms and Inputs */
+.flow-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.flow-form-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-secondary, #cbd5e1);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.flow-form-label span.sub {
+  font-size: 10px;
+  color: var(--color-text-muted, #64748b);
+  font-weight: 400;
+}
+
+.flow-input,
+.flow-select,
+.flow-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 12px;
+  border-radius: var(--radius-xs, 6px);
+  border: 1px solid var(--color-border, #202d45);
+  background: var(--color-surface-muted, #151e30);
+  color: var(--color-text, #ffffff);
+  font-size: 13px;
+  font-family: inherit;
+  transition: border-color 0.15s ease;
+}
+
+.flow-input:focus,
+.flow-select:focus,
+.flow-textarea:focus {
+  outline: none;
+  border-color: var(--color-accent, #8b5cf6);
+  box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.25);
+}
+
+.flow-input-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.flow-input-row .flow-input {
+  flex: 1;
+}
+
+/* Buttons */
+.flow-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: var(--radius-xs, 6px);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.flow-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.flow-btn.primary {
+  background: var(--color-accent, #8b5cf6);
+  color: #ffffff;
+}
+
+.flow-btn.primary:hover:not(:disabled) {
+  background: var(--color-accent-strong, #7c3aed);
+}
+
+.flow-btn.secondary {
+  background: var(--color-surface-elevated, #162035);
+  border-color: var(--color-border, #202d45);
+  color: var(--color-text, #ffffff);
+}
+
+.flow-btn.secondary:hover:not(:disabled) {
+  background: var(--color-surface-hover, #1e2c46);
+}
+
+.flow-btn.success {
+  background: #059669;
+  color: #ffffff;
+}
+
+.flow-btn.success:hover:not(:disabled) {
+  background: #047857;
+}
+
+.flow-btn.danger {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #f87171;
+}
+
+.flow-btn.danger:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.25);
+}
+
+.flow-btn.sm {
+  padding: 5px 10px;
+  font-size: 11px;
+}
+
+/* Callouts / Warnings */
+.flow-callout {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm, 8px);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.flow-callout.info {
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  color: #93c5fd;
+}
+
+.flow-callout.warning {
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  color: #fcd34d;
+}
+
+.flow-callout.success {
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: #6ee7b7;
+}
+
+.flow-callout.security {
+  background: rgba(139, 92, 246, 0.08);
+  border: 1px solid rgba(139, 92, 246, 0.25);
+  color: #ddd6fe;
+}
+
+/* Diagnostic Code Blocks */
+.flow-code-block {
+  background: #090d16;
+  border: 1px solid var(--color-border, #202d45);
+  border-radius: var(--radius-xs, 6px);
+  padding: 10px 14px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  color: #38bdf8;
+  overflow-x: auto;
+  line-height: 1.6;
+}
+
+/* Validation Pills */
+.flow-pill-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.flow-pill {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: var(--radius-full, 999px);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  background: rgba(16, 185, 129, 0.12);
+  color: #34d399;
+}
+
+/* Dropzone */
+.flow-dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
+  border: 2px dashed var(--color-border, #202d45);
+  border-radius: var(--radius-sm, 8px);
+  background: var(--color-surface-muted, #151e30);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: center;
+}
+
+.flow-dropzone:hover {
+  border-color: var(--color-accent, #8b5cf6);
+  background: var(--color-surface-hover, #1e2c46);
+}
+
+.flow-dropzone p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-text-secondary, #94a3b8);
+}
+
+/* Preview Boxes */
+.flow-preview-box {
+  border: 1px solid var(--color-border, #202d45);
+  border-radius: var(--radius-sm, 8px);
+  overflow: hidden;
+  background: #090d16;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 180px;
+}
+
+.flow-preview-box img {
+  max-width: 100%;
+  max-height: 320px;
+  object-fit: contain;
+}
+
+/* Prompt History */
+.flow-history-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: var(--radius-xs, 6px);
+  border: 1px solid var(--color-border, #202d45);
+  background: var(--color-surface-muted, #151e30);
+  font-size: 11px;
+}
+
+.flow-history-meta {
+  display: flex;
+  justify-content: space-between;
+  color: var(--color-text-secondary, #94a3b8);
+  font-size: 10px;
+}

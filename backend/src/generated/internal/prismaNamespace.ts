@@ -403,6 +403,7 @@ export const ModelName = {
   Shot: 'Shot',
   Image: 'Image',
   Character: 'Character',
+  IntegrationCredential: 'IntegrationCredential',
   StoryCharacter: 'StoryCharacter'
 } as const
 
@@ -419,7 +420,7 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
     omit: GlobalOmitOptions
   }
   meta: {
-    modelProps: "story" | "scene" | "sceneVersion" | "shot" | "image" | "character" | "storyCharacter"
+    modelProps: "story" | "scene" | "sceneVersion" | "shot" | "image" | "character" | "integrationCredential" | "storyCharacter"
     txIsolationLevel: TransactionIsolationLevel
   }
   model: {
@@ -867,6 +868,80 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         }
       }
     }
+    IntegrationCredential: {
+      payload: Prisma.$IntegrationCredentialPayload<ExtArgs>
+      fields: Prisma.IntegrationCredentialFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.IntegrationCredentialFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$IntegrationCredentialPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.IntegrationCredentialFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$IntegrationCredentialPayload>
+        }
+        findFirst: {
+          args: Prisma.IntegrationCredentialFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$IntegrationCredentialPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.IntegrationCredentialFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$IntegrationCredentialPayload>
+        }
+        findMany: {
+          args: Prisma.IntegrationCredentialFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$IntegrationCredentialPayload>[]
+        }
+        create: {
+          args: Prisma.IntegrationCredentialCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$IntegrationCredentialPayload>
+        }
+        createMany: {
+          args: Prisma.IntegrationCredentialCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.IntegrationCredentialCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$IntegrationCredentialPayload>[]
+        }
+        delete: {
+          args: Prisma.IntegrationCredentialDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$IntegrationCredentialPayload>
+        }
+        update: {
+          args: Prisma.IntegrationCredentialUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$IntegrationCredentialPayload>
+        }
+        deleteMany: {
+          args: Prisma.IntegrationCredentialDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.IntegrationCredentialUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.IntegrationCredentialUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$IntegrationCredentialPayload>[]
+        }
+        upsert: {
+          args: Prisma.IntegrationCredentialUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$IntegrationCredentialPayload>
+        }
+        aggregate: {
+          args: Prisma.IntegrationCredentialAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateIntegrationCredential>
+        }
+        groupBy: {
+          args: Prisma.IntegrationCredentialGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.IntegrationCredentialGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.IntegrationCredentialCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.IntegrationCredentialCountAggregateOutputType> | number
+        }
+      }
+    }
     StoryCharacter: {
       payload: Prisma.$StoryCharacterPayload<ExtArgs>
       fields: Prisma.StoryCharacterFieldRefs
@@ -1117,6 +1192,22 @@ export const CharacterScalarFieldEnum = {
 } as const
 
 export type CharacterScalarFieldEnum = (typeof CharacterScalarFieldEnum)[keyof typeof CharacterScalarFieldEnum]
+
+
+export const IntegrationCredentialScalarFieldEnum = {
+  id: 'id',
+  provider: 'provider',
+  credentialType: 'credentialType',
+  encryptedValue: 'encryptedValue',
+  iv: 'iv',
+  authTag: 'authTag',
+  keyVersion: 'keyVersion',
+  metadata: 'metadata',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type IntegrationCredentialScalarFieldEnum = (typeof IntegrationCredentialScalarFieldEnum)[keyof typeof IntegrationCredentialScalarFieldEnum]
 
 
 export const StoryCharacterScalarFieldEnum = {
@@ -1409,6 +1500,7 @@ export type GlobalOmitConfig = {
   shot?: Prisma.ShotOmit
   image?: Prisma.ImageOmit
   character?: Prisma.CharacterOmit
+  integrationCredential?: Prisma.IntegrationCredentialOmit
   storyCharacter?: Prisma.StoryCharacterOmit
 }
 
