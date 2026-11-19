@@ -513,6 +513,37 @@ export class FlowBrowserWorker {
   }
 
   createJob(input) {
+    const targetType = input.targetType || (input.sceneId ? "background" : "character");
+
+    if (targetType === "background") {
+      const sceneId = String(input.sceneId || "").trim();
+      const storyId = String(input.storyId || "").trim();
+      if (!sceneId) throw new Error("sceneId is required for background jobs.");
+
+      const projectUrl = input.projectUrl
+        ? assertAllowedFlowUrl(input.projectUrl)
+        : undefined;
+      const prompt = String(input.prompt || "").trim();
+      if (!prompt) throw new Error("A non-empty prompt is required for background jobs.");
+
+      const job = {
+        id: randomUUID(),
+        targetType: "background",
+        sceneId,
+        storyId,
+        aspectRatio: input.aspectRatio || "16:9",
+        projectUrl,
+        prompt,
+        status: "created",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        message: "Background job created. Prepare it after opening Flow.",
+      };
+
+      this.jobs.set(job.id, job);
+      return job;
+    }
+
     const characterId = String(input.characterId || "").trim();
     const characterName = String(input.characterName || "").trim();
     const view = String(input.view || "front");
@@ -551,6 +582,7 @@ export class FlowBrowserWorker {
 
     const job = {
       id: randomUUID(),
+      targetType: "character",
       characterId,
       characterName,
       view,
@@ -896,6 +928,43 @@ export class FlowBrowserWorker {
     if (!job.importResult) {
       const dataUri =
         "data:" + imageType.mimeType + ";base64," + buffer.toString("base64");
+
+      if (job.targetType === "background" || job.sceneId) {
+        let bgResponse;
+        try {
+          bgResponse = await fetch(this.backendUrl + "/api/background-studio/import-flow", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              sceneId: job.sceneId,
+              storyId: job.storyId,
+              imageBufferOrBase64: dataUri,
+              aspectRatio: job.aspectRatio || "16:9",
+              filename: "flow-bg-" + (job.sceneId || job.id) + "." + imageType.extension,
+              notes: "Imported from Google Flow via Playwright loopback worker",
+              prompt: job.prompt,
+            }),
+          });
+        } catch (uploadErr) {
+          throw new Error(
+            "Backend file upload network error: " +
+              (uploadErr instanceof Error ? uploadErr.message : String(uploadErr)),
+          );
+        }
+
+        const bgPayload = await bgResponse.json().catch(() => ({}));
+        if (!bgResponse.ok || bgPayload.success !== true || !bgPayload.asset) {
+          throw new Error("Backend background import failed with HTTP " + bgResponse.status + ".");
+        }
+
+        job.importResult = bgPayload.asset;
+        job.detectedMimeType = imageType.mimeType;
+        job.status = "completed";
+        job.message = "Background image downloaded and applied to scene successfully.";
+        this.touch(job);
+        return;
+      }
+
       const characterPath =
         "/api/character-studio/characters/" +
         encodeURIComponent(job.characterId) +
@@ -943,6 +1012,13 @@ export class FlowBrowserWorker {
   }
 
   async persistAssetMetadata(job) {
+    if (job.targetType === "background" || job.sceneId) {
+      job.status = "completed";
+      job.message = "Background asset import and registration completed successfully.";
+      this.touch(job);
+      return;
+    }
+
     if (!job.importResult)
       throw new Error("There is no imported file result to register.");
 

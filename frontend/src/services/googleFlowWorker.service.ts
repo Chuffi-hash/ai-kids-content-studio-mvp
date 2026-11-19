@@ -475,3 +475,178 @@ export async function importFlowAsset(payload: FlowImportAssetPayload): Promise<
   }
   return data;
 }
+
+// ----------------------------------------------------
+// Story-Aware Direct Generation API Calls
+// ----------------------------------------------------
+
+export interface StoryFlowSceneItem {
+  sceneId: string;
+  id: string;
+  number: number;
+  order: number;
+  title: string;
+  narration: string;
+  visualPrompt: string;
+  cameraDirection: string;
+  aspectRatio: string;
+  hasBackground: boolean;
+  backgroundUrl: string | null;
+  backgroundImageId: string | null;
+  location: string;
+  timeOfDay: string;
+  lighting: string;
+  weather: string;
+  environmentDescription: string;
+  characterIds: string[];
+  charactersInScene: Array<{ id: string; name: string; species?: string }>;
+}
+
+export interface StoryFlowCharacterItem {
+  id: string;
+  name: string;
+  species: string;
+  personality: string;
+  visualDescription: string;
+  clothing: string;
+  distinctiveFeatures: string;
+  referenceImageUrl: string | null;
+  hasMasterReference: boolean;
+  scenesAppearedIn: Array<{ sceneId: string; number: number; title: string }>;
+  scenesCount: number;
+}
+
+export interface StoryFlowContextResponse {
+  story: {
+    id: string;
+    storyId: string;
+    title: string;
+    logline: string;
+    lesson: string;
+    genre: string;
+    targetAudience: string;
+    visualStyle: string;
+    aspectRatio: string;
+    flowProjectId: string | null;
+  };
+  scenes: StoryFlowSceneItem[];
+  characters: StoryFlowCharacterItem[];
+  summary: {
+    totalScenes: number;
+    scenesWithBackground: number;
+    missingBackgroundCount: number;
+    missingBackgroundSceneIds: string[];
+    totalCharacters: number;
+    charactersWithMasterReference: number;
+    missingReferenceCount: number;
+    missingReferenceCharacterIds: string[];
+  };
+}
+
+export interface ProvidersStatusResponse {
+  gemini_api: { available: boolean; model: string; message: string };
+  google_flow: { available: boolean; browserRunning: boolean; authenticated: boolean; message: string };
+}
+
+export async function fetchStoryFlowContext(
+  storyId: string,
+  options?: { sceneId?: string; characterId?: string }
+): Promise<StoryFlowContextResponse> {
+  const apiUrl = getApiUrl();
+  const params = new URLSearchParams();
+  if (options?.sceneId) params.append('sceneId', options.sceneId);
+  if (options?.characterId) params.append('characterId', options.characterId);
+
+  const url = `${apiUrl}/api/integrations/google-flow/stories/${encodeURIComponent(storyId)}/context?${params.toString()}`;
+  const res = await fetch(url);
+  const data = await res.json();
+  if (!res.ok || !data.success) {
+    throw new Error(data.message || 'Failed to load story context.');
+  }
+  return data.context;
+}
+
+export async function fetchGenerationProvidersStatus(): Promise<ProvidersStatusResponse> {
+  const apiUrl = getApiUrl();
+  const res = await fetch(`${apiUrl}/api/integrations/google-flow/providers/status`);
+  const data = await res.json();
+  if (!res.ok || !data.success) {
+    throw new Error(data.message || 'Failed to fetch provider status.');
+  }
+  return data.providers;
+}
+
+export async function generateBackgroundDirect(payload: {
+  storyId: string;
+  sceneId: string;
+  provider?: 'gemini_api' | 'google_flow';
+  promptOverride?: string;
+  aspectRatio?: string;
+}): Promise<any> {
+  const apiUrl = getApiUrl();
+  const res = await fetch(`${apiUrl}/api/integrations/google-flow/generate/background`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json();
+  if (!res.ok || !data.success) {
+    throw new Error(data.message || 'Background generation failed.');
+  }
+  return data.asset;
+}
+
+export async function generateCharacterAssetDirect(payload: {
+  storyId: string;
+  characterId: string;
+  provider?: 'gemini_api' | 'google_flow';
+  assetType?: 'master_reference' | 'turnaround' | 'expression' | 'pose';
+  variation?: string;
+  promptOverride?: string;
+}): Promise<any> {
+  const apiUrl = getApiUrl();
+  const res = await fetch(`${apiUrl}/api/integrations/google-flow/generate/character`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json();
+  if (!res.ok || !data.success) {
+    throw new Error(data.message || 'Character generation failed.');
+  }
+  return data.asset;
+}
+
+export async function generateAllMissingBackgroundsDirect(
+  storyId: string,
+  provider?: 'gemini_api' | 'google_flow'
+): Promise<{ total: number; generated: number; failed: number; results: any[] }> {
+  const apiUrl = getApiUrl();
+  const res = await fetch(`${apiUrl}/api/integrations/google-flow/generate/batch-backgrounds`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ storyId, provider }),
+  });
+  const data = await res.json();
+  if (!res.ok || !data.success) {
+    throw new Error(data.message || 'Batch background generation failed.');
+  }
+  return data.result;
+}
+
+export async function generateAllMissingCharacterReferencesDirect(
+  storyId: string,
+  provider?: 'gemini_api' | 'google_flow'
+): Promise<{ total: number; generated: number; failed: number; results: any[] }> {
+  const apiUrl = getApiUrl();
+  const res = await fetch(`${apiUrl}/api/integrations/google-flow/generate/batch-characters`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ storyId, provider }),
+  });
+  const data = await res.json();
+  if (!res.ok || !data.success) {
+    throw new Error(data.message || 'Batch character generation failed.');
+  }
+  return data.result;
+}

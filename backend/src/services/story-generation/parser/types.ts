@@ -177,6 +177,7 @@ export interface ParsedScene {
   narration: string;
   dialogue: ParsedDialogueLine[];
   characterActions: Array<{ characterName: string; action: string; description?: string }>;
+  charactersPresent?: string[];
   breakdown: ProductionBreakdown;
   suggestedOverlays: Array<{ id: string; type: string; label: string; color?: string }>;
   shots: Array<{ num: number; size: string; move: string; desc: string }>;
@@ -195,11 +196,32 @@ export interface StoryboardIntermediateRepresentation {
   genre: string;
   look: ProjectLookDNA;
   bibles: ProjectBibles;
-  characters: Array<{ name: string; role?: string; description?: string; voice?: string; species?: string; appearance?: any }>;
+  characters: Array<{ name: string; role?: string; description?: string; voice?: string; species?: string; appearance?: any; characterKey?: string }>;
   scenes: ParsedScene[];
   warnings: ScriptWarning[];
   originalText: string;
+  schemaVersion?: string;
+  globalContinuity?: Record<string, any>;
+  endScreen?: { text?: string; cta?: string; durationSeconds?: number };
 }
+
+import {
+  MetadataCategory,
+  normalizeMetadataKey,
+  lookupMetadataCategory,
+  isProductionMetadataLabel,
+  isNonCharacterProductionLabel,
+  looksLikeProductionInstruction,
+} from './metadata-registry.js';
+
+export {
+  MetadataCategory,
+  normalizeMetadataKey,
+  lookupMetadataCategory,
+  isProductionMetadataLabel,
+  isNonCharacterProductionLabel,
+  looksLikeProductionInstruction,
+};
 
 export const RESERVED_METADATA_KEYS = new Set([
   'duration',
@@ -258,6 +280,22 @@ export const RESERVED_METADATA_KEYS = new Set([
   'summary',
   'logline',
   'lesson',
+  'end screen text',
+  'end screen',
+  'closing text',
+  'character consistency',
+  'character continuity',
+  'visual style',
+  'scene notes',
+  'production notes',
+  'notes',
+  'note',
+  'sound effects',
+  'sfx',
+  'vfx',
+  'music',
+  'on-screen text',
+  'characters present',
   'अवधि',
   'समय',
   'दृश्य',
@@ -276,12 +314,20 @@ export const RESERVED_METADATA_KEYS = new Set([
   'भाव',
   'कैप्शन',
   'शीर्षक',
+  'अंतिम स्क्रीन',
+  'पात्र निरंतरता',
+  'कला शैली',
+  'कैमरा निर्देश',
+  'ध्वनि प्रभाव',
+  'संगीत',
 ]);
 
 export function isReservedMetadataKey(str: string): boolean {
   if (!str) return false;
+  if (isNonCharacterProductionLabel(str)) return true;
   const lower = str.trim().toLowerCase();
-  return RESERVED_METADATA_KEYS.has(lower);
+  return RESERVED_METADATA_KEYS.has(lower) || RESERVED_METADATA_KEYS.has(normalizeMetadataKey(str));
 }
+
 
 

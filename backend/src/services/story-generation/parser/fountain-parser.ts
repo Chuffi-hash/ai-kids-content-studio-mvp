@@ -20,6 +20,10 @@ import {
   ParentheticalNode,
   DialogueNode,
   ProductionInstructionNode,
+  lookupMetadataCategory,
+  isNonCharacterProductionLabel,
+  looksLikeProductionInstruction,
+  normalizeMetadataKey,
 } from './types.js';
 
 export function parseDevanagariOrLatinNumber(str?: string): number | undefined {
@@ -458,36 +462,43 @@ export class FountainParser {
       };
     }
 
-    // 4. Standard Production Instructions (Background Prompt, Narration, Effects, Caption, Duration, Camera)
+    // 4. Normalized Production Metadata Labels (English and Hindi)
     const match = trimmed.match(REGEX_PRODUCTION_INSTRUCTION);
     if (match) {
-      const rawKey = (match[1] || '').trim().toLowerCase();
+      const rawKey = (match[1] || '').trim();
       const value = (match[2] || '').trim();
+      const category = lookupMetadataCategory(rawKey);
 
-      let standardKey = '';
-      if (rawKey.includes('background') || rawKey.includes('visual prompt') || rawKey === 'visual' || rawKey === 'दृश्य' || rawKey === 'पृष्ठभूमि') {
-        standardKey = 'background_prompt';
-      } else if (rawKey.includes('narration') || rawKey === 'narrator' || rawKey.includes('voiceover') || rawKey.includes('सूत्रधार') || rawKey.includes('कथावाचक')) {
-        standardKey = 'narration';
-      } else if (rawKey.includes('effect') || rawKey.includes('overlay') || rawKey.includes('प्रभाव')) {
-        standardKey = 'effects';
-      } else if (rawKey.includes('caption') || rawKey.includes('opening caption') || rawKey.includes('closing caption') || rawKey.includes('कैप्शन')) {
-        standardKey = 'caption';
-      } else if (rawKey.includes('duration') || rawKey.includes('अवधि') || rawKey.includes('समय')) {
-        standardKey = 'duration';
-      } else if (rawKey.includes('shot') || rawKey.includes('camera')) {
-        standardKey = 'shot_instruction';
-      }
+      if (category && category !== 'dialogue') {
+        const mappedKey = category;
 
-      if (standardKey) {
         return {
           type: 'production_instruction',
-          key: standardKey,
+          key: mappedKey,
           value,
-          text: `${standardKey}: ${value}`,
+          text: `${mappedKey}: ${value}`,
           raw: rawLine,
           range,
-          metadata: { originalKey: match[2].trim() },
+          metadata: { originalKey: rawKey, category },
+        };
+      }
+
+      if (looksLikeProductionInstruction(rawKey)) {
+        this.warnings.push({
+          code: 'UNRECOGNIZED_PRODUCTION_LABEL',
+          message: `Line ${lineNum}: Unrecognized production label "${rawKey}". Preserved as production note rather than creating a character.`,
+          line: lineNum,
+          severity: 'info',
+          sourceContext: rawLine,
+        });
+        return {
+          type: 'production_instruction',
+          key: 'scene_notes',
+          value,
+          text: `scene_notes: ${value}`,
+          raw: rawLine,
+          range,
+          metadata: { originalKey: rawKey, unrecognizedLabel: true },
         };
       }
     }
@@ -509,114 +520,50 @@ export class FountainParser {
         speech = speech.replace(/\s*\((?:Emotion|Tone|भाव|बोलने का भाव):\s*(.*?)\)\s*$/i, '').trim();
       }
 
-      const lowerSpeaker = rawSpeaker.toLowerCase().trim();
-      // Ensure it is not a reserved instruction like "Narration", "Background Prompt", "Effects", "Character Action", "Suggested Facial Expressions", "Opening Caption"
-      const isReserved = [
-        'background',
-        'visual',
-        'visual prompt',
-        'visual scene prompt',
-        'scene prompt',
-        'image',
-        'narration',
-        'narrator',
-        'voiceover',
-        'vo',
-        'effects',
-        'overlay',
-        'overlays',
-        'action',
-        'actions',
-        'character action',
-        'character actions',
-        'suggested action',
-        'suggested actions',
-        'suggested character action',
-        'suggested character actions',
-        'facial expression',
-        'facial expressions',
-        'suggested facial expression',
-        'suggested facial expressions',
-        'suggested expression',
-        'suggested expressions',
-        'facial',
-        'expression',
-        'expressions',
-        'speaking emotion',
-        'speaking emotions',
-        'suggested speaking emotion',
-        'suggested speaking emotions',
-        'speaking style',
-        'speaking',
-        'emotion',
-        'emotions',
-        'tone',
-        'style',
-        'duration',
-        'length',
-        'time',
-        'opening caption',
-        'closing caption',
-        'caption',
-        'title',
-        'logline',
-        'lesson',
-        'scene',
-        'setting',
-        'location',
-        'shot',
-        'shot type',
-        'camera',
-        'camera direction',
-        'pose',
-        'poses',
-        'note',
-        'notes',
-        'scene note',
-        'scene notes',
-        'director note',
-        'director notes',
-        'दृश्य',
-        'पृष्ठभूमि',
-        'सूत्रधार',
-        'कथावाचक',
-        'वॉइसओवर',
-        'क्रिया',
-        'अभिनय',
-        'भाव',
-        'चेहरे के भाव',
-        'बोलने का भाव',
-      ].some((k) => lowerSpeaker === k || lowerSpeaker.startsWith(k + ' ') || lowerSpeaker.endsWith(' ' + k) || lowerSpeaker.includes(k));
+      // Check against normalized metadata registry BEFORE checking dialogue:
+      // Labels like "End Screen Text", "Character Consistency", "Camera Direction", "Visual Style", "Scene Notes"
+      // must NEVER be treated as dialogue speakers!
+      if (isNonCharacterProductionLabel(rawSpeaker) || looksLikeProductionInstruction(rawSpeaker)) {
+        const cat = lookupMetadataCategory(rawSpeaker) || 'scene_notes';
+        return {
+          type: 'production_instruction',
+          key: cat,
+          value: speech,
+          text: `${cat}: ${speech}`,
+          raw: rawLine,
+          range,
+          metadata: { originalKey: rawSpeaker },
+        };
+      }
 
+      const lowerSpeaker = rawSpeaker.toLowerCase().trim();
       let cleanSpeaker = rawSpeaker;
       const genericModifiers = ['closing', 'opening', 'final', 'intro', 'outro', 'अंतिम', 'प्रारंभिक', 'dialogue', 'speech', 'संवाद', 'लाइन', 'unspecified', 'unknown'];
       if (genericModifiers.includes(lowerSpeaker)) {
         cleanSpeaker = ''; // speaker unspecified, let scene character resolution attribute it
       }
 
-      if (!isReserved) {
-        if (speech.length > 0) {
-          return {
-            type: 'production_instruction',
-            key: 'dialogue_inline',
-            value: speech,
-            text: speech,
-            raw: rawLine,
-            range,
-            actor: cleanSpeaker || undefined,
-            metadata: { speaker: cleanSpeaker, emotion, speech },
-          };
-        } else if (cleanSpeaker.length > 0) {
-          // Block-style dialogue header: treat as a character cue so following line(s) become dialogue
-          return {
-            type: 'character',
-            characterName: cleanSpeaker,
-            parenthetical: emotion || undefined,
-            text: cleanSpeaker,
-            raw: rawLine,
-            range,
-          };
-        }
+      if (speech.length > 0) {
+        return {
+          type: 'production_instruction',
+          key: 'dialogue_inline',
+          value: speech,
+          text: speech,
+          raw: rawLine,
+          range,
+          actor: cleanSpeaker || undefined,
+          metadata: { speaker: cleanSpeaker, emotion, speech },
+        };
+      } else if (cleanSpeaker.length > 0) {
+        // Block-style dialogue header: treat as a character cue so following line(s) become dialogue
+        return {
+          type: 'character',
+          characterName: cleanSpeaker,
+          parenthetical: emotion || undefined,
+          text: cleanSpeaker,
+          raw: rawLine,
+          range,
+        };
       }
     }
 
@@ -671,8 +618,15 @@ export class FountainParser {
         const extMatch = trimmed.match(/\((V\.O\.|O\.S\.|CONT'D)\)/i);
         const parenMatch = capsMatch[2] ? capsMatch[2].trim() : undefined;
 
-        // Ensure it's not a common screenplay heading prefix like "FADE IN"
-        if (!rawName.startsWith('INT') && !rawName.startsWith('EXT') && rawName !== 'FADE IN' && rawName !== 'THE END') {
+        // Ensure it's not a common screenplay heading prefix like "FADE IN" or a production metadata instruction
+        if (
+          !rawName.startsWith('INT') &&
+          !rawName.startsWith('EXT') &&
+          rawName !== 'FADE IN' &&
+          rawName !== 'THE END' &&
+          !isNonCharacterProductionLabel(rawName) &&
+          !looksLikeProductionInstruction(rawName)
+        ) {
           return {
             type: 'character',
             characterName: rawName.replace(/\((.*?)\)/g, '').trim(),

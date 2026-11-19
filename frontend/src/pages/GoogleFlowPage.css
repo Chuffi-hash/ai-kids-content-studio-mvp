@@ -242,7 +242,10 @@ html[data-theme="light"] .flow-textarea {
 .flow-textarea::placeholder {
   color: #94a3b8 !important;
   opacity: 1 !important;
+  font-family: inherit !important;
+  font-size: inherit !important;
   font-weight: 500 !important;
+  -webkit-text-fill-color: #94a3b8 !important;
 }
 
 [data-theme="light"] .flow-input::placeholder,
@@ -251,9 +254,12 @@ html[data-theme="light"] .flow-input::placeholder,
 [data-theme="light"] .flow-textarea::placeholder,
 body.theme-light .flow-textarea::placeholder,
 html[data-theme="light"] .flow-textarea::placeholder {
-  color: #1e293b !important; /* Slate 800 - crisp, high-contrast, clearly legible on light/white background */
-  opacity: 0.8 !important;
+  color: #475569 !important; /* Slate 600 - crisp, high-contrast, clearly legible on light/white background */
+  opacity: 1 !important;
+  font-family: inherit !important;
+  font-size: inherit !important;
   font-weight: 500 !important;
+  -webkit-text-fill-color: #475569 !important;
 }
 
 [data-theme="light"] .flow-form-label,
@@ -442,6 +448,22 @@ html[data-theme="light"] .flow-callout.security strong {
   color: #3b0764 !important;
 }
 
+[data-theme="light"] .flow-callout.security span,
+body.theme-light .flow-callout.security span,
+html[data-theme="light"] .flow-callout.security span {
+  color: #4c1d95 !important;
+}
+
+[data-theme="light"] .flow-callout.security code,
+body.theme-light .flow-callout.security code,
+html[data-theme="light"] .flow-callout.security code {
+  color: #2e1065 !important;
+  background: #ede9fe !important;
+  border: 1px solid #c4b5fd !important;
+  padding: 1px 4px !important;
+  border-radius: 3px !important;
+}
+
 /* Secondary Button in Light Mode */
 [data-theme="light"] .flow-btn.secondary,
 body.theme-light .flow-btn.secondary,
@@ -461,6 +483,10 @@ html[data-theme="light"] .flow-btn.secondary:hover:not(:disabled) {
 
 /* Strict Checkbox Constraints — Prevent Stretched Checkbox Bars */
 input[type="checkbox"],
+input[type="radio"],
+input[type="checkbox"].flow-input,
+.flow-input[type="checkbox"],
+.form-input[type="checkbox"],
 .flow-page-container input[type="checkbox"],
 .flow-card input[type="checkbox"],
 .flow-checkbox-row input[type="checkbox"],
@@ -469,17 +495,24 @@ input[type="checkbox"],
   height: 18px !important;
   min-width: 18px !important;
   max-width: 18px !important;
+  min-height: 18px !important;
+  max-height: 18px !important;
+  flex: 0 0 18px !important;
   box-sizing: border-box !important;
   padding: 0 !important;
   margin: 0 !important;
-  border: 1px solid var(--color-border-strong, #2e4163) !important;
+  border: 1.5px solid var(--color-border-strong, #2e4163) !important;
   border-radius: 4px !important;
+  background: var(--color-surface, #101726) !important;
   box-shadow: none !important;
   cursor: pointer !important;
   accent-color: var(--color-accent, #8b5cf6) !important;
   flex-shrink: 0 !important;
   display: inline-block !important;
   vertical-align: middle !important;
+  appearance: checkbox !important;
+  -webkit-appearance: checkbox !important;
+  outline: none !important;
 }
 
 .flow-checkbox-row,
@@ -664,7 +697,7 @@ html[data-theme="light"] .flow-tab-badge {
   font-weight: 400;
 }
 
-.flow-input,
+.flow-input:not([type="checkbox"]):not([type="radio"]),
 .flow-select,
 .flow-textarea {
   width: 100%;
@@ -679,7 +712,7 @@ html[data-theme="light"] .flow-tab-badge {
   transition: border-color 0.15s ease;
 }
 
-.flow-input:focus,
+.flow-input:not([type="checkbox"]):not([type="radio"]):focus,
 .flow-select:focus,
 .flow-textarea:focus {
   outline: none;
@@ -1121,3 +1154,716 @@ body.theme-light .flow-modal p,
 html[data-theme="light"] .flow-modal p {
   color: #334155;
 }
+
+/* ============================================================
+   Story-Aware Background & Character Studio Production UI
+   ============================================================ */
+
+.flow-production-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 16px 20px;
+  background: var(--color-surface, #101726);
+  border: 1px solid var(--color-border, #202d45);
+  border-radius: var(--radius, 12px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+.flow-toolbar-left {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.flow-toolbar-right {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.flow-provider-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm, 8px);
+  border: 1px solid rgba(139, 92, 246, 0.4);
+  background: rgba(139, 92, 246, 0.12);
+  font-size: 12px;
+  font-weight: 600;
+  color: #e9d5ff;
+}
+
+.flow-provider-select {
+  background: var(--color-surface-muted, #151e30);
+  border: 1px solid var(--color-border, #202d45);
+  border-radius: 6px;
+  color: #ffffff;
+  padding: 4px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  outline: none;
+}
+
+/* Story-Aware Production Studio Toolbar & Controls */
+.flow-production-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  background: var(--color-surface, #101726);
+  border: 1px solid var(--color-border, #202d45);
+  border-radius: var(--radius, 12px);
+  margin-bottom: 8px;
+}
+
+.flow-production-toolbar-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.flow-production-actions-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-top: 10px;
+  border-top: 1px solid var(--color-border, #202d45);
+}
+
+.flow-filter-pills {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.flow-filter-btn {
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border, #202d45);
+  background: var(--color-surface-muted, #151e30);
+  color: var(--color-text-secondary, #94a3b8);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.flow-filter-btn:hover {
+  background: var(--color-surface-hover, rgba(255, 255, 255, 0.08));
+  color: var(--color-text, #ffffff);
+}
+
+.flow-filter-btn.active {
+  background: rgba(139, 92, 246, 0.2);
+  border-color: #8b5cf6;
+  color: #c084fc;
+}
+
+.flow-provider-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(139, 92, 246, 0.4);
+  background: rgba(139, 92, 246, 0.12);
+  color: #c084fc;
+}
+
+.flow-provider-pill.ready {
+  border-color: rgba(16, 185, 129, 0.4);
+  background: rgba(16, 185, 129, 0.12);
+  color: #10b981;
+}
+
+.flow-provider-pill.offline {
+  border-color: rgba(245, 158, 11, 0.4);
+  background: rgba(245, 158, 11, 0.12);
+  color: #f59e0b;
+}
+
+.flow-provider-select {
+  font-weight: 600;
+}
+
+/* Scene Cards Grid */
+.flow-scene-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 18px;
+  margin-top: 10px;
+}
+
+.flow-scene-card {
+  display: flex;
+  flex-direction: column;
+  background: var(--color-surface, #101726);
+  border: 1px solid var(--color-border, #202d45);
+  border-radius: var(--radius, 12px);
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.flow-scene-card:hover {
+  border-color: rgba(139, 92, 246, 0.5);
+  transform: translateY(-2px);
+}
+
+.flow-scene-card.selected {
+  border-color: #8b5cf6;
+  box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.3);
+}
+
+.flow-scene-card.generating {
+  border-color: #3b82f6;
+  animation: pulseGlow 1.5s infinite;
+}
+
+@keyframes pulseGlow {
+  0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4); }
+  70% { box-shadow: 0 0 0 8px rgba(59, 130, 246, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+}
+
+.flow-scene-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--color-border, #202d45);
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.flow-scene-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.flow-scene-num-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: rgba(139, 92, 246, 0.2);
+  color: #c084fc;
+}
+
+.flow-scene-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #ffffff;
+  max-width: 170px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flow-scene-thumb {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #090d16;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.flow-scene-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.2s ease;
+}
+
+.flow-scene-thumb:hover img {
+  transform: scale(1.03);
+}
+
+.flow-thumb-hover-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.flow-scene-thumb:hover .flow-thumb-hover-overlay {
+  opacity: 1;
+}
+
+.flow-scene-empty-thumb {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--color-text-secondary, #94a3b8);
+  font-size: 12px;
+  text-align: center;
+  padding: 16px;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(circle at center, rgba(139, 92, 246, 0.08) 0%, transparent 70%);
+}
+
+.flow-scene-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  flex: 1;
+}
+
+.flow-scene-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.flow-tag {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--color-surface-muted, #151e30);
+  border: 1px solid var(--color-border, #202d45);
+  color: var(--color-text-secondary, #cbd5e1);
+}
+
+.flow-scene-narration {
+  font-size: 11.5px;
+  color: var(--color-text-secondary, #94a3b8);
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.flow-scene-characters {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--color-text-secondary, #cbd5e1);
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.flow-char-pill {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(139, 92, 246, 0.2);
+  color: #c084fc;
+}
+
+.flow-scene-drawer {
+  padding: 10px;
+  border-top: 1px dashed var(--color-border, #202d45);
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 11px;
+}
+
+.flow-scene-error {
+  padding: 8px 10px;
+  background: rgba(239, 68, 68, 0.15);
+  border-left: 3px solid #ef4444;
+  border-radius: 4px;
+  color: #f87171;
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.flow-scene-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 14px;
+  border-top: 1px solid var(--color-border, #202d45);
+  background: rgba(0, 0, 0, 0.1);
+}
+
+/* Character Studio Story Gallery */
+.flow-char-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 18px;
+  margin-top: 10px;
+}
+
+.flow-char-card {
+  display: flex;
+  flex-direction: column;
+  background: var(--color-surface, #101726);
+  border: 1px solid var(--color-border, #202d45);
+  border-radius: var(--radius, 12px);
+  padding: 16px;
+  gap: 14px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.flow-char-card:hover {
+  border-color: rgba(139, 92, 246, 0.5);
+  transform: translateY(-2px);
+}
+
+.flow-char-card-top {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.flow-char-portrait {
+  width: 90px;
+  height: 90px;
+  border-radius: 10px;
+  border: 1.5px solid var(--color-border, #202d45);
+  overflow: hidden;
+  flex-shrink: 0;
+  background: #090d16;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.flow-char-portrait img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.2s ease;
+}
+
+.flow-char-portrait:hover img {
+  transform: scale(1.05);
+}
+
+.flow-char-empty-portrait {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  color: var(--color-text-secondary, #94a3b8);
+  font-size: 11px;
+}
+
+.flow-char-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+.flow-char-name-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.flow-char-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: #ffffff;
+  margin: 0;
+}
+
+.flow-char-scenes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  background: rgba(0, 0, 0, 0.18);
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--color-border, #202d45);
+}
+
+.flow-char-scenes-header {
+  font-weight: 700;
+  color: var(--color-text-secondary, #cbd5e1);
+  margin-bottom: 2px;
+}
+
+.flow-char-scene-chip {
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: rgba(139, 92, 246, 0.15);
+  border: 1px solid rgba(139, 92, 246, 0.35);
+  color: #c084fc;
+  transition: all 0.15s ease;
+}
+
+.flow-char-scene-chip:hover {
+  background: rgba(139, 92, 246, 0.3);
+  border-color: #a855f7;
+  color: #ffffff;
+}
+
+.flow-char-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.flow-char-error {
+  padding: 8px 10px;
+  background: rgba(239, 68, 68, 0.15);
+  border-left: 3px solid #ef4444;
+  border-radius: 4px;
+  color: #f87171;
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* Lightbox Modal */
+.flow-lightbox-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(4px);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.flow-lightbox-content {
+  position: relative;
+  max-width: 92vw;
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  background: var(--color-surface, #101726);
+  border: 1px solid var(--color-border, #202d45);
+  border-radius: var(--radius, 12px);
+  padding: 16px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+}
+
+.flow-lightbox-close {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #fff;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  z-index: 10;
+}
+
+.flow-lightbox-image {
+  max-width: 100%;
+  max-height: 75vh;
+  object-fit: contain;
+  border-radius: 8px;
+}
+
+.flow-lightbox-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+/* Light Theme Overrides for Story-Aware Production Studio */
+[data-theme="light"] .flow-production-toolbar,
+body.theme-light .flow-production-toolbar,
+html[data-theme="light"] .flow-production-toolbar {
+  background: #ffffff;
+  border-color: #cbd5e1;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+[data-theme="light"] .flow-production-actions-row,
+body.theme-light .flow-production-actions-row,
+html[data-theme="light"] .flow-production-actions-row {
+  border-top-color: #e2e8f0;
+}
+
+[data-theme="light"] .flow-filter-btn,
+body.theme-light .flow-filter-btn,
+html[data-theme="light"] .flow-filter-btn {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #475569;
+}
+
+[data-theme="light"] .flow-filter-btn:hover,
+body.theme-light .flow-filter-btn:hover,
+html[data-theme="light"] .flow-filter-btn:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+[data-theme="light"] .flow-filter-btn.active,
+body.theme-light .flow-filter-btn.active,
+html[data-theme="light"] .flow-filter-btn.active {
+  background: #ede9fe;
+  border-color: #8b5cf6;
+  color: #6d28d9;
+}
+
+[data-theme="light"] .flow-provider-pill,
+body.theme-light .flow-provider-pill,
+html[data-theme="light"] .flow-provider-pill {
+  border-color: #c4b5fd;
+  background: #f5f3ff;
+  color: #581c87;
+}
+
+[data-theme="light"] .flow-provider-select,
+body.theme-light .flow-provider-select,
+html[data-theme="light"] .flow-provider-select {
+  background: #ffffff;
+  border-color: #cbd5e1;
+  color: #0f172a;
+}
+
+[data-theme="light"] .flow-scene-card,
+body.theme-light .flow-scene-card,
+html[data-theme="light"] .flow-scene-card,
+[data-theme="light"] .flow-char-card,
+body.theme-light .flow-char-card,
+html[data-theme="light"] .flow-char-card {
+  background: #ffffff;
+  border-color: #e2e8f0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+[data-theme="light"] .flow-scene-card-header,
+body.theme-light .flow-scene-card-header,
+html[data-theme="light"] .flow-scene-card-header,
+[data-theme="light"] .flow-scene-card-footer,
+body.theme-light .flow-scene-card-footer,
+html[data-theme="light"] .flow-scene-card-footer {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+}
+
+[data-theme="light"] .flow-scene-title,
+body.theme-light .flow-scene-title,
+html[data-theme="light"] .flow-scene-title,
+[data-theme="light"] .flow-char-name,
+body.theme-light .flow-char-name,
+html[data-theme="light"] .flow-char-name {
+  color: #0f172a;
+}
+
+[data-theme="light"] .flow-scene-num-badge,
+body.theme-light .flow-scene-num-badge,
+html[data-theme="light"] .flow-scene-num-badge {
+  background: #ede9fe;
+  color: #6d28d9;
+}
+
+[data-theme="light"] .flow-tag,
+body.theme-light .flow-tag,
+html[data-theme="light"] .flow-tag {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #334155;
+}
+
+[data-theme="light"] .flow-scene-narration,
+body.theme-light .flow-scene-narration,
+html[data-theme="light"] .flow-scene-narration {
+  color: #475569;
+}
+
+[data-theme="light"] .flow-scene-characters,
+body.theme-light .flow-scene-characters,
+html[data-theme="light"] .flow-scene-characters,
+[data-theme="light"] .flow-char-scenes-list,
+body.theme-light .flow-char-scenes-list,
+html[data-theme="light"] .flow-char-scenes-list {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+  color: #334155;
+}
+
+[data-theme="light"] .flow-char-scenes-header,
+body.theme-light .flow-char-scenes-header,
+html[data-theme="light"] .flow-char-scenes-header {
+  color: #0f172a;
+}
+
+[data-theme="light"] .flow-char-scene-chip,
+body.theme-light .flow-char-scene-chip,
+html[data-theme="light"] .flow-char-scene-chip {
+  background: #ede9fe;
+  border-color: #c4b5fd;
+  color: #6d28d9;
+}
+
+[data-theme="light"] .flow-char-pill,
+body.theme-light .flow-char-pill,
+html[data-theme="light"] .flow-char-pill {
+  background: #ede9fe;
+  color: #6d28d9;
+}
+
+[data-theme="light"] .flow-scene-drawer,
+body.theme-light .flow-scene-drawer,
+html[data-theme="light"] .flow-scene-drawer {
+  background: #f8fafc;
+  border-top-color: #cbd5e1;
+}
+
+[data-theme="light"] .flow-lightbox-content,
+body.theme-light .flow-lightbox-content,
+html[data-theme="light"] .flow-lightbox-content {
+  background: #ffffff;
+  border-color: #cbd5e1;
+}
+

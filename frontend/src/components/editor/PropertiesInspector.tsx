@@ -35,6 +35,7 @@ import {
 } from '../../services/editor.service';
 import { EMOTION_OPTIONS } from '../../utils/emotionSuggester';
 import { FISH_VOICES_CATALOG } from '../characters/CharacterBuilderModal';
+import { generateBackgroundDirect } from '../../services/googleFlowWorker.service';
 import {
   AlertTriangleIcon,
   CheckIcon,
@@ -891,6 +892,32 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
     } finally {
       setIsUploadingFlowBg(false);
       if (flowFileInputRef.current) flowFileInputRef.current.value = '';
+    }
+  };
+
+  const [directGenProvider, setDirectGenProvider] = useState<'gemini_api' | 'google_flow'>('gemini_api');
+  const [isDirectGenerating, setIsDirectGenerating] = useState(false);
+  const [directGenError, setDirectGenError] = useState<string | null>(null);
+
+  const handleDirectGenerateBackground = async () => {
+    setIsDirectGenerating(true);
+    setDirectGenError(null);
+    try {
+      const res = await generateBackgroundDirect({
+        storyId: storyId || '',
+        sceneId: scene.sceneId,
+        provider: directGenProvider,
+        promptOverride: localPrompt || undefined,
+        aspectRatio: localAspectRatio || '16:9',
+      });
+      if (res?.scene) {
+        onUpdateScene(scene.sceneId, res.scene);
+      }
+    } catch (err: any) {
+      console.error('Direct background generation failed:', err);
+      setDirectGenError(err.message || 'Failed to generate background plate');
+    } finally {
+      setIsDirectGenerating(false);
     }
   };
 
@@ -3259,6 +3286,35 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
             <span style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#047857', padding: '2px 6px', borderRadius: '4px', border: '1px solid rgba(16, 185, 129, 0.25)' }}>
               ✓ Aspect Ratio: {localAspectRatio}
             </span>
+          </div>
+
+          {/* Direct Background Plate Generation */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', background: 'var(--ed-surface-elevated, rgba(139, 92, 246, 0.06))', padding: '10px', borderRadius: '6px', border: '1px solid rgba(139, 92, 246, 0.25)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '11px', fontWeight: 700, color: '#c084fc' }}>⚡ Direct Generation</span>
+              <select
+                className="ed-select"
+                style={{ fontSize: '10.5px', padding: '2px 6px', width: 'auto' }}
+                value={directGenProvider}
+                onChange={(e) => setDirectGenProvider(e.target.value as any)}
+              >
+                <option value="gemini_api">Gemini Imagen 3</option>
+                <option value="google_flow">Google Flow</option>
+              </select>
+            </div>
+            <button
+              type="button"
+              className="ed-btn-action primary"
+              style={{ width: '100%', fontSize: '11.5px', padding: '8px 12px', background: '#7c3aed', borderColor: '#7c3aed' }}
+              disabled={isDirectGenerating}
+              onClick={handleDirectGenerateBackground}
+            >
+              <SparklesIcon size={14} />
+              <span>{isDirectGenerating ? 'Generating Plate...' : (currentBgUrl ? '↻ Regenerate Background Plate' : '✨ Generate Background Plate')}</span>
+            </button>
+            {directGenError && (
+              <span style={{ fontSize: '10.5px', color: '#f87171' }}>{directGenError}</span>
+            )}
           </div>
 
           {/* Workflow A Action Buttons */}

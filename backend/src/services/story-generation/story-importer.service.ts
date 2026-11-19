@@ -90,6 +90,7 @@ export interface DraftStoryboardScene {
   narration: string;
   dialogue: DraftDialogueLine[];
   characterActions: Array<{ characterName: string; action: string; description?: string }>;
+  charactersPresent?: string[];
   suggestedOverlays: DraftOverlayItem[];
   breakdown?: ProductionBreakdown;
   shots?: any[];
@@ -600,13 +601,33 @@ export class StoryImporterService {
 
     const isHindi = language ? language.toLowerCase().includes('hi') : true;
 
-    // 1. Resolve character names (excluding reserved metadata keys and Narrator)
+    // 1. Resolve character names (excluding reserved metadata keys, production labels, and Narrator)
     const charNamesSet = new Set<string>();
     for (const sc of draftScenes) {
+      if (Array.isArray((sc as any).charactersPresent)) {
+        for (const cp of (sc as any).charactersPresent) {
+          const cleaned = cleanSpeakerName(cp);
+          if (
+            cleaned &&
+            !isReservedMetadataKey(cleaned) &&
+            cleaned.toLowerCase() !== 'narrator' &&
+            cleaned !== 'सूत्रधार' &&
+            cleaned !== 'कथावाचक'
+          ) {
+            charNamesSet.add(cleaned);
+          }
+        }
+      }
       for (const d of sc.dialogue || []) {
         if (d.characterName) {
           const cleaned = cleanSpeakerName(d.characterName);
-          if (cleaned && !isReservedMetadataKey(cleaned) && cleaned.toLowerCase() !== 'narrator') {
+          if (
+            cleaned &&
+            !isReservedMetadataKey(cleaned) &&
+            cleaned.toLowerCase() !== 'narrator' &&
+            cleaned !== 'सूत्रधार' &&
+            cleaned !== 'कथावाचक'
+          ) {
             charNamesSet.add(cleaned);
           }
         }
@@ -614,7 +635,13 @@ export class StoryImporterService {
       for (const a of sc.characterActions || []) {
         if (a.characterName) {
           const cleaned = cleanSpeakerName(a.characterName);
-          if (cleaned && !isReservedMetadataKey(cleaned) && cleaned.toLowerCase() !== 'narrator') {
+          if (
+            cleaned &&
+            !isReservedMetadataKey(cleaned) &&
+            cleaned.toLowerCase() !== 'narrator' &&
+            cleaned !== 'सूत्रधार' &&
+            cleaned !== 'कथावाचक'
+          ) {
             charNamesSet.add(cleaned);
           }
         }
@@ -858,10 +885,30 @@ export class StoryImporterService {
         // Identify scene characters
         const sceneCharRecords: any[] = [];
         const sceneCharNames = new Set<string>();
+        if (Array.isArray((draft as any).charactersPresent)) {
+          for (const cp of (draft as any).charactersPresent) {
+            const cl = cleanSpeakerName(cp);
+            if (
+              cl &&
+              !isReservedMetadataKey(cl) &&
+              cl.toLowerCase() !== 'narrator' &&
+              cl !== 'सूत्रधार' &&
+              cl !== 'कथावाचक'
+            ) {
+              sceneCharNames.add(cl.toLowerCase());
+            }
+          }
+        }
         for (const d of draft.dialogue || []) {
           if (d.characterName) {
             const cl = cleanSpeakerName(d.characterName);
-            if (cl && !isReservedMetadataKey(cl) && cl.toLowerCase() !== 'narrator') {
+            if (
+              cl &&
+              !isReservedMetadataKey(cl) &&
+              cl.toLowerCase() !== 'narrator' &&
+              cl !== 'सूत्रधार' &&
+              cl !== 'कथावाचक'
+            ) {
               sceneCharNames.add(cl.toLowerCase());
             }
           }
@@ -869,7 +916,13 @@ export class StoryImporterService {
         for (const a of draft.characterActions || []) {
           if (a.characterName) {
             const cl = cleanSpeakerName(a.characterName);
-            if (cl && !isReservedMetadataKey(cl) && cl.toLowerCase() !== 'narrator') {
+            if (
+              cl &&
+              !isReservedMetadataKey(cl) &&
+              cl.toLowerCase() !== 'narrator' &&
+              cl !== 'सूत्रधार' &&
+              cl !== 'कथावाचक'
+            ) {
               sceneCharNames.add(cl.toLowerCase());
             }
           }

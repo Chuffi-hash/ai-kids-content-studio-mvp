@@ -58,6 +58,181 @@ Earth: पतझड़ के बाद नया बसंत आता है!
 Effects: falling_leaves, flying_birds
 `;
 
+const SAMPLE_HINDI_JSON = JSON.stringify(
+  {
+    schemaVersion: '1.0',
+    story: {
+      title: 'पृथ्वी का वादा: चार ऋतुएं',
+      language: 'Hindi',
+      targetDurationSeconds: 60,
+      genre: 'Educational',
+      logline: 'पृथ्वी बच्चों को सिखाती है कि चार ऋतुएं हमारे ग्रह पर जीवन का संतुलन कैसे बनाती हैं।',
+      lesson: 'प्रकृति की हर ऋतु का एक विशेष उद्देश्य होता है।',
+      visualStyle: '3D Storybook Animation',
+    },
+    characters: [
+      {
+        characterKey: 'earth',
+        name: 'Earth',
+        role: 'protagonist',
+        species: 'earth',
+        description: 'Smiling, wise living planet with blue oceans and green continents.',
+      },
+    ],
+    scenes: [
+      {
+        sceneNumber: 1,
+        title: 'सुनहरी गर्मियां',
+        durationSeconds: 15,
+        location: 'धूप से सराबोर घास का मैदान',
+        charactersPresent: ['earth'],
+        narration: 'ग्रीष्म ऋतु में सूरज अपनी सुनहरी किरणें बिखेरता है और प्रकृति खिल उठती है।',
+        dialogue: [
+          {
+            speakerKey: 'earth',
+            text: 'नमस्ते नन्हे दोस्तों! मैं तुम्हारी पृथ्वी हूँ। देखो, सूरज की धूप फसलों को पका रही है!',
+            emotion: 'happy',
+          },
+        ],
+        characterActions: [
+          {
+            characterKey: 'earth',
+            action: 'wave',
+            description: 'हाथ हिलाकर मुस्कुराती है',
+          },
+        ],
+        background: {
+          prompt: 'Sun-drenched golden meadows with distant mountains, vibrant sunshine rays and heat shimmer',
+          style: '3D Storybook Animation',
+        },
+      },
+      {
+        sceneNumber: 2,
+        title: 'मानसून की फुहारें',
+        durationSeconds: 15,
+        location: 'हरी-भरी वादियां और झरने',
+        charactersPresent: ['earth'],
+        narration: 'वर्षा ऋतु में काले बादल गरजते हैं और ठंडी बारिश सूखी धरती को नया जीवन देती है।',
+        dialogue: [
+          {
+            speakerKey: 'earth',
+            text: 'आहा! बारिश की हर बूंद नदियों और झरनों में नई जान फूंक देती है।',
+            emotion: 'excited',
+          },
+        ],
+        characterActions: [
+          {
+            characterKey: 'earth',
+            action: 'jump',
+            description: 'उछलकर खुशी मनाती है',
+          },
+        ],
+        background: {
+          prompt: 'Lush green hills and valleys covered in fresh gentle monsoon rain, rolling clouds and water splashes',
+          style: '3D Storybook Animation',
+        },
+      },
+    ],
+    endScreen: {
+      text: 'प्रकृति के और रोमांचक पाठों के लिए जुड़े रहें!',
+    },
+  },
+  null,
+  2
+);
+
+const SAMPLE_ENGLISH_JSON = JSON.stringify(
+  {
+    schemaVersion: '1.0',
+    story: {
+      title: "Pip & Barnaby's Great Adventure",
+      language: 'English',
+      targetDurationSeconds: 45,
+      genre: 'Adventure',
+      logline: 'Pip the little fox and Barnaby the wise owl search for the ancient golden acorn.',
+      lesson: 'Patience and observation lead to great discoveries.',
+      visualStyle: '3D Storybook Animation',
+    },
+    characters: [
+      {
+        characterKey: 'pip',
+        name: 'Pip',
+        role: 'protagonist',
+        species: 'fox',
+        description: 'Curious golden-furred fox cub wearing a red bandana.',
+      },
+      {
+        characterKey: 'barnaby',
+        name: 'Barnaby',
+        role: 'sidekick',
+        species: 'owl',
+        description: 'Wise barn owl wearing round spectacles.',
+      },
+    ],
+    scenes: [
+      {
+        sceneNumber: 1,
+        title: 'The Whispering Glade',
+        durationSeconds: 15,
+        location: 'Ancient mossy forest glade',
+        charactersPresent: ['pip', 'barnaby'],
+        narration: 'Early in the morning, Pip and Barnaby gathered by the hollow tree.',
+        dialogue: [
+          {
+            speakerKey: 'pip',
+            text: 'Barnaby, the map says the golden acorn is near the crystalline stream!',
+            emotion: 'excited',
+          },
+          {
+            speakerKey: 'barnaby',
+            text: 'Hoo! We must watch our step carefully and look for glowing moss.',
+            emotion: 'calm',
+          },
+        ],
+        characterActions: [
+          {
+            characterKey: 'pip',
+            action: 'point',
+            description: 'points towards the winding path',
+          },
+        ],
+        background: {
+          prompt: 'Enchanted ancient woodland glade with ancient mossy roots, gentle shafts of morning sunlight',
+          style: '3D Storybook Animation',
+        },
+      },
+      {
+        sceneNumber: 2,
+        title: 'The River Crossing',
+        durationSeconds: 15,
+        location: 'Sparkling forest river',
+        charactersPresent: ['barnaby'],
+        narration: 'Barnaby flew up to scout the riverbank from above.',
+        dialogue: [
+          {
+            speakerKey: 'barnaby',
+            text: 'The stepping stones are safe, young fox! Follow my path.',
+            emotion: 'wise',
+          },
+        ],
+        characterActions: [
+          {
+            characterKey: 'barnaby',
+            action: 'idle',
+            description: 'perches on a mossy branch observing the river',
+          },
+        ],
+        background: 'A clear bubbling forest river with smooth stepping stones, emerald water and reeds',
+      },
+    ],
+    endScreen: {
+      text: 'Subscribe for more Pip and Barnaby adventures!',
+    },
+  },
+  null,
+  2
+);
+
 const AVAILABLE_OVERLAY_TYPES = [
   { type: 'sunshine_rays', label: 'Sunshine Rays', color: '#fef08a' },
   { type: 'heat_shimmer', label: 'Heat Shimmer', color: '#fde047' },
@@ -85,6 +260,8 @@ export const ImportScriptModal: React.FC<ImportScriptModalProps> = ({
   const [targetDurationSeconds, setTargetDurationSeconds] = useState<number>(0);
   const [isParsing, setIsParsing] = useState<boolean>(false);
   const [parseError, setParseError] = useState<string | null>(null);
+  const [copiedPrompt, setCopiedPrompt] = useState<boolean>(false);
+  const [showFormatGuide, setShowFormatGuide] = useState<boolean>(false);
 
   // Review step state
   const [draftResult, setDraftResult] = useState<DraftStoryboardResult | null>(null);
@@ -93,6 +270,185 @@ export const ImportScriptModal: React.FC<ImportScriptModalProps> = ({
   const [updateTitleOnImport, setUpdateTitleOnImport] = useState<boolean>(true);
   const [isImporting, setIsImporting] = useState<boolean>(false);
   const [importError, setImportError] = useState<string | null>(null);
+
+  if (!isOpen) return null;
+
+  const handleCopyAiPrompt = () => {
+    const promptText = `You are an expert children's content writer and storyboard artist.
+Write an engaging, educational children's story script following this exact JSON specification:
+Language: ${selectedLanguage}
+Target Duration: ${targetDurationSeconds > 0 ? targetDurationSeconds + ' seconds' : '60 seconds'}
+
+Output strictly valid JSON with no markdown wrapping or additional text:
+{
+  "schemaVersion": "1.0",
+  "story": {
+    "title": "Story Title",
+    "language": "${selectedLanguage}",
+    "targetDurationSeconds": ${targetDurationSeconds > 0 ? targetDurationSeconds : 60},
+    "genre": "Educational",
+    "logline": "One clear sentence logline",
+    "lesson": "Moral or educational takeaway",
+    "visualStyle": "3D Storybook Animation"
+  },
+  "characters": [
+    {
+      "characterKey": "pip",
+      "name": "Pip",
+      "role": "protagonist",
+      "species": "fox",
+      "description": "Curious fox cub with a red bandana"
+    }
+  ],
+  "scenes": [
+    {
+      "sceneNumber": 1,
+      "title": "Scene Title",
+      "durationSeconds": 15,
+      "location": "Location Name",
+      "charactersPresent": ["pip"],
+      "narration": "Narration line",
+      "dialogue": [
+        { "speakerKey": "pip", "text": "Speech", "emotion": "cheerful" }
+      ],
+      "characterActions": [
+        { "characterKey": "pip", "action": "idle", "description": "observes the surroundings" }
+      ],
+      "background": {
+        "prompt": "Detailed cinematic environment plate without characters or text",
+        "style": "3D Storybook Animation"
+      }
+    }
+  ],
+  "endScreen": {
+    "text": "Subscribe for more stories!"
+  }
+}`;
+
+    navigator.clipboard.writeText(promptText);
+    setCopiedPrompt(true);
+    setTimeout(() => setCopiedPrompt(false), 2500);
+  };
+
+  const handleDownloadTemplate = () => {
+    const templateData = {
+      schemaVersion: '1.0',
+      story: {
+        title: 'My Story Title',
+        language: selectedLanguage,
+        targetDurationSeconds: targetDurationSeconds > 0 ? targetDurationSeconds : 60,
+        genre: 'Educational',
+        logline: 'Logline here',
+        lesson: 'Moral or lesson here',
+        visualStyle: '3D Storybook Animation',
+      },
+      characters: [
+        {
+          characterKey: 'char_one',
+          name: 'Character Name',
+          role: 'protagonist',
+          species: 'human',
+          description: 'Visual appearance details',
+        },
+      ],
+      scenes: [
+        {
+          sceneNumber: 1,
+          title: 'Scene 1: Introduction',
+          durationSeconds: 15,
+          location: 'Location Name',
+          charactersPresent: ['char_one'],
+          narration: 'Narration text',
+          dialogue: [
+            { 'speakerKey': 'char_one', 'text': 'Dialogue line', 'emotion': 'cheerful' },
+          ],
+          characterActions: [
+            { 'characterKey': 'char_one', 'action': 'wave', 'description': 'waves cheerfully' },
+          ],
+          background: {
+            'prompt': 'Vibrant environment illustration without characters or text',
+            'style': '3D Storybook Animation',
+          },
+        },
+      ],
+      endScreen: {
+        text: 'Thanks for watching!',
+      },
+    };
+
+    const blob = new Blob([JSON.stringify(templateData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'story-script-template.json';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleRemoveCharacter = (idx: number) => {
+    if (!draftResult) return;
+    const removedChar = draftResult.characters[idx];
+    const newChars = draftResult.characters.filter((_, i) => i !== idx);
+
+    // Update dialogue lines referencing this character to 'Narrator'
+    const newScenes = draftResult.scenes.map((sc) => ({
+      ...sc,
+      dialogue: sc.dialogue.map((d) =>
+        d.characterName.toLowerCase() === removedChar.name.toLowerCase()
+          ? { ...d, characterName: 'Narrator' }
+          : d
+      ),
+      characterActions: sc.characterActions.filter(
+        (a) => a.characterName.toLowerCase() !== removedChar.name.toLowerCase()
+      ),
+      charactersPresent: (sc.charactersPresent || []).filter(
+        (cp: string) => cp.toLowerCase() !== removedChar.name.toLowerCase()
+      ),
+    }));
+
+    setDraftResult({
+      ...draftResult,
+      characters: newChars,
+      scenes: newScenes,
+    });
+  };
+
+  const handleMapCharacter = (idx: number, targetExistingId: string) => {
+    if (!draftResult) return;
+    const existing = existingCharacters.find((c) => c.id === targetExistingId);
+    if (!existing) return;
+
+    const oldName = draftResult.characters[idx].name;
+    const newChars = [...draftResult.characters];
+    newChars[idx] = {
+      ...newChars[idx],
+      id: existing.id,
+      name: existing.name,
+    };
+
+    const newScenes = draftResult.scenes.map((sc) => ({
+      ...sc,
+      dialogue: sc.dialogue.map((d) =>
+        d.characterName.toLowerCase() === oldName.toLowerCase()
+          ? { ...d, characterName: existing.name }
+          : d
+      ),
+      characterActions: sc.characterActions.map((a) =>
+        a.characterName.toLowerCase() === oldName.toLowerCase()
+          ? { ...a, characterName: existing.name }
+          : a
+      ),
+      charactersPresent: (sc.charactersPresent || []).map((cp: string) =>
+        cp.toLowerCase() === oldName.toLowerCase() ? existing.name : cp
+      ),
+    }));
+
+    setDraftResult({
+      ...draftResult,
+      characters: newChars,
+      scenes: newScenes,
+    });
+  };
 
   if (!isOpen) return null;
 
@@ -379,7 +735,49 @@ export const ImportScriptModal: React.FC<ImportScriptModalProps> = ({
                   </label>
                 </div>
 
-                <div style={{ display: 'flex', gap: '8px' }}>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    className="ed-tool-btn"
+                    onClick={handleCopyAiPrompt}
+                    style={{ fontSize: '11px', padding: '4px 10px', color: copiedPrompt ? '#34d399' : '#818cf8', borderColor: copiedPrompt ? '#10b981' : '#6366f1' }}
+                    title="Copy a structured prompt for ChatGPT, Claude, or Gemini"
+                  >
+                    {copiedPrompt ? '✓ Copied AI Prompt!' : '📋 Copy AI Prompt'}
+                  </button>
+                  <button
+                    type="button"
+                    className="ed-tool-btn"
+                    onClick={handleDownloadTemplate}
+                    style={{ fontSize: '11px', padding: '4px 10px' }}
+                    title="Download canonical JSON schema template file"
+                  >
+                    ⬇️ Download JSON Template
+                  </button>
+                  <button
+                    type="button"
+                    className="ed-tool-btn"
+                    onClick={() => {
+                      setRawText(SAMPLE_HINDI_JSON);
+                      setSelectedLanguage('Hindi');
+                    }}
+                    style={{ fontSize: '11px', padding: '4px 8px', color: '#c084fc', borderColor: '#8b5cf6' }}
+                    title="Load valid Hindi Canonical JSON script"
+                  >
+                    Load Hindi JSON
+                  </button>
+                  <button
+                    type="button"
+                    className="ed-tool-btn"
+                    onClick={() => {
+                      setRawText(SAMPLE_ENGLISH_JSON);
+                      setSelectedLanguage('English');
+                    }}
+                    style={{ fontSize: '11px', padding: '4px 8px', color: '#38bdf8', borderColor: '#0284c7' }}
+                    title="Load valid English Canonical JSON script"
+                  >
+                    Load English JSON
+                  </button>
                   <button
                     type="button"
                     className="ed-tool-btn"
@@ -387,22 +785,70 @@ export const ImportScriptModal: React.FC<ImportScriptModalProps> = ({
                       setRawText(SAMPLE_HINDI_SCRIPT);
                       setSelectedLanguage('Hindi');
                     }}
-                    style={{ fontSize: '11px', padding: '4px 10px', color: '#c084fc', borderColor: '#8b5cf6' }}
+                    style={{ fontSize: '11px', padding: '4px 8px' }}
                   >
-                    Load Four Seasons Example
+                    Load Markdown Script
+                  </button>
+                  <button
+                    type="button"
+                    className="ed-tool-btn"
+                    onClick={() => setShowFormatGuide(!showFormatGuide)}
+                    style={{ fontSize: '11px', padding: '4px 8px', color: showFormatGuide ? '#f59e0b' : 'inherit' }}
+                  >
+                    {showFormatGuide ? 'Hide Format Guide' : 'Format Guide'}
                   </button>
                   {rawText && (
                     <button
                       type="button"
                       className="ed-tool-btn"
                       onClick={() => setRawText('')}
-                      style={{ fontSize: '11px', padding: '4px 10px' }}
+                      style={{ fontSize: '11px', padding: '4px 8px' }}
                     >
                       Clear
                     </button>
                   )}
                 </div>
               </div>
+
+              {/* Format Guide Drawer */}
+              {showFormatGuide && (
+                <div
+                  style={{
+                    padding: '12px 16px',
+                    borderRadius: '8px',
+                    background: 'var(--ed-surface-elevated)',
+                    border: '1px solid #8b5cf6',
+                    marginBottom: '14px',
+                    fontSize: '12px',
+                    lineHeight: 1.5,
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <strong style={{ color: '#c084fc', fontSize: '13px' }}>📐 Standard AI Script Formats Supported:</strong>
+                    <button
+                      type="button"
+                      onClick={() => setShowFormatGuide(false)}
+                      style={{ background: 'transparent', border: 'none', color: 'var(--ed-text-muted)', cursor: 'pointer' }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '12px' }}>
+                    <div>
+                      <strong style={{ color: 'var(--ed-text)', display: 'block', marginBottom: '4px' }}>1. Canonical JSON Schema v1.0 (Recommended)</strong>
+                      <p style={{ margin: 0, color: 'var(--ed-text-secondary)', fontSize: '11.5px' }}>
+                        Deterministic, structured JSON with <code>schemaVersion: "1.0"</code>, <code>story</code>, <code>characters</code>, and <code>scenes</code>. Each scene explicitly states <code>charactersPresent</code>, <code>narration</code>, <code>dialogue</code>, <code>characterActions</code>, and <code>background</code>.
+                      </p>
+                    </div>
+                    <div>
+                      <strong style={{ color: 'var(--ed-text)', display: 'block', marginBottom: '4px' }}>2. Screenplay Markdown / Fountain</strong>
+                      <p style={{ margin: 0, color: 'var(--ed-text-secondary)', fontSize: '11.5px' }}>
+                        Start with <code># Title: ...</code>, followed by <code>## Characters</code> (e.g. <code>- Pip: Fox</code>), and <code>## Scene 1: ...</code>. Production labels like <code>Visual: ...</code>, <code>Characters Present: ...</code>, <code>Effects: ...</code>, and <code>Character Action: ...</code> are strictly parsed.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Text Area */}
               <div style={{ position: 'relative' }}>
@@ -553,6 +999,133 @@ Effects: sunshine_rays
                 </div>
               )}
 
+              {/* Story Overview Summary Card */}
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+                  gap: '12px',
+                  marginBottom: '16px',
+                }}
+              >
+                <div style={{ padding: '10px 12px', background: 'var(--ed-surface-elevated)', borderRadius: '6px', border: '1px solid var(--ed-border)' }}>
+                  <span style={{ fontSize: '11px', color: 'var(--ed-text-muted)', display: 'block' }}>Target Duration</span>
+                  <strong style={{ fontSize: '14px', color: 'var(--ed-text)' }}>
+                    {draftResult?.targetDurationSeconds ? `${draftResult.targetDurationSeconds}s` : 'Auto'}
+                  </strong>
+                </div>
+                <div style={{ padding: '10px 12px', background: 'var(--ed-surface-elevated)', borderRadius: '6px', border: '1px solid var(--ed-border)' }}>
+                  <span style={{ fontSize: '11px', color: 'var(--ed-text-muted)', display: 'block' }}>Calculated Runtime</span>
+                  <strong style={{ fontSize: '14px', color: '#38bdf8' }}>{totalCalculatedDuration}s</strong>
+                </div>
+                <div style={{ padding: '10px 12px', background: 'var(--ed-surface-elevated)', borderRadius: '6px', border: '1px solid var(--ed-border)' }}>
+                  <span style={{ fontSize: '11px', color: 'var(--ed-text-muted)', display: 'block' }}>Total Scenes</span>
+                  <strong style={{ fontSize: '14px', color: 'var(--ed-text)' }}>{draftResult?.scenes.length || 0}</strong>
+                </div>
+                <div style={{ padding: '10px 12px', background: 'var(--ed-surface-elevated)', borderRadius: '6px', border: '1px solid var(--ed-border)' }}>
+                  <span style={{ fontSize: '11px', color: 'var(--ed-text-muted)', display: 'block' }}>Detected Cast</span>
+                  <strong style={{ fontSize: '14px', color: '#c084fc' }}>{draftResult?.characters.length || 0}</strong>
+                </div>
+              </div>
+
+              {/* Character Cast Review Panel */}
+              <div
+                style={{
+                  padding: '14px 16px',
+                  borderRadius: '8px',
+                  background: 'var(--ed-surface-elevated)',
+                  border: '1px solid var(--ed-border)',
+                  marginBottom: '16px',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <strong style={{ fontSize: '13px', color: 'var(--ed-text)' }}>
+                      👥 Character Cast Review ({draftResult?.characters.length || 0})
+                    </strong>
+                    <span style={{ fontSize: '11px', color: 'var(--ed-text-muted)' }}>
+                      Verified dialogue speakers and actors. Link to existing characters or remove false detections.
+                    </span>
+                  </div>
+                </div>
+
+                {(draftResult?.characters || []).length === 0 ? (
+                  <div style={{ fontSize: '12px', color: 'var(--ed-text-muted)', fontStyle: 'italic' }}>
+                    No characters detected. This script will be imported with voice-over narration only.
+                  </div>
+                ) : (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '10px' }}>
+                    {draftResult?.characters.map((ch, chIdx) => {
+                      const isLinkedToExisting = Boolean(ch.id);
+                      return (
+                        <div
+                          key={`char-review-${chIdx}`}
+                          style={{
+                            padding: '10px 12px',
+                            borderRadius: '6px',
+                            background: 'var(--ed-surface)',
+                            border: `1px solid ${isLinkedToExisting ? '#10b981' : 'var(--ed-border)'}`,
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '8px',
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <strong style={{ fontSize: '13px', color: 'var(--ed-text)' }}>{ch.name}</strong>
+                              <span
+                                style={{
+                                  fontSize: '10px',
+                                  padding: '1px 5px',
+                                  borderRadius: '3px',
+                                  background: isLinkedToExisting ? 'rgba(16, 185, 129, 0.2)' : 'rgba(139, 92, 246, 0.2)',
+                                  color: isLinkedToExisting ? '#34d399' : '#c084fc',
+                                  fontWeight: 600,
+                                }}
+                              >
+                                {isLinkedToExisting ? 'Linked' : ch.species || 'New'}
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveCharacter(chIdx)}
+                              title="Remove character (convert lines to narrator)"
+                              style={{
+                                background: 'transparent',
+                                border: 'none',
+                                color: '#f87171',
+                                cursor: 'pointer',
+                                fontSize: '11px',
+                                padding: '2px 6px',
+                              }}
+                            >
+                              ✕ Remove
+                            </button>
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ fontSize: '11px', color: 'var(--ed-text-muted)' }}>Map to:</span>
+                            <select
+                              className="ed-select"
+                              value={ch.id || ''}
+                              onChange={(e) => handleMapCharacter(chIdx, e.target.value)}
+                              style={{ flex: 1, padding: '2px 6px', fontSize: '11px' }}
+                            >
+                              <option value="">-- Create As New Character --</option>
+                              {existingCharacters.map((ec) => (
+                                <option key={ec.id} value={ec.id}>
+                                  {ec.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
               {/* Parsed Scenes List */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 {(draftResult?.scenes || []).map((sc, scIdx) => (
@@ -566,7 +1139,7 @@ Effects: sunshine_rays
                     }}
                   >
                     {/* Scene Card Header */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', paddingBottom: '10px', borderBottom: '1px solid var(--ed-border)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', paddingBottom: '10px', borderBottom: '1px solid var(--ed-border)' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                         <span style={{ background: '#8b5cf6', color: '#fff', fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '4px' }}>
                           Scene {scIdx + 1}
@@ -624,6 +1197,35 @@ Effects: sunshine_rays
                           <TrashIcon size={13} />
                         </button>
                       </div>
+                    </div>
+
+                    {/* Characters Present in Scene */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '12px', flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--ed-text-secondary)' }}>
+                        Cast in Scene:
+                      </span>
+                      {sc.charactersPresent && sc.charactersPresent.length > 0 ? (
+                        sc.charactersPresent.map((cp: string, cpIdx: number) => (
+                          <span
+                            key={`scene-${scIdx}-cp-${cpIdx}`}
+                            style={{
+                              fontSize: '10.5px',
+                              padding: '2px 8px',
+                              borderRadius: '12px',
+                              background: 'rgba(139, 92, 246, 0.15)',
+                              color: '#c084fc',
+                              border: '1px solid rgba(139, 92, 246, 0.3)',
+                              fontWeight: 600,
+                            }}
+                          >
+                            {cp}
+                          </span>
+                        ))
+                      ) : (
+                        <span style={{ fontSize: '11px', color: 'var(--ed-text-muted)', fontStyle: 'italic' }}>
+                          Voice-over Narration only (No character on screen)
+                        </span>
+                      )}
                     </div>
 
                     {/* Scene Background Prompt */}

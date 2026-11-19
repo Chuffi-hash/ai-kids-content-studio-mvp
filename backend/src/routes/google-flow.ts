@@ -2,6 +2,8 @@ import { Router, Request, Response } from 'express';
 import { GoogleFlowCredentialService } from '../services/google-flow/google-flow-credential.service.js';
 import { EncryptionKeyManager } from '../services/google-flow/encryption-key.manager.js';
 import { GoogleFlowAssetImportService } from '../services/google-flow/google-flow-asset-import.service.js';
+import { StoryContextService } from '../services/google-flow/story-context.service.js';
+import { GenerationOrchestratorService } from '../services/generation-orchestrator/generation-orchestrator.service.js';
 
 export const googleFlowRouter = Router();
 
@@ -374,4 +376,127 @@ googleFlowRouter.post('/import-asset', async (req: Request, res: Response) => {
   } catch (err: any) {
     res.status(400).json({ success: false, message: err.message || 'Asset import failed' });
   }
+});
+
+// ----------------------------------------------------
+// 5. Story Context & Direct Generation Engine
+// ----------------------------------------------------
+
+googleFlowRouter.get('/stories/:storyId/context', async (req: Request, res: Response) => {
+  try {
+    const rawStoryId = Array.isArray(req.params.storyId) ? req.params.storyId[0] : req.params.storyId;
+    const storyId = String(rawStoryId);
+    const { sceneId, characterId } = req.query;
+    const context = await StoryContextService.resolveStoryContext(storyId, {
+      sceneId: sceneId ? String(sceneId) : undefined,
+      characterId: characterId ? String(characterId) : undefined,
+    });
+    res.json({ success: true, context });
+  } catch (err: any) {
+    console.error('[GoogleFlowRouter] Resolve context failed:', err);
+    res.status(err.message?.includes('not found') ? 404 : 500).json({
+      success: false,
+      message: err.message || 'Failed to resolve story context',
+    });
+  }
+});
+
+googleFlowRouter.get('/providers/status', async (_req: Request, res: Response) => {
+  try {
+    const status = await GenerationOrchestratorService.getProviderStatus();
+    res.json({ success: true, providers: status });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+googleFlowRouter.post('/generate/background', async (req: Request, res: Response) => {
+  try {
+    const { storyId, sceneId, provider, promptOverride, aspectRatio } = req.body;
+    if (!storyId || !sceneId) {
+      return res.status(400).json({ success: false, message: 'storyId and sceneId are required' });
+    }
+    const result = await GenerationOrchestratorService.generateSceneBackground({
+      storyId,
+      sceneId,
+      provider: provider || 'gemini_api',
+      promptOverride,
+      aspectRatio,
+    });
+    res.json({ success: true, asset: result });
+  } catch (err: any) {
+    console.error('[GoogleFlowRouter] Background generation failed:', err);
+    res.status(500).json({ success: false, message: err.message || 'Background generation failed' });
+  }
+});
+
+googleFlowRouter.post('/generate/character', async (req: Request, res: Response) => {
+  try {
+    const { storyId, characterId, provider, assetType, variation, promptOverride } = req.body;
+    if (!storyId || !characterId) {
+      return res.status(400).json({ success: false, message: 'storyId and characterId are required' });
+    }
+    const result = await GenerationOrchestratorService.generateCharacterAsset({
+      storyId,
+      characterId,
+      provider: provider || 'gemini_api',
+      assetType: assetType || 'master_reference',
+      variation,
+      promptOverride,
+    });
+    res.json({ success: true, asset: result });
+  } catch (err: any) {
+    console.error('[GoogleFlowRouter] Character generation failed:', err);
+    res.status(500).json({ success: false, message: err.message || 'Character generation failed' });
+  }
+});
+
+googleFlowRouter.post('/generate/batch-backgrounds', async (req: Request, res: Response) => {
+  try {
+    const { storyId, provider } = req.body;
+    if (!storyId) {
+      return res.status(400).json({ success: false, message: 'storyId is required' });
+    }
+    const result = await GenerationOrchestratorService.generateAllMissingBackgrounds(
+      storyId,
+      provider || 'gemini_api'
+    );
+    res.json({ success: true, result });
+  } catch (err: any) {
+    console.error('[GoogleFlowRouter] Batch background generation failed:', err);
+    res.status(500).json({ success: false, message: err.message || 'Batch background generation failed' });
+  }
+});
+
+googleFlowRouter.post('/generate/batch-characters', async (req: Request, res: Response) => {
+  try {
+    const { storyId, provider } = req.body;
+    if (!storyId) {
+      return res.status(400).json({ success: false, message: 'storyId is required' });
+    }
+    const result = await GenerationOrchestratorService.generateAllMissingCharacterReferences(
+      storyId,
+      provider || 'gemini_api'
+    );
+    res.json({ success: true, result });
+  } catch (err: any) {
+    console.error('[GoogleFlowRouter] Batch character generation failed:', err);
+    res.status(500).json({ success: false, message: err.message || 'Batch character generation failed' });
+  }
+});
+
+googleFlowRouter.get('/jobs', (req: Request, res: Response) => {
+  const storyId = req.query.storyId ? String(req.query.storyId) : undefined;
+  const jobs = GenerationOrchestratorService.listJobs(storyId);
+  res.json({ success: true, jobs });
+});
+
+googleFlowRouter.get('/jobs/:id', (req: Request, res: Response) => {
+  const rawId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const jobId = String(rawId);
+  const job = GenerationOrchestratorService.getJob(jobId);
+  if (!job) {
+    return res.status(404).json({ success: false, message: 'Job not found' });
+  }
+  res.json({ success: true, job });
 });

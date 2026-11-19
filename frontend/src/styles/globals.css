@@ -136,7 +136,10 @@ textarea::placeholder,
 select::placeholder {
   color: #94a3b8 !important; /* Slate 400 in dark mode */
   opacity: 1 !important;
+  font-family: inherit !important;
+  font-size: inherit !important;
   font-weight: 500 !important;
+  -webkit-text-fill-color: #94a3b8 !important;
 }
 
 [data-theme="light"] input::placeholder,
@@ -148,9 +151,12 @@ html[data-theme="light"] textarea::placeholder,
 [data-theme="light"] select::placeholder,
 body.theme-light select::placeholder,
 html[data-theme="light"] select::placeholder {
-  color: #1e293b !important; /* Slate 800 - crisp, high-contrast, clearly legible */
-  opacity: 0.8 !important;
+  color: #475569 !important; /* Slate 600 - crisp, high-contrast, clearly legible */
+  opacity: 1 !important;
+  font-family: inherit !important;
+  font-size: inherit !important;
   font-weight: 500 !important;
+  -webkit-text-fill-color: #475569 !important;
 }
 
 /* Universal Checkbox Rules — Never stretch or render wide rectangular outline bars */

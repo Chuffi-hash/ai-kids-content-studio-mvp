@@ -199,6 +199,7 @@ export interface DraftStoryboardScene {
   narration: string;
   dialogue: DraftDialogueLine[];
   characterActions: Array<{ characterName: string; action: string; description?: string }>;
+  charactersPresent?: string[];
   suggestedOverlays: DraftOverlayItem[];
   breakdown?: any;
   shots?: any[];

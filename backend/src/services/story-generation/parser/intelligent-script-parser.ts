@@ -153,11 +153,26 @@ export class IntelligentScriptParser {
   public static parseScript = IntelligentScriptParser.parse;
 
   /**
-   * Parses arbitrary scripts (Fountain, Markdown, Plain Text) into a validated
+   * Parses arbitrary scripts (Fountain, Markdown, Plain Text, or Canonical JSON) into a validated
    * Storyboard Intermediate Representation.
    */
   public static parse(rawText: string, options: ParseScriptOptions = {}): StoryboardIntermediateRepresentation {
     const text = (rawText || '').trim();
+
+    // 0. Canonical JSON Script Detection
+    if (text.startsWith('{') && text.endsWith('}')) {
+      try {
+        const parsedJson = JSON.parse(text);
+        if (parsedJson && (parsedJson.schemaVersion || parsedJson.story || Array.isArray(parsedJson.scenes))) {
+          return IntelligentScriptParser.parseCanonicalJson(parsedJson, options);
+        }
+      } catch (err: any) {
+        const syntaxErr = new Error(`Invalid JSON script format: ${err.message}`);
+        (syntaxErr as any).code = 'INVALID_JSON_SCRIPT';
+        throw syntaxErr;
+      }
+    }
+
     const warnings: ScriptWarning[] = [];
 
     const fountainParser = new FountainParser();
@@ -314,10 +329,13 @@ export class IntelligentScriptParser {
 
     // 4. Build Structured Parsed Scenes
     const parsedScenes: ParsedScene[] = [];
-    const allDetectedCharacters = new Set<string>();
+    const storyCharacterNames = new Set<string>();
+    const globalContinuity: Record<string, any> = {};
+    let endScreenText = '';
 
     sceneGroups.forEach((group, index) => {
       const sceneNumber = group.sceneNumber || index + 1;
+      const sceneCharacterNames = new Set<string>();
       let titleClean = group.headingText
         .replace(/^Scene\s*(?:\d+|[०-९]+)[:\s—–-]*/i, '')
         .replace(/^दृश्य\s*(?:\d+|[०-९]+)[:\s—–-]*/i, '')
@@ -355,6 +373,19 @@ export class IntelligentScriptParser {
           } else if (pi.key === 'effects') {
             const tokens = pi.value.split(/[,;]+/).map((s: string) => s.trim()).filter(Boolean);
             explicitEffects.push(...tokens);
+          } else if (pi.key === 'characters_present') {
+            const tokens = pi.value.split(/[,;\u0964]+/).map((s: string) => s.trim()).filter(Boolean);
+            for (const t of tokens) {
+              const cleaned = t.replace(/^[-*•]\s*/, '').trim();
+              if (cleaned && !isReservedMetadataKey(cleaned) && cleaned.toLowerCase() !== 'narrator' && cleaned !== 'सूत्रधार' && cleaned !== 'कथावाचक') {
+                sceneCharacterNames.add(cleaned);
+                storyCharacterNames.add(cleaned);
+              }
+            }
+          } else if (pi.key === 'end_screen_text' || pi.key === 'end_screen') {
+            endScreenText = endScreenText ? `${endScreenText} ${pi.value}` : pi.value;
+          } else if (pi.key === 'character_consistency' || pi.key === 'visual_style') {
+            globalContinuity[pi.key] = pi.value;
           } else if (pi.key === 'character_action') {
             let actor = (pi.actor || pi.metadata?.characterName || pi.metadata?.actor || '').trim();
             if (/^(?:character|पात्र|char|action|क्रिया|अभिनय)$/i.test(actor)) {
@@ -363,11 +394,11 @@ export class IntelligentScriptParser {
             let actionText = pi.value.trim();
 
             // If actor was not parsed in label, check if value starts with a known character name:
-            // e.g. "Krishna plays the flute", "Radha dances gracefully"
             if (!actor) {
               const knownNames = [
                 ...declaredCharacters.map((c) => c.name),
-                ...Array.from(allDetectedCharacters),
+                ...Array.from(sceneCharacterNames),
+                ...Array.from(storyCharacterNames),
               ];
               for (const kn of knownNames) {
                 const prefixRegex = new RegExp(`^${kn}\\s+(.*)$`, 'i');
@@ -387,8 +418,9 @@ export class IntelligentScriptParser {
               actor = declaredCharacters[0].name;
             }
 
-            if (actor) {
-              allDetectedCharacters.add(actor);
+            if (actor && actor.toLowerCase() !== 'narrator' && !isReservedMetadataKey(actor)) {
+              sceneCharacterNames.add(actor);
+              storyCharacterNames.add(actor);
             }
 
             // Normalize action to animation engine vocabulary
@@ -435,7 +467,7 @@ export class IntelligentScriptParser {
               'closing caption',
               'notes',
               'director note',
-            ].some((d) => lowerSpeaker === d || lowerSpeaker.includes(d));
+            ].some((d) => lowerSpeaker === d || lowerSpeaker.includes(d)) || isReservedMetadataKey(speaker);
 
             if (!isDisallowed) {
               if (!speaker) {
@@ -453,7 +485,21 @@ export class IntelligentScriptParser {
                 }
               }
               if (speaker.toLowerCase() !== 'narrator') {
-                allDetectedCharacters.add(speaker);
+                sceneCharacterNames.add(speaker);
+                storyCharacterNames.add(speaker);
+
+                const isDeclaredOrExisting =
+                  declaredCharacters.some((c) => c.name.toLowerCase() === speaker.toLowerCase()) ||
+                  options.existingCharacters?.some((c) => c.name.toLowerCase() === speaker.toLowerCase());
+                if (!isDeclaredOrExisting) {
+                  warnings.push({
+                    code: 'UNRESOLVED_SPEAKER',
+                    message: `Speaker "${speaker}" on line ${node.range.start.line} was not declared in script character list.`,
+                    line: node.range.start.line,
+                    severity: 'warning',
+                    suggestion: `Declare "${speaker}" in the script Characters section.`,
+                  });
+                }
               }
 
               const emo = meta.emotion || pendingEmotion || 'cheerful';
@@ -491,7 +537,7 @@ export class IntelligentScriptParser {
             'closing caption',
             'notes',
             'director note',
-          ].some((d) => lowerSpeaker === d || lowerSpeaker.includes(d));
+          ].some((d) => lowerSpeaker === d || lowerSpeaker.includes(d)) || isReservedMetadataKey(speaker);
 
           if (!isDisallowed) {
             if (!speaker) {
@@ -509,7 +555,21 @@ export class IntelligentScriptParser {
               }
             }
             if (speaker.toLowerCase() !== 'narrator') {
-              allDetectedCharacters.add(speaker);
+              sceneCharacterNames.add(speaker);
+              storyCharacterNames.add(speaker);
+
+              const isDeclaredOrExisting =
+                declaredCharacters.some((c) => c.name.toLowerCase() === speaker.toLowerCase()) ||
+                options.existingCharacters?.some((c) => c.name.toLowerCase() === speaker.toLowerCase());
+              if (!isDeclaredOrExisting) {
+                warnings.push({
+                  code: 'UNRESOLVED_SPEAKER',
+                  message: `Speaker "${speaker}" on line ${node.range.start.line} was not declared in script character list.`,
+                  line: node.range.start.line,
+                  severity: 'warning',
+                  suggestion: `Declare "${speaker}" in the script Characters section.`,
+                });
+              }
             }
 
             const emo = dNode.emotion || pendingEmotion || 'cheerful';
@@ -558,7 +618,7 @@ export class IntelligentScriptParser {
 
       // Fallback character action if none specified for this scene
       if (characterActions.length === 0) {
-        const sceneChars = Array.from(new Set(dialogueLines.map((d) => d.characterName))).filter(Boolean);
+        const sceneChars = Array.from(sceneCharacterNames);
         if (sceneChars.length > 0) {
           characterActions.push({
             characterName: sceneChars[0],
@@ -575,7 +635,7 @@ export class IntelligentScriptParser {
         // If pure narrator scene with no characters declared, characterActions remains empty []
       }
 
-      // 5. Run Production Breakdown Extractor (ScriptBreak-style)
+      // 5. Run Production Breakdown Extractor with Scene Characters ONLY
       const breakdown = ProductionBreakdownExtractor.extractSceneBreakdown({
         title: titleClean,
         locationText: canonicalLocName,
@@ -584,7 +644,7 @@ export class IntelligentScriptParser {
         dialogueTexts: dialogueLines.map((d) => d.text),
         actionTexts: characterActions.map((a) => a.description || a.action),
         explicitEffects,
-        characterNames: Array.from(allDetectedCharacters),
+        characterNames: Array.from(sceneCharacterNames),
       });
 
       const suggestedOverlays = ProductionBreakdownExtractor.mapVfxToStudioOverlays(breakdown.vfx);
@@ -610,6 +670,7 @@ export class IntelligentScriptParser {
         narration,
         dialogue: dialogueLines,
         characterActions,
+        charactersPresent: Array.from(sceneCharacterNames),
         breakdown,
         suggestedOverlays,
         shots: breakdown.shots.map((s) => ({ num: s.num, size: s.size, move: s.move, desc: s.desc || '' })),
@@ -618,8 +679,13 @@ export class IntelligentScriptParser {
     });
 
     // Merge declared characters and detected characters
-    for (const charName of allDetectedCharacters) {
-      if (charName.toLowerCase() === 'narrator' || charName === 'सूत्रधार' || charName === 'कथावाचक') {
+    for (const charName of storyCharacterNames) {
+      if (
+        charName.toLowerCase() === 'narrator' ||
+        charName === 'सूत्रधार' ||
+        charName === 'कथावाचक' ||
+        isReservedMetadataKey(charName)
+      ) {
         continue;
       }
       const existing = options.existingCharacters?.find((c) => c.name.toLowerCase() === charName.toLowerCase());
@@ -661,6 +727,266 @@ export class IntelligentScriptParser {
       scenes: parsedScenes,
       warnings,
       originalText: text,
+      schemaVersion: '1.0',
+      globalContinuity,
+      endScreen: endScreenText ? { text: endScreenText } : undefined,
+    };
+  }
+
+  /**
+   * Parses canonical Story Script JSON (v1.0 schema) into a StoryboardIntermediateRepresentation.
+   */
+  public static parseCanonicalJson(
+    json: any,
+    options: ParseScriptOptions = {}
+  ): StoryboardIntermediateRepresentation {
+    if (!json || typeof json !== 'object') {
+      throw new Error('Invalid canonical script: root must be a JSON object');
+    }
+
+    const storyObj = json.story || {};
+    const title = options.defaultTitle || storyObj.title || 'Untitled Story';
+    const language = options.language || storyObj.language || 'Hindi';
+    const targetDurationSeconds =
+      options.targetDurationSeconds ||
+      options.desiredDurationSeconds ||
+      options.targetDuration ||
+      storyObj.targetDurationSeconds ||
+      60;
+    const genre = options.genre || storyObj.genre || 'Educational';
+    const logline = storyObj.logline || storyObj.synopsis || '';
+    const lesson = storyObj.lesson || storyObj.moral || '';
+    const warnings: ScriptWarning[] = [];
+
+    // Characters map
+    const declaredCharacters: Array<{
+      characterKey?: string;
+      name: string;
+      role?: string;
+      description?: string;
+      voice?: string;
+      species?: string;
+      appearance?: any;
+    }> = [];
+
+    const keyToCharMap = new Map<string, { key: string; name: string; species?: string; voice?: string; role?: string }>();
+
+    if (Array.isArray(json.characters)) {
+      for (const ch of json.characters) {
+        if (!ch || !ch.name) continue;
+        const key = (ch.characterKey || ch.name).toLowerCase();
+        const charVoice = ch.voice || IntelligentScriptParser.resolveDefaultVoice(ch.name, language);
+        const charEntry = {
+          characterKey: ch.characterKey || ch.name.toLowerCase().replace(/[^a-z0-9_-]/g, '_'),
+          name: ch.name,
+          role: ch.role || 'protagonist',
+          description: ch.description || ch.distinctiveFeatures || `Character ${ch.name}`,
+          voice: charVoice,
+          species: ch.species || 'human',
+          appearance: ch.appearance,
+        };
+        declaredCharacters.push(charEntry);
+        keyToCharMap.set(key, {
+          key: charEntry.characterKey,
+          name: charEntry.name,
+          species: charEntry.species,
+          voice: charEntry.voice,
+          role: charEntry.role,
+        });
+        keyToCharMap.set(ch.name.toLowerCase(), {
+          key: charEntry.characterKey,
+          name: charEntry.name,
+          species: charEntry.species,
+          voice: charEntry.voice,
+          role: charEntry.role,
+        });
+      }
+    }
+
+    const resolveCharacter = (keyOrName: string): { name: string; voice: string } => {
+      const lower = (keyOrName || '').toLowerCase().trim();
+      if (lower === 'narrator' || lower === 'सूत्रधार' || lower === 'कथावाचक') {
+        return { name: 'Narrator', voice: IntelligentScriptParser.resolveDefaultVoice('Narrator', language) };
+      }
+      const found = keyToCharMap.get(lower);
+      if (found) {
+        return { name: found.name, voice: found.voice || IntelligentScriptParser.resolveDefaultVoice(found.name, language) };
+      }
+      return { name: keyOrName.trim(), voice: IntelligentScriptParser.resolveDefaultVoice(keyOrName, language) };
+    };
+
+    const parsedScenes: ParsedScene[] = [];
+    const scenesArray = Array.isArray(json.scenes) ? json.scenes : [];
+
+    if (scenesArray.length === 0) {
+      throw new Error('Canonical JSON script must contain at least one scene in "scenes" array.');
+    }
+
+    scenesArray.forEach((sc: any, index: number) => {
+      const sceneNumber = typeof sc.sceneNumber === 'number' ? sc.sceneNumber : index + 1;
+      const sceneTitle = sc.title || `Scene ${sceneNumber}`;
+      const location = sc.location || sceneTitle;
+      const locationId = PromptSynthesizer.generateLocationId(location);
+      const timeOfDay = sc.timeOfDay || 'Day';
+      const durationSeconds = typeof sc.durationSeconds === 'number' ? sc.durationSeconds : 15;
+      const narration = sc.narration || '';
+
+      const sceneCharNames = new Set<string>();
+
+      // 1. Process charactersPresent
+      if (Array.isArray(sc.charactersPresent)) {
+        for (const cp of sc.charactersPresent) {
+          const res = resolveCharacter(cp);
+          if (res.name.toLowerCase() !== 'narrator' && !isReservedMetadataKey(res.name)) {
+            sceneCharNames.add(res.name);
+          }
+        }
+      }
+
+      // 2. Process dialogue
+      const dialogueLines: ParsedDialogueLine[] = [];
+      if (Array.isArray(sc.dialogue)) {
+        for (const dlg of sc.dialogue) {
+          const speakerRaw = dlg.speakerKey || dlg.characterName || dlg.speaker || 'Narrator';
+          const res = resolveCharacter(speakerRaw);
+          if (res.name.toLowerCase() !== 'narrator' && !isReservedMetadataKey(res.name)) {
+            sceneCharNames.add(res.name);
+            if (!keyToCharMap.has(speakerRaw.toLowerCase()) && !keyToCharMap.has(res.name.toLowerCase())) {
+              warnings.push({
+                code: 'UNRESOLVED_SPEAKER',
+                message: `Scene ${sceneNumber}: Speaker "${speakerRaw}" is not declared in the characters roster.`,
+                line: sceneNumber,
+                severity: 'warning',
+              });
+            }
+          }
+          dialogueLines.push({
+            id: randomUUID(),
+            characterName: res.name,
+            text: dlg.text || '',
+            emotion: dlg.emotion || 'cheerful',
+            expression: dlg.expression,
+            voice: dlg.voice || res.voice,
+          });
+        }
+      }
+
+      // 3. Process characterActions
+      const characterActions: Array<{ characterName: string; action: string; description?: string }> = [];
+      if (Array.isArray(sc.characterActions)) {
+        for (const act of sc.characterActions) {
+          const actorRaw = act.characterKey || act.characterName || act.actor || '';
+          const res = resolveCharacter(actorRaw);
+          if (res.name.toLowerCase() !== 'narrator' && !isReservedMetadataKey(res.name)) {
+            sceneCharNames.add(res.name);
+          }
+          const normAction = normalizeAnimationAction(act.action || 'idle');
+          characterActions.push({
+            characterName: res.name,
+            action: normAction.action,
+            description: act.description || act.action,
+          });
+        }
+      }
+
+      // If no character action provided for this scene but characters present, add default idle
+      if (characterActions.length === 0 && sceneCharNames.size > 0) {
+        characterActions.push({
+          characterName: Array.from(sceneCharNames)[0],
+          action: 'idle',
+          description: 'Default idle',
+        });
+      }
+
+      // Background prompt
+      const explicitPrompt =
+        typeof sc.background === 'object' && sc.background !== null
+          ? sc.background.prompt || ''
+          : typeof sc.background === 'string'
+            ? sc.background
+            : '';
+
+      const finalPrompt = PromptSynthesizer.synthesizeBackgroundPrompt({
+        explicitPrompt,
+        sceneTitle,
+        locationName: location,
+        timeOfDay,
+        look: options.look,
+      });
+
+      // Breakdown
+      const breakdown = ProductionBreakdownExtractor.extractSceneBreakdown({
+        title: sceneTitle,
+        locationText: location,
+        visualPrompt: finalPrompt,
+        narration,
+        dialogueTexts: dialogueLines.map((d) => d.text),
+        actionTexts: characterActions.map((a) => a.description || a.action),
+        explicitEffects: Array.isArray(sc.soundEffects) ? sc.soundEffects : [],
+        characterNames: Array.from(sceneCharNames),
+      });
+
+      const suggestedOverlays = ProductionBreakdownExtractor.mapVfxToStudioOverlays(breakdown.vfx);
+
+      // Camera shots
+      const cameraObj = sc.camera || {};
+      const shots = breakdown.shots.map((s) => ({
+        num: s.num,
+        size: typeof cameraObj === 'object' && cameraObj.perspective ? cameraObj.perspective : s.size,
+        move: typeof cameraObj === 'object' && cameraObj.movement ? cameraObj.movement : s.move,
+        desc: s.desc || '',
+      }));
+
+      parsedScenes.push({
+        sceneNumber,
+        title: sceneTitle,
+        location,
+        locationId,
+        timeOfDay,
+        durationSeconds,
+        durationConfidence: 'explicit',
+        visualPrompt: finalPrompt,
+        narration,
+        dialogue: dialogueLines,
+        characterActions,
+        charactersPresent: Array.from(sceneCharNames),
+        breakdown,
+        suggestedOverlays,
+        shots,
+      });
+    });
+
+    const bibles: ProjectBibles = {
+      characters: {},
+      locations: {},
+      props: {},
+    };
+    for (const c of declaredCharacters) {
+      bibles.characters[c.name.toLowerCase()] = {
+        name: c.name,
+        role: c.role,
+        species: c.species,
+        desc: c.description || '',
+        voice: c.voice,
+      };
+    }
+
+    return {
+      title,
+      targetDurationSeconds,
+      language,
+      logline,
+      lesson,
+      genre,
+      look: { ...DEFAULT_PROJECT_LOOK, ...(options.look || {}) },
+      bibles,
+      characters: declaredCharacters,
+      scenes: parsedScenes,
+      warnings,
+      originalText: JSON.stringify(json, null, 2),
+      schemaVersion: json.schemaVersion || '1.0',
+      globalContinuity: json.globalContinuity,
+      endScreen: json.endScreen,
     };
   }
 
@@ -697,6 +1023,7 @@ export class IntelligentScriptParser {
           voice: d.voice,
         })),
         characterActions: s.characterActions,
+        charactersPresent: s.charactersPresent || [],
         suggestedOverlays: s.suggestedOverlays,
         breakdown: s.breakdown,
         shots: s.shots,

@@ -31,13 +31,18 @@ textarea {
 }
 
 input[type="checkbox"],
-input[type="radio"] {
+input[type="radio"],
+input[type="checkbox"].form-input,
+input[type="checkbox"].flow-input,
+.form-input[type="checkbox"],
+.flow-input[type="checkbox"] {
   width: 18px !important;
   height: 18px !important;
   min-width: 18px !important;
   max-width: 18px !important;
   min-height: 18px !important;
   max-height: 18px !important;
+  flex: 0 0 18px !important;
   box-sizing: border-box !important;
   padding: 0 !important;
   margin: 0 !important;
@@ -74,11 +79,37 @@ label:has(input[type="radio"]),
   padding: 0 !important;
 }
 
+/* Placeholder font, color and opacity across all browsers and themes */
 input::placeholder,
 textarea::placeholder,
 select::placeholder {
   color: #94a3b8 !important; /* Slate 400 in dark mode */
-  font-weight: 500;
+  font-family: inherit !important;
+  font-size: inherit !important;
+  font-weight: 500 !important;
+  opacity: 1 !important;
+  -webkit-text-fill-color: #94a3b8 !important;
+}
+
+::-webkit-input-placeholder {
+  color: #94a3b8 !important;
+  font-family: inherit !important;
+  font-weight: 500 !important;
+  opacity: 1 !important;
+  -webkit-text-fill-color: #94a3b8 !important;
+}
+
+::-moz-placeholder {
+  color: #94a3b8 !important;
+  font-family: inherit !important;
+  font-weight: 500 !important;
+  opacity: 1 !important;
+}
+
+:-ms-input-placeholder {
+  color: #94a3b8 !important;
+  font-family: inherit !important;
+  font-weight: 500 !important;
   opacity: 1 !important;
 }
 
@@ -91,9 +122,40 @@ html[data-theme="light"] textarea::placeholder,
 [data-theme="light"] select::placeholder,
 body.theme-light select::placeholder,
 html[data-theme="light"] select::placeholder {
-  color: #1e293b !important; /* Slate 800 - crisp, high contrast readability on white/light backgrounds */
-  font-weight: 500;
-  opacity: 0.8 !important;
+  color: #475569 !important; /* Slate 600 - crisp, high-contrast, clearly legible on light/white background */
+  font-family: inherit !important;
+  font-size: inherit !important;
+  font-weight: 500 !important;
+  opacity: 1 !important;
+  -webkit-text-fill-color: #475569 !important;
+}
+
+[data-theme="light"] ::-webkit-input-placeholder,
+body.theme-light ::-webkit-input-placeholder,
+html[data-theme="light"] ::-webkit-input-placeholder {
+  color: #475569 !important;
+  font-family: inherit !important;
+  font-weight: 500 !important;
+  opacity: 1 !important;
+  -webkit-text-fill-color: #475569 !important;
+}
+
+[data-theme="light"] ::-moz-placeholder,
+body.theme-light ::-moz-placeholder,
+html[data-theme="light"] ::-moz-placeholder {
+  color: #475569 !important;
+  font-family: inherit !important;
+  font-weight: 500 !important;
+  opacity: 1 !important;
+}
+
+[data-theme="light"] :-ms-input-placeholder,
+body.theme-light :-ms-input-placeholder,
+html[data-theme="light"] :-ms-input-placeholder {
+  color: #475569 !important;
+  font-family: inherit !important;
+  font-weight: 500 !important;
+  opacity: 1 !important;
 }
 
 input:not([type="checkbox"]):not([type="radio"]):hover,
