@@ -39,7 +39,7 @@ export function detectImageMime(buffer: Buffer): { mimeType: string; ext: string
 }
 
 export function parseImageDimensions(buffer: Buffer): { width: number; height: number } {
-  if (!buffer || buffer.length < 8) return { width: 1920, height: 1080 };
+  if (!buffer || buffer.length < 8) return { width: 0, height: 0 };
 
   // 1. PNG: PNG IHDR chunk at offset 16 (4 bytes width, 4 bytes height BE)
   if (
@@ -108,6 +108,6 @@ export function parseImageDimensions(buffer: Buffer): { width: number; height: n
     }
   }
 
-  // Default fallback 16:9 standard canvas
-  return { width: 1920, height: 1080 };
+  // Return { width: 0, height: 0 } on unknown or invalid bytes
+  return { width: 0, height: 0 };
 }

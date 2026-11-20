@@ -51,6 +51,31 @@ export function parseImageDimensions(buffer) {
         offset += 2 + len;
       }
     }
+    // WebP (VP8 lossy, VP8L lossless, VP8X extended)
+    if (
+      buffer.length >= 30 &&
+      buffer.toString("ascii", 0, 4) === "RIFF" &&
+      buffer.toString("ascii", 8, 12) === "WEBP"
+    ) {
+      const format = buffer.toString("ascii", 12, 16);
+      if (format === "VP8 " && buffer.length >= 30) {
+        const width = buffer.readUInt16LE(26) & 0x3fff;
+        const height = buffer.readUInt16LE(28) & 0x3fff;
+        if (width > 0 && height > 0) return { width, height };
+      } else if (format === "VP8L" && buffer.length >= 25) {
+        const b0 = buffer[21];
+        const b1 = buffer[22];
+        const b2 = buffer[23];
+        const b3 = buffer[24];
+        const width = 1 + (((b1 & 0x3f) << 8) | b0);
+        const height = 1 + (((b3 & 0x0f) << 10) | (b2 << 2) | ((b1 & 0xc0) >> 6));
+        if (width > 0 && height > 0) return { width, height };
+      } else if (format === "VP8X" && buffer.length >= 30) {
+        const width = 1 + buffer.readUIntLE(24, 3);
+        const height = 1 + buffer.readUIntLE(27, 3);
+        if (width > 0 && height > 0) return { width, height };
+      }
+    }
   } catch {}
   return { width: 0, height: 0 };
 }

@@ -4,6 +4,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { FlowBrowserWorker, getFirstLocator } from "../src/flow-browser.mjs";
+import { parseImageDimensions, detectImageType } from "../src/image-validation.mjs";
 
 describe("Google Flow Agent Live DOM & Prompt Submission Suite", () => {
   const projectUrl = "https://flow.google.com/project/2ea32335-0e57-4d1a-9e1e-98fa3cd491e8";
@@ -201,6 +202,9 @@ describe("Google Flow Agent Live DOM & Prompt Submission Suite", () => {
       result.status === "agent_prompt_submitted" || result.status === "generation_submitted" || result.status === "generating"
     );
 
+    // Stop background monitoring loop
+    job.status = "completed";
+
     await fs.rm(testDir, { recursive: true, force: true });
   });
 
@@ -369,5 +373,165 @@ describe("Google Flow Agent Live DOM & Prompt Submission Suite", () => {
 
     assert.equal(previousJob.status, "cancelled", "Previous idle job must be superseded");
     assert.equal(worker.activeJobId, newJob.id, "New job must acquire active lock");
+  });
+
+  it("10. WebP Dimension Parsing: Validates VP8, VP8L, VP8X formats and returns 0x0 on invalid/corrupted bytes", async () => {
+    // 1. Construct valid VP8 lossy header (width: 1920, height: 1080)
+    const vp8Buf = Buffer.alloc(32);
+    vp8Buf.write("RIFF", 0);
+    vp8Buf.writeUInt32LE(24, 4);
+    vp8Buf.write("WEBP", 8);
+    vp8Buf.write("VP8 ", 12);
+    vp8Buf.writeUInt32LE(12, 16);
+    vp8Buf.writeUInt16LE(1920 & 0x3fff, 26);
+    vp8Buf.writeUInt16LE(1080 & 0x3fff, 28);
+
+    assert.equal(detectImageType(vp8Buf)?.mimeType, "image/webp");
+    assert.deepEqual(parseImageDimensions(vp8Buf), { width: 1920, height: 1080 });
+
+    // 2. Construct valid VP8X extended header (width: 1024, height: 576)
+    const vp8xBuf = Buffer.alloc(32);
+    vp8xBuf.write("RIFF", 0);
+    vp8xBuf.writeUInt32LE(24, 4);
+    vp8xBuf.write("WEBP", 8);
+    vp8xBuf.write("VP8X", 12);
+    vp8xBuf.writeUInt32LE(10, 16);
+    vp8xBuf.writeUIntLE(1024 - 1, 24, 3);
+    vp8xBuf.writeUIntLE(576 - 1, 27, 3);
+
+    assert.deepEqual(parseImageDimensions(vp8xBuf), { width: 1024, height: 576 });
+
+    // 3. Corrupt bytes must return 0x0 without throwing
+    const corruptBuf = Buffer.from([0x52, 0x49, 0x46, 0x46, 0x00, 0x00]);
+    assert.deepEqual(parseImageDimensions(corruptBuf), { width: 0, height: 0 });
+  });
+
+  it("11. attachCharacterReference: Correctly opens ingredients picker, searches character, and selects it", async () => {
+    const worker = new FlowBrowserWorker();
+    let ingredientsClicked = false;
+    let optionClicked = false;
+    let addConfirmed = false;
+
+    const ingredientsBtn = {
+      tagName: "button",
+      ariaLabel: "Add ingredients to the prompt box",
+      visible: true,
+      onClick: async () => { ingredientsClicked = true; },
+    };
+
+    const charOption = {
+      tagName: "div",
+      role: "option",
+      text: "चिंटू",
+      visible: true,
+      onClick: async () => { optionClicked = true; },
+    };
+
+    const confirmBtn = {
+      tagName: "button",
+      text: "Add to prompt",
+      visible: true,
+      onClick: async () => { addConfirmed = true; },
+    };
+
+    worker.page = {
+      isClosed: () => false,
+      locator: (sel) => {
+        if (sel.includes("Add ingredients") || sel.includes("+")) {
+          return createMockLocator([ingredientsBtn]);
+        }
+        if (sel.includes("चिंटू")) {
+          return createMockLocator([charOption]);
+        }
+        if (sel.includes("Add to prompt")) {
+          return createMockLocator([confirmBtn]);
+        }
+        return createMockLocator([]);
+      },
+    };
+
+    const attached = await worker.attachCharacterReference("- चिंटू");
+    assert.equal(attached, true, "Character reference attachment must succeed");
+    assert.equal(ingredientsClicked, true, "Ingredients button must be clicked");
+    assert.equal(optionClicked, true, "Character option must be clicked");
+    assert.equal(addConfirmed, true, "Add to prompt button must be confirmed");
+  });
+
+  it("12. Dual-Path Capture: Automatically correlates intercepted WebP network stream when thumbnail appears", async () => {
+    const worker = new FlowBrowserWorker();
+    const testDir = path.join(os.tmpdir(), `test-flow-dualpath-${Date.now()}`);
+    worker.downloadDir = path.join(testDir, "downloads");
+    worker.profileDir = path.join(testDir, "profile");
+    await fs.mkdir(worker.downloadDir, { recursive: true });
+
+    const job = worker.createJob({
+      characterId: "c1",
+      characterName: "Pip",
+      targetType: "background",
+      prompt: "A beautiful enchanted meadow",
+      sceneId: "scene-101",
+      storyId: "story-202",
+    });
+
+    // Mock captured network WebP response
+    const sampleWebp = Buffer.alloc(2000);
+    sampleWebp.write("RIFF", 0);
+    sampleWebp.writeUInt32LE(1992, 4);
+    sampleWebp.write("WEBP", 8);
+    sampleWebp.write("VP8X", 12);
+    sampleWebp.writeUInt32LE(10, 16);
+    sampleWebp.writeUIntLE(1024 - 1, 24, 3);
+    sampleWebp.writeUIntLE(576 - 1, 27, 3);
+
+    const targetSrc = "https://flow.google.com/asb/test-render-image-abc=s1600-rw";
+    job.capturedImageResponses = new Map();
+    job.capturedImageResponses.set(targetSrc, {
+      buffer: sampleWebp,
+      contentType: "image/webp",
+      url: targetSrc,
+    });
+
+    let importedPayload = null;
+    worker.importDownloadedAsset = async (j, buf, type) => {
+      importedPayload = { j, buf, type };
+      j.status = "completed";
+    };
+
+    const mediaOption = {
+      tagName: "flow-a2ui-image-option",
+      className: "media-option",
+      visible: true,
+      locator: (sel) => {
+        if (sel.includes("img")) {
+          return createMockLocator([{
+            tagName: "img",
+            className: "image-thumbnail",
+            src: targetSrc,
+            visible: true,
+            getAttribute: async (a) => a === "src" ? targetSrc : null,
+          }]);
+        }
+        return createMockLocator([]);
+      },
+    };
+
+    worker.page = {
+      isClosed: () => false,
+      locator: (sel) => {
+        if (sel.includes("flow-a2ui-image-option") || sel.includes("media-option")) {
+          return createMockLocator([mediaOption]);
+        }
+        return createMockLocator([]);
+      },
+    };
+
+    await worker.monitorGenerationAndDownload(job.id, { count: 0, identifiers: new Set() });
+
+    assert.equal(job.status, "completed", "Job must complete after response correlation");
+    assert.ok(importedPayload, "Asset import must be invoked");
+    assert.equal(importedPayload.type.mimeType, "image/webp");
+    assert.equal(importedPayload.buf.length, 2000);
+
+    await fs.rm(testDir, { recursive: true, force: true });
   });
 });

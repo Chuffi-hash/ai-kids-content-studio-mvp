@@ -134,6 +134,13 @@ backgroundStudioRouter.post('/import-flow', async (req, res) => {
       prompt,
       fit,
       cameraDirection,
+      generationJobId,
+      flowProjectId,
+      provider,
+      model,
+      mimeType,
+      width,
+      height,
     } = req.body;
 
     if (!imageBufferOrBase64) {
@@ -151,6 +158,10 @@ backgroundStudioRouter.post('/import-flow', async (req, res) => {
         prompt: prompt || notes,
         fit,
         cameraDirection,
+        sourceJobId: generationJobId,
+        flowProjectId,
+        provider: provider || 'google_flow',
+        model: model || 'google_flow',
       });
 
       return res.json({

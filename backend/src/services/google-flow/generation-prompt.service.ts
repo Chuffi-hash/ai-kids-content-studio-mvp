@@ -17,6 +17,39 @@ export interface CharacterPromptResult {
   referenceImageUrl?: string | null;
 }
 
+export type ImageStylePreset =
+  | 'cinematic_storybook_balanced'
+  | 'illustrated_2d'
+  | 'stylized_3d'
+  | 'photorealistic';
+
+export function cleanVisualPrompt(raw: string): string {
+  if (!raw || typeof raw !== 'string') return '';
+  let cleaned = raw
+    // Strip aspect ratio directives and dimensions
+    .replace(/--ar\s+[0-9:]+/gi, '')
+    .replace(/(?:Vertical\s+)?(?:9:16|16:9|4:3|1:1)\s*(?:composition|aspect\s*ratio)?/gi, '')
+    .replace(/aspect\s*ratio\s*[0-9:]+/gi, '')
+    // Strip Pixar/Disney render style and CGI buzzwords
+    .replace(/Pixar\s*(?:\/|and)?\s*Disney\s*(?:animated\s*)?render\s*style\.?/gi, '')
+    .replace(/High-end\s*3D\s*CGI\s*rendering\s*with\s*soft\s*subsurface\s*scattering[^.]*\./gi, '')
+    .replace(/Cinematic\s*3D\s*storybook\s*animation,?\s*/gi, '')
+    .replace(/35mm\s*storybook\s*prime\s*lens,?\s*soft\s*depth\s*of\s*field,?\s*/gi, '')
+    // Strip redundant "Environment only", "No characters", etc.
+    .replace(/STRICT\s*INSTRUCTION:?[^.]*\./gi, '')
+    .replace(/Environment\s*only\.?[^.]*\./gi, '')
+    .replace(/Backdrop\s*only\.?/gi, '')
+    .replace(/Pristine\s*empty\s*world[^.]*\./gi, '')
+    .replace(/Keep\s*the\s*central\s*foreground\s*open[^.]*\./gi, '')
+    .replace(/Open\s*foreground\s*and\s*middleground\s*space[^.]*\./gi, '')
+    .replace(/No\s*(?:characters|people|humans|figures|animals|creatures|watermarks|logos)[^.]*\./gi, '')
+    .replace(/[*_#"`]/g, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+
+  return cleaned;
+}
+
 export class GenerationPromptService {
   /**
    * Builds a canonical, environment-only background plate prompt.
@@ -25,7 +58,8 @@ export class GenerationPromptService {
   public static buildSceneBackgroundPrompt(
     story: { visualStyle?: string; aspectRatio?: string },
     scene: SceneContextItem,
-    promptOverride?: string
+    promptOverride?: string,
+    stylePreset: ImageStylePreset = 'cinematic_storybook_balanced'
   ): BackgroundPromptResult {
     const aspectRatio = scene.aspectRatio || story.aspectRatio || '16:9';
     const dims = getDimensionsForRatio(aspectRatio);
@@ -41,27 +75,32 @@ export class GenerationPromptService {
       };
     }
 
-    const artStyle = story.visualStyle || 'vibrant children storybook illustration style, digital painting with clean linework, whimsical color palette';
-    const camera = scene.cameraDirection || 'Eye-level wide shot';
-
-    // Compose layered scenic environment description
+    const cleanedCore = cleanVisualPrompt(scene.visualPrompt || scene.narration || scene.title);
     const sceneCues = [
-      `Setting: ${scene.location}`,
-      `Time: ${scene.timeOfDay}`,
-      `Lighting: ${scene.lighting}`,
-      `Atmosphere: ${scene.weather}`,
-    ].join(', ');
+      scene.location ? `Setting: ${scene.location}` : '',
+      scene.timeOfDay ? `Time of day: ${scene.timeOfDay}` : '',
+      scene.lighting ? `Lighting: ${scene.lighting}` : '',
+      scene.weather ? `Atmosphere: ${scene.weather}` : '',
+    ].filter(Boolean).join('. ');
 
-    const coreEnvironment = scene.visualPrompt || scene.narration || scene.title;
+    let styleDirective = 'Moderately stylized illustrated realism with subtle 3D depth, natural proportions, softly painterly surfaces and believable environmental detail.';
+    if (stylePreset === 'illustrated_2d') {
+      styleDirective = 'Warm storybook 2D hand-painted illustration with charming storybook textures and clean outlines.';
+    } else if (stylePreset === 'stylized_3d') {
+      styleDirective = 'Tastefully stylized animated storybook 3D environment with gentle tactile textures.';
+    } else if (stylePreset === 'photorealistic') {
+      styleDirective = 'Cinematic natural realism with believable lighting and environmental depth.';
+    }
 
     const prompt = [
-      `Masterpiece children storybook environment plate of ${scene.title}.`,
-      `Art Style: ${artStyle}.`,
-      `Camera Perspective: ${camera}, wide scenic landscape with clear open foreground.`,
-      `Environmental Details: ${coreEnvironment}.`,
-      `Atmospheric conditions: ${sceneCues}.`,
-      `STRICT INSTRUCTION: Environment only! Empty scenic background plate. Absolutely NO characters, NO humans, NO animals, NO figures, NO people, NO creatures of any kind in the scene. Pristine empty world ready for 2D character animation overlay.`,
-    ].join(' ');
+      `Create one premium cinematic storybook environment illustration of ${scene.title || scene.location || 'the scene'}.`,
+      `Style: ${styleDirective}`,
+      cleanedCore ? `Scenic Landscape Details: ${cleanedCore}.` : '',
+      sceneCues ? `Atmospheric conditions: ${sceneCues}.` : '',
+      `Format: Exactly one environment-only landscape image in ${aspectRatio} aspect ratio.`,
+      `Composition: Wide scenic backdrop with open central foreground reserved for character staging.`,
+      `STRICT INSTRUCTION: Environment only! Empty scenic background plate. Absolutely NO characters, NO humans, NO animals, NO figures, NO faces, NO text, NO captions, NO logos, NO watermarks.`,
+    ].filter(Boolean).join(' ');
 
     const negativePrompt =
       'characters, people, humans, animals, pets, creatures, person, boy, girl, man, woman, bird, owl, bear, rabbit, figures, silhouettes, faces, hands, text, letters, watermark, signature, artist name, borders, cropped, blurry, low quality, oversaturated noise';

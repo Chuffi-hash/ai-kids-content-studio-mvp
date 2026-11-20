@@ -711,12 +711,19 @@ export class FlowBrowserWorker {
       }
 
       const selectors = [
+        "flow-a2ui-multiple-choice",
+        "div[role='group'][aria-label='Media options gallery']",
+        "flow-a2ui-image-option",
+        "flow-a2ui-image-option.media-option",
+        "div.image-container[aria-label='Open image in editor']",
+        "img.image-thumbnail",
         "flow-output-tile",
         "[data-asset-id]",
         ".generation-tile",
         ".output-tile",
         'img[src*="blob:"]',
         'img[src*="googleusercontent.com"]',
+        'img[src*="flow.google.com/asb/"]',
       ].join(", ");
 
       const elements = this.page.locator(selectors);
@@ -1053,6 +1060,44 @@ export class FlowBrowserWorker {
     // 7. Record asset baseline
     const baseline = await this.getOutputAssetBaseline();
 
+    // 7b. Attach Network Response Interceptor to capture generation image streams (WebP/PNG/JPEG)
+    const capturedResponses = new Map();
+    job.capturedImageResponses = capturedResponses;
+    const onResponse = async (response) => {
+      try {
+        const resUrl = typeof response.url === "function" ? response.url() : "";
+        const headers = typeof response.headers === "function" ? response.headers() : {};
+        const contentType = (headers["content-type"] || "").toLowerCase();
+        const status = typeof response.status === "function" ? response.status() : 200;
+
+        if (
+          status === 200 &&
+          (resUrl.includes("/asb/") ||
+            resUrl.includes("flow.google.com/asb/") ||
+            contentType.includes("image/webp") ||
+            contentType.includes("image/png") ||
+            contentType.includes("image/jpeg"))
+        ) {
+          const body = typeof response.body === "function" ? await response.body().catch(() => null) : null;
+          if (body && Buffer.isBuffer(body) && body.length > 500) {
+            capturedResponses.set(resUrl, { buffer: body, contentType, url: resUrl });
+            const cleanUrl = resUrl.split("?")[0].split("=")[0];
+            capturedResponses.set(cleanUrl, { buffer: body, contentType, url: resUrl });
+          }
+        }
+      } catch {}
+    };
+
+    if (typeof this.page.on === "function") {
+      this.page.on("response", onResponse);
+      job._cleanupResponseListener = () => {
+        try {
+          if (typeof this.page.off === "function") this.page.off("response", onResponse);
+          else if (typeof this.page.removeListener === "function") this.page.removeListener("response", onResponse);
+        } catch {}
+      };
+    }
+
     // 8. Click Start generation
     try {
       if (typeof submitBtn.click === "function") {
@@ -1177,17 +1222,41 @@ export class FlowBrowserWorker {
       if (typeof this.page.locator !== "function") return false;
 
       // 1. Check for "Add ingredients to the prompt box" button
-      const ingredientsBtn = getFirstLocator(this.page.locator('button[aria-label="Add ingredients to the prompt box"]'));
+      const ingredientsBtn = getFirstLocator(this.page.locator(
+        'button[aria-label="Add ingredients to the prompt box"], button[aria-label*="Add ingredients" i], flow-creative-agent-prompt-box button:has-text("+")'
+      ));
+
       if (ingredientsBtn && (await ingredientsBtn.count().catch(() => 0)) > 0 && (await ingredientsBtn.isVisible().catch(() => false))) {
         await ingredientsBtn.click({ timeout: 5000 }).catch(() => {});
-        await new Promise((r) => setTimeout(r, 500));
+        await new Promise((r) => setTimeout(r, 600));
 
-        const charItem = getFirstLocator(this.page
-          .locator(
-            `[role="option"]:has-text("${characterName}"), button:has-text("${characterName}"), .ingredient-item:has-text("${characterName}")`
-          ));
+        const cleanName = String(characterName || "").replace(/^[-–—•*_#\s]+|[-–—•*_#:\s]+$/g, "").trim();
+
+        // Optional search input in dialog
+        const searchInput = getFirstLocator(this.page.locator(
+          'input[placeholder*="Search" i], input[aria-label*="Search" i]'
+        ));
+        if (searchInput && (await searchInput.count().catch(() => 0)) > 0 && (await searchInput.isVisible().catch(() => false))) {
+          await searchInput.fill(cleanName).catch(() => {});
+          await new Promise((r) => setTimeout(r, 400));
+        }
+
+        const charItem = getFirstLocator(this.page.locator(
+          `[role="option"]:has-text("${cleanName}"), button:has-text("${cleanName}"), .ingredient-item:has-text("${cleanName}"), mat-option:has-text("${cleanName}")`
+        ));
+
         if (charItem && (await charItem.count().catch(() => 0)) > 0 && (await charItem.isVisible().catch(() => false))) {
           await charItem.click({ timeout: 5000 }).catch(() => {});
+
+          // Click "Add to prompt" button if separate confirm button exists
+          const addToPromptBtn = getFirstLocator(this.page.locator(
+            'button:has-text("Add to prompt"), button[aria-label*="Add to prompt" i]'
+          ));
+          if (addToPromptBtn && (await addToPromptBtn.count().catch(() => 0)) > 0 && (await addToPromptBtn.isVisible().catch(() => false))) {
+            await addToPromptBtn.click({ timeout: 5000 }).catch(() => {});
+          }
+
+          await new Promise((r) => setTimeout(r, 400));
           return true;
         }
       }
@@ -1277,8 +1346,9 @@ export class FlowBrowserWorker {
 
       const maxWaitMs = 90000;
       const startTime = Date.now();
-      const pollIntervalMs = 2000;
+      const pollIntervalMs = 1500;
       let targetTile = null;
+      let targetThumbnailSrc = null;
 
       while (Date.now() - startTime < maxWaitMs) {
         if (!this.page || (typeof this.page.isClosed === "function" && this.page.isClosed()) || job.status === "completed" || job.status === "cancelled") {
@@ -1286,29 +1356,61 @@ export class FlowBrowserWorker {
         }
 
         if (typeof this.page.locator === "function") {
-          const selectors = [
-            "flow-output-tile",
-            "[data-asset-id]",
-            ".generation-tile",
-            ".output-tile",
-            'img[src*="blob:"]',
-            'img[src*="googleusercontent.com"]',
-          ].join(", ");
+          // 1. Live DOM Agent mode: check for flow-a2ui-multiple-choice gallery options
+          const agentOptions = this.page.locator(
+            "flow-a2ui-multiple-choice flow-a2ui-image-option.media-option, .gallery-container flow-a2ui-image-option, flow-a2ui-image-option"
+          );
+          const agentCount = await agentOptions.count().catch(() => 0);
 
-          const elements = this.page.locator(selectors);
-          const currentCount = await elements.count().catch(() => 0);
-
-          if (currentCount > baseline.count) {
-            for (let i = currentCount - 1; i >= 0; i--) {
-              const el = elements.nth(i);
-              const id =
-                (typeof el.getAttribute === "function" ? await el.getAttribute("data-asset-id").catch(() => null) : null) ||
-                (typeof el.getAttribute === "function" ? await el.getAttribute("id").catch(() => null) : null) ||
-                (typeof el.getAttribute === "function" ? await el.getAttribute("src").catch(() => null) : null) ||
-                `element-${i}`;
-              if (!baseline.identifiers.has(id)) {
-                targetTile = el;
+          if (agentCount > 0) {
+            for (let i = agentCount - 1; i >= 0; i--) {
+              const opt = agentOptions.nth(i);
+              const thumbImg = opt.locator("img.image-thumbnail, img");
+              let src = "";
+              if ((await thumbImg.count().catch(() => 0)) > 0) {
+                src = (typeof thumbImg.first().getAttribute === "function"
+                  ? await thumbImg.first().getAttribute("src").catch(() => "")
+                  : "") || "";
+              }
+              const optId = src || `agent-option-${i}`;
+              if (!baseline.identifiers.has(optId)) {
+                targetTile = opt;
+                targetThumbnailSrc = src;
                 break;
+              }
+            }
+          }
+
+          // 2. Legacy / Standard mode selectors fallback
+          if (!targetTile) {
+            const selectors = [
+              "flow-output-tile",
+              "[data-asset-id]",
+              ".generation-tile",
+              ".output-tile",
+              'img[src*="blob:"]',
+              'img[src*="googleusercontent.com"]',
+              'img[src*="flow.google.com/asb/"]',
+            ].join(", ");
+
+            const elements = this.page.locator(selectors);
+            const currentCount = await elements.count().catch(() => 0);
+
+            if (currentCount > baseline.count) {
+              for (let i = currentCount - 1; i >= 0; i--) {
+                const el = elements.nth(i);
+                const id =
+                  (typeof el.getAttribute === "function" ? await el.getAttribute("data-asset-id").catch(() => null) : null) ||
+                  (typeof el.getAttribute === "function" ? await el.getAttribute("id").catch(() => null) : null) ||
+                  (typeof el.getAttribute === "function" ? await el.getAttribute("src").catch(() => null) : null) ||
+                  `element-${i}`;
+                if (!baseline.identifiers.has(id)) {
+                  targetTile = el;
+                  if (typeof el.getAttribute === "function") {
+                    targetThumbnailSrc = await el.getAttribute("src").catch(() => null);
+                  }
+                  break;
+                }
               }
             }
           }
@@ -1329,50 +1431,97 @@ export class FlowBrowserWorker {
         job.message = "Downloading new asset from Google Flow...";
         this.touch(job);
 
-        if (typeof targetTile.hover === "function") {
-          await targetTile.hover().catch(() => {});
-        }
+        let downloadedBuffer = null;
+        let downloadedType = null;
 
-        let downloadBtn = null;
-        if (typeof targetTile.locator === "function") {
-          downloadBtn = getFirstLocator(targetTile
-            .locator(
-              'button[aria-label*="download" i], button[title*="download" i], [data-testid*="download" i], button:has-text("Download")'
-            ));
-        }
+        // Path A: Click image container to open full editor and trigger visible Download
+        try {
+          const openEditorBtn = getFirstLocator(targetTile.locator(
+            'div.image-container[aria-label="Open image in editor"], div[role="button"][aria-label*="editor" i], div.image-container'
+          ));
 
-        let canClick = downloadBtn ? (await downloadBtn.count().catch(() => 0)) > 0 && (await downloadBtn.isVisible().catch(() => false)) : false;
-
-        if (!canClick && typeof targetTile.locator === "function") {
-          const parent = targetTile.locator("..");
-          downloadBtn = getFirstLocator(parent
-            .locator(
-              'button[aria-label*="download" i], button[title*="download" i], [data-testid*="download" i], button:has-text("Download")'
-            ));
-          canClick = downloadBtn ? (await downloadBtn.count().catch(() => 0)) > 0 && (await downloadBtn.isVisible().catch(() => false)) : false;
-        }
-
-        if (canClick && typeof downloadBtn.click === "function") {
-          try {
-            if (typeof this.page.waitForEvent === "function") {
-              const [download] = await Promise.all([
-                this.page.waitForEvent("download", { timeout: 30000 }),
-                downloadBtn.click({ timeout: 10000 }),
-              ]);
-
-              const tempDir = path.join(this.profileDir, "..", "downloads");
-              await fs.mkdir(tempDir, { recursive: true, mode: 0o700 }).catch(() => {});
-              const tempFilePath = path.join(tempDir, `flow-${job.id}-${Date.now()}.png`);
-              await download.saveAs(tempFilePath);
-
-              job.status = "importing";
-              this.touch(job);
-              await this.handleDownload(download, tempFilePath);
-              return;
-            }
-          } catch (dlErr) {
-            console.warn("[FlowBrowser] Automatic download trigger notice:", dlErr.message);
+          let editorOpened = false;
+          if (openEditorBtn && (await openEditorBtn.count().catch(() => 0)) > 0) {
+            await openEditorBtn.click({ timeout: 5000 }).catch(() => {});
+            editorOpened = true;
+          } else if (typeof targetTile.click === "function") {
+            await targetTile.click({ timeout: 5000 }).catch(() => {});
+            editorOpened = true;
           }
+
+          if (editorOpened) {
+            await new Promise((r) => setTimeout(r, 600));
+
+            const downloadBtn = getFirstLocator(this.page.locator(
+              'button[aria-label*="download" i], button[title*="download" i], button:has-text("Download"), [data-testid*="download" i]'
+            ));
+
+            if (downloadBtn && (await downloadBtn.count().catch(() => 0)) > 0 && (await downloadBtn.isVisible().catch(() => false))) {
+              if (typeof this.page.waitForEvent === "function") {
+                const [download] = await Promise.all([
+                  this.page.waitForEvent("download", { timeout: 12000 }).catch(() => [null]),
+                  downloadBtn.click({ timeout: 5000 }).catch(() => {}),
+                ]);
+
+                if (download && typeof download.saveAs === "function") {
+                  const tempDir = path.join(this.profileDir, "..", "downloads");
+                  await fs.mkdir(tempDir, { recursive: true, mode: 0o700 }).catch(() => {});
+                  const tempFilePath = path.join(tempDir, `flow-${job.id}-${Date.now()}.png`);
+                  await download.saveAs(tempFilePath);
+                  const buf = await fs.readFile(tempFilePath).catch(() => null);
+                  if (buf && buf.length > 500) {
+                    downloadedBuffer = buf;
+                    downloadedType = detectImageType(buf);
+                  }
+                }
+              }
+            }
+
+            // Close editor view
+            const closeBtn = getFirstLocator(this.page.locator(
+              'button[aria-label="Close"], button[aria-label="Back"], button:has-text("Close"), button:has-text("Back")'
+            ));
+            if (closeBtn && (await closeBtn.count().catch(() => 0)) > 0 && (await closeBtn.isVisible().catch(() => false))) {
+              await closeBtn.click().catch(() => {});
+            } else if (this.page.keyboard) {
+              await this.page.keyboard.press("Escape").catch(() => {});
+            }
+          }
+        } catch (uiDlErr) {
+          console.warn("[FlowBrowser] UI download attempt notice:", uiDlErr.message);
+        }
+
+        // Path B: Fallback to Network Response Interceptor (flow.google.com/asb/ WebP stream)
+        if (!downloadedBuffer && job.capturedImageResponses) {
+          if (targetThumbnailSrc) {
+            const cleanThumb = targetThumbnailSrc.split("?")[0].split("=")[0];
+            const match = job.capturedImageResponses.get(targetThumbnailSrc) || job.capturedImageResponses.get(cleanThumb);
+            if (match && match.buffer && match.buffer.length > 500) {
+              downloadedBuffer = match.buffer;
+              downloadedType = detectImageType(match.buffer);
+            }
+          }
+
+          if (!downloadedBuffer && job.capturedImageResponses.size > 0) {
+            const all = Array.from(job.capturedImageResponses.values());
+            const latest = all[all.length - 1];
+            if (latest && latest.buffer && latest.buffer.length > 500) {
+              downloadedBuffer = latest.buffer;
+              downloadedType = detectImageType(latest.buffer);
+            }
+          }
+        }
+
+        if (downloadedBuffer && downloadedType) {
+          const dims = parseImageDimensions(downloadedBuffer);
+          if (dims.width === 0 || dims.height === 0) {
+            console.warn("[FlowBrowser] Warning: Image dimensions unparseable, proceeding with safe import.");
+          }
+
+          job.status = "importing";
+          this.touch(job);
+          await this.importDownloadedAsset(job, downloadedBuffer, downloadedType);
+          return;
         }
       }
 
@@ -1387,6 +1536,11 @@ export class FlowBrowserWorker {
         job.status = "awaiting_download";
         job.message = "Generation in progress. Worker listening for download event.";
         this.touch(job);
+      }
+    } finally {
+      if (typeof job._cleanupResponseListener === "function") {
+        job._cleanupResponseListener();
+        delete job._cleanupResponseListener;
       }
     }
   }
@@ -1641,10 +1795,11 @@ export class FlowBrowserWorker {
 
   async handleDownload(download, originatingPage) {
     const page =
-      originatingPage ||
-      (typeof download?.page === "function" ? download.page() : null);
+      (originatingPage && typeof originatingPage.url === "function")
+        ? originatingPage
+        : (typeof download?.page === "function" ? download.page() : null);
 
-    if (!isValidFlowDownloadSource(page, this.page, this.context)) {
+    if (page && !isValidFlowDownloadSource(page, this.page, this.context)) {
       // Ignore downloads from unrelated tabs, non-Flow pages, or closed sessions
       return;
     }

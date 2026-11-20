@@ -366,9 +366,12 @@ export default function GoogleFlowPage() {
 
         // Ensure active character selection belongs strictly to this story's character roster
         const storyCharIds = (flowCtx.characters || []).map((c: any) => c.id);
-        if (!selectedCharacterId || !storyCharIds.includes(selectedCharacterId)) {
-          setSelectedCharacterIdState(storyCharIds[0] || "");
-        }
+        setSelectedCharacterIdState((current) => {
+          if (!current || !storyCharIds.includes(current)) {
+            return storyCharIds[0] || "";
+          }
+          return current;
+        });
       } catch (err: any) {
         console.warn("Could not load story context:", err);
         setStoryContextError(err.message || "Failed to load story context.");
@@ -903,8 +906,7 @@ export default function GoogleFlowPage() {
   // ----------------------------------------------------
   const selectedCharacter = selectedCharacterId
     ? (storyContext?.characters || []).find((c) => c.id === selectedCharacterId) ||
-      characters.find((c) => c.id === selectedCharacterId) ||
-      null
+      (!selectedStoryId ? characters.find((c) => c.id === selectedCharacterId) || null : null)
     : null;
 
   return (
@@ -1059,8 +1061,9 @@ export default function GoogleFlowPage() {
                 Active Character:{" "}
                 <strong>
                   {storyContext?.characters?.find((c) => c.id === selectedCharacterId)?.name ||
-                    storyContext?.characters?.[0]?.name ||
-                    "All Story Characters"}
+                    (storyContext?.characters && storyContext.characters.length > 0
+                      ? storyContext.characters[0].name
+                      : "All Story Characters")}
                 </strong>
               </span>
             )}

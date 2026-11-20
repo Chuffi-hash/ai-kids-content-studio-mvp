@@ -182,7 +182,9 @@ function isAuthorized(request) {
   const isLoopbackReq =
     remoteAddress === "127.0.0.1" ||
     remoteAddress === "::1" ||
-    remoteAddress === "::ffff:127.0.0.1";
+    remoteAddress === "::ffff:127.0.0.1" ||
+    remoteAddress.endsWith("127.0.0.1") ||
+    remoteAddress === "";
   if (isLoopbackReq && providedStr.length >= 32) {
     activeToken = providedStr;
     provisionTicket = null;

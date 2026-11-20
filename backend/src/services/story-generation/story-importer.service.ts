@@ -1330,6 +1330,18 @@ export const RESERVED_METADATA_KEYS = new Set([
   'summary',
   'logline',
   'lesson',
+  'end screen text',
+  'end screen',
+  'end_screen',
+  'closing text',
+  'outro',
+  'character consistency',
+  'character consistency notes',
+  'consistency',
+  'scene notes',
+  'scene note',
+  'visual direction',
+  'camera direction',
   'अवधि',
   'समय',
   'दृश्य',
@@ -1352,17 +1364,26 @@ export const RESERVED_METADATA_KEYS = new Set([
 
 export function isReservedMetadataKey(str: string): boolean {
   if (!str) return false;
-  const lower = str.trim().toLowerCase();
-  return RESERVED_METADATA_KEYS.has(lower);
+  const lower = str.trim().toLowerCase().replace(/^[-–—•*_#\s]+|[-–—•*_#:\s]+$/g, '');
+  if (RESERVED_METADATA_KEYS.has(lower)) return true;
+  if (
+    lower.startsWith('end screen') ||
+    lower.startsWith('character consistency') ||
+    lower.startsWith('visual direction') ||
+    lower.startsWith('scene note')
+  ) {
+    return true;
+  }
+  return false;
 }
 
 export function cleanSpeakerName(rawSpeaker: string): string {
   if (!rawSpeaker || typeof rawSpeaker !== 'string') return '';
   let cleaned = rawSpeaker
-    .replace(/^[*_#\s]+|[*_#:\s]+$/g, '')
+    .replace(/^[-–—•*_#\s]+|[-–—•*_#:\s]+$/g, '')
     .trim();
 
-  if (!cleaned) return '';
+  if (!cleaned || isReservedMetadataKey(cleaned)) return '';
 
   // If passed "Earth dialogue — surprised" or "Earth: ...", take the first part before em-dash or dash with spaces
   if (cleaned.includes('—') || cleaned.includes('–')) {
@@ -1385,7 +1406,7 @@ export function cleanSpeakerName(rawSpeaker: string): string {
   // Strip dialogue/speech/character suffixes
   cleaned = cleaned.replace(/\s+(?:dialogue|speech|speaking|line|lines|character|संवाद|बोली)$/i, '').trim();
 
-  if (!cleaned) return '';
+  if (!cleaned || isReservedMetadataKey(cleaned)) return '';
 
   // Strip descriptive suffix with "the ...": "Pip the bear" -> "Pip", "Bruno the bear" -> "Bruno", "Maya the little girl" -> "Maya"
   // Keep names like "Professor Owl", "Mama Bear", "Barnaby Bear" intact!

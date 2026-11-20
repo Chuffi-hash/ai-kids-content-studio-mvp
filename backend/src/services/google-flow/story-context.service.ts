@@ -1,4 +1,5 @@
 import { prisma } from '../database/database.service.js';
+import { isReservedMetadataKey, cleanSpeakerName } from '../story-generation/story-importer.service.js';
 
 export interface SceneContextItem {
   sceneId: string;
@@ -131,7 +132,10 @@ export class StoryContextService {
 
     for (const sc of story.storyCharacters) {
       const char = sc.character;
-      if (!char) continue;
+      if (!char || !char.name || isReservedMetadataKey(char.name)) continue;
+
+      const cleanName = cleanSpeakerName(char.name) || char.name.replace(/^[-–—•*_#\s]+|[-–—•*_#:\s]+$/g, '').trim();
+      if (!cleanName || isReservedMetadataKey(cleanName)) continue;
 
       const visualDesc = char.visualDescription || '';
       const clothing = char.distinctiveFeatures || '';
@@ -139,7 +143,7 @@ export class StoryContextService {
 
       charactersMap.set(char.id, {
         id: char.id,
-        name: char.name,
+        name: cleanName,
         species: char.species || 'Unknown',
         personality: char.personality || 'Friendly',
         visualDescription: visualDesc,
@@ -219,10 +223,12 @@ export class StoryContextService {
         if (!charContext) {
           try {
             const extraChar = await prisma.character.findUnique({ where: { id: cId } });
-            if (extraChar) {
-              charContext = {
-                id: extraChar.id,
-                name: extraChar.name,
+            if (extraChar && !isReservedMetadataKey(extraChar.name)) {
+              const cleanExtraName = cleanSpeakerName(extraChar.name) || extraChar.name.replace(/^[-–—•*_#\s]+|[-–—•*_#:\s]+$/g, '').trim();
+              if (cleanExtraName && !isReservedMetadataKey(cleanExtraName)) {
+                charContext = {
+                  id: extraChar.id,
+                  name: cleanExtraName,
                 species: extraChar.species || 'Unknown',
                 personality: extraChar.personality || 'Friendly',
                 visualDescription: extraChar.visualDescription || '',
@@ -236,6 +242,7 @@ export class StoryContextService {
                 scenesCount: 0,
               };
               charactersMap.set(extraChar.id, charContext);
+              }
             }
           } catch {
             // ignore
