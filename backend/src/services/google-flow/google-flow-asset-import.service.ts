@@ -1,25 +1,29 @@
-import { randomUUID } from 'crypto';
-import path from 'path';
-import { prisma } from '../database/database.service.js';
-import { LocalStorageService } from '../storage/local-storage.service.js';
+import { randomUUID } from "crypto";
+import path from "path";
+import { prisma } from "../database/database.service.js";
+import { LocalStorageService } from "../storage/local-storage.service.js";
 import {
   getSceneBySceneId,
   updateScene,
   createImage,
   getCharacterById,
   updateCharacter,
-} from '../database/database.service.js';
-import { CharacterReferenceService } from '../character-studio/character-reference.service.js';
-import { BackgroundStudioService } from '../background-studio/background-studio.service.js';
+} from "../database/database.service.js";
+import { CharacterReferenceService } from "../character-studio/character-reference.service.js";
+import { BackgroundStudioService } from "../background-studio/background-studio.service.js";
 
 const MAX_IMAGE_BYTES = 25 * 1024 * 1024; // 25 MB
 
 export interface ImportAssetOptions {
-  target: 'scene_background' | 'background_library' | 'character_view' | 'character_reference';
+  target:
+    | "scene_background"
+    | "background_library"
+    | "character_view"
+    | "character_reference";
   imageData: string | Buffer;
   filename?: string;
   mimeType?: string;
-  provider?: 'google_flow' | 'gemini_api' | 'manual_upload' | string;
+  provider?: "google_flow" | "gemini_api" | "manual_upload" | string;
   model?: string;
   sourceJobId?: string;
   flowProjectId?: string;
@@ -27,10 +31,10 @@ export interface ImportAssetOptions {
   // Scene background options
   storyId?: string;
   sceneId?: string;
-  fit?: 'cover' | 'contain';
+  fit?: "cover" | "contain";
   prompt?: string;
   cameraDirection?: string;
-  aspectRatio?: '16:9' | '9:16' | '1:1' | '4:5' | string;
+  aspectRatio?: "16:9" | "9:16" | "1:1" | "4:5" | string;
 
   // Background library options
   name?: string;
@@ -60,8 +64,14 @@ export interface ImportAssetResult {
   characterId?: string;
 }
 
-export { detectImageMime, parseImageDimensions } from './image-dimension-helper.js';
-import { detectImageMime, parseImageDimensions } from './image-dimension-helper.js';
+export {
+  detectImageMime,
+  parseImageDimensions,
+} from "./image-dimension-helper.js";
+import {
+  detectImageMime,
+  parseImageDimensions,
+} from "./image-dimension-helper.js";
 
 export class GoogleFlowAssetImportService {
   private static storageService = new LocalStorageService();
@@ -85,46 +95,69 @@ export class GoogleFlowAssetImportService {
   /**
    * Unified asset import handler for Google Flow generated media.
    */
-  public static async importAsset(options: ImportAssetOptions): Promise<ImportAssetResult> {
-    const { target, imageData, filename: rawFilename, aspectRatio = '16:9' } = options;
+  public static async importAsset(
+    options: ImportAssetOptions,
+  ): Promise<ImportAssetResult> {
+    const {
+      target,
+      imageData,
+      filename: rawFilename,
+      aspectRatio = "16:9",
+    } = options;
 
     if (!target) {
-      throw new Error('target is required (scene_background, background_library, character_view, character_reference).');
+      throw new Error(
+        "target is required (scene_background, background_library, character_view, character_reference).",
+      );
     }
 
     if (!imageData) {
-      throw new Error('imageData (base64 string or Buffer) is required.');
+      throw new Error("imageData (base64 string or Buffer) is required.");
     }
 
     // 1. Decode to Buffer
     let buffer: Buffer;
-    if (typeof imageData === 'string') {
-      const clean = imageData.replace(/^data:image\/[a-zA-Z0-9.+_-]+;base64,/, '');
-      buffer = Buffer.from(clean, 'base64');
+    if (typeof imageData === "string") {
+      const clean = imageData.replace(
+        /^data:image\/[a-zA-Z0-9.+_-]+;base64,/,
+        "",
+      );
+      buffer = Buffer.from(clean, "base64");
     } else if (Buffer.isBuffer(imageData)) {
       buffer = imageData;
     } else {
-      throw new Error('Invalid image data type.');
+      throw new Error("Invalid image data type.");
     }
 
     // 2. Validate Size
     if (buffer.length === 0) {
-      throw new Error('Image data is empty (0 bytes).');
+      throw new Error("Image data is empty (0 bytes).");
     }
 
     if (buffer.length > MAX_IMAGE_BYTES) {
-      throw new Error(`Image size (${(buffer.length / (1024 * 1024)).toFixed(1)}MB) exceeds maximum 25MB limit.`);
+      throw new Error(
+        `Image size (${(buffer.length / (1024 * 1024)).toFixed(1)}MB) exceeds maximum 25MB limit.`,
+      );
     }
 
     // 3. Validate MIME Type / Magic Bytes
     const detected = detectImageMime(buffer);
     if (!detected) {
-      throw new Error('Unsupported image format. Google Flow assets must be valid PNG, JPEG, or WebP images.');
+      throw new Error(
+        "Unsupported image format. Google Flow assets must be valid PNG, JPEG, or WebP images.",
+      );
     }
 
     const { width, height } = parseImageDimensions(buffer);
-    if (!Number.isInteger(width) || !Number.isInteger(height) || width < 32 || height < 32) {
-      throw new Error(`Invalid or unknown dimensions: ${width}x${height}px. Assets must be full-resolution scenes or character references, not placeholder pixels.`);
+    if (
+      !Number.isInteger(width) ||
+      !Number.isInteger(height) ||
+      width < 32 ||
+      height < 32
+    ) {
+      throw new Error(
+        `Invalid or unknown dimensions: ${width}x${height}px. Assets must be full-resolution scenes or character references, not placeholder pixels.`,
+      );
     }
     const fileId = randomUUID();
     const storageFilename = `flow-${target}-${Date.now()}-${fileId.slice(0, 8)}.${detected.ext}`;
@@ -132,9 +165,9 @@ export class GoogleFlowAssetImportService {
     // ----------------------------------------------------------------
     // Target A: Scene Background
     // ----------------------------------------------------------------
-    if (target === 'scene_background') {
+    if (target === "scene_background") {
       if (!options.sceneId) {
-        throw new Error('sceneId is required when target is scene_background.');
+        throw new Error("sceneId is required when target is scene_background.");
       }
 
       const scene = await getSceneBySceneId(options.sceneId);
@@ -143,33 +176,63 @@ export class GoogleFlowAssetImportService {
       }
 
       if (options.storyId && scene.storyId !== options.storyId) {
-        throw new Error(`Scene ${options.sceneId} does not belong to story ${options.storyId}`);
+        throw new Error(
+          `Scene ${options.sceneId} does not belong to story ${options.storyId}`,
+        );
       }
 
       if (options.sourceJobId) {
         try {
-          const genJob = await prisma.generationJob.findUnique({ where: { id: options.sourceJobId } });
+          const genJob = await prisma.generationJob.findUnique({
+            where: { id: options.sourceJobId },
+          });
           if (genJob) {
             if (genJob.sceneId && genJob.sceneId !== options.sceneId) {
-              throw new Error(`Generation job ${options.sourceJobId} does not belong to scene ${options.sceneId}`);
+              throw new Error(
+                `Generation job ${options.sourceJobId} does not belong to scene ${options.sceneId}`,
+              );
             }
-            if (genJob.storyId && options.storyId && genJob.storyId !== options.storyId) {
-              throw new Error(`Generation job ${options.sourceJobId} does not belong to story ${options.storyId}`);
+            if (
+              genJob.storyId &&
+              options.storyId &&
+              genJob.storyId !== options.storyId
+            ) {
+              throw new Error(
+                `Generation job ${options.sourceJobId} does not belong to story ${options.storyId}`,
+              );
             }
           }
         } catch (jobCheckErr: any) {
-          if (jobCheckErr.message?.includes("does not belong to")) throw jobCheckErr;
+          if (jobCheckErr.message?.includes("does not belong to"))
+            throw jobCheckErr;
         }
       }
 
-      const { url } = await this.storageService.saveFile(buffer, storageFilename, detected.mimeType);
+      const { url } = await this.storageService.saveFile(
+        buffer,
+        storageFilename,
+        detected.mimeType,
+      );
 
       const currentAnim = (scene.animationData || {}) as any;
-      const fit = options.fit === 'contain' ? 'contain' : 'cover';
-      const prompt = options.prompt || currentAnim.background?.prompt || scene.visualPrompt || 'Google Flow scene background';
-      const cameraDirection = options.cameraDirection || scene.cameraDirection || 'Eye-level wide shot';
-      const provider = options.provider || 'google_flow';
-      const model = options.model || (provider === 'google_flow' ? 'google_flow' : (provider === 'gemini_api' ? 'gemini-imagen' : 'manual_upload'));
+      const fit = options.fit === "contain" ? "contain" : "cover";
+      const prompt =
+        options.prompt ||
+        currentAnim.background?.prompt ||
+        scene.visualPrompt ||
+        "Google Flow scene background";
+      const cameraDirection =
+        options.cameraDirection ||
+        scene.cameraDirection ||
+        "Eye-level wide shot";
+      const provider = options.provider || "google_flow";
+      const model =
+        options.model ||
+        (provider === "google_flow"
+          ? "google_flow"
+          : provider === "gemini_api"
+            ? "gemini-imagen"
+            : "manual_upload");
 
       const updatedAnimData = {
         ...currentAnim,
@@ -206,12 +269,12 @@ export class GoogleFlowAssetImportService {
         imageUrl: url,
         width,
         height,
-        status: 'completed',
+        status: "completed",
       });
 
       return {
         success: true,
-        target: 'scene_background',
+        target: "scene_background",
         assetId: scene.sceneId,
         imageUrl: url,
         width,
@@ -229,19 +292,27 @@ export class GoogleFlowAssetImportService {
     // ----------------------------------------------------------------
     // Target B: Background Library
     // ----------------------------------------------------------------
-    if (target === 'background_library') {
-      const asset = await this.getBackgroundStudioService().importFromGoogleFlow({
-        name: options.name || (rawFilename ? path.basename(rawFilename, path.extname(rawFilename)) : 'Google Flow Background'),
-        environmentType: options.environmentType || 'Storybook Environment',
-        imageBufferOrBase64: buffer,
-        filename: rawFilename || storageFilename,
-        notes: options.notes || options.prompt || 'Imported via Google Flow Studio',
-        aspectRatio: (aspectRatio as any) || '16:9',
-      });
+    if (target === "background_library") {
+      const asset =
+        await this.getBackgroundStudioService().importFromGoogleFlow({
+          name:
+            options.name ||
+            (rawFilename
+              ? path.basename(rawFilename, path.extname(rawFilename))
+              : "Google Flow Background"),
+          environmentType: options.environmentType || "Storybook Environment",
+          imageBufferOrBase64: buffer,
+          filename: rawFilename || storageFilename,
+          notes:
+            options.notes ||
+            options.prompt ||
+            "Imported via Google Flow Studio",
+          aspectRatio: (aspectRatio as any) || "16:9",
+        });
 
       return {
         success: true,
-        target: 'background_library',
+        target: "background_library",
         assetId: asset.id,
         imageUrl: asset.imageUrl,
         width: asset.width,
@@ -258,9 +329,11 @@ export class GoogleFlowAssetImportService {
     // ----------------------------------------------------------------
     // Target C & D: Character View / Reference
     // ----------------------------------------------------------------
-    if (target === 'character_view' || target === 'character_reference') {
+    if (target === "character_view" || target === "character_reference") {
       if (!options.characterId) {
-        throw new Error('characterId is required when target is character_view or character_reference.');
+        throw new Error(
+          "characterId is required when target is character_view or character_reference.",
+        );
       }
 
       const character = await getCharacterById(options.characterId);
@@ -268,31 +341,53 @@ export class GoogleFlowAssetImportService {
         throw new Error(`Character not found: ${options.characterId}`);
       }
 
-      const { url } = await this.storageService.saveFile(buffer, storageFilename, detected.mimeType);
+      const { url } = await this.storageService.saveFile(
+        buffer,
+        storageFilename,
+        detected.mimeType,
+      );
 
-      const view = options.view || 'front';
-      const isMaster = Boolean(options.isMasterReference || target === 'character_reference');
+      const view = options.view || "front";
+      const isMaster = Boolean(
+        options.isMasterReference || target === "character_reference",
+      );
       const assetId = `flow-${options.characterId}-${view}-${Date.now()}`;
 
-      const provider = options.provider || 'google_flow';
-      const model = options.model || (provider === 'google_flow' ? 'google_flow' : (provider === 'gemini_api' ? 'gemini-imagen' : 'manual_upload'));
+      const provider = options.provider || "google_flow";
+      const model =
+        options.model ||
+        (provider === "google_flow"
+          ? "google_flow"
+          : provider === "gemini_api"
+            ? "gemini-imagen"
+            : "manual_upload");
 
-      const registered = await this.getCharacterReferenceService().saveAssetToCharacter(options.characterId, {
-        id: assetId,
-        assetType: isMaster ? 'main' : (view === 'front' ? 'main' : 'turnaround'),
-        direction: view,
-        prompt: options.prompt || `${character.name} reference view (${view})`,
-        provider,
-        model,
-        url,
-        isMasterReference: isMaster,
-        createdAt: new Date().toISOString(),
-      });
+      const registered =
+        await this.getCharacterReferenceService().saveAssetToCharacter(
+          options.characterId,
+          {
+            id: assetId,
+            assetType: isMaster
+              ? "main"
+              : view === "front"
+                ? "main"
+                : "turnaround",
+            direction: view,
+            prompt:
+              options.prompt || `${character.name} reference view (${view})`,
+            provider,
+            model,
+            url,
+            isMasterReference: isMaster,
+            createdAt: new Date().toISOString(),
+          },
+        );
 
       if (isMaster) {
         await updateCharacter(options.characterId, {
           referenceImageUrl: url,
-          referenceImagePrompt: options.prompt || `${character.name} master reference`,
+          referenceImagePrompt:
+            options.prompt || `${character.name} master reference`,
         });
       }
 

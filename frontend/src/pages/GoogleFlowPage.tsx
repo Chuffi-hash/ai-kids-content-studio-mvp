@@ -60,7 +60,12 @@ import { CollapsibleSection } from "../components/editor/CollapsibleSection";
 import GoogleFlowCharacterPanel from "../components/characters/GoogleFlowCharacterPanel";
 import "./GoogleFlowPage.css";
 
-type ActiveTab = "setup" | "connection" | "project" | "background" | "character";
+type ActiveTab =
+  | "setup"
+  | "connection"
+  | "project"
+  | "background"
+  | "character";
 
 function cleanScriptText(text?: string): string {
   if (!text) return "";
@@ -70,12 +75,12 @@ function cleanScriptText(text?: string): string {
   // Aggressively strip known script/fountain labels and markdown markers
   clean = clean.replace(
     /^(?:Visual Direction|Visual Style|Environment|Camera Angle|Lighting|Narration|Action|Scene Description|Shot Instruction)\s*:?[\s*_#:"“”'«»]*\s*/gi,
-    ""
+    "",
   );
   clean = clean.replace(/^[*_~`#\s"“”'«»]+|[*_~`#\s"“”'«»]+$/g, "");
   clean = clean.replace(
     /^(?:Visual Direction|Visual Style|Environment|Camera Angle|Lighting|Narration|Action|Scene Description|Shot Instruction)\s*:?[\s*_#:"“”'«»]*\s*/gi,
-    ""
+    "",
   );
   clean = clean.replace(/^[*_~`#\s"“”'«»]+|[*_~`#\s"“”'«»]+$/g, "");
   return clean.trim();
@@ -225,31 +230,55 @@ export default function GoogleFlowPage() {
   // ----------------------------------------------------
   // Story-Aware Production Studio State & Context
   // ----------------------------------------------------
-  const [storyContext, setStoryContext] = useState<StoryFlowContextResponse | null>(null);
+  const [storyContext, setStoryContext] =
+    useState<StoryFlowContextResponse | null>(null);
   const [isLoadingStoryContext, setIsLoadingStoryContext] = useState(false);
-  const [storyContextError, setStoryContextError] = useState<string | null>(null);
-  const [generationProvider, setGenerationProvider] = useState<"gemini_api" | "google_flow">("gemini_api");
-  const [providersStatus, setProvidersStatus] = useState<ProvidersStatusResponse | null>(null);
+  const [storyContextError, setStoryContextError] = useState<string | null>(
+    null,
+  );
+  const [generationProvider, setGenerationProvider] = useState<
+    "gemini_api" | "google_flow"
+  >("gemini_api");
+  const [providersStatus, setProvidersStatus] =
+    useState<ProvidersStatusResponse | null>(null);
 
   // Background Studio specific state
-  const [generatingSceneIds, setGeneratingSceneIds] = useState<Record<string, boolean>>({});
+  const [generatingSceneIds, setGeneratingSceneIds] = useState<
+    Record<string, boolean>
+  >({});
   const [sceneErrors, setSceneErrors] = useState<Record<string, string>>({});
   const [isBatchBgRunning, setIsBatchBgRunning] = useState(false);
   const [batchBgSummary, setBatchBgSummary] = useState<string | null>(null);
   const [bgFilter, setBgFilter] = useState<"all" | "ready" | "missing">("all");
-  const [selectedSceneIdsForBatch, setSelectedSceneIdsForBatch] = useState<string[]>([]);
-  const [expandedSceneSettings, setExpandedSceneSettings] = useState<Record<string, boolean>>({});
-  const [sceneCustomPrompts, setSceneCustomPrompts] = useState<Record<string, string>>({});
-  const [activeDirectivesSceneId, setActiveDirectivesSceneId] = useState<string | null>(null);
-  const [copiedPromptSceneId, setCopiedPromptSceneId] = useState<string | null>(null);
+  const [selectedSceneIdsForBatch, setSelectedSceneIdsForBatch] = useState<
+    string[]
+  >([]);
+  const [expandedSceneSettings, setExpandedSceneSettings] = useState<
+    Record<string, boolean>
+  >({});
+  const [sceneCustomPrompts, setSceneCustomPrompts] = useState<
+    Record<string, string>
+  >({});
+  const [activeDirectivesSceneId, setActiveDirectivesSceneId] = useState<
+    string | null
+  >(null);
+  const [copiedPromptSceneId, setCopiedPromptSceneId] = useState<string | null>(
+    null,
+  );
 
   // Character Studio specific state
-  const [generatingCharIds, setGeneratingCharIds] = useState<Record<string, boolean>>({});
-  const [syncingCharIds, setSyncingCharIds] = useState<Record<string, boolean>>({});
+  const [generatingCharIds, setGeneratingCharIds] = useState<
+    Record<string, boolean>
+  >({});
+  const [syncingCharIds, setSyncingCharIds] = useState<Record<string, boolean>>(
+    {},
+  );
   const [charErrors, setCharErrors] = useState<Record<string, string>>({});
   const [isBatchCharRunning, setIsBatchCharRunning] = useState(false);
   const [batchCharSummary, setBatchCharSummary] = useState<string | null>(null);
-  const [charFilter, setCharFilter] = useState<"all" | "ready" | "missing">("all");
+  const [charFilter, setCharFilter] = useState<"all" | "ready" | "missing">(
+    "all",
+  );
 
   // Lightbox Preview Modal
   interface PreviewAssetModalData {
@@ -261,9 +290,12 @@ export default function GoogleFlowPage() {
     characterId?: string;
     type: "background" | "character";
   }
-  const [previewAsset, setPreviewAsset] = useState<PreviewAssetModalData | null>(null);
+  const [previewAsset, setPreviewAsset] =
+    useState<PreviewAssetModalData | null>(null);
   const setPreviewModalUrl = (url: string | null) =>
-    setPreviewAsset(url ? { url, title: "Asset Preview", type: "background" } : null);
+    setPreviewAsset(
+      url ? { url, title: "Asset Preview", type: "background" } : null,
+    );
 
   // ----------------------------------------------------
   // Unified Flow Project Resolution
@@ -474,7 +506,9 @@ export default function GoogleFlowPage() {
   const handleRecoverCredential = async () => {
     try {
       await recoverCredential();
-      setConnectionSuccess("Credential safely recovered and re-encrypted with active master key.");
+      setConnectionSuccess(
+        "Credential safely recovered and re-encrypted with active master key.",
+      );
     } catch (err: any) {
       setConnectionError(err.message || "Failed to recover credential.");
     }
@@ -484,7 +518,9 @@ export default function GoogleFlowPage() {
     setShowResetConfirm(false);
     try {
       await resetProfile();
-      setConnectionSuccess("Dedicated Google Flow browser profile reset. Sign in again via Open Browser.");
+      setConnectionSuccess(
+        "Dedicated Google Flow browser profile reset. Sign in again via Open Browser.",
+      );
     } catch (err: any) {
       setConnectionError(err.message || "Failed to reset profile.");
     }
@@ -499,9 +535,13 @@ export default function GoogleFlowPage() {
       if (health.online) {
         await verifyAuthentication();
         await refreshSession();
-        setConnectionSuccess("Verification checks complete. Worker and browser session are responsive.");
+        setConnectionSuccess(
+          "Verification checks complete. Worker and browser session are responsive.",
+        );
       } else {
-        setConnectionError("Worker is offline on loopback (http://127.0.0.1:4177). Please start the worker.");
+        setConnectionError(
+          "Worker is offline on loopback (http://127.0.0.1:4177). Please start the worker.",
+        );
       }
     } catch (err: any) {
       setConnectionError(err.message || "Verification check failed.");
@@ -512,7 +552,9 @@ export default function GoogleFlowPage() {
 
   const handleCopyStartupCommand = async () => {
     try {
-      await navigator.clipboard.writeText("cd flow-worker\nnpm install\nnpm start");
+      await navigator.clipboard.writeText(
+        "cd flow-worker\nnpm install\nnpm start",
+      );
       setCopiedCmdToast(true);
       setTimeout(() => setCopiedCmdToast(false), 2500);
     } catch {}
@@ -725,7 +767,9 @@ export default function GoogleFlowPage() {
 
         while (!completed) {
           if (Date.now() - pollStart > timeoutMs) {
-            console.warn("UI timeout reached while generation job is still active on server.");
+            console.warn(
+              "UI timeout reached while generation job is still active on server.",
+            );
             break;
           }
 
@@ -735,7 +779,9 @@ export default function GoogleFlowPage() {
               completed = true;
               break;
             case "failed":
-              throw new Error(job?.error || "Google Flow background generation failed.");
+              throw new Error(
+                job?.error || "Google Flow background generation failed.",
+              );
             case "cancelled":
               throw new Error("Google Flow generation was cancelled.");
             default:
@@ -764,9 +810,14 @@ export default function GoogleFlowPage() {
       return next;
     });
     try {
-      const res = await syncCharacterToGoogleFlowDirect(selectedStoryId, characterId);
+      const res = await syncCharacterToGoogleFlowDirect(
+        selectedStoryId,
+        characterId,
+      );
       await loadStoryContext(selectedStoryId);
-      setBatchCharSummary(res.message || "Character synchronized with Google Flow.");
+      setBatchCharSummary(
+        res.message || "Character synchronized with Google Flow.",
+      );
       setTimeout(() => setBatchCharSummary(null), 5000);
     } catch (err: any) {
       setCharErrors((prev) => ({
@@ -783,9 +834,12 @@ export default function GoogleFlowPage() {
     setIsBatchBgRunning(true);
     setBatchBgSummary(null);
     try {
-      const res = await generateAllMissingBackgroundsDirect(selectedStoryId, generationProvider);
+      const res = await generateAllMissingBackgroundsDirect(
+        selectedStoryId,
+        generationProvider,
+      );
       setBatchBgSummary(
-        `Batch generation finished: ${res.generated} created, ${res.failed} failed out of ${res.total} missing scenes.`
+        `Batch generation finished: ${res.generated} created, ${res.failed} failed out of ${res.total} missing scenes.`,
       );
       await loadStoryContext(selectedStoryId);
     } catch (err: any) {
@@ -815,7 +869,9 @@ export default function GoogleFlowPage() {
         fail++;
       }
     }
-    setBatchBgSummary(`Batch selected finished: ${succ} generated, ${fail} failed.`);
+    setBatchBgSummary(
+      `Batch selected finished: ${succ} generated, ${fail} failed.`,
+    );
     setSelectedSceneIdsForBatch([]);
     await loadStoryContext(selectedStoryId);
     setIsBatchBgRunning(false);
@@ -823,8 +879,12 @@ export default function GoogleFlowPage() {
 
   const handleGenerateCharacterAsset = async (
     characterId: string,
-    assetType: "master_reference" | "turnaround" | "expression" | "pose" = "master_reference",
-    variation?: string
+    assetType:
+      | "master_reference"
+      | "turnaround"
+      | "expression"
+      | "pose" = "master_reference",
+    variation?: string,
   ) => {
     if (!selectedStoryId) return;
     setGeneratingCharIds((prev) => ({ ...prev, [characterId]: true }));
@@ -849,7 +909,9 @@ export default function GoogleFlowPage() {
 
         while (!completed) {
           if (Date.now() - pollStart > timeoutMs) {
-            console.warn("UI timeout reached while character generation job is still active on server.");
+            console.warn(
+              "UI timeout reached while character generation job is still active on server.",
+            );
             break;
           }
 
@@ -859,7 +921,9 @@ export default function GoogleFlowPage() {
               completed = true;
               break;
             case "failed":
-              throw new Error(job?.error || "Google Flow character generation failed.");
+              throw new Error(
+                job?.error || "Google Flow character generation failed.",
+              );
             case "cancelled":
               throw new Error("Google Flow generation was cancelled.");
             default:
@@ -885,9 +949,12 @@ export default function GoogleFlowPage() {
     setIsBatchCharRunning(true);
     setBatchCharSummary(null);
     try {
-      const res = await generateAllMissingCharacterReferencesDirect(selectedStoryId, generationProvider);
+      const res = await generateAllMissingCharacterReferencesDirect(
+        selectedStoryId,
+        generationProvider,
+      );
       setBatchCharSummary(
-        `Batch generation finished: ${res.generated} master references created, ${res.failed} failed out of ${res.total} missing.`
+        `Batch generation finished: ${res.generated} master references created, ${res.failed} failed out of ${res.total} missing.`,
       );
       await loadStoryContext(selectedStoryId);
       getAllCharacters().then(setCharacters);
@@ -900,7 +967,9 @@ export default function GoogleFlowPage() {
 
   const toggleSceneSelectForBatch = (sceneId: string) => {
     setSelectedSceneIdsForBatch((prev) =>
-      prev.includes(sceneId) ? prev.filter((id) => id !== sceneId) : [...prev, sceneId]
+      prev.includes(sceneId)
+        ? prev.filter((id) => id !== sceneId)
+        : [...prev, sceneId],
     );
   };
 
@@ -923,8 +992,12 @@ export default function GoogleFlowPage() {
   // Selected Character for Section D
   // ----------------------------------------------------
   const selectedCharacter = selectedCharacterId
-    ? (storyContext?.characters || []).find((c) => c.id === selectedCharacterId) ||
-      (!selectedStoryId ? characters.find((c) => c.id === selectedCharacterId) || null : null)
+    ? (storyContext?.characters || []).find(
+        (c) => c.id === selectedCharacterId,
+      ) ||
+      (!selectedStoryId
+        ? characters.find((c) => c.id === selectedCharacterId) || null
+        : null)
     : null;
 
   return (
@@ -1074,15 +1147,19 @@ export default function GoogleFlowPage() {
                 )}
               </span>
             )}
-            {activeTab === "character" && selectedStoryId && storyContext?.characters && storyContext.characters.length > 0 && (
-              <span style={{ marginLeft: "12px" }}>
-                Active Character:{" "}
-                <strong>
-                  {storyContext.characters.find((c) => c.id === selectedCharacterId)?.name ||
-                    storyContext.characters[0].name}
-                </strong>
-              </span>
-            )}
+            {activeTab === "character" &&
+              selectedStoryId &&
+              storyContext?.characters &&
+              storyContext.characters.length > 0 && (
+                <span style={{ marginLeft: "12px" }}>
+                  Active Character:{" "}
+                  <strong>
+                    {storyContext.characters.find(
+                      (c) => c.id === selectedCharacterId,
+                    )?.name || storyContext.characters[0].name}
+                  </strong>
+                </span>
+              )}
           </div>
           {editorStory && (
             <button
@@ -1154,26 +1231,43 @@ export default function GoogleFlowPage() {
         <div className="flow-tab-content">
           <div className="flow-wizard-container">
             {/* Step 1: Requirements Check */}
-            <div className={`flow-wizard-step ${workerHealth?.online ? "completed" : "active"}`}>
+            <div
+              className={`flow-wizard-step ${workerHealth?.online ? "completed" : "active"}`}
+            >
               <div className="flow-step-header">
                 <div className="flow-step-title-group">
                   <div className="flow-step-number">1</div>
-                  <h3 className="flow-step-title">Requirements & Loopback Networking</h3>
+                  <h3 className="flow-step-title">
+                    Requirements & Loopback Networking
+                  </h3>
                 </div>
-                <span className={`flow-status-badge ${workerHealth?.online ? "online" : "neutral"}`}>
-                  <span className={`flow-status-dot ${workerHealth?.online ? "green" : "gray"}`} />
+                <span
+                  className={`flow-status-badge ${workerHealth?.online ? "online" : "neutral"}`}
+                >
+                  <span
+                    className={`flow-status-dot ${workerHealth?.online ? "green" : "gray"}`}
+                  />
                   {workerHealth?.online ? "Port 4177 Online" : "Loopback Ready"}
                 </span>
               </div>
               <div className="flow-step-body">
                 <p>
-                  Google Flow integration communicates securely via a loopback Playwright worker running locally at{" "}
-                  <code>http://127.0.0.1:4177</code>. Ensure Node.js (v18+) is installed on this laptop.
+                  Google Flow integration communicates securely via a loopback
+                  Playwright worker running locally at{" "}
+                  <code>http://127.0.0.1:4177</code>. Ensure Node.js (v18+) is
+                  installed on this laptop.
                 </p>
                 <div className="flow-checklist">
-                  <div className={`flow-checklist-item ${workerHealth?.online ? "pass" : "pending"}`}>
+                  <div
+                    className={`flow-checklist-item ${workerHealth?.online ? "pass" : "pending"}`}
+                  >
                     <span>{workerHealth?.online ? "✓" : "○"}</span>
-                    <span>Loopback Worker (127.0.0.1:4177): {workerHealth?.online ? `Online (${workerHealth.latencyMs}ms)` : "Offline (Start in step 4)"}</span>
+                    <span>
+                      Loopback Worker (127.0.0.1:4177):{" "}
+                      {workerHealth?.online
+                        ? `Online (${workerHealth.latencyMs}ms)`
+                        : "Offline (Start in step 4)"}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -1184,15 +1278,25 @@ export default function GoogleFlowPage() {
               <div className="flow-step-header">
                 <div className="flow-step-title-group">
                   <div className="flow-step-number">2</div>
-                  <h3 className="flow-step-title">Choose Browser Engine Channel</h3>
+                  <h3 className="flow-step-title">
+                    Choose Browser Engine Channel
+                  </h3>
                 </div>
                 <span className="flow-tab-badge">Configured</span>
               </div>
               <div className="flow-step-body">
                 <p>
-                  We recommend using your installed Google Chrome browser for the highest compatibility with Google Flow.
+                  We recommend using your installed Google Chrome browser for
+                  the highest compatibility with Google Flow.
                 </p>
-                <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", marginTop: "4px" }}>
+                <div
+                  style={{
+                    display: "flex",
+                    gap: "12px",
+                    flexWrap: "wrap",
+                    marginTop: "4px",
+                  }}
+                >
                   <button
                     type="button"
                     className={`flow-btn ${browserChannel === "chrome" ? "primary" : "secondary"}`}
@@ -1222,32 +1326,47 @@ export default function GoogleFlowPage() {
               <div className="flow-step-header">
                 <div className="flow-step-title-group">
                   <div className="flow-step-number">3</div>
-                  <h3 className="flow-step-title">Dedicated Persistent Chrome Profile</h3>
+                  <h3 className="flow-step-title">
+                    Dedicated Persistent Chrome Profile
+                  </h3>
                 </div>
                 <span className="flow-tab-badge">Isolated & Secure</span>
               </div>
               <div className="flow-step-body">
                 <p>
-                  To keep you signed in without automating passwords or CAPTCHAs, Playwright runs inside a dedicated, isolated browser directory:
+                  To keep you signed in without automating passwords or
+                  CAPTCHAs, Playwright runs inside a dedicated, isolated browser
+                  directory:
                 </p>
                 <div className="flow-code-block">
-                  {session?.configuredProfileDir || workerHealth?.profileDir || "C:\\Users\\...\\AppData\\Local\\AIKidsContentStudio\\GoogleFlowChromeProfile"}
+                  {session?.configuredProfileDir ||
+                    workerHealth?.profileDir ||
+                    "C:\\Users\\...\\AppData\\Local\\AIKidsContentStudio\\GoogleFlowChromeProfile"}
                 </div>
-                <div className="flow-callout security" style={{ marginTop: "6px" }}>
+                <div
+                  className="flow-callout security"
+                  style={{ marginTop: "6px" }}
+                >
                   <strong>🔒 Privacy Protection:</strong>
                   <span>
-                    Your everyday personal Chrome profile and browsing history are NEVER touched or modified. Only session cookies inside this dedicated studio profile are preserved across restarts.
+                    Your everyday personal Chrome profile and browsing history
+                    are NEVER touched or modified. Only session cookies inside
+                    this dedicated studio profile are preserved across restarts.
                   </span>
                 </div>
               </div>
             </div>
 
             {/* Step 4: Worker Startup Command */}
-            <div className={`flow-wizard-step ${workerHealth?.online ? "completed" : "active"}`}>
+            <div
+              className={`flow-wizard-step ${workerHealth?.online ? "completed" : "active"}`}
+            >
               <div className="flow-step-header">
                 <div className="flow-step-title-group">
                   <div className="flow-step-number">4</div>
-                  <h3 className="flow-step-title">Start the Local Playwright Worker</h3>
+                  <h3 className="flow-step-title">
+                    Start the Local Playwright Worker
+                  </h3>
                 </div>
                 <button
                   type="button"
@@ -1260,35 +1379,65 @@ export default function GoogleFlowPage() {
               </div>
               <div className="flow-step-body">
                 <p>
-                  In a terminal window on your computer, navigate to the <code>flow-worker</code> directory and run:
+                  In a terminal window on your computer, navigate to the{" "}
+                  <code>flow-worker</code> directory and run:
                 </p>
-                <div className="flow-code-block" style={{ cursor: "pointer" }} onClick={handleCopyStartupCommand}>
-                  cd flow-worker<br />
-                  npm install<br />
+                <div
+                  className="flow-code-block"
+                  style={{ cursor: "pointer" }}
+                  onClick={handleCopyStartupCommand}
+                >
+                  cd flow-worker
+                  <br />
+                  npm install
+                  <br />
                   npm start
                 </div>
-                <span style={{ fontSize: "11px", color: "var(--color-text-secondary, #94a3b8)" }}>
-                  💡 The worker connects automatically to PostgreSQL to provision its encrypted authorization token on launch.
+                <span
+                  style={{
+                    fontSize: "11px",
+                    color: "var(--color-text-secondary, #94a3b8)",
+                  }}
+                >
+                  💡 The worker connects automatically to PostgreSQL to
+                  provision its encrypted authorization token on launch.
                 </span>
               </div>
             </div>
 
             {/* Step 5: Manual Google Sign-In */}
-            <div className={`flow-wizard-step ${session?.googleAuthenticated ? "completed" : "active"}`}>
+            <div
+              className={`flow-wizard-step ${session?.googleAuthenticated ? "completed" : "active"}`}
+            >
               <div className="flow-step-header">
                 <div className="flow-step-title-group">
                   <div className="flow-step-number">5</div>
-                  <h3 className="flow-step-title">Sign In to Google (One-Time Manual Step)</h3>
+                  <h3 className="flow-step-title">
+                    Sign In to Google (One-Time Manual Step)
+                  </h3>
                 </div>
-                <span className={`flow-status-badge ${session?.googleAuthenticated ? "online" : "neutral"}`}>
-                  {session?.googleAuthenticated ? "Authenticated" : "Sign-In Required"}
+                <span
+                  className={`flow-status-badge ${session?.googleAuthenticated ? "online" : "neutral"}`}
+                >
+                  {session?.googleAuthenticated
+                    ? "Authenticated"
+                    : "Sign-In Required"}
                 </span>
               </div>
               <div className="flow-step-body">
                 <p>
-                  Google prohibits automated logins. Click below to open a visible browser window where you can sign in to your Google account directly.
+                  Google prohibits automated logins. Click below to open a
+                  visible browser window where you can sign in to your Google
+                  account directly.
                 </p>
-                <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginTop: "4px" }}>
+                <div
+                  style={{
+                    display: "flex",
+                    gap: "10px",
+                    flexWrap: "wrap",
+                    marginTop: "4px",
+                  }}
+                >
                   <button
                     type="button"
                     className="flow-btn primary"
@@ -1309,8 +1458,14 @@ export default function GoogleFlowPage() {
                     </button>
                   )}
                 </div>
-                <span style={{ fontSize: "11px", color: "var(--color-text-secondary, #94a3b8)" }}>
-                  Once signed in, the session persists in your dedicated profile directory so you stay logged in.
+                <span
+                  style={{
+                    fontSize: "11px",
+                    color: "var(--color-text-secondary, #94a3b8)",
+                  }}
+                >
+                  Once signed in, the session persists in your dedicated profile
+                  directory so you stay logged in.
                 </span>
               </div>
             </div>
@@ -1320,7 +1475,9 @@ export default function GoogleFlowPage() {
               <div className="flow-step-header">
                 <div className="flow-step-title-group">
                   <div className="flow-step-number">6</div>
-                  <h3 className="flow-step-title">Run Integration Health Checks</h3>
+                  <h3 className="flow-step-title">
+                    Run Integration Health Checks
+                  </h3>
                 </div>
                 <button
                   type="button"
@@ -1329,38 +1486,88 @@ export default function GoogleFlowPage() {
                   onClick={handleRunWizardVerification}
                 >
                   <CheckIcon size={13} />
-                  <span>{isVerifyingWizard ? "Verifying..." : "Run Verification"}</span>
+                  <span>
+                    {isVerifyingWizard ? "Verifying..." : "Run Verification"}
+                  </span>
                 </button>
               </div>
               <div className="flow-step-body">
-                <p>Verify that the worker, database encryption, and browser session are functioning properly:</p>
+                <p>
+                  Verify that the worker, database encryption, and browser
+                  session are functioning properly:
+                </p>
                 <div className="flow-checklist">
-                  <div className={`flow-checklist-item ${workerHealth?.online ? "pass" : "fail"}`}>
+                  <div
+                    className={`flow-checklist-item ${workerHealth?.online ? "pass" : "fail"}`}
+                  >
                     <span>{workerHealth?.online ? "✓" : "✕"}</span>
-                    <span>Local Worker Service: {workerHealth?.online ? `Online (${workerHealth.latencyMs}ms)` : "Offline"}</span>
+                    <span>
+                      Local Worker Service:{" "}
+                      {workerHealth?.online
+                        ? `Online (${workerHealth.latencyMs}ms)`
+                        : "Offline"}
+                    </span>
                   </div>
-                  <div className={`flow-checklist-item ${credentialStatus?.configured ? "pass" : "fail"}`}>
+                  <div
+                    className={`flow-checklist-item ${credentialStatus?.configured ? "pass" : "fail"}`}
+                  >
                     <span>{credentialStatus?.configured ? "✓" : "✕"}</span>
-                    <span>Database Credential: {credentialStatus?.configured ? "Configured (PostgreSQL AES-256-GCM)" : "Unconfigured"}</span>
+                    <span>
+                      Database Credential:{" "}
+                      {credentialStatus?.configured
+                        ? "Configured (PostgreSQL AES-256-GCM)"
+                        : "Unconfigured"}
+                    </span>
                   </div>
-                  <div className={`flow-checklist-item ${workerHealth?.credentialDecryptable ? "pass" : workerHealth?.credentialError ? "fail" : "pending"}`}>
-                    <span>{workerHealth?.credentialDecryptable ? "✓" : workerHealth?.credentialError ? "✕" : "○"}</span>
-                    <span>Credential Decryption: {workerHealth?.credentialDecryptable ? "Verified" : (workerHealth?.credentialError ? "Decryption failed" : "Pending verification")}</span>
+                  <div
+                    className={`flow-checklist-item ${workerHealth?.credentialDecryptable ? "pass" : workerHealth?.credentialError ? "fail" : "pending"}`}
+                  >
+                    <span>
+                      {workerHealth?.credentialDecryptable
+                        ? "✓"
+                        : workerHealth?.credentialError
+                          ? "✕"
+                          : "○"}
+                    </span>
+                    <span>
+                      Credential Decryption:{" "}
+                      {workerHealth?.credentialDecryptable
+                        ? "Verified"
+                        : workerHealth?.credentialError
+                          ? "Decryption failed"
+                          : "Pending verification"}
+                    </span>
                   </div>
-                  <div className={`flow-checklist-item ${session?.browserRunning ? "pass" : "pending"}`}>
+                  <div
+                    className={`flow-checklist-item ${session?.browserRunning ? "pass" : "pending"}`}
+                  >
                     <span>{session?.browserRunning ? "✓" : "○"}</span>
-                    <span>Browser Session: {session?.browserRunning ? "Running" : "Closed (Will open on demand)"}</span>
+                    <span>
+                      Browser Session:{" "}
+                      {session?.browserRunning
+                        ? "Running"
+                        : "Closed (Will open on demand)"}
+                    </span>
                   </div>
-                  <div className={`flow-checklist-item ${session?.googleAuthenticated ? "pass" : "pending"}`}>
+                  <div
+                    className={`flow-checklist-item ${session?.googleAuthenticated ? "pass" : "pending"}`}
+                  >
                     <span>{session?.googleAuthenticated ? "✓" : "○"}</span>
-                    <span>Google Authentication: {session?.googleAuthenticated ? "Authenticated" : "Sign-in needed"}</span>
+                    <span>
+                      Google Authentication:{" "}
+                      {session?.googleAuthenticated
+                        ? "Authenticated"
+                        : "Sign-in needed"}
+                    </span>
                   </div>
                 </div>
               </div>
             </div>
 
             {/* Step 7: Ready to Generate */}
-            <div className={`flow-wizard-step ${workerHealth?.online ? "completed" : ""}`}>
+            <div
+              className={`flow-wizard-step ${workerHealth?.online ? "completed" : ""}`}
+            >
               <div className="flow-step-header">
                 <div className="flow-step-title-group">
                   <div className="flow-step-number">7</div>
@@ -1370,9 +1577,18 @@ export default function GoogleFlowPage() {
               </div>
               <div className="flow-step-body">
                 <p>
-                  You are all set! Use the navigation tabs above or the shortcuts below to generate environment backgrounds or character views:
+                  You are all set! Use the navigation tabs above or the
+                  shortcuts below to generate environment backgrounds or
+                  character views:
                 </p>
-                <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginTop: "4px" }}>
+                <div
+                  style={{
+                    display: "flex",
+                    gap: "10px",
+                    flexWrap: "wrap",
+                    marginTop: "4px",
+                  }}
+                >
                   <button
                     type="button"
                     className="flow-btn primary"
@@ -1407,7 +1623,10 @@ export default function GoogleFlowPage() {
             <div className="flow-card-header">
               <div>
                 <h3>🛠️ Troubleshooting & Emergency Recovery</h3>
-                <p>One-click tools to resolve stalled workers, mismatched encryption keys, or profile locks.</p>
+                <p>
+                  One-click tools to resolve stalled workers, mismatched
+                  encryption keys, or profile locks.
+                </p>
               </div>
             </div>
 
@@ -1490,13 +1709,17 @@ export default function GoogleFlowPage() {
                   }}
                 >
                   Google rejected automated sign-in on{" "}
-                  <code>accounts.google.com/v3/signin/rejected</code>. To resolve this:
+                  <code>accounts.google.com/v3/signin/rejected</code>. To
+                  resolve this:
                   <br />
-                  1. Set <code>FLOW_BROWSER_CHANNEL=chrome</code> in your settings to use installed Google Chrome.
+                  1. Set <code>FLOW_BROWSER_CHANNEL=chrome</code> in your
+                  settings to use installed Google Chrome.
                   <br />
-                  2. Alternatively, sign in manually via the "Open Persistent Flow Browser" button.
+                  2. Alternatively, sign in manually via the "Open Persistent
+                  Flow Browser" button.
                   <br />
-                  3. You can also generate in Google Flow manually and import assets directly via Background Studio or Character Studio.
+                  3. You can also generate in Google Flow manually and import
+                  assets directly via Background Studio or Character Studio.
                 </p>
               </div>
             </div>
@@ -1504,7 +1727,9 @@ export default function GoogleFlowPage() {
 
           <div className="flow-grid-2col">
             {/* Left Column: Worker Controls & Credential Management */}
-            <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+            <div
+              style={{ display: "flex", flexDirection: "column", gap: "20px" }}
+            >
               {/* Card 1: Worker & Browser Controls (Collapsible) */}
               <CollapsibleSection
                 id="sec-worker-controls"
@@ -1541,7 +1766,9 @@ export default function GoogleFlowPage() {
                 <div className="flow-form-group">
                   <label className="flow-form-label">
                     Local Worker URL
-                    <span className="sub">Must bind to loopback (127.0.0.1)</span>
+                    <span className="sub">
+                      Must bind to loopback (127.0.0.1)
+                    </span>
                   </label>
                   <input
                     type="text"
@@ -1555,7 +1782,9 @@ export default function GoogleFlowPage() {
                 <div className="flow-form-group">
                   <label className="flow-form-label">
                     Browser Engine Channel
-                    <span className="sub">Google Chrome installed vs Bundled Chromium</span>
+                    <span className="sub">
+                      Google Chrome installed vs Bundled Chromium
+                    </span>
                   </label>
                   <select
                     className="flow-select"
@@ -1654,29 +1883,46 @@ export default function GoogleFlowPage() {
               >
                 <div className="flow-diagnostics-grid">
                   <div className="flow-diag-item">
-                    <span className="flow-diag-label">Credential Configured</span>
-                    <span
-                      className="flow-diag-value"
-                      style={{ color: credentialStatus?.configured ? "#10b981" : "#f59e0b" }}
-                    >
-                      {credentialStatus?.configured ? "Yes (PostgreSQL AES-256-GCM)" : "No"}
+                    <span className="flow-diag-label">
+                      Credential Configured
                     </span>
-                  </div>
-
-                  <div className="flow-diag-item">
-                    <span className="flow-diag-label">Master Encryption Key</span>
                     <span
                       className="flow-diag-value"
                       style={{
-                        color: workerHealth?.masterKeyAvailable !== false ? "#10b981" : "#ef4444",
+                        color: credentialStatus?.configured
+                          ? "#10b981"
+                          : "#f59e0b",
                       }}
                     >
-                      {workerHealth?.masterKeyAvailable !== false ? "Healthy (Active)" : "Missing / Unreadable"}
+                      {credentialStatus?.configured
+                        ? "Yes (PostgreSQL AES-256-GCM)"
+                        : "No"}
                     </span>
                   </div>
 
                   <div className="flow-diag-item">
-                    <span className="flow-diag-label">Credential Decryption</span>
+                    <span className="flow-diag-label">
+                      Master Encryption Key
+                    </span>
+                    <span
+                      className="flow-diag-value"
+                      style={{
+                        color:
+                          workerHealth?.masterKeyAvailable !== false
+                            ? "#10b981"
+                            : "#ef4444",
+                      }}
+                    >
+                      {workerHealth?.masterKeyAvailable !== false
+                        ? "Healthy (Active)"
+                        : "Missing / Unreadable"}
+                    </span>
+                  </div>
+
+                  <div className="flow-diag-item">
+                    <span className="flow-diag-label">
+                      Credential Decryption
+                    </span>
                     <span
                       className="flow-diag-value"
                       style={{
@@ -1703,32 +1949,40 @@ export default function GoogleFlowPage() {
                   </div>
 
                   <div className="flow-diag-item">
-                    <span className="flow-diag-label">Worker Pairing Status</span>
+                    <span className="flow-diag-label">
+                      Worker Pairing Status
+                    </span>
                     <span
                       className="flow-diag-value"
                       style={{
                         color:
                           credentialStatus?.metadata?.pairingStatus === "paired"
                             ? "#10b981"
-                            : credentialStatus?.metadata?.pairingStatus === "awaiting_provisioning"
+                            : credentialStatus?.metadata?.pairingStatus ===
+                                "awaiting_provisioning"
                               ? "#f59e0b"
                               : "#94a3b8",
                       }}
                     >
                       {credentialStatus?.metadata?.pairingStatus === "paired"
                         ? "Paired (Active)"
-                        : credentialStatus?.metadata?.pairingStatus === "awaiting_provisioning"
+                        : credentialStatus?.metadata?.pairingStatus ===
+                            "awaiting_provisioning"
                           ? "Awaiting Provisioning"
                           : "Unpaired"}
                     </span>
                   </div>
 
                   <div className="flow-diag-item">
-                    <span className="flow-diag-label">Worker Authentication</span>
+                    <span className="flow-diag-label">
+                      Worker Authentication
+                    </span>
                     <span
                       className="flow-diag-value"
                       style={{
-                        color: workerHealth?.isProvisioned ? "#10b981" : "#f59e0b",
+                        color: workerHealth?.isProvisioned
+                          ? "#10b981"
+                          : "#f59e0b",
                       }}
                     >
                       {workerHealth?.isProvisioned
@@ -1738,32 +1992,38 @@ export default function GoogleFlowPage() {
                   </div>
                 </div>
 
-                {workerHealth?.credentialDecryptable === false && workerHealth?.credentialError && (
-                  <div
-                    className="flow-callout warning"
-                    style={{
-                      borderColor: "rgba(239, 68, 68, 0.5)",
-                      background: "rgba(239, 68, 68, 0.12)",
-                      marginTop: "12px",
-                    }}
-                  >
-                    <AlertTriangleIcon size={16} />
-                    <div>
-                      <strong style={{ color: "#f87171" }}>Decryption Recovery Required</strong>
-                      <p style={{ margin: "4px 0 8px 0", fontSize: "12px" }}>
-                        The active master key cannot decrypt the existing credential token ({workerHealth.credentialError}). Click below to safely re-encrypt a fresh token with zero impact to your browser profile.
-                      </p>
-                      <button
-                        type="button"
-                        className="flow-btn primary sm"
-                        disabled={isSessionBusy}
-                        onClick={handleRecoverCredential}
-                      >
-                        Recover Credential Now
-                      </button>
+                {workerHealth?.credentialDecryptable === false &&
+                  workerHealth?.credentialError && (
+                    <div
+                      className="flow-callout warning"
+                      style={{
+                        borderColor: "rgba(239, 68, 68, 0.5)",
+                        background: "rgba(239, 68, 68, 0.12)",
+                        marginTop: "12px",
+                      }}
+                    >
+                      <AlertTriangleIcon size={16} />
+                      <div>
+                        <strong style={{ color: "#f87171" }}>
+                          Decryption Recovery Required
+                        </strong>
+                        <p style={{ margin: "4px 0 8px 0", fontSize: "12px" }}>
+                          The active master key cannot decrypt the existing
+                          credential token ({workerHealth.credentialError}).
+                          Click below to safely re-encrypt a fresh token with
+                          zero impact to your browser profile.
+                        </p>
+                        <button
+                          type="button"
+                          className="flow-btn primary sm"
+                          disabled={isSessionBusy}
+                          onClick={handleRecoverCredential}
+                        >
+                          Recover Credential Now
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
 
                 {showRegenConfirm ? (
                   <div
@@ -1783,7 +2043,9 @@ export default function GoogleFlowPage() {
                           lineHeight: 1.45,
                         }}
                       >
-                        Regenerating credentials creates a new token in PostgreSQL. Any running worker sessions must be reconnected to receive the new credential.
+                        Regenerating credentials creates a new token in
+                        PostgreSQL. Any running worker sessions must be
+                        reconnected to receive the new credential.
                       </p>
                       <div style={{ display: "flex", gap: "8px" }}>
                         <button
@@ -1804,7 +2066,14 @@ export default function GoogleFlowPage() {
                     </div>
                   </div>
                 ) : (
-                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "12px" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: "8px",
+                      flexWrap: "wrap",
+                      marginTop: "12px",
+                    }}
+                  >
                     <button
                       type="button"
                       className="flow-btn secondary sm"
@@ -1865,7 +2134,9 @@ export default function GoogleFlowPage() {
                 </div>
 
                 <div className="flow-diag-item">
-                  <span className="flow-diag-label">Configured Profile Directory</span>
+                  <span className="flow-diag-label">
+                    Configured Profile Directory
+                  </span>
                   <span
                     className="flow-diag-value"
                     title={
@@ -1881,7 +2152,9 @@ export default function GoogleFlowPage() {
                 </div>
 
                 <div className="flow-diag-item">
-                  <span className="flow-diag-label">Profile Directory Exists</span>
+                  <span className="flow-diag-label">
+                    Profile Directory Exists
+                  </span>
                   <span className="flow-diag-value">
                     {session?.profileDirExists !== undefined
                       ? session.profileDirExists
@@ -1892,14 +2165,18 @@ export default function GoogleFlowPage() {
                 </div>
 
                 <div className="flow-diag-item">
-                  <span className="flow-diag-label">Worker Controls Active Browser</span>
+                  <span className="flow-diag-label">
+                    Worker Controls Active Browser
+                  </span>
                   <span className="flow-diag-value">
                     {session?.ownsActiveBrowser ? "Yes" : "No"}
                   </span>
                 </div>
 
                 <div className="flow-diag-item">
-                  <span className="flow-diag-label">Google Sign-in Required</span>
+                  <span className="flow-diag-label">
+                    Google Sign-in Required
+                  </span>
                   <span className="flow-diag-value">
                     {session?.manualLoginRequired ||
                     session?.authenticationStatus === "login_required"
@@ -1913,30 +2190,58 @@ export default function GoogleFlowPage() {
 
                 <div className="flow-diag-item">
                   <span className="flow-diag-label">Credential Storage</span>
-                  <span className="flow-diag-value">PostgreSQL (AES-256-GCM)</span>
+                  <span className="flow-diag-value">
+                    PostgreSQL (AES-256-GCM)
+                  </span>
                 </div>
               </div>
 
-              <div className="flow-callout security" style={{ marginTop: "16px" }}>
+              <div
+                className="flow-callout security"
+                style={{ marginTop: "16px" }}
+              >
                 <strong>🔒 Security & Privacy Architecture:</strong>
                 <span>
-                  The worker binds exclusively to loopback (<code>127.0.0.1</code>) and uses automated provisioning. Credentials are never exposed to the frontend browser or stored in plaintext. The browser session runs in a dedicated persistent profile so your Google login is remembered across studio restarts without automating passwords or CAPTCHAs.
+                  The worker binds exclusively to loopback (
+                  <code>127.0.0.1</code>) and uses automated provisioning.
+                  Credentials are never exposed to the frontend browser or
+                  stored in plaintext. The browser session runs in a dedicated
+                  persistent profile so your Google login is remembered across
+                  studio restarts without automating passwords or CAPTCHAs.
                 </span>
               </div>
 
               <div style={{ marginTop: "16px" }}>
-                <strong style={{ fontSize: "12px", display: "block", marginBottom: "6px" }}>
+                <strong
+                  style={{
+                    fontSize: "12px",
+                    display: "block",
+                    marginBottom: "6px",
+                  }}
+                >
                   1. Start the local worker process:
                 </strong>
-                <div className="flow-code-block" style={{ cursor: "pointer" }} onClick={handleCopyStartupCommand}>
-                  cd flow-worker<br />
-                  npm install<br />
+                <div
+                  className="flow-code-block"
+                  style={{ cursor: "pointer" }}
+                  onClick={handleCopyStartupCommand}
+                >
+                  cd flow-worker
+                  <br />
+                  npm install
+                  <br />
                   npm start
                 </div>
               </div>
 
               <div>
-                <strong style={{ fontSize: "12px", display: "block", marginBottom: "6px" }}>
+                <strong
+                  style={{
+                    fontSize: "12px",
+                    display: "block",
+                    marginBottom: "6px",
+                  }}
+                >
                   2. Install Playwright Chromium (if not already installed):
                 </strong>
                 <div className="flow-code-block">
@@ -1945,12 +2250,20 @@ export default function GoogleFlowPage() {
               </div>
 
               <div>
-                <strong style={{ fontSize: "12px", display: "block", marginBottom: "6px" }}>
+                <strong
+                  style={{
+                    fontSize: "12px",
+                    display: "block",
+                    marginBottom: "6px",
+                  }}
+                >
                   3. Automated Provisioning Handshake:
                 </strong>
                 <div className="flow-code-block">
-                  # The worker automatically provisions its bearer token from PostgreSQL at startup.<br />
-                  # No manual editing of FLOW_WORKER_TOKEN in .env is required.
+                  # The worker automatically provisions its bearer token from
+                  PostgreSQL at startup.
+                  <br /># No manual editing of FLOW_WORKER_TOKEN in .env is
+                  required.
                 </div>
               </div>
 
@@ -2166,7 +2479,9 @@ export default function GoogleFlowPage() {
             });
             const isAllFilteredSelected =
               filteredScenes.length > 0 &&
-              filteredScenes.every((sc) => selectedSceneIdsForBatch.includes(sc.sceneId));
+              filteredScenes.every((sc) =>
+                selectedSceneIdsForBatch.includes(sc.sceneId),
+              );
 
             return (
               <>
@@ -2196,9 +2511,14 @@ export default function GoogleFlowPage() {
                       </div>
 
                       <div className="flow-story-stat-badge">
-                        <span>{storyContext?.summary?.totalScenes || 0} Scenes</span>
+                        <span>
+                          {storyContext?.summary?.totalScenes || 0} Scenes
+                        </span>
                         <span className="dot-divider">•</span>
-                        <span>{storyContext?.summary?.totalCharacters || 0} Characters</span>
+                        <span>
+                          {storyContext?.summary?.totalCharacters || 0}{" "}
+                          Characters
+                        </span>
                       </div>
                     </div>
 
@@ -2212,10 +2532,16 @@ export default function GoogleFlowPage() {
                           <select
                             className="flow-select flow-provider-select"
                             value={generationProvider}
-                            onChange={(e) => setGenerationProvider(e.target.value as any)}
+                            onChange={(e) =>
+                              setGenerationProvider(e.target.value as any)
+                            }
                           >
-                            <option value="gemini_api">⚡ Gemini Imagen 3 (Direct Cloud API)</option>
-                            <option value="google_flow">🤖 Google Flow (Loopback Playwright Worker)</option>
+                            <option value="gemini_api">
+                              ⚡ Gemini Imagen 3 (Direct Cloud API)
+                            </option>
+                            <option value="google_flow">
+                              🤖 Google Flow (Loopback Playwright Worker)
+                            </option>
                           </select>
                         </div>
                       </div>
@@ -2224,7 +2550,9 @@ export default function GoogleFlowPage() {
                         {generationProvider === "gemini_api" ? (
                           <span
                             className={`flow-provider-pill ${
-                              providersStatus?.gemini_api?.available !== false ? "ready" : "offline"
+                              providersStatus?.gemini_api?.available !== false
+                                ? "ready"
+                                : "offline"
                             }`}
                           >
                             <span className="flow-status-dot" />
@@ -2235,22 +2563,35 @@ export default function GoogleFlowPage() {
                             </span>
                           </span>
                         ) : (
-                          <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "8px",
+                              flexWrap: "wrap",
+                            }}
+                          >
                             <span
                               className={`flow-provider-pill ${
-                                workerHealth?.isProvisioned ? "ready" : "offline"
+                                workerHealth?.isProvisioned
+                                  ? "ready"
+                                  : "offline"
                               }`}
                             >
                               <span className="flow-status-dot" />
                               <span>
-                                {workerHealth?.isProvisioned ? "Flow Worker Paired" : "Worker Offline"}
+                                {workerHealth?.isProvisioned
+                                  ? "Flow Worker Paired"
+                                  : "Worker Offline"}
                               </span>
                             </span>
                             <button
                               type="button"
                               className="flow-btn secondary sm flow-open-browser-btn"
                               disabled={isSessionBusy}
-                              onClick={() => openBrowser(effectiveProjectUrl || undefined)}
+                              onClick={() =>
+                                openBrowser(effectiveProjectUrl || undefined)
+                              }
                               title="Launch or bring up visible Google Flow companion browser"
                             >
                               <span>Open Flow Browser ↗</span>
@@ -2270,21 +2611,32 @@ export default function GoogleFlowPage() {
                           className={`flow-segment-btn ${bgFilter === "all" ? "active" : ""}`}
                           onClick={() => setBgFilter("all")}
                         >
-                          All <span className="flow-segment-count">({storyContext?.summary?.totalScenes || 0})</span>
+                          All{" "}
+                          <span className="flow-segment-count">
+                            ({storyContext?.summary?.totalScenes || 0})
+                          </span>
                         </button>
                         <button
                           type="button"
                           className={`flow-segment-btn ${bgFilter === "ready" ? "active" : ""}`}
                           onClick={() => setBgFilter("ready")}
                         >
-                          Ready <span className="flow-segment-count">({storyContext?.summary?.scenesWithBackground || 0})</span>
+                          Ready{" "}
+                          <span className="flow-segment-count">
+                            ({storyContext?.summary?.scenesWithBackground || 0})
+                          </span>
                         </button>
                         <button
                           type="button"
                           className={`flow-segment-btn ${bgFilter === "missing" ? "active" : ""}`}
                           onClick={() => setBgFilter("missing")}
                         >
-                          Missing <span className="flow-segment-count">({storyContext?.summary?.missingBackgroundCount || 0})</span>
+                          Missing{" "}
+                          <span className="flow-segment-count">
+                            (
+                            {storyContext?.summary?.missingBackgroundCount || 0}
+                            )
+                          </span>
                         </button>
                       </div>
 
@@ -2294,7 +2646,9 @@ export default function GoogleFlowPage() {
                             type="checkbox"
                             className="flow-standard-checkbox"
                             checked={isAllFilteredSelected}
-                            onChange={() => toggleSelectAllScenes(filteredScenes)}
+                            onChange={() =>
+                              toggleSelectAllScenes(filteredScenes)
+                            }
                           />
                           <span>Select All ({filteredScenes.length})</span>
                         </label>
@@ -2309,7 +2663,10 @@ export default function GoogleFlowPage() {
                           disabled={isBatchBgRunning}
                           onClick={handleGenerateSelectedBackgrounds}
                         >
-                          <span>↻ Regenerate Selected ({selectedSceneIdsForBatch.length})</span>
+                          <span>
+                            ↻ Regenerate Selected (
+                            {selectedSceneIdsForBatch.length})
+                          </span>
                         </button>
                       )}
 
@@ -2318,7 +2675,8 @@ export default function GoogleFlowPage() {
                         className="flow-btn primary sm flow-batch-generate-btn"
                         disabled={
                           isBatchBgRunning ||
-                          (storyContext?.summary?.missingBackgroundCount || 0) === 0
+                          (storyContext?.summary?.missingBackgroundCount ||
+                            0) === 0
                         }
                         onClick={handleBatchGenerateMissingBackgrounds}
                       >
@@ -2335,12 +2693,19 @@ export default function GoogleFlowPage() {
 
                 {/* Batch Status Message */}
                 {batchBgSummary && (
-                  <div className="flow-callout info" style={{ marginBottom: "12px" }}>
+                  <div
+                    className="flow-callout info"
+                    style={{ marginBottom: "12px" }}
+                  >
                     <span>{batchBgSummary}</span>
                     <button
                       type="button"
                       className="flow-btn secondary sm"
-                      style={{ marginLeft: "auto", padding: "2px 8px", fontSize: "11px" }}
+                      style={{
+                        marginLeft: "auto",
+                        padding: "2px 8px",
+                        fontSize: "11px",
+                      }}
                       onClick={() => setBatchBgSummary(null)}
                     >
                       Dismiss
@@ -2350,9 +2715,14 @@ export default function GoogleFlowPage() {
 
                 {/* Context Loading / Error */}
                 {isLoadingStoryContext && (
-                  <div className="flow-card" style={{ textAlign: "center", padding: "30px" }}>
+                  <div
+                    className="flow-card"
+                    style={{ textAlign: "center", padding: "30px" }}
+                  >
                     <SparklesIcon size={24} color="#8b5cf6" />
-                    <p style={{ marginTop: "8px" }}>Loading scenes from PostgreSQL story context...</p>
+                    <p style={{ marginTop: "8px" }}>
+                      Loading scenes from PostgreSQL story context...
+                    </p>
                   </div>
                 )}
 
@@ -2363,7 +2733,9 @@ export default function GoogleFlowPage() {
                     <button
                       type="button"
                       className="flow-btn secondary sm"
-                      onClick={() => selectedStoryId && loadStoryContext(selectedStoryId)}
+                      onClick={() =>
+                        selectedStoryId && loadStoryContext(selectedStoryId)
+                      }
                     >
                       Retry
                     </button>
@@ -2372,10 +2744,22 @@ export default function GoogleFlowPage() {
 
                 {/* Scene Cards Grid */}
                 {!isLoadingStoryContext && filteredScenes.length === 0 ? (
-                  <div className="flow-card" style={{ textAlign: "center", padding: "40px" }}>
+                  <div
+                    className="flow-card"
+                    style={{ textAlign: "center", padding: "40px" }}
+                  >
                     <ImageIcon size={32} color="#64748b" />
-                    <h4 style={{ marginTop: "10px", color: "var(--color-text)" }}>No scenes found</h4>
-                    <p style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}>
+                    <h4
+                      style={{ marginTop: "10px", color: "var(--color-text)" }}
+                    >
+                      No scenes found
+                    </h4>
+                    <p
+                      style={{
+                        fontSize: "13px",
+                        color: "var(--color-text-secondary)",
+                      }}
+                    >
                       {bgFilter !== "all"
                         ? `No scenes match the "${bgFilter}" filter.`
                         : "This story has no scenes created yet. Add scenes in the Story Editor to generate backgrounds."}
@@ -2404,12 +2788,20 @@ export default function GoogleFlowPage() {
                   !isLoadingStoryContext && (
                     <div className="flow-scene-grid">
                       {filteredScenes.map((sc) => {
-                        const isGenerating = Boolean(generatingSceneIds[sc.sceneId]);
-                        const isSelected = selectedSceneIdsForBatch.includes(sc.sceneId);
-                        const isSettingsOpen = Boolean(expandedSceneSettings[sc.sceneId]);
+                        const isGenerating = Boolean(
+                          generatingSceneIds[sc.sceneId],
+                        );
+                        const isSelected = selectedSceneIdsForBatch.includes(
+                          sc.sceneId,
+                        );
+                        const isSettingsOpen = Boolean(
+                          expandedSceneSettings[sc.sceneId],
+                        );
                         const error = sceneErrors[sc.sceneId];
                         const cleanDirection = cleanScriptText(
-                          sc.visualPrompt || sc.narration || sc.environmentDescription
+                          sc.visualPrompt ||
+                            sc.narration ||
+                            sc.environmentDescription,
                         );
 
                         return (
@@ -2426,16 +2818,27 @@ export default function GoogleFlowPage() {
                                   type="checkbox"
                                   className="flow-standard-checkbox"
                                   checked={isSelected}
-                                  onChange={() => toggleSceneSelectForBatch(sc.sceneId)}
+                                  onChange={() =>
+                                    toggleSceneSelectForBatch(sc.sceneId)
+                                  }
                                   title="Select for batch regeneration"
                                 />
-                                <span className="flow-scene-num-badge">Scene {sc.number}</span>
-                                <span className="flow-scene-title" title={sc.title || "Untitled"}>
+                                <span className="flow-scene-num-badge">
+                                  Scene {sc.number}
+                                </span>
+                                <span
+                                  className="flow-scene-title"
+                                  title={sc.title || "Untitled"}
+                                >
                                   {sc.title || "Untitled"}
                                 </span>
                               </div>
-                              <span className={`flow-status-badge ${sc.hasBackground ? "ready" : "missing"}`}>
-                                {sc.hasBackground ? "✓ Plate Ready" : "● Missing Plate"}
+                              <span
+                                className={`flow-status-badge ${sc.hasBackground ? "ready" : "missing"}`}
+                              >
+                                {sc.hasBackground
+                                  ? "✓ Plate Ready"
+                                  : "● Missing Plate"}
                               </span>
                             </div>
 
@@ -2444,7 +2847,9 @@ export default function GoogleFlowPage() {
                               {isGenerating ? (
                                 <div className="flow-scene-generating-thumb">
                                   <div className="flow-generating-spinner" />
-                                  <span className="flow-generating-title">Synthesizing Plate...</span>
+                                  <span className="flow-generating-title">
+                                    Synthesizing Plate...
+                                  </span>
                                   <small className="flow-generating-sub">
                                     {generationProvider === "gemini_api"
                                       ? "Rendering Imagen 3 backdrop"
@@ -2453,7 +2858,12 @@ export default function GoogleFlowPage() {
                                 </div>
                               ) : sc.backgroundUrl ? (
                                 <div
-                                  style={{ width: "100%", height: "100%", position: "relative", cursor: "pointer" }}
+                                  style={{
+                                    width: "100%",
+                                    height: "100%",
+                                    position: "relative",
+                                    cursor: "pointer",
+                                  }}
                                   onClick={() =>
                                     setPreviewAsset({
                                       url: sc.backgroundUrl!,
@@ -2470,16 +2880,36 @@ export default function GoogleFlowPage() {
                                     src={sc.backgroundUrl}
                                     alt={sc.title || `Scene ${sc.number}`}
                                     onError={(e) => {
-                                      (e.target as HTMLElement).style.display = "none";
-                                      const parent = (e.target as HTMLElement).parentElement;
-                                      const fallback = parent?.querySelector(".flow-thumb-fallback") as HTMLElement;
-                                      if (fallback) fallback.style.display = "flex";
+                                      (e.target as HTMLElement).style.display =
+                                        "none";
+                                      const parent = (e.target as HTMLElement)
+                                        .parentElement;
+                                      const fallback = parent?.querySelector(
+                                        ".flow-thumb-fallback",
+                                      ) as HTMLElement;
+                                      if (fallback)
+                                        fallback.style.display = "flex";
                                     }}
                                   />
-                                  <div className="flow-thumb-fallback" style={{ display: "none" }}>
+                                  <div
+                                    className="flow-thumb-fallback"
+                                    style={{ display: "none" }}
+                                  >
                                     <ImageIcon size={22} color="#f59e0b" />
-                                    <span style={{ fontSize: "11px", fontWeight: 600 }}>Image Load Failed</span>
-                                    <small style={{ fontSize: "10px", color: "var(--color-text-secondary)" }}>
+                                    <span
+                                      style={{
+                                        fontSize: "11px",
+                                        fontWeight: 600,
+                                      }}
+                                    >
+                                      Image Load Failed
+                                    </span>
+                                    <small
+                                      style={{
+                                        fontSize: "10px",
+                                        color: "var(--color-text-secondary)",
+                                      }}
+                                    >
                                       Click to view or regenerate
                                     </small>
                                   </div>
@@ -2490,7 +2920,9 @@ export default function GoogleFlowPage() {
                               ) : (
                                 <div
                                   className="flow-scene-empty-thumb"
-                                  onClick={() => handleGenerateSceneBackground(sc.sceneId)}
+                                  onClick={() =>
+                                    handleGenerateSceneBackground(sc.sceneId)
+                                  }
                                   title="Click to generate this background plate"
                                 >
                                   <div className="flow-empty-plate-icon-wrap">
@@ -2508,7 +2940,9 @@ export default function GoogleFlowPage() {
                                       <circle cx="17.5" cy="6.5" r="2.5" />
                                     </svg>
                                   </div>
-                                  <span className="flow-empty-plate-badge">No Background Plate</span>
+                                  <span className="flow-empty-plate-badge">
+                                    No Background Plate
+                                  </span>
                                   <small className="flow-empty-plate-desc">
                                     Character-free environment backdrop
                                   </small>
@@ -2523,18 +2957,36 @@ export default function GoogleFlowPage() {
                             <div className="flow-scene-body">
                               {/* Metadata Chips */}
                               <div className="flow-scene-tags">
-                                <span className="flow-tag" title="Location">📍 {sc.location}</span>
-                                <span className="flow-tag" title="Time of Day">☀️ {sc.timeOfDay}</span>
-                                <span className="flow-tag" title="Lighting">💡 {sc.lighting}</span>
-                                <span className="flow-tag" title="Weather">🌧️ {sc.weather}</span>
-                                <span className="flow-tag" title="Aspect Ratio">📐 {sc.aspectRatio}</span>
+                                <span className="flow-tag" title="Location">
+                                  📍 {sc.location}
+                                </span>
+                                <span className="flow-tag" title="Time of Day">
+                                  ☀️ {sc.timeOfDay}
+                                </span>
+                                <span className="flow-tag" title="Lighting">
+                                  💡 {sc.lighting}
+                                </span>
+                                <span className="flow-tag" title="Weather">
+                                  🌧️ {sc.weather}
+                                </span>
+                                <span className="flow-tag" title="Aspect Ratio">
+                                  📐 {sc.aspectRatio}
+                                </span>
                               </div>
 
                               {/* Direction / Narration Preview */}
-                              <div className="flow-scene-direction" title={cleanDirection}>
-                                <span className="flow-direction-label">🎬 Visual Direction:</span>
+                              <div
+                                className="flow-scene-direction"
+                                title={cleanDirection}
+                              >
+                                <span className="flow-direction-label">
+                                  🎬 Visual Direction:
+                                </span>
                                 <p className="flow-direction-text">
-                                  "{cleanDirection || "Atmospheric scenery matching visual look."}"
+                                  "
+                                  {cleanDirection ||
+                                    "Atmospheric scenery matching visual look."}
+                                  "
                                 </p>
                               </div>
 
@@ -2543,16 +2995,26 @@ export default function GoogleFlowPage() {
                                 <UsersIcon size={12} />
                                 <span className="flow-char-label">Cast:</span>
                                 {sc.charactersInScene.length > 0 ? (
-                                  <div style={{ display: "flex", gap: "5px", flexWrap: "wrap" }}>
+                                  <div
+                                    style={{
+                                      display: "flex",
+                                      gap: "5px",
+                                      flexWrap: "wrap",
+                                    }}
+                                  >
                                     {sc.charactersInScene.map((c) => (
-                                      <span key={c.id} className="flow-char-pill">
+                                      <span
+                                        key={c.id}
+                                        className="flow-char-pill"
+                                      >
                                         👤 {c.name}
                                       </span>
                                     ))}
                                   </div>
                                 ) : (
                                   <span className="flow-char-empty-tag">
-                                    🎙️ Voice-Over Narration • Zero Characters on Plate
+                                    🎙️ Voice-Over Narration • Zero Characters on
+                                    Plate
                                   </span>
                                 )}
                               </div>
@@ -2560,33 +3022,65 @@ export default function GoogleFlowPage() {
                               {/* Error Banner */}
                               {error && (
                                 <div className="flow-scene-error">
-                                  <div style={{ display: "flex", alignItems: "center", gap: "6px", minWidth: 0 }}>
+                                  <div
+                                    style={{
+                                      display: "flex",
+                                      alignItems: "center",
+                                      gap: "6px",
+                                      minWidth: 0,
+                                    }}
+                                  >
                                     <span>⚠️</span>
-                                    <span className="flow-error-text" title={error}>
+                                    <span
+                                      className="flow-error-text"
+                                      title={error}
+                                    >
                                       {error}
                                     </span>
                                   </div>
-                                  <div style={{ display: "flex", gap: "6px", flexShrink: 0 }}>
+                                  <div
+                                    style={{
+                                      display: "flex",
+                                      gap: "6px",
+                                      flexShrink: 0,
+                                    }}
+                                  >
                                     <button
                                       type="button"
                                       className="flow-btn danger sm"
                                       onClick={async () => {
-                                        if (error?.toLowerCase().includes("flow worker") || error?.toLowerCase().includes("bearer token")) {
-                                          try { await reconnectWorker(); } catch {}
+                                        if (
+                                          error
+                                            ?.toLowerCase()
+                                            .includes("flow worker") ||
+                                          error
+                                            ?.toLowerCase()
+                                            .includes("bearer token")
+                                        ) {
+                                          try {
+                                            await reconnectWorker();
+                                          } catch {}
                                         }
-                                        await handleGenerateSceneBackground(sc.sceneId);
+                                        await handleGenerateSceneBackground(
+                                          sc.sceneId,
+                                        );
                                       }}
                                     >
                                       Retry
                                     </button>
-                                    {(error?.includes("active") || error?.includes("stuck") || error?.includes("lock")) && (
+                                    {(error?.includes("active") ||
+                                      error?.includes("stuck") ||
+                                      error?.includes("lock")) && (
                                       <button
                                         type="button"
                                         className="flow-btn secondary sm"
                                         onClick={async () => {
                                           try {
                                             await cancelActiveFlowJob();
-                                            if (selectedStoryId) await loadStoryContext(selectedStoryId);
+                                            if (selectedStoryId)
+                                              await loadStoryContext(
+                                                selectedStoryId,
+                                              );
                                             setSceneErrors((prev) => {
                                               const next = { ...prev };
                                               delete next[sc.sceneId];
@@ -2610,9 +3104,13 @@ export default function GoogleFlowPage() {
                                 type="button"
                                 className="flow-btn primary sm"
                                 disabled={isGenerating || isBatchBgRunning}
-                                onClick={() => handleGenerateSceneBackground(sc.sceneId)}
+                                onClick={() =>
+                                  handleGenerateSceneBackground(sc.sceneId)
+                                }
                                 title={`Generate character-free plate using ${
-                                  generationProvider === "gemini_api" ? "Gemini Imagen 3" : "Google Flow"
+                                  generationProvider === "gemini_api"
+                                    ? "Gemini Imagen 3"
+                                    : "Google Flow"
                                 }`}
                               >
                                 <SparklesIcon size={13} />
@@ -2620,8 +3118,8 @@ export default function GoogleFlowPage() {
                                   {isGenerating
                                     ? "Generating..."
                                     : sc.hasBackground
-                                    ? "↻ Regenerate"
-                                    : "✨ Generate Plate"}
+                                      ? "↻ Regenerate"
+                                      : "✨ Generate Plate"}
                                 </span>
                               </button>
 
@@ -2629,20 +3127,29 @@ export default function GoogleFlowPage() {
                                 <button
                                   type="button"
                                   className={`flow-btn secondary sm ${sceneCustomPrompts[sc.sceneId]?.trim() ? "active" : ""}`}
-                                  onClick={() => setActiveDirectivesSceneId(sc.sceneId)}
+                                  onClick={() =>
+                                    setActiveDirectivesSceneId(sc.sceneId)
+                                  }
                                   title="View / Customize prompt directives in dedicated modal"
                                 >
                                   <SettingsIcon size={13} />
                                   <span>Directives</span>
                                   {sceneCustomPrompts[sc.sceneId]?.trim() && (
-                                    <span className="flow-active-dot" title="Custom override active" />
+                                    <span
+                                      className="flow-active-dot"
+                                      title="Custom override active"
+                                    />
                                   )}
                                 </button>
 
                                 <button
                                   type="button"
                                   className="flow-btn secondary sm"
-                                  onClick={() => navigate(`/editor/${selectedStoryId}?sceneId=${sc.sceneId}`)}
+                                  onClick={() =>
+                                    navigate(
+                                      `/editor/${selectedStoryId}?sceneId=${sc.sceneId}`,
+                                    )
+                                  }
                                   title="Open scene in Story Editor"
                                 >
                                   <span>Editor ↗</span>
@@ -2705,7 +3212,9 @@ export default function GoogleFlowPage() {
                         <span>{allCharacters.length} Characters</span>
                         <span className="dot-divider">•</span>
                         <span>
-                          {storyContext?.summary?.charactersWithMasterReference || 0} Canonical References
+                          {storyContext?.summary
+                            ?.charactersWithMasterReference || 0}{" "}
+                          Canonical References
                         </span>
                       </div>
                     </div>
@@ -2720,10 +3229,16 @@ export default function GoogleFlowPage() {
                           <select
                             className="flow-select flow-provider-select"
                             value={generationProvider}
-                            onChange={(e) => setGenerationProvider(e.target.value as any)}
+                            onChange={(e) =>
+                              setGenerationProvider(e.target.value as any)
+                            }
                           >
-                            <option value="gemini_api">⚡ Gemini Imagen 3 (Direct Cloud API)</option>
-                            <option value="google_flow">🤖 Google Flow (Loopback Playwright Worker)</option>
+                            <option value="gemini_api">
+                              ⚡ Gemini Imagen 3 (Direct Cloud API)
+                            </option>
+                            <option value="google_flow">
+                              🤖 Google Flow (Loopback Playwright Worker)
+                            </option>
                           </select>
                         </div>
                       </div>
@@ -2732,7 +3247,9 @@ export default function GoogleFlowPage() {
                         {generationProvider === "gemini_api" ? (
                           <span
                             className={`flow-provider-pill ${
-                              providersStatus?.gemini_api?.available !== false ? "ready" : "offline"
+                              providersStatus?.gemini_api?.available !== false
+                                ? "ready"
+                                : "offline"
                             }`}
                           >
                             <span className="flow-status-dot" />
@@ -2743,22 +3260,35 @@ export default function GoogleFlowPage() {
                             </span>
                           </span>
                         ) : (
-                          <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "8px",
+                              flexWrap: "wrap",
+                            }}
+                          >
                             <span
                               className={`flow-provider-pill ${
-                                workerHealth?.isProvisioned ? "ready" : "offline"
+                                workerHealth?.isProvisioned
+                                  ? "ready"
+                                  : "offline"
                               }`}
                             >
                               <span className="flow-status-dot" />
                               <span>
-                                {workerHealth?.isProvisioned ? "Flow Worker Paired" : "Worker Offline"}
+                                {workerHealth?.isProvisioned
+                                  ? "Flow Worker Paired"
+                                  : "Worker Offline"}
                               </span>
                             </span>
                             <button
                               type="button"
                               className="flow-btn secondary sm flow-open-browser-btn"
                               disabled={isSessionBusy}
-                              onClick={() => openBrowser(effectiveProjectUrl || undefined)}
+                              onClick={() =>
+                                openBrowser(effectiveProjectUrl || undefined)
+                              }
                               title="Launch or bring up visible Google Flow companion browser"
                             >
                               <span>Open Flow Browser ↗</span>
@@ -2778,21 +3308,34 @@ export default function GoogleFlowPage() {
                           className={`flow-segment-btn ${charFilter === "all" ? "active" : ""}`}
                           onClick={() => setCharFilter("all")}
                         >
-                          All <span className="flow-segment-count">({allCharacters.length})</span>
+                          All{" "}
+                          <span className="flow-segment-count">
+                            ({allCharacters.length})
+                          </span>
                         </button>
                         <button
                           type="button"
                           className={`flow-segment-btn ${charFilter === "ready" ? "active" : ""}`}
                           onClick={() => setCharFilter("ready")}
                         >
-                          Master Ready <span className="flow-segment-count">({storyContext?.summary?.charactersWithMasterReference || 0})</span>
+                          Master Ready{" "}
+                          <span className="flow-segment-count">
+                            (
+                            {storyContext?.summary
+                              ?.charactersWithMasterReference || 0}
+                            )
+                          </span>
                         </button>
                         <button
                           type="button"
                           className={`flow-segment-btn ${charFilter === "missing" ? "active" : ""}`}
                           onClick={() => setCharFilter("missing")}
                         >
-                          Missing Ref <span className="flow-segment-count">({storyContext?.summary?.missingReferenceCount || 0})</span>
+                          Missing Ref{" "}
+                          <span className="flow-segment-count">
+                            ({storyContext?.summary?.missingReferenceCount || 0}
+                            )
+                          </span>
                         </button>
                       </div>
                     </div>
@@ -2803,7 +3346,8 @@ export default function GoogleFlowPage() {
                         className="flow-btn primary sm flow-batch-generate-btn"
                         disabled={
                           isBatchCharRunning ||
-                          (storyContext?.summary?.missingReferenceCount || 0) === 0
+                          (storyContext?.summary?.missingReferenceCount ||
+                            0) === 0
                         }
                         onClick={handleBatchGenerateMissingCharacters}
                       >
@@ -2820,12 +3364,19 @@ export default function GoogleFlowPage() {
 
                 {/* Batch Status Message */}
                 {batchCharSummary && (
-                  <div className="flow-callout info" style={{ marginBottom: "12px" }}>
+                  <div
+                    className="flow-callout info"
+                    style={{ marginBottom: "12px" }}
+                  >
                     <span>{batchCharSummary}</span>
                     <button
                       type="button"
                       className="flow-btn secondary sm"
-                      style={{ marginLeft: "auto", padding: "2px 8px", fontSize: "11px" }}
+                      style={{
+                        marginLeft: "auto",
+                        padding: "2px 8px",
+                        fontSize: "11px",
+                      }}
                       onClick={() => setBatchCharSummary(null)}
                     >
                       Dismiss
@@ -2835,19 +3386,37 @@ export default function GoogleFlowPage() {
 
                 {/* Context Loading / Error */}
                 {isLoadingStoryContext && (
-                  <div className="flow-card" style={{ textAlign: "center", padding: "30px" }}>
+                  <div
+                    className="flow-card"
+                    style={{ textAlign: "center", padding: "30px" }}
+                  >
                     <SparklesIcon size={24} color="#8b5cf6" />
-                    <p style={{ marginTop: "8px" }}>Loading characters from PostgreSQL story context...</p>
+                    <p style={{ marginTop: "8px" }}>
+                      Loading characters from PostgreSQL story context...
+                    </p>
                   </div>
                 )}
 
                 {/* Character Gallery Grid */}
                 {!isLoadingStoryContext && allCharacters.length === 0 ? (
-                  <div className="flow-card" style={{ textAlign: "center", padding: "40px" }}>
+                  <div
+                    className="flow-card"
+                    style={{ textAlign: "center", padding: "40px" }}
+                  >
                     <UsersIcon size={32} color="#64748b" />
-                    <h4 style={{ marginTop: "10px", color: "var(--color-text)" }}>No characters found in this story</h4>
-                    <p style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}>
-                      Add or link characters to this story in Character Studio or the Story Editor.
+                    <h4
+                      style={{ marginTop: "10px", color: "var(--color-text)" }}
+                    >
+                      No characters found in this story
+                    </h4>
+                    <p
+                      style={{
+                        fontSize: "13px",
+                        color: "var(--color-text-secondary)",
+                      }}
+                    >
+                      Add or link characters to this story in Character Studio
+                      or the Story Editor.
                     </p>
                     <button
                       type="button"
@@ -2871,13 +3440,35 @@ export default function GoogleFlowPage() {
                             <div className="flow-char-card-top">
                               <div className="flow-char-portrait">
                                 {isGenerating ? (
-                                  <div className="flow-scene-generating-thumb" style={{ borderRadius: "10px" }}>
-                                    <div className="flow-generating-spinner" style={{ width: "22px", height: "22px", borderWidth: "2px" }} />
-                                    <small style={{ fontSize: "9px", color: "#cbd5e1" }}>Rendering...</small>
+                                  <div
+                                    className="flow-scene-generating-thumb"
+                                    style={{ borderRadius: "10px" }}
+                                  >
+                                    <div
+                                      className="flow-generating-spinner"
+                                      style={{
+                                        width: "22px",
+                                        height: "22px",
+                                        borderWidth: "2px",
+                                      }}
+                                    />
+                                    <small
+                                      style={{
+                                        fontSize: "9px",
+                                        color: "#cbd5e1",
+                                      }}
+                                    >
+                                      Rendering...
+                                    </small>
                                   </div>
                                 ) : ch.referenceImageUrl ? (
                                   <div
-                                    style={{ width: "100%", height: "100%", position: "relative", cursor: "pointer" }}
+                                    style={{
+                                      width: "100%",
+                                      height: "100%",
+                                      position: "relative",
+                                      cursor: "pointer",
+                                    }}
                                     onClick={() =>
                                       setPreviewAsset({
                                         url: ch.referenceImageUrl!,
@@ -2893,15 +3484,26 @@ export default function GoogleFlowPage() {
                                       src={ch.referenceImageUrl}
                                       alt={ch.name}
                                       onError={(e) => {
-                                        (e.target as HTMLElement).style.display = "none";
-                                        const parent = (e.target as HTMLElement).parentElement;
-                                        const fallback = parent?.querySelector(".flow-thumb-fallback") as HTMLElement;
-                                        if (fallback) fallback.style.display = "flex";
+                                        (
+                                          e.target as HTMLElement
+                                        ).style.display = "none";
+                                        const parent = (e.target as HTMLElement)
+                                          .parentElement;
+                                        const fallback = parent?.querySelector(
+                                          ".flow-thumb-fallback",
+                                        ) as HTMLElement;
+                                        if (fallback)
+                                          fallback.style.display = "flex";
                                       }}
                                     />
-                                    <div className="flow-thumb-fallback" style={{ display: "none" }}>
+                                    <div
+                                      className="flow-thumb-fallback"
+                                      style={{ display: "none" }}
+                                    >
                                       <UsersIcon size={18} color="#f59e0b" />
-                                      <small style={{ fontSize: "8px" }}>Load Error</small>
+                                      <small style={{ fontSize: "8px" }}>
+                                        Load Error
+                                      </small>
                                     </div>
                                     <div className="flow-thumb-hover-overlay">
                                       <span>🔍</span>
@@ -2910,12 +3512,25 @@ export default function GoogleFlowPage() {
                                 ) : (
                                   <div
                                     className="flow-char-empty-portrait"
-                                    onClick={() => handleGenerateCharacterAsset(ch.id, "master_reference")}
+                                    onClick={() =>
+                                      handleGenerateCharacterAsset(
+                                        ch.id,
+                                        "master_reference",
+                                      )
+                                    }
                                     title="Click to generate master reference"
                                   >
                                     <UsersIcon size={24} color="#818cf8" />
                                     <small>No Ref</small>
-                                    <span style={{ fontSize: "8.5px", color: "#a78bfa", fontWeight: 700 }}>Generate ⚡</span>
+                                    <span
+                                      style={{
+                                        fontSize: "8.5px",
+                                        color: "#a78bfa",
+                                        fontWeight: 700,
+                                      }}
+                                    >
+                                      Generate ⚡
+                                    </span>
                                   </div>
                                 )}
                               </div>
@@ -2923,20 +3538,41 @@ export default function GoogleFlowPage() {
                               <div className="flow-char-info">
                                 <div className="flow-char-name-row">
                                   <h4 className="flow-char-name">{ch.name}</h4>
-                                  <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
-                                    <span className={`flow-status-badge ${ch.hasMasterReference ? "ready" : "missing"}`}>
-                                      {ch.hasMasterReference ? "✓ Master Ready" : "● Missing Ref"}
+                                  <div
+                                    style={{
+                                      display: "flex",
+                                      gap: "6px",
+                                      alignItems: "center",
+                                    }}
+                                  >
+                                    <span
+                                      className={`flow-status-badge ${ch.hasMasterReference ? "ready" : "missing"}`}
+                                    >
+                                      {ch.hasMasterReference
+                                        ? "✓ Master Ready"
+                                        : "● Missing Ref"}
                                     </span>
                                     {ch.flowMapping?.syncStatus === "synced" ? (
-                                      <span className="flow-status-badge ready" title={`Synced in Google Flow project as @${ch.flowMapping.flowCharacterName}`}>
-                                        ✓ Flow: @{ch.flowMapping.flowCharacterName}
+                                      <span
+                                        className="flow-status-badge ready"
+                                        title={`Synced in Google Flow project as @${ch.flowMapping.flowCharacterName}`}
+                                      >
+                                        ✓ Flow: @
+                                        {ch.flowMapping.flowCharacterName}
                                       </span>
-                                    ) : ch.flowMapping?.syncStatus === "failed" ? (
-                                      <span className="flow-status-badge missing" title="Synchronization to Google Flow failed">
+                                    ) : ch.flowMapping?.syncStatus ===
+                                      "failed" ? (
+                                      <span
+                                        className="flow-status-badge missing"
+                                        title="Synchronization to Google Flow failed"
+                                      >
                                         ⚠️ Sync Failed
                                       </span>
                                     ) : (
-                                      <span className="flow-status-badge neutral" title="Not yet synchronized to Google Flow project">
+                                      <span
+                                        className="flow-status-badge neutral"
+                                        title="Not yet synchronized to Google Flow project"
+                                      >
                                         ● Not in Flow
                                       </span>
                                     )}
@@ -2944,13 +3580,27 @@ export default function GoogleFlowPage() {
                                 </div>
 
                                 <div className="flow-char-tags-row">
-                                  <span className="flow-tag">👤 {ch.species || "Character"}</span>
-                                  <span className="flow-tag">✨ {ch.personality || "Friendly"}</span>
+                                  <span className="flow-tag">
+                                    👤 {ch.species || "Character"}
+                                  </span>
+                                  <span className="flow-tag">
+                                    ✨ {ch.personality || "Friendly"}
+                                  </span>
                                 </div>
 
                                 <div className="flow-char-description">
-                                  <span style={{ fontWeight: 600, color: "var(--color-text)" }}>Look: </span>
-                                  {cleanScriptText(ch.visualDescription || ch.distinctiveFeatures) || "Canonical cartoon look."}
+                                  <span
+                                    style={{
+                                      fontWeight: 600,
+                                      color: "var(--color-text)",
+                                    }}
+                                  >
+                                    Look:{" "}
+                                  </span>
+                                  {cleanScriptText(
+                                    ch.visualDescription ||
+                                      ch.distinctiveFeatures,
+                                  ) || "Canonical cartoon look."}
                                 </div>
                               </div>
                             </div>
@@ -2958,15 +3608,27 @@ export default function GoogleFlowPage() {
                             {/* Database Scene Appearances */}
                             <div className="flow-char-scenes-list">
                               <span className="flow-char-scenes-header">
-                                Appears in {ch.scenesCount} scene{ch.scenesCount === 1 ? "" : "s"}:
+                                Appears in {ch.scenesCount} scene
+                                {ch.scenesCount === 1 ? "" : "s"}:
                               </span>
                               {ch.scenesAppearedIn.length > 0 ? (
-                                <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginTop: "2px" }}>
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    gap: "6px",
+                                    flexWrap: "wrap",
+                                    marginTop: "2px",
+                                  }}
+                                >
                                   {ch.scenesAppearedIn.map((sc) => (
                                     <span
                                       key={sc.sceneId}
                                       className="flow-char-scene-chip"
-                                      onClick={() => navigate(`/editor/${selectedStoryId}?sceneId=${sc.sceneId}`)}
+                                      onClick={() =>
+                                        navigate(
+                                          `/editor/${selectedStoryId}?sceneId=${sc.sceneId}`,
+                                        )
+                                      }
                                       title="Click to jump to this scene in Story Editor"
                                     >
                                       Scene {sc.number}: {sc.title}
@@ -2974,7 +3636,13 @@ export default function GoogleFlowPage() {
                                   ))}
                                 </div>
                               ) : (
-                                <span style={{ fontStyle: "italic", opacity: 0.75, fontSize: "11px" }}>
+                                <span
+                                  style={{
+                                    fontStyle: "italic",
+                                    opacity: 0.75,
+                                    fontSize: "11px",
+                                  }}
+                                >
                                   Not placed in any scene yet
                                 </span>
                               )}
@@ -2983,18 +3651,42 @@ export default function GoogleFlowPage() {
                             {/* Error Banner */}
                             {error && (
                               <div className="flow-char-error">
-                                <div style={{ display: "flex", alignItems: "center", gap: "6px", minWidth: 0 }}>
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "6px",
+                                    minWidth: 0,
+                                  }}
+                                >
                                   <span>⚠️</span>
-                                  <span className="flow-error-text" title={error}>{error}</span>
+                                  <span
+                                    className="flow-error-text"
+                                    title={error}
+                                  >
+                                    {error}
+                                  </span>
                                 </div>
                                 <button
                                   type="button"
                                   className="flow-btn danger sm"
                                   onClick={async () => {
-                                    if (error?.toLowerCase().includes("flow worker") || error?.toLowerCase().includes("bearer token")) {
-                                      try { await reconnectWorker(); } catch {}
+                                    if (
+                                      error
+                                        ?.toLowerCase()
+                                        .includes("flow worker") ||
+                                      error
+                                        ?.toLowerCase()
+                                        .includes("bearer token")
+                                    ) {
+                                      try {
+                                        await reconnectWorker();
+                                      } catch {}
                                     }
-                                    await handleGenerateCharacterAsset(ch.id, "master_reference");
+                                    await handleGenerateCharacterAsset(
+                                      ch.id,
+                                      "master_reference",
+                                    );
                                   }}
                                   style={{ flexShrink: 0 }}
                                 >
@@ -3016,8 +3708,8 @@ export default function GoogleFlowPage() {
                                   {syncingCharIds[ch.id]
                                     ? "Syncing..."
                                     : ch.flowMapping?.syncStatus === "synced"
-                                    ? "↻ Resync Flow"
-                                    : "⚡ Sync to Flow"}
+                                      ? "↻ Resync Flow"
+                                      : "⚡ Sync to Flow"}
                                 </span>
                               </button>
 
@@ -3025,7 +3717,12 @@ export default function GoogleFlowPage() {
                                 type="button"
                                 className="flow-btn secondary sm"
                                 disabled={isGenerating || isBatchCharRunning}
-                                onClick={() => handleGenerateCharacterAsset(ch.id, "master_reference")}
+                                onClick={() =>
+                                  handleGenerateCharacterAsset(
+                                    ch.id,
+                                    "master_reference",
+                                  )
+                                }
                                 title="Generate canonical master reference portrait"
                               >
                                 <SparklesIcon size={13} />
@@ -3033,16 +3730,23 @@ export default function GoogleFlowPage() {
                                   {isGenerating
                                     ? "Generating..."
                                     : ch.hasMasterReference
-                                    ? "↻ Redo Ref"
-                                    : "✨ Generate Ref"}
+                                      ? "↻ Redo Ref"
+                                      : "✨ Generate Ref"}
                                 </span>
                               </button>
 
                               <button
                                 type="button"
                                 className="flow-btn secondary sm"
-                                disabled={!ch.hasMasterReference || isGenerating}
-                                onClick={() => handleGenerateCharacterAsset(ch.id, "turnaround")}
+                                disabled={
+                                  !ch.hasMasterReference || isGenerating
+                                }
+                                onClick={() =>
+                                  handleGenerateCharacterAsset(
+                                    ch.id,
+                                    "turnaround",
+                                  )
+                                }
                                 title="Generate 8-way directional turnaround sheet"
                               >
                                 <span>🔄 Turnaround</span>
@@ -3051,7 +3755,9 @@ export default function GoogleFlowPage() {
                               <button
                                 type="button"
                                 className="flow-btn secondary sm"
-                                onClick={() => navigate(`/characters?characterId=${ch.id}`)}
+                                onClick={() =>
+                                  navigate(`/characters?characterId=${ch.id}`)
+                                }
                                 title="Open in Character Studio"
                               >
                                 <span>Studio ↗</span>
@@ -3078,17 +3784,25 @@ export default function GoogleFlowPage() {
               Reset Dedicated Browser Profile?
             </h3>
             <p>
-              This action will close any active Google Flow browser instance and completely clear the dedicated profile directory:
+              This action will close any active Google Flow browser instance and
+              completely clear the dedicated profile directory:
             </p>
             <div className="flow-code-block">
-              {session?.configuredProfileDir || workerHealth?.profileDir || "C:\\Users\\...\\AppData\\Local\\AIKidsContentStudio\\GoogleFlowChromeProfile"}
+              {session?.configuredProfileDir ||
+                workerHealth?.profileDir ||
+                "C:\\Users\\...\\AppData\\Local\\AIKidsContentStudio\\GoogleFlowChromeProfile"}
             </div>
             <p style={{ fontSize: "12px", color: "#f59e0b" }}>
-              ⚠️ You will be signed out of your Google account inside this dedicated profile and will need to log in again via "Open Persistent Flow Browser".
+              ⚠️ You will be signed out of your Google account inside this
+              dedicated profile and will need to log in again via "Open
+              Persistent Flow Browser".
             </p>
             <div className="flow-callout security" style={{ margin: 0 }}>
               <strong>🔒 Safe Guarantee:</strong>
-              <span>Your everyday personal Google Chrome browser and personal data are completely unaffected.</span>
+              <span>
+                Your everyday personal Google Chrome browser and personal data
+                are completely unaffected.
+              </span>
             </div>
             <div className="flow-modal-actions">
               <button
@@ -3112,14 +3826,22 @@ export default function GoogleFlowPage() {
 
       {/* Lightbox / Enlarged Asset Preview Modal */}
       {previewAsset && (
-        <div className="flow-lightbox-backdrop" onClick={() => setPreviewAsset(null)}>
-          <div className="flow-lightbox-content" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="flow-lightbox-backdrop"
+          onClick={() => setPreviewAsset(null)}
+        >
+          <div
+            className="flow-lightbox-content"
+            onClick={(e) => e.stopPropagation()}
+          >
             {/* Header */}
             <div className="flow-lightbox-header">
               <div className="flow-lightbox-title-box">
                 <h3 className="flow-lightbox-title">{previewAsset.title}</h3>
                 {previewAsset.subtitle && (
-                  <p className="flow-lightbox-subtitle">{previewAsset.subtitle}</p>
+                  <p className="flow-lightbox-subtitle">
+                    {previewAsset.subtitle}
+                  </p>
                 )}
               </div>
               <button
@@ -3141,14 +3863,22 @@ export default function GoogleFlowPage() {
                 onError={(e) => {
                   (e.target as HTMLElement).style.display = "none";
                   const parent = (e.target as HTMLElement).parentElement;
-                  const errorBox = parent?.querySelector(".flow-lightbox-error-box") as HTMLElement;
+                  const errorBox = parent?.querySelector(
+                    ".flow-lightbox-error-box",
+                  ) as HTMLElement;
                   if (errorBox) errorBox.style.display = "flex";
                 }}
               />
-              <div className="flow-lightbox-error-box" style={{ display: "none" }}>
+              <div
+                className="flow-lightbox-error-box"
+                style={{ display: "none" }}
+              >
                 <AlertTriangleIcon size={32} color="#f59e0b" />
                 <h4>Image Plate Not Accessible</h4>
-                <p>The image could not be loaded from storage or is incomplete. Click below to regenerate this asset plate.</p>
+                <p>
+                  The image could not be loaded from storage or is incomplete.
+                  Click below to regenerate this asset plate.
+                </p>
                 {previewAsset.type === "background" && previewAsset.sceneId && (
                   <button
                     type="button"
@@ -3169,10 +3899,14 @@ export default function GoogleFlowPage() {
             <div className="flow-lightbox-footer">
               <div className="flow-lightbox-meta">
                 <span className="flow-status-badge ready">
-                  {previewAsset.type === "background" ? "✓ Scene Environment Plate" : "✓ Master Character Reference"}
+                  {previewAsset.type === "background"
+                    ? "✓ Scene Environment Plate"
+                    : "✓ Master Character Reference"}
                 </span>
                 {previewAsset.aspectRatio && (
-                  <span className="flow-tag" style={{ margin: 0 }}>📐 {previewAsset.aspectRatio}</span>
+                  <span className="flow-tag" style={{ margin: 0 }}>
+                    📐 {previewAsset.aspectRatio}
+                  </span>
                 )}
               </div>
 
@@ -3198,19 +3932,20 @@ export default function GoogleFlowPage() {
                     ↻ Regenerate Plate
                   </button>
                 )}
-                {previewAsset.type === "character" && previewAsset.characterId && (
-                  <button
-                    type="button"
-                    className="flow-btn primary sm"
-                    onClick={() => {
-                      const cId = previewAsset.characterId!;
-                      setPreviewAsset(null);
-                      handleGenerateCharacterAsset(cId, "master_reference");
-                    }}
-                  >
-                    ↻ Regenerate Reference
-                  </button>
-                )}
+                {previewAsset.type === "character" &&
+                  previewAsset.characterId && (
+                    <button
+                      type="button"
+                      className="flow-btn primary sm"
+                      onClick={() => {
+                        const cId = previewAsset.characterId!;
+                        setPreviewAsset(null);
+                        handleGenerateCharacterAsset(cId, "master_reference");
+                      }}
+                    >
+                      ↻ Regenerate Reference
+                    </button>
+                  )}
                 <button
                   type="button"
                   className="flow-btn secondary sm"
@@ -3225,143 +3960,209 @@ export default function GoogleFlowPage() {
       )}
 
       {/* Scene Directives & Prompt Studio Modal */}
-      {activeDirectivesSceneId && (() => {
-        const activeScene = (storyContext?.scenes || []).find((s) => s.sceneId === activeDirectivesSceneId);
-        if (!activeScene) return null;
-        const cleanDirection = cleanScriptText(
-          activeScene.visualPrompt || activeScene.narration || activeScene.environmentDescription
-        );
-        const synthPrompt = `Create a cinematic 3D storybook illustration of ${activeScene.location}, ${activeScene.timeOfDay}. Storybook animation style, rich natural colors, soft ambient depth of field. ${activeScene.aspectRatio} composition, open central foreground for character animation. Environment backdrop only. No characters, people, figures, text, captions, subtitles, logos or watermarks.`;
+      {activeDirectivesSceneId &&
+        (() => {
+          const activeScene = (storyContext?.scenes || []).find(
+            (s) => s.sceneId === activeDirectivesSceneId,
+          );
+          if (!activeScene) return null;
+          const cleanDirection = cleanScriptText(
+            activeScene.visualPrompt ||
+              activeScene.narration ||
+              activeScene.environmentDescription,
+          );
+          const synthPrompt = `Create a cinematic 3D storybook illustration of ${activeScene.location}, ${activeScene.timeOfDay}. Storybook animation style, rich natural colors, soft ambient depth of field. ${activeScene.aspectRatio} composition, open central foreground for character animation. Environment backdrop only. No characters, people, figures, text, captions, subtitles, logos or watermarks.`;
 
-        return (
-          <div
-            className="flow-modal-overlay"
-            onClick={() => setActiveDirectivesSceneId(null)}
-          >
+          return (
             <div
-              className="flow-modal flow-directives-modal"
-              onClick={(e) => e.stopPropagation()}
+              className="flow-modal-overlay"
+              onClick={() => setActiveDirectivesSceneId(null)}
             >
-              <div className="flow-directives-modal-header">
-                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                  <span className="flow-scene-num-badge">Scene {activeScene.number}</span>
-                  <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 700 }}>
-                    {activeScene.title || "Untitled Scene"} — Directives
-                  </h3>
+              <div
+                className="flow-modal flow-directives-modal"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flow-directives-modal-header">
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "10px",
+                    }}
+                  >
+                    <span className="flow-scene-num-badge">
+                      Scene {activeScene.number}
+                    </span>
+                    <h3
+                      style={{ margin: 0, fontSize: "16px", fontWeight: 700 }}
+                    >
+                      {activeScene.title || "Untitled Scene"} — Directives
+                    </h3>
+                  </div>
+                  <button
+                    type="button"
+                    className="flow-btn-ghost sm"
+                    onClick={() => setActiveDirectivesSceneId(null)}
+                    style={{ fontSize: "14px", padding: "4px 8px" }}
+                  >
+                    ✕
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  className="flow-btn-ghost sm"
-                  onClick={() => setActiveDirectivesSceneId(null)}
-                  style={{ fontSize: "14px", padding: "4px 8px" }}
-                >
-                  ✕
-                </button>
-              </div>
 
-              {/* Story Context summary pill */}
-              <div className="flow-directives-meta-bar">
-                <span className="flow-tag">📍 {activeScene.location}</span>
-                <span className="flow-tag">☀️ {activeScene.timeOfDay}</span>
-                <span className="flow-tag">💡 {activeScene.lighting}</span>
-                <span className="flow-tag">🌧️ {activeScene.weather}</span>
-                <span className="flow-tag">📐 {activeScene.aspectRatio}</span>
-              </div>
-
-              {/* Visual Direction Narrative */}
-              <div className="flow-directives-section">
-                <label className="flow-toolbar-label">
-                  <span>🎬 Script Visual Direction</span>
-                </label>
-                <div className="flow-scene-direction" style={{ margin: 0 }}>
-                  <p className="flow-direction-text" style={{ WebkitLineClamp: "unset", maxHeight: "80px", overflowY: "auto" }}>
-                    "{cleanDirection || "Atmospheric scenery matching story visual style."}"
-                  </p>
+                {/* Story Context summary pill */}
+                <div className="flow-directives-meta-bar">
+                  <span className="flow-tag">📍 {activeScene.location}</span>
+                  <span className="flow-tag">☀️ {activeScene.timeOfDay}</span>
+                  <span className="flow-tag">💡 {activeScene.lighting}</span>
+                  <span className="flow-tag">🌧️ {activeScene.weather}</span>
+                  <span className="flow-tag">📐 {activeScene.aspectRatio}</span>
                 </div>
-              </div>
 
-              {/* Synthesized Prompt Preview */}
-              <div className="flow-directives-section">
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
-                  <label className="flow-toolbar-label" style={{ margin: 0 }}>
-                    <span>Synthesized Environment Prompt (Characters Strictly Excluded)</span>
+                {/* Visual Direction Narrative */}
+                <div className="flow-directives-section">
+                  <label className="flow-toolbar-label">
+                    <span>🎬 Script Visual Direction</span>
                   </label>
+                  <div className="flow-scene-direction" style={{ margin: 0 }}>
+                    <p
+                      className="flow-direction-text"
+                      style={{
+                        WebkitLineClamp: "unset",
+                        maxHeight: "80px",
+                        overflowY: "auto",
+                      }}
+                    >
+                      "
+                      {cleanDirection ||
+                        "Atmospheric scenery matching story visual style."}
+                      "
+                    </p>
+                  </div>
+                </div>
+
+                {/* Synthesized Prompt Preview */}
+                <div className="flow-directives-section">
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      marginBottom: "4px",
+                    }}
+                  >
+                    <label className="flow-toolbar-label" style={{ margin: 0 }}>
+                      <span>
+                        Synthesized Environment Prompt (Characters Strictly
+                        Excluded)
+                      </span>
+                    </label>
+                    <button
+                      type="button"
+                      className="flow-btn secondary sm"
+                      style={{ fontSize: "10.5px", padding: "2px 8px" }}
+                      onClick={() => {
+                        navigator.clipboard?.writeText(synthPrompt);
+                        setCopiedPromptSceneId(activeScene.sceneId);
+                        setTimeout(() => setCopiedPromptSceneId(null), 2000);
+                      }}
+                    >
+                      {copiedPromptSceneId === activeScene.sceneId
+                        ? "✓ Copied"
+                        : "📋 Copy Prompt"}
+                    </button>
+                  </div>
+                  <div
+                    className="flow-code-block"
+                    style={{
+                      fontSize: "11px",
+                      maxHeight: "90px",
+                      overflowY: "auto",
+                      margin: 0,
+                    }}
+                  >
+                    {synthPrompt}
+                  </div>
+                </div>
+
+                {/* Custom Prompt Override */}
+                <div className="flow-directives-section">
+                  <label className="flow-toolbar-label">
+                    <span>
+                      Custom Prompt Override (Add landscape, architecture, or
+                      mood details)
+                    </span>
+                  </label>
+                  <textarea
+                    className="flow-textarea"
+                    rows={3}
+                    placeholder="e.g. Glowing blue mushrooms on mossy tree trunks, fireflies hovering over quiet stream..."
+                    value={sceneCustomPrompts[activeScene.sceneId] || ""}
+                    onChange={(e) =>
+                      setSceneCustomPrompts((prev) => ({
+                        ...prev,
+                        [activeScene.sceneId]: e.target.value,
+                      }))
+                    }
+                    style={{
+                      width: "100%",
+                      fontSize: "12px",
+                      resize: "vertical",
+                    }}
+                  />
+                  <small
+                    style={{
+                      fontSize: "10.5px",
+                      color: "var(--color-text-secondary)",
+                      marginTop: "4px",
+                      display: "block",
+                    }}
+                  >
+                    Characters and living figures are automatically excluded
+                    from plate generation.
+                  </small>
+                </div>
+
+                {/* Modal Actions */}
+                <div
+                  className="flow-modal-actions"
+                  style={{
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                  }}
+                >
                   <button
                     type="button"
                     className="flow-btn secondary sm"
-                    style={{ fontSize: "10.5px", padding: "2px 8px" }}
-                    onClick={() => {
-                      navigator.clipboard?.writeText(synthPrompt);
-                      setCopiedPromptSceneId(activeScene.sceneId);
-                      setTimeout(() => setCopiedPromptSceneId(null), 2000);
-                    }}
+                    onClick={() => setActiveDirectivesSceneId(null)}
                   >
-                    {copiedPromptSceneId === activeScene.sceneId ? "✓ Copied" : "📋 Copy Prompt"}
+                    Close
                   </button>
-                </div>
-                <div className="flow-code-block" style={{ fontSize: "11px", maxHeight: "90px", overflowY: "auto", margin: 0 }}>
-                  {synthPrompt}
-                </div>
-              </div>
-
-              {/* Custom Prompt Override */}
-              <div className="flow-directives-section">
-                <label className="flow-toolbar-label">
-                  <span>Custom Prompt Override (Add landscape, architecture, or mood details)</span>
-                </label>
-                <textarea
-                  className="flow-textarea"
-                  rows={3}
-                  placeholder="e.g. Glowing blue mushrooms on mossy tree trunks, fireflies hovering over quiet stream..."
-                  value={sceneCustomPrompts[activeScene.sceneId] || ""}
-                  onChange={(e) =>
-                    setSceneCustomPrompts((prev) => ({
-                      ...prev,
-                      [activeScene.sceneId]: e.target.value,
-                    }))
-                  }
-                  style={{ width: "100%", fontSize: "12px", resize: "vertical" }}
-                />
-                <small style={{ fontSize: "10.5px", color: "var(--color-text-secondary)", marginTop: "4px", display: "block" }}>
-                  Characters and living figures are automatically excluded from plate generation.
-                </small>
-              </div>
-
-              {/* Modal Actions */}
-              <div className="flow-modal-actions" style={{ justifyContent: "space-between", alignItems: "center" }}>
-                <button
-                  type="button"
-                  className="flow-btn secondary sm"
-                  onClick={() => setActiveDirectivesSceneId(null)}
-                >
-                  Close
-                </button>
-                <div style={{ display: "flex", gap: "8px" }}>
-                  <button
-                    type="button"
-                    className="flow-btn primary sm"
-                    disabled={generatingSceneIds[activeScene.sceneId]}
-                    onClick={async () => {
-                      const scId = activeScene.sceneId;
-                      setActiveDirectivesSceneId(null);
-                      await handleGenerateSceneBackground(scId);
-                    }}
-                  >
-                    <SparklesIcon size={13} />
-                    <span>
-                      {generatingSceneIds[activeScene.sceneId]
-                        ? "Generating..."
-                        : activeScene.hasBackground
-                        ? "↻ Regenerate Plate"
-                        : "✨ Generate Plate Now"}
-                    </span>
-                  </button>
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    <button
+                      type="button"
+                      className="flow-btn primary sm"
+                      disabled={generatingSceneIds[activeScene.sceneId]}
+                      onClick={async () => {
+                        const scId = activeScene.sceneId;
+                        setActiveDirectivesSceneId(null);
+                        await handleGenerateSceneBackground(scId);
+                      }}
+                    >
+                      <SparklesIcon size={13} />
+                      <span>
+                        {generatingSceneIds[activeScene.sceneId]
+                          ? "Generating..."
+                          : activeScene.hasBackground
+                            ? "↻ Regenerate Plate"
+                            : "✨ Generate Plate Now"}
+                      </span>
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        );
-      })()}
+          );
+        })()}
     </div>
   );
 }
