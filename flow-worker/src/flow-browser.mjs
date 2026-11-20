@@ -20,6 +20,15 @@ const VALID_ASSET_TYPES = new Set([
 ]);
 const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
 
+export function getFirstLocator(loc) {
+  if (!loc) return null;
+  return typeof loc.first === "function"
+    ? loc.first()
+    : typeof loc.nth === "function"
+      ? loc.nth(0)
+      : loc;
+}
+
 function defaultDataDirectory(name) {
   return path.join(os.homedir(), ".ai-kids-content-studio", name);
 }
@@ -601,6 +610,134 @@ export class FlowBrowserWorker {
     return job;
   }
 
+  extractProjectId(url) {
+    if (!url || typeof url !== "string") return null;
+    const match = url.match(/\/project\/([a-zA-Z0-9\-_]+)/i);
+    return match ? match[1] : null;
+  }
+
+  setJobTerminal(job, terminalStatus, error = undefined, message = undefined) {
+    if (!job) return;
+    job.status = terminalStatus;
+    if (error !== undefined) job.error = error;
+    if (message !== undefined) job.message = message;
+    if (terminalStatus === "completed") {
+      job.completedAt = new Date().toISOString();
+      job.error = undefined;
+    }
+    if (this.activeJobId === job.id) {
+      this.activeJobId = null;
+    }
+    this.touch(job);
+  }
+
+  recoverActiveJobLock(force = false) {
+    if (!this.activeJobId) return;
+    const active = this.jobs.get(this.activeJobId);
+    if (!active || force || ["completed", "cancelled", "failed"].includes(active.status)) {
+      this.activeJobId = null;
+      return;
+    }
+
+    const ageMs = Date.now() - new Date(active.updatedAt || active.createdAt).getTime();
+    const isActivelyGenerating = ["generating", "output_detected", "downloading", "importing"].includes(active.status);
+    const timeoutThresholdMs = isActivelyGenerating ? 120000 : 30000;
+
+    if (ageMs > timeoutThresholdMs) {
+      console.warn(`[FlowBrowser] Recovering stale activeJobId lock for job ${this.activeJobId} (${Math.round(ageMs / 1000)}s old, status=${active.status}).`);
+      this.setJobTerminal(
+        active,
+        "failed",
+        `Job was inactive in status "${active.status}" and active lock was safely recovered.`,
+        "Active lock recovered due to timeout."
+      );
+    }
+  }
+
+  cancelActiveJob(reason = "Active job cancelled by user or system recovery.") {
+    this.recoverActiveJobLock();
+    if (!this.activeJobId) {
+      return { cancelled: false, message: "No active job was running." };
+    }
+    const active = this.jobs.get(this.activeJobId);
+    const id = this.activeJobId;
+    if (active) {
+      this.setJobTerminal(active, "cancelled", undefined, reason);
+    } else {
+      this.activeJobId = null;
+    }
+    return {
+      cancelled: true,
+      jobId: id,
+      message: `Active job ${id} was cancelled and worker lock released.`,
+    };
+  }
+
+  async detectInterfaceMode() {
+    if (!this.page || (typeof this.page.isClosed === "function" && this.page.isClosed())) {
+      return "unknown";
+    }
+
+    try {
+      if (typeof this.page.locator === "function") {
+        // 1. Check for Agent mode elements
+        const agentBox = this.page.locator("flow-creative-agent-prompt-box");
+        if ((await agentBox.count().catch(() => 0)) > 0) return "agent";
+
+        const agentTextbox = this.page.locator('[role="textbox"][aria-label="What do you want to create?"]');
+        if ((await agentTextbox.count().catch(() => 0)) > 0) return "agent";
+
+        const agentSubmit = this.page.locator('button[aria-label="Start generation"]');
+        if ((await agentSubmit.count().catch(() => 0)) > 0) return "agent";
+
+        // 2. Check for Standard mode elements
+        const standardBtn = this.page.locator('button:has-text("Generate Image"), button[aria-label="Generate Image"]');
+        if ((await standardBtn.count().catch(() => 0)) > 0) return "standard";
+      }
+      return "unknown";
+    } catch {
+      return "unknown";
+    }
+  }
+
+  async getOutputAssetBaseline() {
+    if (!this.page || (typeof this.page.isClosed === "function" && this.page.isClosed())) {
+      return { count: 0, identifiers: new Set() };
+    }
+
+    try {
+      if (typeof this.page.locator !== "function") {
+        return { count: 0, identifiers: new Set() };
+      }
+
+      const selectors = [
+        "flow-output-tile",
+        "[data-asset-id]",
+        ".generation-tile",
+        ".output-tile",
+        'img[src*="blob:"]',
+        'img[src*="googleusercontent.com"]',
+      ].join(", ");
+
+      const elements = this.page.locator(selectors);
+      const count = await elements.count().catch(() => 0);
+      const identifiers = new Set();
+
+      for (let i = 0; i < count; i++) {
+        const el = elements.nth(i);
+        const id =
+          (typeof el.getAttribute === "function" ? await el.getAttribute("data-asset-id").catch(() => null) : null) ||
+          (typeof el.getAttribute === "function" ? await el.getAttribute("id").catch(() => null) : null) ||
+          (typeof el.getAttribute === "function" ? await el.getAttribute("src").catch(() => null) : null) ||
+          `element-${i}`;
+        identifiers.add(id);
+      }
+      return { count, identifiers };
+    } catch {
+      return { count: 0, identifiers: new Set() };
+    }
+  }
+
   async prepareJob(jobId) {
     const job = this.requireJob(jobId);
 
@@ -610,26 +747,50 @@ export class FlowBrowserWorker {
       );
     }
 
+    this.recoverActiveJobLock();
+
     if (this.activeJobId && this.activeJobId !== jobId) {
       const active = this.jobs.get(this.activeJobId);
       if (
         active &&
         !["completed", "cancelled", "failed"].includes(active.status)
       ) {
-        throw new Error(
-          "Another Flow job is active. Complete or cancel it before starting another.",
-        );
+        const isActivelyWorking = ["generating", "output_detected", "downloading", "importing"].includes(active.status);
+        const ageSec = Math.round((Date.now() - new Date(active.updatedAt || active.createdAt).getTime()) / 1000);
+
+        // If previous job is not actively generating (e.g. idle or waiting) or if cancelPrevious is requested:
+        if (job.cancelPrevious || !isActivelyWorking) {
+          console.log(`[FlowBrowser] Automatically superseding inactive previous job ${active.id} (status: ${active.status}, ${ageSec}s old).`);
+          this.setJobTerminal(active, "cancelled", undefined, "Superseded by new generation request.");
+        } else {
+          const err = new Error(
+            `Another Flow job (${active.id}) is actively generating in the browser (status: ${active.status}, started ${ageSec}s ago). Complete or cancel it before starting another.`
+          );
+          err.statusCode = 409;
+          err.activeJob = {
+            id: active.id,
+            status: active.status,
+            ageSeconds: ageSec,
+          };
+          throw err;
+        }
       }
     }
 
-    if (job.projectUrl && this.page.url() !== job.projectUrl) {
+    const currentUrl = typeof this.page.url === "function" ? this.page.url() : String(this.page.url || "");
+    const currentProjectId = this.extractProjectId(currentUrl);
+    const targetProjectId = this.extractProjectId(job.projectUrl);
+
+    if (targetProjectId && currentProjectId === targetProjectId) {
+      // Already on the requested Flow project page! Avoid reloading the SPA.
+    } else if (job.projectUrl && currentUrl !== job.projectUrl) {
       await this.page.goto(job.projectUrl, {
         waitUntil: "domcontentloaded",
         timeout: 60000,
       });
     } else if (
-      !isFlowUrl(this.page.url()) &&
-      !isGoogleLoginUrl(this.page.url())
+      !isFlowUrl(currentUrl) &&
+      !isGoogleLoginUrl(currentUrl)
     ) {
       await this.page.goto(FLOW_HOME_URL, {
         waitUntil: "domcontentloaded",
@@ -657,7 +818,21 @@ export class FlowBrowserWorker {
 
     try {
       const promptEditor = await this.findPromptEditor();
-      await promptEditor.locator.fill(job.prompt);
+      if (typeof promptEditor.locator.click === "function") {
+        await promptEditor.locator.click().catch(() => {});
+      }
+      try {
+        if (typeof promptEditor.locator.fill === "function") {
+          await promptEditor.locator.fill(job.prompt);
+        }
+      } catch {
+        if (typeof promptEditor.locator.evaluate === "function") {
+          await promptEditor.locator.evaluate((node, text) => {
+            node.innerText = text;
+            node.dispatchEvent(new Event("input", { bubbles: true }));
+          }, job.prompt).catch(() => {});
+        }
+      }
       job.promptSelectorUsed = promptEditor.selector;
       job.status = "prompt_ready";
       job.message =
@@ -669,11 +844,12 @@ export class FlowBrowserWorker {
       job.diagnosticScreenshotPath = await this.saveDiagnosticScreenshot(
         job.id,
       );
-      job.status = "prompt_editor_not_found";
-      job.error = error.message;
-      job.message =
-        "The Flow prompt editor could not be identified safely. Inspect the visible browser and configure FLOW_PROMPT_SELECTOR if needed.";
-      this.touch(job);
+      this.setJobTerminal(
+        job,
+        "prompt_editor_not_found",
+        error.message,
+        "The Flow prompt editor could not be identified safely. Inspect the visible browser and configure FLOW_PROMPT_SELECTOR if needed."
+      );
       return job;
     }
   }
@@ -716,12 +892,13 @@ export class FlowBrowserWorker {
       const title = (await candidate.getAttribute("title")) || "";
       const name = (await candidate.getAttribute("name")) || "";
       const id = (await candidate.getAttribute("id")) || "";
+      const className = (await candidate.getAttribute("class")) || "";
       const testId =
         (await candidate.getAttribute("data-testid")) ||
         (await candidate.getAttribute("data-test-id")) ||
         "";
 
-      const label = [placeholder, ariaLabel, dataPlaceholder, title, name, id, testId]
+      const label = [placeholder, ariaLabel, dataPlaceholder, title, name, id, className, testId]
         .join(" ")
         .toLowerCase();
 
@@ -731,8 +908,10 @@ export class FlowBrowserWorker {
       }
 
       let score = 0;
-      // High-confidence prompt indicators
-      if (/prompt|describe|what.*to (see|generate|create)|enter.*prompt/.test(label)) {
+      // Exact Google Flow Agent prompt box match gets highest priority
+      if (/what do you want to create/i.test(ariaLabel)) {
+        score += 25;
+      } else if (/prompt|describe|what.*to (see|generate|create)|enter.*prompt/.test(label)) {
         score += 10;
       } else if (/generate|image|create|scene|character|visual/.test(label)) {
         score += 5;
@@ -775,6 +954,249 @@ export class FlowBrowserWorker {
     return scored[0];
   }
 
+  async submitAgentPrompt(job, confirmation) {
+    if (!this.page || (typeof this.page.isClosed === "function" && this.page.isClosed())) {
+      throw new Error("Flow page is not available.");
+    }
+
+    // 1. Verify correct Flow page
+    if (typeof this.page.url === "function" && !isFlowUrl(this.page.url())) {
+      throw new Error(`Current page is not a valid Google Flow URL: ${this.page.url()}`);
+    }
+
+    // 2. Locate unique prompt textbox
+    const promptLocator = this.page.locator(
+      'flow-creative-agent-prompt-box [role="textbox"], flow-creative-agent-prompt-box div.ProseMirror, [role="textbox"][aria-label="What do you want to create?"]'
+    );
+    const count = await promptLocator.count().catch(() => 0);
+    const promptEditor = getFirstLocator(promptLocator);
+
+    if (count === 0 || !promptEditor || !(await promptEditor.isVisible().catch(() => false))) {
+      throw new Error("Could not find visible 'What do you want to create?' prompt textbox in Google Flow Agent mode.");
+    }
+
+    // 3. Fill the prompt into ProseMirror
+    if (typeof promptEditor.click === "function") {
+      await promptEditor.click().catch(() => {});
+    }
+
+    if (this.page.keyboard) {
+      await this.page.keyboard.press("ControlOrMeta+A").catch(() => {});
+      await this.page.keyboard.press("Backspace").catch(() => {});
+    }
+
+    try {
+      if (typeof promptEditor.fill === "function") {
+        await promptEditor.fill(job.prompt);
+      }
+    } catch {
+      if (typeof promptEditor.evaluate === "function") {
+        await promptEditor.evaluate((node, text) => {
+          node.innerText = text;
+          node.dispatchEvent(new Event("input", { bubbles: true }));
+          node.dispatchEvent(new Event("change", { bubbles: true }));
+        }, job.prompt).catch(() => {});
+      }
+    }
+
+    // 4. Verify text was entered
+    let enteredText = "";
+    if (typeof promptEditor.innerText === "function") {
+      enteredText = await promptEditor.innerText().catch(() => "");
+    }
+    if (!enteredText.trim() && typeof promptEditor.textContent === "function") {
+      enteredText = await promptEditor.textContent().catch(() => "");
+    }
+    if (!enteredText.trim() && this.page.keyboard && typeof this.page.keyboard.insertText === "function") {
+      if (typeof promptEditor.click === "function") await promptEditor.click().catch(() => {});
+      await this.page.keyboard.insertText(job.prompt).catch(() => {});
+      if (typeof promptEditor.innerText === "function") {
+        enteredText = await promptEditor.innerText().catch(() => "");
+      }
+    }
+
+    job.status = "prompt_filled";
+    job.message = "Prompt populated into Google Flow Agent box.";
+    this.touch(job);
+
+    // 5. Wait for Start generation button to become enabled
+    const submitLocator = this.page.locator(
+      'flow-creative-agent-prompt-box button[aria-label="Start generation"], flow-creative-agent-prompt-box button[type="submit"], button[aria-label="Start generation"]'
+    );
+    const btnCount = await submitLocator.count().catch(() => 0);
+    const submitBtn = getFirstLocator(submitLocator);
+
+    if (btnCount === 0 || !submitBtn || !(await submitBtn.isVisible().catch(() => false))) {
+      throw new Error("Could not find visible 'Start generation' submit button in Google Flow Agent mode.");
+    }
+
+    let isEnabled = false;
+    const waitStart = Date.now();
+    while (Date.now() - waitStart < 10000) {
+      const disabledAttr = typeof submitBtn.getAttribute === "function" ? await submitBtn.getAttribute("disabled").catch(() => null) : null;
+      const enabled = typeof submitBtn.isEnabled === "function" ? await submitBtn.isEnabled().catch(() => false) : true;
+      const isNotDisabled = disabledAttr === null || disabledAttr === false || disabledAttr === "false";
+      if (isNotDisabled && enabled) {
+        isEnabled = true;
+        break;
+      }
+      await new Promise((r) => setTimeout(r, 200));
+    }
+
+    if (!isEnabled) {
+      throw new Error("'Start generation' button remained disabled after populating the prompt.");
+    }
+
+    // 6. Capture screenshot before submission
+    job.preSubmitScreenshot = await this.saveDiagnosticScreenshot(`${job.id}-before-submit`).catch(() => null);
+
+    // 7. Record asset baseline
+    const baseline = await this.getOutputAssetBaseline();
+
+    // 8. Click Start generation
+    try {
+      if (typeof submitBtn.click === "function") {
+        await submitBtn.click({ timeout: 15000 });
+      }
+      job.status = "agent_prompt_submitted";
+      job.generationRequestedAt = new Date().toISOString();
+      job.message = "Agent prompt submitted to Google Flow.";
+      this.touch(job);
+    } catch (btnErr) {
+      this.setJobTerminal(job, "failed", btnErr.message, "Could not click 'Start generation' submit button.");
+      throw btnErr;
+    }
+
+    // 9. Capture screenshot after submission
+    job.postSubmitScreenshot = await this.saveDiagnosticScreenshot(`${job.id}-after-submit`).catch(() => null);
+
+    // 10. Observe Agent response & handle confirmation
+    await new Promise((r) => setTimeout(r, 2000));
+    const confirmationRequired = await this.detectAgentConfirmationRequired(job);
+
+    if (confirmationRequired) {
+      job.status = "awaiting_agent_confirmation";
+      job.message = "Google Flow Agent requested confirmation before generating media.";
+      this.touch(job);
+
+      if (confirmation?.confirmGenerate === true && confirmation?.referenceConfirmed === true) {
+        await this.handleAgentConfirmationAction(job);
+        job.status = "generation_submitted";
+        this.touch(job);
+      } else {
+        return job;
+      }
+    } else {
+      job.status = "generation_submitted";
+      this.touch(job);
+    }
+
+    // 11. Autonomous download monitoring
+    this.monitorGenerationAndDownload(job.id, baseline).catch((err) => {
+      console.warn(`[FlowBrowser] Generation monitor notice for job ${job.id}:`, err.message);
+    });
+
+    return job;
+  }
+
+  async detectAgentConfirmationRequired(job) {
+    if (!this.page || (typeof this.page.isClosed === "function" && this.page.isClosed())) return false;
+
+    try {
+      if (typeof this.page.locator !== "function") return false;
+
+      const agentMessages = this.page.locator(
+        'flow-creative-agent-message, [data-message-author="agent"], .agent-message'
+      );
+      const msgCount = await agentMessages.count().catch(() => 0);
+      if (msgCount > 0) {
+        const lastMsg = agentMessages.last();
+        const text = typeof lastMsg.innerText === "function" ? (await lastMsg.innerText().catch(() => "")).toLowerCase() : "";
+        if (/confirm|permission|allow|generate.*image|should i|ready to create/i.test(text)) {
+          return true;
+        }
+        const msgButtons = lastMsg.locator("button");
+        if ((await msgButtons.count().catch(() => 0)) > 0) {
+          return true;
+        }
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  }
+
+  async handleAgentConfirmationAction(job) {
+    if (!this.page || (typeof this.page.isClosed === "function" && this.page.isClosed())) return;
+
+    try {
+      if (typeof this.page.locator !== "function") return;
+
+      const agentMessages = this.page.locator(
+        'flow-creative-agent-message, [data-message-author="agent"], .agent-message'
+      );
+      const msgCount = await agentMessages.count().catch(() => 0);
+      if (msgCount > 0) {
+        const lastMsg = agentMessages.last();
+        const confirmBtn = getFirstLocator(lastMsg
+          .locator(
+            'button:has-text("Generate"), button:has-text("Confirm"), button:has-text("Yes"), button:has-text("Proceed")'
+          ));
+        if (
+          confirmBtn &&
+          (await confirmBtn.count().catch(() => 0)) > 0 &&
+          (await confirmBtn.isVisible().catch(() => false)) &&
+          (await confirmBtn.isEnabled().catch(() => false))
+        ) {
+          await confirmBtn.click({ timeout: 10000 });
+          job.message = "Confirmed generation with Google Flow Agent.";
+          return;
+        }
+      }
+
+      const generalConfirmBtn = getFirstLocator(this.page
+        .locator('button:has-text("Confirm"), button:has-text("Generate Image")'));
+      if (
+        generalConfirmBtn &&
+        (await generalConfirmBtn.count().catch(() => 0)) > 0 &&
+        (await generalConfirmBtn.isVisible().catch(() => false)) &&
+        (await generalConfirmBtn.isEnabled().catch(() => false))
+      ) {
+        await generalConfirmBtn.click({ timeout: 10000 });
+        job.message = "Confirmed generation action.";
+      }
+    } catch (err) {
+      console.warn("[FlowBrowser] Agent confirmation action error:", err.message);
+    }
+  }
+
+  async attachCharacterReference(characterName) {
+    if (!this.page || (typeof this.page.isClosed === "function" && this.page.isClosed())) return false;
+
+    try {
+      if (typeof this.page.locator !== "function") return false;
+
+      // 1. Check for "Add ingredients to the prompt box" button
+      const ingredientsBtn = getFirstLocator(this.page.locator('button[aria-label="Add ingredients to the prompt box"]'));
+      if (ingredientsBtn && (await ingredientsBtn.count().catch(() => 0)) > 0 && (await ingredientsBtn.isVisible().catch(() => false))) {
+        await ingredientsBtn.click({ timeout: 5000 }).catch(() => {});
+        await new Promise((r) => setTimeout(r, 500));
+
+        const charItem = getFirstLocator(this.page
+          .locator(
+            `[role="option"]:has-text("${characterName}"), button:has-text("${characterName}"), .ingredient-item:has-text("${characterName}")`
+          ));
+        if (charItem && (await charItem.count().catch(() => 0)) > 0 && (await charItem.isVisible().catch(() => false))) {
+          await charItem.click({ timeout: 5000 }).catch(() => {});
+          return true;
+        }
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  }
+
   async requestGeneration(jobId, confirmation) {
     const job = this.requireJob(jobId);
 
@@ -787,48 +1209,48 @@ export class FlowBrowserWorker {
       );
     }
 
-    if (
-      job.status !== "prompt_ready" &&
-      job.status !== "awaiting_manual_generate"
-    ) {
-      throw new Error(
-        "The job must be prepared before generation can be requested. Current status: " +
-          job.status,
-      );
-    }
+    this.recoverActiveJobLock();
 
-    if (!this.page || this.page.isClosed())
+    if (!this.page || (typeof this.page.isClosed === "function" && this.page.isClosed()))
       throw new Error("Flow page is not available.");
 
-    // Generation can consume the user's Google Flow allowance. Only attempt the documented,
-    // visible Generate Image button after the caller has explicitly confirmed.
-    const button = this.page.getByRole("button", {
-      name: "Generate Image",
-      exact: true,
-    });
-    const count = await button.count();
+    const mode = await this.detectInterfaceMode();
+
+    if (mode === "agent") {
+      return await this.submitAgentPrompt(job, confirmation);
+    }
+
+    // Standard mode:
+    let button;
+    if (typeof this.page.locator === "function") {
+      button = getFirstLocator(this.page.locator('button:has-text("Generate Image"), button[aria-label="Generate Image"]'));
+    } else if (typeof this.page.getByRole === "function") {
+      button = this.page.getByRole("button", { name: "Generate Image", exact: true });
+    }
+
+    const count = button ? await button.count().catch(() => 0) : 0;
 
     if (
       count !== 1 ||
-      !(await button.isVisible()) ||
-      !(await button.isEnabled())
+      !(await button.isVisible().catch(() => false)) ||
+      !(await button.isEnabled().catch(() => false))
     ) {
       job.status = "awaiting_manual_generate";
       job.message =
-        "The exact visible Generate Image button was not uniquely identifiable. Review the prompt and click Generate Image manually in Flow; the worker is listening for the resulting image download.";
+        "The visible Generate Image button was not uniquely identifiable or enabled. Review the prompt and click Generate Image manually in Flow; the worker is listening for the resulting image download.";
       this.touch(job);
       return job;
     }
 
     try {
+      const baseline = await this.getOutputAssetBaseline();
       await button.click({ timeout: 15000 });
-      job.status = "awaiting_download";
+      job.status = "generation_submitted";
       job.generationRequestedAt = new Date().toISOString();
       job.message =
         "Generation was submitted through the visible Flow UI. When the result is ready, use Flow's normal Download action; the worker will capture and import the downloaded image.";
-      
-      // Autonomous background monitoring: detect newly generated tile and trigger download
-      this.monitorGenerationAndDownload(job.id).catch((err) => {
+
+      this.monitorGenerationAndDownload(job.id, baseline).catch((err) => {
         console.warn(`[FlowBrowser] Generation monitor notice for job ${job.id}:`, err.message);
       });
     } catch (clickError) {
@@ -844,7 +1266,7 @@ export class FlowBrowserWorker {
     return job;
   }
 
-  async monitorGenerationAndDownload(jobId) {
+  async monitorGenerationAndDownload(jobId, baseline = { count: 0, identifiers: new Set() }) {
     const job = this.jobs.get(jobId);
     if (!job || !this.page || (typeof this.page.isClosed === "function" && this.page.isClosed())) return;
 
@@ -853,8 +1275,10 @@ export class FlowBrowserWorker {
       job.message = "Generation in progress in Google Flow. Waiting for rendered output...";
       this.touch(job);
 
-      const maxWaitMs = 60000;
+      const maxWaitMs = 90000;
       const startTime = Date.now();
+      const pollIntervalMs = 2000;
+      let targetTile = null;
 
       while (Date.now() - startTime < maxWaitMs) {
         if (!this.page || (typeof this.page.isClosed === "function" && this.page.isClosed()) || job.status === "completed" || job.status === "cancelled") {
@@ -862,40 +1286,229 @@ export class FlowBrowserWorker {
         }
 
         if (typeof this.page.locator === "function") {
-          const downloadCandidates = this.page.locator(
-            'button[aria-label*="download" i], button[title*="download" i], [data-testid*="download" i], button:has-text("Download")'
-          );
-          const count = await downloadCandidates.count().catch(() => 0);
+          const selectors = [
+            "flow-output-tile",
+            "[data-asset-id]",
+            ".generation-tile",
+            ".output-tile",
+            'img[src*="blob:"]',
+            'img[src*="googleusercontent.com"]',
+          ].join(", ");
 
-          if (count > 0) {
-            for (let i = 0; i < count; i++) {
-              const cand = downloadCandidates.nth(i);
-              if (await cand.isVisible().catch(() => false)) {
-                await cand.click({ timeout: 5000 }).catch(() => {});
-                job.status = "awaiting_download";
-                job.message = "Download triggered automatically from Flow output. Capturing file...";
-                this.touch(job);
-                return;
+          const elements = this.page.locator(selectors);
+          const currentCount = await elements.count().catch(() => 0);
+
+          if (currentCount > baseline.count) {
+            for (let i = currentCount - 1; i >= 0; i--) {
+              const el = elements.nth(i);
+              const id =
+                (typeof el.getAttribute === "function" ? await el.getAttribute("data-asset-id").catch(() => null) : null) ||
+                (typeof el.getAttribute === "function" ? await el.getAttribute("id").catch(() => null) : null) ||
+                (typeof el.getAttribute === "function" ? await el.getAttribute("src").catch(() => null) : null) ||
+                `element-${i}`;
+              if (!baseline.identifiers.has(id)) {
+                targetTile = el;
+                break;
               }
             }
           }
+
+          if (targetTile) {
+            job.status = "output_detected";
+            job.message = "New generation output tile identified in Google Flow.";
+            this.touch(job);
+            break;
+          }
         }
 
-        await new Promise((r) => setTimeout(r, 2000));
+        await new Promise((r) => setTimeout(r, pollIntervalMs));
       }
 
-      if (job.status === "generating") {
+      if (targetTile) {
+        job.status = "downloading";
+        job.message = "Downloading new asset from Google Flow...";
+        this.touch(job);
+
+        if (typeof targetTile.hover === "function") {
+          await targetTile.hover().catch(() => {});
+        }
+
+        let downloadBtn = null;
+        if (typeof targetTile.locator === "function") {
+          downloadBtn = getFirstLocator(targetTile
+            .locator(
+              'button[aria-label*="download" i], button[title*="download" i], [data-testid*="download" i], button:has-text("Download")'
+            ));
+        }
+
+        let canClick = downloadBtn ? (await downloadBtn.count().catch(() => 0)) > 0 && (await downloadBtn.isVisible().catch(() => false)) : false;
+
+        if (!canClick && typeof targetTile.locator === "function") {
+          const parent = targetTile.locator("..");
+          downloadBtn = getFirstLocator(parent
+            .locator(
+              'button[aria-label*="download" i], button[title*="download" i], [data-testid*="download" i], button:has-text("Download")'
+            ));
+          canClick = downloadBtn ? (await downloadBtn.count().catch(() => 0)) > 0 && (await downloadBtn.isVisible().catch(() => false)) : false;
+        }
+
+        if (canClick && typeof downloadBtn.click === "function") {
+          try {
+            if (typeof this.page.waitForEvent === "function") {
+              const [download] = await Promise.all([
+                this.page.waitForEvent("download", { timeout: 30000 }),
+                downloadBtn.click({ timeout: 10000 }),
+              ]);
+
+              const tempDir = path.join(this.profileDir, "..", "downloads");
+              await fs.mkdir(tempDir, { recursive: true, mode: 0o700 }).catch(() => {});
+              const tempFilePath = path.join(tempDir, `flow-${job.id}-${Date.now()}.png`);
+              await download.saveAs(tempFilePath);
+
+              job.status = "importing";
+              this.touch(job);
+              await this.handleDownload(download, tempFilePath);
+              return;
+            }
+          } catch (dlErr) {
+            console.warn("[FlowBrowser] Automatic download trigger notice:", dlErr.message);
+          }
+        }
+      }
+
+      if (job.status === "generating" || job.status === "output_detected") {
         job.status = "awaiting_download";
-        job.message = "Generation was submitted. When the tile appears in Flow, click Download; the worker will automatically capture and import it.";
+        job.message =
+          "Generation was submitted. When the tile appears in Flow, click Download; the worker will automatically capture and import it.";
         this.touch(job);
       }
     } catch (monitorErr) {
-      if (job.status === "generating") {
+      if (job.status === "generating" || job.status === "output_detected") {
         job.status = "awaiting_download";
         job.message = "Generation in progress. Worker listening for download event.";
         this.touch(job);
       }
     }
+  }
+
+  async inspectFlowPage() {
+    if (!this.page || (typeof this.page.isClosed === "function" && this.page.isClosed())) {
+      return {
+        isOpen: false,
+        message: "Browser session is not open.",
+      };
+    }
+
+    const url = typeof this.page.url === "function" ? this.page.url() : "";
+    const title = typeof this.page.title === "function" ? await this.page.title().catch(() => "") : "";
+
+    let activeProjectId = null;
+    const projectMatch = url.match(/\/project\/([a-f0-9-]+)/i);
+    if (projectMatch) {
+      activeProjectId = projectMatch[1];
+    }
+
+    const sessionStatus = await this.getSessionStatus();
+    const googleAuthStatus = sessionStatus.googleAuth || sessionStatus.authenticationStatus;
+    const interfaceMode = await this.detectInterfaceMode();
+
+    const promptEditors = [];
+    if (typeof this.page.locator === "function") {
+      const editorCandidates = this.page.locator(
+        'flow-creative-agent-prompt-box, [role="textbox"], div.ProseMirror, textarea'
+      );
+      const editorCount = await editorCandidates.count().catch(() => 0);
+      for (let i = 0; i < Math.min(editorCount, 10); i++) {
+        const el = editorCandidates.nth(i);
+        if (await el.isVisible().catch(() => false)) {
+          promptEditors.push({
+            tagName: typeof el.evaluate === "function" ? await el.evaluate((n) => n.tagName.toLowerCase()).catch(() => "") : "",
+            role: typeof el.getAttribute === "function" ? await el.getAttribute("role").catch(() => null) : null,
+            ariaLabel: typeof el.getAttribute === "function" ? await el.getAttribute("aria-label").catch(() => null) : null,
+            contentEditable: typeof el.getAttribute === "function" ? await el.getAttribute("contenteditable").catch(() => null) : null,
+            className: typeof el.getAttribute === "function" ? await el.getAttribute("class").catch(() => null) : null,
+            isEnabled: typeof el.isEnabled === "function" ? await el.isEnabled().catch(() => false) : true,
+            textPreview: typeof el.innerText === "function" ? (await el.innerText().catch(() => "")).slice(0, 100) : "",
+          });
+        }
+      }
+    }
+
+    const buttons = [];
+    if (typeof this.page.locator === "function") {
+      const btnCandidates = this.page.locator('button, [role="button"]');
+      const btnCount = await btnCandidates.count().catch(() => 0);
+      for (let i = 0; i < Math.min(btnCount, 25); i++) {
+        const btn = btnCandidates.nth(i);
+        if (await btn.isVisible().catch(() => false)) {
+          const text = typeof btn.innerText === "function" ? (await btn.innerText().catch(() => "")).trim() : "";
+          const ariaLabel = typeof btn.getAttribute === "function" ? await btn.getAttribute("aria-label").catch(() => null) : null;
+          const isEnabled = typeof btn.isEnabled === "function" ? await btn.isEnabled().catch(() => false) : true;
+          const type = typeof btn.getAttribute === "function" ? await btn.getAttribute("type").catch(() => null) : null;
+          buttons.push({ text: text.slice(0, 50), ariaLabel, isEnabled, type });
+        }
+      }
+    }
+
+    const frames = typeof this.page.frames === "function" ? this.page.frames() : [];
+    const relevantIframeUrls = frames
+      .map((f) => (typeof f.url === "function" ? f.url() : ""))
+      .filter((u) => u && u !== "about:blank" && !u.startsWith("chrome-extension://"));
+
+    const agentMessages = [];
+    if (typeof this.page.locator === "function") {
+      const msgElements = this.page.locator(
+        'flow-creative-agent-message, [data-message-author="agent"], .agent-message'
+      );
+      const msgCount = await msgElements.count().catch(() => 0);
+      for (let i = Math.max(0, msgCount - 5); i < msgCount; i++) {
+        const msg = msgElements.nth(i);
+        const text = typeof msg.innerText === "function" ? (await msg.innerText().catch(() => "")).trim() : "";
+        if (text) agentMessages.push(text.slice(0, 200));
+      }
+    }
+
+    const indicators = typeof this.page.locator === "function"
+      ? this.page.locator('[role="progressbar"], .generating, .loading-spinner, [aria-label*="generating" i], [aria-label*="loading" i]')
+      : null;
+    const hasActiveGeneration = indicators ? (await indicators.count().catch(() => 0)) > 0 : false;
+
+    const timestamp = Date.now();
+    const diagDir = path.resolve(this.profileDir, "..", "diagnostics");
+    await fs.mkdir(diagDir, { recursive: true, mode: 0o700 }).catch(() => {});
+
+    const screenshotPath = path.join(diagDir, `inspect-${timestamp}.png`);
+    if (typeof this.page.screenshot === "function") {
+      await this.page.screenshot({ path: screenshotPath, fullPage: false }).catch(() => {});
+    }
+
+    const domSnapshotPath = path.join(diagDir, `inspect-${timestamp}.html`);
+    if (typeof this.page.content === "function") {
+      const rawHtml = await this.page.content().catch(() => "");
+      const sanitizedHtml = rawHtml
+        .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "<!-- script removed -->")
+        .replace(/data:image\/[^;]+;base64,[^"']+/g, "data:image/...[truncated]");
+      await fs.writeFile(domSnapshotPath, sanitizedHtml, { mode: 0o600, encoding: "utf8" }).catch(() => {});
+    }
+
+    return {
+      isOpen: true,
+      url,
+      title,
+      activeProjectId,
+      googleAuthStatus,
+      interfaceMode,
+      promptEditors,
+      buttons,
+      relevantIframeUrls,
+      agentMessages,
+      activeGenerationIndicators: hasActiveGeneration,
+      diagnostics: {
+        screenshotPath,
+        domSnapshotPath,
+        timestamp,
+      },
+    };
   }
 
   async synchronizeCharacter(input) {
@@ -957,11 +1570,13 @@ export class FlowBrowserWorker {
     // Navigate to Characters section if available
     try {
       if (typeof this.page.getByRole === "function") {
-        const charTab = this.page.getByRole("tab", { name: /character/i })
-          .or(this.page.getByRole("button", { name: /character/i }))
-          .or(this.page.locator('[data-testid*="character" i], [aria-label*="character" i]'));
-        if (await charTab.count() > 0 && await charTab.first().isVisible()) {
-          await charTab.first().click({ timeout: 5000 });
+        const charTab = getFirstLocator(
+          this.page.getByRole("tab", { name: /character/i })
+            .or(this.page.getByRole("button", { name: /character/i }))
+            .or(this.page.locator('[data-testid*="character" i], [aria-label*="character" i]'))
+        );
+        if (charTab && (await charTab.count().catch(() => 0)) > 0 && (await charTab.isVisible().catch(() => false))) {
+          await charTab.click({ timeout: 5000 });
         }
       }
     } catch {}
@@ -969,10 +1584,12 @@ export class FlowBrowserWorker {
     // Click New Character / Add Character if available
     try {
       if (typeof this.page.getByRole === "function") {
-        const newBtn = this.page.getByRole("button", { name: /(new|create|add).*character/i })
-          .or(this.page.locator('button:has-text("New Character"), button:has-text("Add Character")'));
-        if (await newBtn.count() > 0 && await newBtn.first().isVisible()) {
-          await newBtn.first().click({ timeout: 5000 });
+        const newBtn = getFirstLocator(
+          this.page.getByRole("button", { name: /(new|create|add).*character/i })
+            .or(this.page.locator('button:has-text("New Character"), button:has-text("Add Character")'))
+        );
+        if (newBtn && (await newBtn.count().catch(() => 0)) > 0 && (await newBtn.isVisible().catch(() => false))) {
+          await newBtn.click({ timeout: 5000 });
         }
       }
     } catch {}
@@ -980,10 +1597,12 @@ export class FlowBrowserWorker {
     // Fill character name if input field exists
     try {
       if (typeof this.page.getByRole === "function") {
-        const nameInput = this.page.getByRole("textbox", { name: /(name|character name)/i })
-          .or(this.page.locator('input[placeholder*="name" i], input[aria-label*="name" i]'));
-        if (await nameInput.count() > 0 && await nameInput.first().isVisible()) {
-          await nameInput.first().fill(characterName);
+        const nameInput = getFirstLocator(
+          this.page.getByRole("textbox", { name: /(name|character name)/i })
+            .or(this.page.locator('input[placeholder*="name" i], input[aria-label*="name" i]'))
+        );
+        if (nameInput && (await nameInput.count().catch(() => 0)) > 0 && (await nameInput.isVisible().catch(() => false))) {
+          await nameInput.fill(characterName);
         }
       }
     } catch {}
@@ -992,9 +1611,9 @@ export class FlowBrowserWorker {
     if (referenceImagePath) {
       try {
         if (typeof this.page.locator === "function") {
-          const fileInput = this.page.locator('input[type="file"]');
-          if (await fileInput.count() > 0) {
-            await fileInput.first().setInputFiles(referenceImagePath);
+          const fileInput = getFirstLocator(this.page.locator('input[type="file"]'));
+          if (fileInput && (await fileInput.count().catch(() => 0)) > 0) {
+            await fileInput.setInputFiles(referenceImagePath);
           }
         }
       } catch (uploadErr) {
@@ -1005,9 +1624,9 @@ export class FlowBrowserWorker {
     // Click Create / Save button if available
     try {
       if (typeof this.page.getByRole === "function") {
-        const saveBtn = this.page.getByRole("button", { name: /(create|save|confirm|done)/i });
-        if (await saveBtn.count() > 0 && await saveBtn.first().isVisible()) {
-          await saveBtn.first().click({ timeout: 5000 });
+        const saveBtn = getFirstLocator(this.page.getByRole("button", { name: /(create|save|confirm|done)/i }));
+        if (saveBtn && (await saveBtn.count().catch(() => 0)) > 0 && (await saveBtn.isVisible().catch(() => false))) {
+          await saveBtn.click({ timeout: 5000 });
         }
       }
     } catch {}
@@ -1035,7 +1654,13 @@ export class FlowBrowserWorker {
     const job = this.jobs.get(this.activeJobId);
     if (
       !job ||
-      !["awaiting_download", "awaiting_manual_generate"].includes(job.status)
+      ![
+        "generating",
+        "output_detected",
+        "downloading",
+        "awaiting_download",
+        "awaiting_manual_generate",
+      ].includes(job.status)
     )
       return;
 
@@ -1102,10 +1727,12 @@ export class FlowBrowserWorker {
         job.message =
           "The file exists in backend storage. Retry metadata registration instead of downloading the image again.";
       } else {
-        job.status = "failed";
-        job.error = error.message;
-        job.message =
-          "The image download or import failed. Inspect the job error before retrying.";
+        this.setJobTerminal(
+          job,
+          "failed",
+          error.message,
+          "The image download or import failed. Inspect the job error before retrying."
+        );
       }
       this.touch(job);
     } finally {
@@ -1148,9 +1775,7 @@ export class FlowBrowserWorker {
 
         job.importResult = bgPayload.asset;
         job.detectedMimeType = imageType.mimeType;
-        job.status = "completed";
-        job.message = "Background image downloaded and applied to scene successfully.";
-        this.touch(job);
+        this.setJobTerminal(job, "completed", undefined, "Background image downloaded and applied to scene successfully.");
         return;
       }
 
@@ -1202,9 +1827,7 @@ export class FlowBrowserWorker {
 
   async persistAssetMetadata(job) {
     if (job.targetType === "background" || job.sceneId) {
-      job.status = "completed";
-      job.message = "Background asset import and registration completed successfully.";
-      this.touch(job);
+      this.setJobTerminal(job, "completed", undefined, "Background asset import and registration completed successfully.");
       return;
     }
 
@@ -1248,13 +1871,8 @@ export class FlowBrowserWorker {
         return job;
       }
 
-      job.status = "completed";
       job.asset = assetPayload.asset || result;
-      job.completedAt = new Date().toISOString();
-      job.message =
-        "Google Flow image imported and registered against the character.";
-      job.error = undefined;
-      this.touch(job);
+      this.setJobTerminal(job, "completed", undefined, "Google Flow image imported and registered against the character.");
       return job;
     } catch (networkOrParseError) {
       job.status = "import_metadata_failed";
@@ -1294,11 +1912,7 @@ export class FlowBrowserWorker {
 
   async cancelJob(jobId) {
     const job = this.requireJob(jobId);
-    job.status = "cancelled";
-    job.message =
-      "Job cancelled. Any already generated Flow media remains in the Google Flow project.";
-    if (this.activeJobId === jobId) this.activeJobId = null;
-    this.touch(job);
+    this.setJobTerminal(job, "cancelled", undefined, "Job cancelled. Any already generated Flow media remains in the Google Flow project.");
     return job;
   }
 

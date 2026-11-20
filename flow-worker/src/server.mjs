@@ -359,6 +359,12 @@ const server = http.createServer(async (request, response) => {
       return;
     }
 
+    if (request.method === "GET" && pathname === "/diagnostics/inspect") {
+      const inspection = await worker.inspectFlowPage();
+      sendJson(response, 200, { success: true, inspection });
+      return;
+    }
+
     if (request.method === "POST" && pathname === "/config") {
       const body = await readJson(request);
       try {
@@ -408,11 +414,20 @@ const server = http.createServer(async (request, response) => {
       return;
     }
 
+    if (request.method === "POST" && (pathname === "/jobs/cancel-active" || pathname === "/session/cancel-active")) {
+      const result = worker.cancelActiveJob();
+      sendJson(response, 200, { success: true, ...result });
+      return;
+    }
+
     if (request.method === "POST" && pathname === "/jobs") {
       const body = await readJson(request);
       if (!worker.context || !worker.page || worker.page.isClosed()) {
         sendJson(response, 409, { success: false, message: "Open the visible Flow browser session first." });
         return;
+      }
+      if (body.cancelPrevious) {
+        worker.cancelActiveJob("Cancelled by new incoming job request.");
       }
       const job = worker.createJob(body);
       const prepared = await worker.prepareJob(job.id);
@@ -456,9 +471,11 @@ const server = http.createServer(async (request, response) => {
     sendJson(response, 404, { success: false, message: "Endpoint not found." });
   } catch (error) {
     console.error("[FlowWorker] Request failed:", error.message);
-    sendJson(response, error.statusCode || 500, {
+    const statusCode = error.statusCode || 500;
+    sendJson(response, statusCode, {
       success: false,
-      message: error.message || "Flow worker request failed."
+      message: error.message || "Flow worker request failed.",
+      activeJob: error.activeJob,
     });
   }
 });

@@ -804,15 +804,17 @@ export class IntelligentScriptParser {
     }
 
     const resolveCharacter = (keyOrName: string): { name: string; voice: string } => {
-      const lower = (keyOrName || '').toLowerCase().trim();
-      if (lower === 'narrator' || lower === 'सूत्रधार' || lower === 'कथावाचक') {
+      // Strip leading bullet markers, dashes, or numbered lists: e.g. "- चिंटू" -> "चिंटू"
+      const cleaned = (keyOrName || '').replace(/^[-*•\d.)\s]+/, '').trim();
+      const lower = cleaned.toLowerCase();
+      if (!cleaned || lower === 'narrator' || lower === 'सूत्रधार' || lower === 'कथावाचक') {
         return { name: 'Narrator', voice: IntelligentScriptParser.resolveDefaultVoice('Narrator', language) };
       }
       const found = keyToCharMap.get(lower);
       if (found) {
         return { name: found.name, voice: found.voice || IntelligentScriptParser.resolveDefaultVoice(found.name, language) };
       }
-      return { name: keyOrName.trim(), voice: IntelligentScriptParser.resolveDefaultVoice(keyOrName, language) };
+      return { name: cleaned, voice: IntelligentScriptParser.resolveDefaultVoice(cleaned, language) };
     };
 
     const parsedScenes: ParsedScene[] = [];

@@ -31,6 +31,7 @@ import {
   syncCharacterToGoogleFlowDirect,
   fetchGenerationJob,
   fetchStoryCharacterMappings,
+  cancelActiveFlowJob,
   StoryFlowContextResponse,
   StoryFlowSceneItem,
   StoryFlowCharacterItem,
@@ -365,8 +366,8 @@ export default function GoogleFlowPage() {
 
         // Ensure active character selection belongs strictly to this story's character roster
         const storyCharIds = (flowCtx.characters || []).map((c: any) => c.id);
-        if (selectedCharacterId && !storyCharIds.includes(selectedCharacterId)) {
-          setSelectedCharacterIdState("");
+        if (!selectedCharacterId || !storyCharIds.includes(selectedCharacterId)) {
+          setSelectedCharacterIdState(storyCharIds[0] || "");
         }
       } catch (err: any) {
         console.warn("Could not load story context:", err);
@@ -2546,19 +2547,40 @@ export default function GoogleFlowPage() {
                                       {error}
                                     </span>
                                   </div>
-                                  <button
-                                    type="button"
-                                    className="flow-btn danger sm"
-                                    onClick={async () => {
-                                      if (error?.toLowerCase().includes("flow worker") || error?.toLowerCase().includes("bearer token")) {
-                                        try { await reconnectWorker(); } catch {}
-                                      }
-                                      await handleGenerateSceneBackground(sc.sceneId);
-                                    }}
-                                    style={{ flexShrink: 0 }}
-                                  >
-                                    Retry
-                                  </button>
+                                  <div style={{ display: "flex", gap: "6px", flexShrink: 0 }}>
+                                    <button
+                                      type="button"
+                                      className="flow-btn danger sm"
+                                      onClick={async () => {
+                                        if (error?.toLowerCase().includes("flow worker") || error?.toLowerCase().includes("bearer token")) {
+                                          try { await reconnectWorker(); } catch {}
+                                        }
+                                        await handleGenerateSceneBackground(sc.sceneId);
+                                      }}
+                                    >
+                                      Retry
+                                    </button>
+                                    {(error?.includes("active") || error?.includes("stuck") || error?.includes("lock")) && (
+                                      <button
+                                        type="button"
+                                        className="flow-btn secondary sm"
+                                        onClick={async () => {
+                                          try {
+                                            await cancelActiveFlowJob();
+                                            if (selectedStoryId) await loadStoryContext(selectedStoryId);
+                                            setSceneErrors((prev) => {
+                                              const next = { ...prev };
+                                              delete next[sc.sceneId];
+                                              return next;
+                                            });
+                                          } catch {}
+                                        }}
+                                        title="Cancel stuck job and release worker lock"
+                                      >
+                                        Clear Lock
+                                      </button>
+                                    )}
+                                  </div>
                                 </div>
                               )}
                             </div>

@@ -288,6 +288,24 @@ googleFlowRouter.get('/worker/session', async (_req: Request, res: Response) => 
   }
 });
 
+googleFlowRouter.get('/worker/inspect', async (_req: Request, res: Response) => {
+  try {
+    const { status, data } = await forwardToWorker('/diagnostics/inspect', 'GET');
+    res.status(status).json(data);
+  } catch (err: any) {
+    res.status(502).json({ success: false, message: `Worker proxy error: ${err.message}` });
+  }
+});
+
+googleFlowRouter.get('/inspect', async (_req: Request, res: Response) => {
+  try {
+    const { status, data } = await forwardToWorker('/diagnostics/inspect', 'GET');
+    res.status(status).json(data);
+  } catch (err: any) {
+    res.status(502).json({ success: false, message: `Worker proxy error: ${err.message}` });
+  }
+});
+
 googleFlowRouter.post('/worker/session/open', async (req: Request, res: Response) => {
   try {
     const { status, data } = await forwardToWorker('/session/open', 'POST', req.body);
@@ -547,5 +565,25 @@ googleFlowRouter.get('/jobs/:id', async (req: Request, res: Response) => {
     res.json({ success: true, job });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message || 'Failed to get job' });
+  }
+});
+
+googleFlowRouter.post('/jobs/cancel-active', async (_req: Request, res: Response) => {
+  try {
+    const result = await GenerationOrchestratorService.cancelActiveFlowJob();
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message || 'Failed to cancel active job' });
+  }
+});
+
+googleFlowRouter.delete('/jobs/:id', async (req: Request, res: Response) => {
+  try {
+    const rawId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const jobId = String(rawId);
+    const result = await GenerationOrchestratorService.cancelJob(jobId);
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message || 'Failed to cancel job' });
   }
 });

@@ -823,3 +823,29 @@ export async function fetchGenerationJob(
   return data.job;
 }
 
+export async function cancelActiveFlowJob(): Promise<{ success: boolean; message: string }> {
+  const apiUrl = getApiUrl();
+  const res = await fetch(`${apiUrl}/api/integrations/google-flow/jobs/cancel-active`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.message || "Failed to cancel active Google Flow job.");
+  }
+  return data;
+}
+
+export async function cancelGenerationJob(jobId: string): Promise<{ success: boolean; message: string }> {
+  const apiUrl = getApiUrl();
+  const res = await fetch(`${apiUrl}/api/integrations/google-flow/jobs/${encodeURIComponent(jobId)}`, {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.message || "Failed to cancel job.");
+  }
+  return data;
+}
+

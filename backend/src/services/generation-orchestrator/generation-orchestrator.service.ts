@@ -32,7 +32,22 @@ export interface GenerationJobRecord {
   assetType?: 'scene_background' | 'master_reference' | 'turnaround' | 'expression' | 'pose';
   provider: GenerationProviderType;
   prompt: string;
-  status: 'queued' | 'preparing' | 'generating' | 'importing' | 'completed' | 'failed' | 'awaiting_download' | 'awaiting_manual_action';
+  status:
+    | 'queued'
+    | 'preparing'
+    | 'prompt_filled'
+    | 'agent_prompt_submitted'
+    | 'awaiting_agent_confirmation'
+    | 'generation_submitted'
+    | 'generating'
+    | 'output_detected'
+    | 'downloading'
+    | 'importing'
+    | 'completed'
+    | 'failed'
+    | 'cancelled'
+    | 'awaiting_download'
+    | 'awaiting_manual_action';
   progress: number;
   result?: ImportAssetResult;
   error?: string;
@@ -125,9 +140,33 @@ export class GenerationOrchestratorService {
                   resultAssetId = wJob.importResult.assetId;
                 } else if (wJob.status === 'failed') {
                   nextStatus = 'failed';
-                } else if (wJob.status === 'awaiting_download' || wJob.status === 'generating') {
+                } else if (wJob.status === 'prompt_filled') {
+                  nextStatus = 'prompt_filled';
+                  nextProgress = 25;
+                } else if (wJob.status === 'agent_prompt_submitted') {
+                  nextStatus = 'agent_prompt_submitted';
+                  nextProgress = 35;
+                } else if (wJob.status === 'awaiting_agent_confirmation') {
+                  nextStatus = 'awaiting_agent_confirmation';
+                  nextProgress = 40;
+                } else if (wJob.status === 'generation_submitted') {
+                  nextStatus = 'generation_submitted';
+                  nextProgress = 45;
+                } else if (wJob.status === 'generating') {
                   nextStatus = 'generating';
                   nextProgress = 60;
+                } else if (wJob.status === 'output_detected') {
+                  nextStatus = 'output_detected';
+                  nextProgress = 75;
+                } else if (wJob.status === 'downloading') {
+                  nextStatus = 'downloading';
+                  nextProgress = 85;
+                } else if (wJob.status === 'importing') {
+                  nextStatus = 'importing';
+                  nextProgress = 95;
+                } else if (wJob.status === 'awaiting_download') {
+                  nextStatus = 'awaiting_download';
+                  nextProgress = 70;
                 } else if (wJob.status === 'awaiting_manual_generate') {
                   nextStatus = 'awaiting_manual_action';
                 }
@@ -183,6 +222,67 @@ export class GenerationOrchestratorService {
     }
 
     return this.jobs.get(jobId);
+  }
+
+  /**
+   * Explicitly cancels the active Flow job on worker and reconciles database state.
+   */
+  public static async cancelActiveFlowJob(): Promise<{ success: boolean; message: string }> {
+    try {
+      const { token, metadata } = await GoogleFlowCredentialService.getOrCreateWorkerCredential();
+      const workerUrl = (metadata?.workerUrl || process.env.FLOW_WORKER_URL || 'http://127.0.0.1:4177').replace(/\/+$/, '');
+      const res = await fetch(`${workerUrl}/jobs/cancel-active`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      }).catch(() => null);
+
+      // Reconcile any in-memory or PostgreSQL jobs that are active
+      for (const [id, j] of this.jobs.entries()) {
+        if (!['completed', 'cancelled', 'failed'].includes(j.status)) {
+          j.status = 'cancelled';
+          j.error = 'Cancelled by user request.';
+          j.updatedAt = new Date().toISOString();
+          try {
+            await updateGenerationJob(id, { status: 'cancelled', error: 'Cancelled by user request.' });
+          } catch {}
+        }
+      }
+
+      if (res && res.ok) {
+        const data = await res.json().catch(() => ({}));
+        return { success: true, message: data.message || 'Active Google Flow job cancelled successfully.' };
+      }
+      return { success: true, message: 'Active Google Flow jobs cleared.' };
+    } catch (err: any) {
+      return { success: false, message: err.message || 'Failed to cancel active Flow job.' };
+    }
+  }
+
+  /**
+   * Cancels a specific generation job by ID.
+   */
+  public static async cancelJob(jobId: string): Promise<{ success: boolean; message: string }> {
+    const job = await this.getJob(jobId);
+    if (!job) {
+      return { success: false, message: 'Job not found.' };
+    }
+    if (job.workerJobId) {
+      try {
+        const { token, metadata } = await GoogleFlowCredentialService.getOrCreateWorkerCredential();
+        const workerUrl = (metadata?.workerUrl || process.env.FLOW_WORKER_URL || 'http://127.0.0.1:4177').replace(/\/+$/, '');
+        await fetch(`${workerUrl}/jobs/${job.workerJobId}`, {
+          method: 'DELETE',
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        }).catch(() => {});
+      } catch {}
+    }
+    job.status = 'cancelled';
+    job.error = 'Job cancelled by user request.';
+    job.updatedAt = new Date().toISOString();
+    try {
+      await updateGenerationJob(jobId, { status: 'cancelled', error: 'Job cancelled by user request.' });
+    } catch {}
+    return { success: true, message: `Job ${jobId} was cancelled.` };
   }
 
   /**
@@ -438,12 +538,42 @@ export class GenerationOrchestratorService {
         if (!submitRes.ok) {
           const errData = (await submitRes.json().catch(() => ({}))) as any;
           if (submitRes.status === 409) {
-            throw new Error("Google Flow browser is not open. Please click 'Open Flow Browser' in the top bar to launch the companion browser.");
+            if (errData.message?.includes("browser session") || errData.message?.includes("browser is not open")) {
+              throw new Error("Google Flow browser is not open. Please click 'Open Flow Browser' in the top bar to launch the companion browser.");
+            }
+            if (errData.message?.includes("Another Flow job is active")) {
+              console.warn('[GenerationOrchestrator] Another Flow job was active. Auto-recovering lock and retrying with cancelPrevious...');
+              try {
+                await fetch(`${workerUrl}/jobs/cancel-active`, {
+                  method: 'POST',
+                  headers: token ? { Authorization: `Bearer ${token}` } : {},
+                });
+                submitRes = await fetch(`${workerUrl}/jobs`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                  },
+                  body: JSON.stringify({
+                    targetType: 'background',
+                    storyId,
+                    sceneId: scene.sceneId,
+                    prompt: promptData.prompt,
+                    aspectRatio: promptData.aspectRatio,
+                    projectUrl,
+                    cancelPrevious: true,
+                  }),
+                });
+              } catch {}
+            }
           }
-          if (submitRes.status === 401) {
-            throw new Error("Flow worker authentication out of sync. Please retry or click 'Verify / Reconnect' in Integration Studio.");
+          if (!submitRes.ok) {
+            if (submitRes.status === 401) {
+              throw new Error("Flow worker authentication out of sync. Please retry or click 'Verify / Reconnect' in Integration Studio.");
+            }
+            const retryErr = (await submitRes.json().catch(() => ({}))) as any;
+            throw new Error(retryErr.message || errData.message || `Flow worker returned HTTP ${submitRes.status}`);
           }
-          throw new Error(errData.message || `Flow worker returned HTTP ${submitRes.status}`);
         }
 
         const submitPayload = (await submitRes.json()) as any;
@@ -796,12 +926,44 @@ export class GenerationOrchestratorService {
         if (!submitRes.ok) {
           const errData = (await submitRes.json().catch(() => ({}))) as any;
           if (submitRes.status === 409) {
-            throw new Error("Google Flow browser is not open. Please click 'Open Flow Browser' in the top bar to launch the companion browser.");
+            if (errData.message?.includes("browser session") || errData.message?.includes("browser is not open")) {
+              throw new Error("Google Flow browser is not open. Please click 'Open Flow Browser' in the top bar to launch the companion browser.");
+            }
+            if (errData.message?.includes("Another Flow job is active")) {
+              console.warn('[GenerationOrchestrator] Another Flow job was active. Auto-recovering lock and retrying with cancelPrevious...');
+              try {
+                await fetch(`${workerUrl}/jobs/cancel-active`, {
+                  method: 'POST',
+                  headers: token ? { Authorization: `Bearer ${token}` } : {},
+                });
+                submitRes = await fetch(`${workerUrl}/jobs`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                  },
+                  body: JSON.stringify({
+                    targetType: 'character',
+                    characterId: character.id,
+                    characterName: flowCharacterName,
+                    assetType: assetType === 'master_reference' ? 'main' : 'turnaround',
+                    view: variation || 'front',
+                    prompt: finalPrompt,
+                    projectUrl,
+                    storyId,
+                    cancelPrevious: true,
+                  }),
+                });
+              } catch {}
+            }
           }
-          if (submitRes.status === 401) {
-            throw new Error("Flow worker authentication out of sync. Please retry or click 'Verify / Reconnect' in Integration Studio.");
+          if (!submitRes.ok) {
+            if (submitRes.status === 401) {
+              throw new Error("Flow worker authentication out of sync. Please retry or click 'Verify / Reconnect' in Integration Studio.");
+            }
+            const retryErr = (await submitRes.json().catch(() => ({}))) as any;
+            throw new Error(retryErr.message || errData.message || `Flow worker returned HTTP ${submitRes.status}`);
           }
-          throw new Error(errData.message || `Flow worker returned HTTP ${submitRes.status}`);
         }
 
         const submitPayload = (await submitRes.json()) as any;
