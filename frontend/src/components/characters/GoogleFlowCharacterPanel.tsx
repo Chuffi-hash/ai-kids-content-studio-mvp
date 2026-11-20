@@ -11,7 +11,7 @@ import {
   requestFlowCharacterGeneration,
   retryFlowCharacterAssetRegistration,
 } from '../../services/googleFlowWorker.service';
-import { useGoogleFlowConnection } from '../../context/GoogleFlowConnectionContext';
+import { useGoogleFlowConnection } from '../../context/useGoogleFlowConnection';
 import './GoogleFlowCharacterPanel.css';
 
 function useOptionalGoogleFlowConnection() {

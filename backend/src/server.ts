@@ -79,8 +79,8 @@ async function startServer() {
     console.warn('[Server] Google Flow credential notice:', err.message);
   }
 
-  app.listen(port, () => {
-    console.log(`API running on http://localhost:${port}`);
+  app.listen(port, "0.0.0.0", () => {
+    console.log(`API running on http://127.0.0.1:${port}`);
   });
 }
 

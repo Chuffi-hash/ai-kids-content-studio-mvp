@@ -67,7 +67,7 @@ export interface GoogleFlowConnectionContextType {
   clearConnection: () => void;
 }
 
-const GoogleFlowConnectionContext = createContext<GoogleFlowConnectionContextType | null>(null);
+export const GoogleFlowConnectionContext = createContext<GoogleFlowConnectionContextType | null>(null);
 
 export const GoogleFlowConnectionProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [credentialStatus, setCredentialStatus] = useState<FlowCredentialStatus | null>(null);
@@ -400,11 +400,3 @@ export const GoogleFlowConnectionProvider: React.FC<{ children: React.ReactNode 
     </GoogleFlowConnectionContext.Provider>
   );
 };
-
-export function useGoogleFlowConnection(): GoogleFlowConnectionContextType {
-  const context = useContext(GoogleFlowConnectionContext);
-  if (!context) {
-    throw new Error('useGoogleFlowConnection must be used within a GoogleFlowConnectionProvider');
-  }
-  return context;
-}

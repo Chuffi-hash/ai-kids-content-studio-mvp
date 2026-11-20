@@ -55,7 +55,7 @@ import {
 } from "../services/editor.service";
 import { getAllCharacters, Character } from "../services/character.service";
 import { EditorStory, EditorScene } from "../types/editor";
-import { useGoogleFlowConnection } from "../context/GoogleFlowConnectionContext";
+import { useGoogleFlowConnection } from "../context/useGoogleFlowConnection";
 import { CollapsibleSection } from "../components/editor/CollapsibleSection";
 import GoogleFlowCharacterPanel from "../components/characters/GoogleFlowCharacterPanel";
 import "./GoogleFlowPage.css";

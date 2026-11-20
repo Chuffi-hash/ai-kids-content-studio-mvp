@@ -14,6 +14,9 @@ import {
   parseImageDimensions,
   safeFilename,
 } from "./image-validation.mjs";
+import { downloadFlowImage } from "./flow-download.mjs";
+
+export { downloadFlowImage };
 
 const VALID_ASSET_TYPES = new Set([
   "main",
@@ -716,20 +719,107 @@ export class FlowBrowserWorker {
       "output_detected",
       "downloading",
       "importing",
+      "awaiting_download",
     ].includes(active.status);
     const timeoutThresholdMs = isActivelyGenerating ? 120000 : 30000;
 
     if (ageMs > timeoutThresholdMs) {
+      const recoveredJobId = this.activeJobId;
       console.warn(
-        `[FlowBrowser] Recovering stale activeJobId lock for job ${this.activeJobId} (${Math.round(ageMs / 1000)}s old, status=${active.status}).`,
+        `[FlowBrowser] Recovering stale activeJobId lock for job ${recoveredJobId} (${Math.round(ageMs / 1000)}s old, status=${active.status}).`,
       );
-      this.setJobTerminal(
-        active,
-        "failed",
-        `Job was inactive in status "${active.status}" and active lock was safely recovered.`,
-        "Active lock recovered due to timeout.",
-      );
+      // Immediately release active lock so new operations are unblocked
+      this.activeJobId = null;
+      active.status = "failed";
+      active.errorCode = "STALE_DOWNLOAD_JOB";
+      active.error = `STALE_DOWNLOAD_JOB: Worker was interrupted during image download or processing in status "${active.status}".`;
+      active.message = "Stale lock safely recovered due to timeout.";
+      this.touch(active);
+
+      // Attempt state reconciliation if recoverable artifacts exist
+      return this.reconcileStaleJob(active).catch((err) => {
+        console.warn(`[FlowBrowser] Stale job reconciliation notice for ${recoveredJobId}:`, err.message);
+      });
     }
+    return Promise.resolve();
+  }
+
+  async reconcileStaleJob(job) {
+    if (!job) return;
+
+    // Case 1: Verified downloaded file exists on disk
+    if (job.downloadPath) {
+      try {
+        const stat = await fs.stat(job.downloadPath).catch(() => null);
+        if (stat && stat.size > 50) {
+          const buf = await fs.readFile(job.downloadPath).catch(() => null);
+          if (buf && buf.length > 50) {
+            const detected = detectImageType(buf);
+            const dims = parseImageDimensions(buf);
+            if (detected && dims.width >= 32 && dims.height >= 32) {
+              console.info(
+                `[FlowBrowser] Reconcile Case 1: Found downloaded file on disk (${stat.size} bytes). Resuming import.`,
+              );
+              job.status = "importing";
+              delete job.error;
+              delete job.errorCode;
+              this.touch(job);
+              await this.importDownloadedAsset(job, buf, detected);
+              return;
+            }
+          }
+        }
+      } catch (c1Err) {
+        console.warn(`[FlowBrowser] Case 1 recovery failed: ${c1Err.message}`);
+      }
+    }
+
+    // Case 2: Captured image response exists in memory
+    if (job.capturedImageResponses && job.capturedImageResponses.size > 0) {
+      for (const [url, item] of job.capturedImageResponses.entries()) {
+        if (item && item.buffer && item.buffer.length > 50) {
+          const detected = detectImageType(item.buffer);
+          const dims = parseImageDimensions(item.buffer);
+          if (detected && dims.width >= 32 && dims.height >= 32) {
+            console.info(
+              `[FlowBrowser] Reconcile Case 2: Found captured image stream (${item.buffer.length} bytes). Resuming import.`,
+            );
+            job.status = "importing";
+            delete job.error;
+            delete job.errorCode;
+            this.touch(job);
+            await this.importDownloadedAsset(job, item.buffer, detected);
+            return;
+          }
+        }
+      }
+    }
+
+    // Case 5: Backend asset already exists
+    try {
+      if (job.sceneId || job.storyId) {
+        const statusRes = await fetch(
+          `${this.backendUrl}/api/integrations/google-flow/jobs?workerJobId=${encodeURIComponent(job.id)}`,
+          {
+            signal: AbortSignal.timeout(800),
+            headers: this.token ? { Authorization: `Bearer ${this.token}` } : {},
+          },
+        ).catch(() => null);
+        if (statusRes && statusRes.ok) {
+          const data = await statusRes.json().catch(() => null);
+          if (data?.job?.status === "completed" && data?.job?.resultUrl) {
+            job.status = "completed";
+            job.resultUrl = data.job.resultUrl;
+            job.completedAt = data.job.completedAt || new Date().toISOString();
+            job.message = "Job reconciled from existing backend asset.";
+            delete job.error;
+            delete job.errorCode;
+            this.touch(job);
+            return;
+          }
+        }
+      }
+    } catch {}
   }
 
   cancelActiveJob(reason = "Active job cancelled by user or system recovery.") {
@@ -1032,7 +1122,7 @@ export class FlowBrowserWorker {
             typeof response.request === "function" ? response.request() : null;
           if (request && typeof request.resourceType === "function") {
             const rType = request.resourceType();
-            if (rType !== "image") return;
+            if (!["image", "fetch", "xhr"].includes(rType)) return;
           }
 
           const headers =
@@ -1090,7 +1180,7 @@ export class FlowBrowserWorker {
   }
 
   findCapturedOutput(output, capturedResponses) {
-    if (!output || !capturedResponses) return null;
+    if (!output || !capturedResponses || capturedResponses.size === 0) return null;
     const exactUrl = output.sourceUrl;
     if (exactUrl && capturedResponses.has(exactUrl)) {
       return capturedResponses.get(exactUrl);
@@ -1099,6 +1189,24 @@ export class FlowBrowserWorker {
     if (rawSrc && capturedResponses.has(rawSrc)) {
       return capturedResponses.get(rawSrc);
     }
+
+    // Asset ID correlation: extract /asb/([a-zA-Z0-9_\-]+)
+    const extractAssetId = (u) => {
+      if (!u || typeof u !== "string") return null;
+      const m = u.match(/\/asb\/([a-zA-Z0-9_\-]+)/i);
+      return m ? m[1].replace(/=s\d+.*$/, "") : null;
+    };
+
+    const targetId = extractAssetId(exactUrl) || extractAssetId(rawSrc);
+    if (targetId) {
+      for (const [key, val] of capturedResponses.entries()) {
+        const keyId = extractAssetId(key);
+        if (keyId && keyId === targetId) {
+          return val;
+        }
+      }
+    }
+
     return null;
   }
 
@@ -1867,6 +1975,14 @@ export class FlowBrowserWorker {
     return job;
   }
 
+  async downloadFlowImage(opts) {
+    return await downloadFlowImage({
+      page: this.page,
+      downloadDir: this.downloadDir,
+      ...opts,
+    });
+  }
+
   async monitorGenerationAndDownload(
     jobId,
     baseline = { count: 0, identifiers: new Set() },
@@ -1929,91 +2045,27 @@ export class FlowBrowserWorker {
         let downloadedBuffer = null;
         let downloadedType = null;
 
-        // Path A: Click image container to open full editor and trigger visible Download
+        // Path A: Use structured downloadFlowImage with discrete phase states and timeouts
         try {
-          const tileEl = targetOutput.optionLocator;
-          const openEditorBtn = getFirstLocator(
-            tileEl.locator(
-              'div.image-container[aria-label="Open image in editor"], div[role="button"][aria-label*="editor" i], div.image-container',
-            ),
-          );
+          const dlResult = await downloadFlowImage({
+            page: this.page,
+            job,
+            output: targetOutput,
+            timeoutMs: 20000,
+            downloadDir: this.downloadDir,
+          });
 
-          let editorOpened = false;
-          if (
-            openEditorBtn &&
-            (await openEditorBtn.count().catch(() => 0)) > 0
-          ) {
-            await openEditorBtn.click({ timeout: 5000 }).catch(() => {});
-            editorOpened = true;
-          } else if (typeof tileEl.click === "function") {
-            await tileEl.click({ timeout: 5000 }).catch(() => {});
-            editorOpened = true;
-          }
-
-          if (editorOpened) {
-            await new Promise((r) => setTimeout(r, 600));
-
-            const downloadBtn = getFirstLocator(
-              this.page.locator(
-                'button[aria-label*="download" i], button[title*="download" i], button:has-text("Download"), [data-testid*="download" i]',
-              ),
+          if (dlResult.success && dlResult.buffer) {
+            downloadedBuffer = dlResult.buffer;
+            downloadedType = {
+              mimeType: dlResult.mimeType,
+              extension: dlResult.fileName.split(".").pop(),
+            };
+            job.downloadPath = dlResult.path;
+          } else {
+            console.warn(
+              `[FlowBrowser] Path A download notice (${dlResult.code}): ${dlResult.message}`,
             );
-
-            if (
-              downloadBtn &&
-              (await downloadBtn.count().catch(() => 0)) > 0 &&
-              (await downloadBtn.isVisible().catch(() => false))
-            ) {
-              if (typeof this.page.waitForEvent === "function") {
-                const [download] = await Promise.all([
-                  this.page
-                    .waitForEvent("download", { timeout: 12000 })
-                    .catch(() => [null]),
-                  downloadBtn.click({ timeout: 5000 }).catch(() => {}),
-                ]);
-
-                if (download && typeof download.saveAs === "function") {
-                  const tempDir = path.join(this.profileDir, "..", "downloads");
-                  await fs
-                    .mkdir(tempDir, { recursive: true, mode: 0o700 })
-                    .catch(() => {});
-                  const tempFilePath = path.join(
-                    tempDir,
-                    `flow-temp-${job.id}-${Date.now()}.bin`,
-                  );
-                  await download.saveAs(tempFilePath);
-                  const buf = await fs.readFile(tempFilePath).catch(() => null);
-                  if (buf && buf.length > 500) {
-                    const detected = detectImageType(buf);
-                    if (detected) {
-                      const finalPath = path.join(
-                        tempDir,
-                        `flow-${job.id}-${Date.now()}.${detected.extension}`,
-                      );
-                      await fs.rename(tempFilePath, finalPath).catch(() => {});
-                      downloadedBuffer = buf;
-                      downloadedType = detected;
-                    }
-                  }
-                }
-              }
-            }
-
-            // Close editor view
-            const closeBtn = getFirstLocator(
-              this.page.locator(
-                'button[aria-label="Close"], button[aria-label="Back"], button:has-text("Close"), button:has-text("Back")',
-              ),
-            );
-            if (
-              closeBtn &&
-              (await closeBtn.count().catch(() => 0)) > 0 &&
-              (await closeBtn.isVisible().catch(() => false))
-            ) {
-              await closeBtn.click().catch(() => {});
-            } else if (this.page.keyboard) {
-              await this.page.keyboard.press("Escape").catch(() => {});
-            }
           }
         } catch (uiDlErr) {
           console.warn(
@@ -2064,32 +2116,35 @@ export class FlowBrowserWorker {
           return;
         }
 
-        // If bytes were not captured, report OUTPUT_BYTES_NOT_CAPTURED safely without importing arbitrary images
-        job.status = "awaiting_download";
-        job.error =
-          "OUTPUT_BYTES_NOT_CAPTURED: Generation output was detected, but image bytes could not be automatically acquired.";
-        job.message =
-          "Generation output detected in Google Flow. Use Flow's Download button to complete import.";
-        this.touch(job);
+        // If bytes were not captured, fail the job clearly and release lock instead of staying indefinitely in awaiting_download
+        this.setJobTerminal(
+          job,
+          "failed",
+          "OUTPUT_BYTES_NOT_CAPTURED: Generation output was detected, but image bytes could not be automatically acquired.",
+          "Generation output detected in Google Flow, but image could not be downloaded. Please retry.",
+        );
         return;
       }
 
       if (job.status === "generating" || job.status === "output_detected") {
-        job.status = "awaiting_download";
-        job.message =
-          "Generation was submitted. When the tile appears in Flow, click Download; the worker will automatically capture and import it.";
-        this.touch(job);
+        this.setJobTerminal(
+          job,
+          "failed",
+          "GENERATION_TIMEOUT: Output tile was not detected within timeout window.",
+          "Generation timed out waiting for output tile in Google Flow.",
+        );
       }
     } catch (monitorErr) {
       if (monitorErr.message?.includes("OUTPUT_COUNT_MISMATCH")) {
+        this.setJobTerminal(job, "failed", monitorErr.message, monitorErr.message);
         throw monitorErr;
       }
-      if (job.status === "generating" || job.status === "output_detected") {
-        job.status = "awaiting_download";
-        job.message =
-          "Generation in progress. Worker listening for download event.";
-        this.touch(job);
-      }
+      this.setJobTerminal(
+        job,
+        "failed",
+        monitorErr.message,
+        "Generation monitor encountered an error.",
+      );
     } finally {
       if (typeof job._cleanupResponseListener === "function") {
         job._cleanupResponseListener();
