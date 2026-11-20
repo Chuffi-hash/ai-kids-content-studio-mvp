@@ -9,7 +9,7 @@ import {
   FLOW_HOME_URL,
   CHARACTER_VIEW_LABELS,
 } from "./prompts.mjs";
-import { detectImageType, safeFilename } from "./image-validation.mjs";
+import { detectImageType, parseImageDimensions, safeFilename } from "./image-validation.mjs";
 
 const VALID_ASSET_TYPES = new Set([
   "main",
@@ -886,6 +886,14 @@ export class FlowBrowserWorker {
         await fs.rm(temporaryPath, { force: true });
         job.message =
           "A download was detected, but it was not a supported PNG, JPEG, or WebP image. Download the generated image asset from Flow, not a project archive.";
+        this.touch(job);
+        return;
+      }
+
+      const { width, height } = parseImageDimensions(buffer);
+      if ((width > 0 && width < 32) || (height > 0 && height < 32)) {
+        await fs.rm(temporaryPath, { force: true });
+        job.message = `Downloaded image is a placeholder or corrupted (${width}x${height}px). Ensure you download the full generated image from Flow.`;
         this.touch(job);
         return;
       }

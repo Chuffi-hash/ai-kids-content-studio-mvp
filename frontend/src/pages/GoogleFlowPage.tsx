@@ -58,6 +58,25 @@ import "./GoogleFlowPage.css";
 
 type ActiveTab = "setup" | "connection" | "project" | "background" | "character";
 
+function cleanScriptText(text?: string): string {
+  if (!text) return "";
+  let clean = text;
+  // Aggressively strip known script/fountain labels and markdown markers
+  clean = clean.replace(
+    /^[*_#\s]*(?:Visual Direction|Visual Style|Environment|Camera Angle|Lighting|Narration|Action|Scene Description|Shot Instruction)\s*:?[\s*_#:]*\s*/gi,
+    ""
+  );
+  clean = clean.replace(/^[*_~`#\s]+|[*_~`#\s]+$/g, "");
+  clean = clean.replace(/^["“”'«»]+|["“”'«»]+$/g, "");
+  clean = clean.replace(
+    /^[*_#\s]*(?:Visual Direction|Visual Style|Environment|Camera Angle|Lighting|Narration|Action|Scene Description|Shot Instruction)\s*:?[\s*_#:]*\s*/gi,
+    ""
+  );
+  clean = clean.replace(/^[*_~`#\s]+|[*_~`#\s]+$/g, "");
+  clean = clean.replace(/^["“”'«»]+|["“”'«»]+$/g, "");
+  return clean.trim();
+}
+
 const ASPECT_RATIOS = [
   { value: "16:9", label: "16:9 (Landscape - YouTube/TV)" },
   { value: "9:16", label: "9:16 (Portrait - Shorts/Reels)" },
@@ -190,11 +209,13 @@ export default function GoogleFlowPage() {
   // ----------------------------------------------------
   const [characters, setCharacters] = useState<Character[]>([]);
   const [selectedCharacterId, setSelectedCharacterIdState] = useState<string>(
-    queryCharacterId || lastSelectedCharacterId || "",
+    queryCharacterId || "",
   );
   const setSelectedCharacterId = (id: string) => {
     setSelectedCharacterIdState(id);
-    setLastSelectedCharacterId(id);
+    if (id) {
+      setLastSelectedCharacterId(id);
+    }
   };
 
   // ----------------------------------------------------
@@ -215,15 +236,29 @@ export default function GoogleFlowPage() {
   const [selectedSceneIdsForBatch, setSelectedSceneIdsForBatch] = useState<string[]>([]);
   const [expandedSceneSettings, setExpandedSceneSettings] = useState<Record<string, boolean>>({});
   const [sceneCustomPrompts, setSceneCustomPrompts] = useState<Record<string, string>>({});
+  const [activeDirectivesSceneId, setActiveDirectivesSceneId] = useState<string | null>(null);
+  const [copiedPromptSceneId, setCopiedPromptSceneId] = useState<string | null>(null);
 
   // Character Studio specific state
   const [generatingCharIds, setGeneratingCharIds] = useState<Record<string, boolean>>({});
   const [charErrors, setCharErrors] = useState<Record<string, string>>({});
   const [isBatchCharRunning, setIsBatchCharRunning] = useState(false);
   const [batchCharSummary, setBatchCharSummary] = useState<string | null>(null);
+  const [charFilter, setCharFilter] = useState<"all" | "ready" | "missing">("all");
 
   // Lightbox Preview Modal
-  const [previewModalUrl, setPreviewModalUrl] = useState<string | null>(null);
+  interface PreviewAssetModalData {
+    url: string;
+    title: string;
+    subtitle?: string;
+    aspectRatio?: string;
+    sceneId?: string;
+    characterId?: string;
+    type: "background" | "character";
+  }
+  const [previewAsset, setPreviewAsset] = useState<PreviewAssetModalData | null>(null);
+  const setPreviewModalUrl = (url: string | null) =>
+    setPreviewAsset(url ? { url, title: "Asset Preview", type: "background" } : null);
 
   // ----------------------------------------------------
   // Unified Flow Project Resolution
@@ -255,14 +290,6 @@ export default function GoogleFlowPage() {
     getAllCharacters()
       .then((data) => {
         setCharacters(data || []);
-        if (
-          !selectedCharacterId &&
-          data &&
-          data.length > 0 &&
-          !queryCharacterId
-        ) {
-          setSelectedCharacterId(data[0].id);
-        }
       })
       .catch((err) =>
         console.warn("Could not fetch characters for Flow integration", err),
@@ -331,6 +358,12 @@ export default function GoogleFlowPage() {
         // 3. Fetch comprehensive story context (characters, environmental cues, missing counts)
         const flowCtx = await fetchStoryFlowContext(storyId);
         setStoryContext(flowCtx);
+
+        // Ensure active character selection belongs strictly to this story's character roster
+        const storyCharIds = (flowCtx.characters || []).map((c: any) => c.id);
+        if (selectedCharacterId && !storyCharIds.includes(selectedCharacterId)) {
+          setSelectedCharacterIdState("");
+        }
       } catch (err: any) {
         console.warn("Could not load story context:", err);
         setStoryContextError(err.message || "Failed to load story context.");
@@ -803,10 +836,11 @@ export default function GoogleFlowPage() {
   // ----------------------------------------------------
   // Selected Character for Section D
   // ----------------------------------------------------
-  const selectedCharacter =
-    characters.find((c) => c.id === selectedCharacterId) ||
-    characters[0] ||
-    null;
+  const selectedCharacter = selectedCharacterId
+    ? (storyContext?.characters || []).find((c) => c.id === selectedCharacterId) ||
+      characters.find((c) => c.id === selectedCharacterId) ||
+      null
+    : null;
 
   return (
     <div className="flow-page-container">
@@ -955,11 +989,11 @@ export default function GoogleFlowPage() {
                 )}
               </span>
             )}
-            {selectedCharacterId && (
+            {activeTab === "character" && selectedCharacter && (
               <span style={{ marginLeft: selectedStoryId ? "12px" : 0 }}>
                 Active Character:{" "}
                 <strong>
-                  {selectedCharacter?.name || selectedCharacterId}
+                  {selectedCharacter.name}
                 </strong>
               </span>
             )}
@@ -2037,172 +2071,221 @@ export default function GoogleFlowPage() {
       {/* ==================================================== */}
       {activeTab === "background" && (
         <div className="flow-tab-content">
-          {/* Production Toolbar */}
-          <div className="flow-production-toolbar">
-            <div className="flow-production-toolbar-row">
-              {/* Active Story selector */}
-              <div className="flow-form-group" style={{ margin: 0, minWidth: "220px" }}>
-                <label className="flow-form-label">Active Story</label>
-                <select
-                  className="flow-select"
-                  value={selectedStoryId}
-                  onChange={(e) => setSelectedStoryId(e.target.value)}
-                >
-                  {stories.map((st) => (
-                    <option key={st.storyId} value={st.storyId}>
-                      {st.title}
-                    </option>
-                  ))}
-                </select>
-              </div>
+          {(() => {
+            const allScenes = storyContext?.scenes || [];
+            const filteredScenes = allScenes.filter((sc) => {
+              if (bgFilter === "ready") return sc.hasBackground;
+              if (bgFilter === "missing") return !sc.hasBackground;
+              return true;
+            });
+            const isAllFilteredSelected =
+              filteredScenes.length > 0 &&
+              filteredScenes.every((sc) => selectedSceneIdsForBatch.includes(sc.sceneId));
 
-              {/* Provider selector */}
-              <div className="flow-form-group" style={{ margin: 0, minWidth: "240px" }}>
-                <label className="flow-form-label">Generation Engine</label>
-                <select
-                  className="flow-select flow-provider-select"
-                  value={generationProvider}
-                  onChange={(e) => setGenerationProvider(e.target.value as any)}
-                >
-                  <option value="gemini_api">Gemini Imagen 3 (Direct Cloud API)</option>
-                  <option value="google_flow">Google Flow (Loopback Playwright Worker)</option>
-                </select>
-              </div>
+            return (
+              <>
+                {/* Production Studio Toolbar */}
+                <div className="flow-production-toolbar">
+                  {/* Top Bar: Story & Engine Selectors */}
+                  <div className="flow-production-toolbar-top">
+                    <div className="flow-toolbar-left-group">
+                      <div className="flow-story-selector-box">
+                        <label className="flow-toolbar-label">
+                          <BookOpenIcon size={13} />
+                          <span>Active Story</span>
+                        </label>
+                        <div className="flow-select-wrapper">
+                          <select
+                            className="flow-select flow-story-select"
+                            value={selectedStoryId}
+                            onChange={(e) => setSelectedStoryId(e.target.value)}
+                          >
+                            {stories.map((st) => (
+                              <option key={st.storyId} value={st.storyId}>
+                                {st.title}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
 
-              {/* Provider Health Pill */}
-              <div style={{ display: "flex", alignItems: "flex-end", height: "100%", paddingBottom: "2px" }}>
-                {generationProvider === "gemini_api" ? (
-                  <span className={`flow-provider-pill ${providersStatus?.gemini_api?.available !== false ? "ready" : "offline"}`}>
-                    {providersStatus?.gemini_api?.available !== false ? "⚡ Gemini API Ready" : "⚠️ API Key Needed"}
-                  </span>
-                ) : (
-                  <span className={`flow-provider-pill ${workerHealth?.isProvisioned ? "ready" : "offline"}`}>
-                    {workerHealth?.isProvisioned ? "🤖 Flow Worker Paired" : "⚠️ Flow Worker Offline"}
-                  </span>
+                      <div className="flow-story-stat-badge">
+                        <span>{storyContext?.summary?.totalScenes || 0} Scenes</span>
+                        <span className="dot-divider">•</span>
+                        <span>{storyContext?.summary?.totalCharacters || 0} Characters</span>
+                      </div>
+                    </div>
+
+                    <div className="flow-toolbar-right-group">
+                      <div className="flow-engine-selector-box">
+                        <label className="flow-toolbar-label">
+                          <SparklesIcon size={13} />
+                          <span>Generation Engine</span>
+                        </label>
+                        <div className="flow-select-wrapper">
+                          <select
+                            className="flow-select flow-provider-select"
+                            value={generationProvider}
+                            onChange={(e) => setGenerationProvider(e.target.value as any)}
+                          >
+                            <option value="gemini_api">⚡ Gemini Imagen 3 (Direct Cloud API)</option>
+                            <option value="google_flow">🤖 Google Flow (Loopback Playwright Worker)</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className="flow-engine-status-box">
+                        {generationProvider === "gemini_api" ? (
+                          <span
+                            className={`flow-provider-pill ${
+                              providersStatus?.gemini_api?.available !== false ? "ready" : "offline"
+                            }`}
+                          >
+                            <span className="flow-status-dot" />
+                            <span>
+                              {providersStatus?.gemini_api?.available !== false
+                                ? "Gemini API Ready"
+                                : "API Key Needed"}
+                            </span>
+                          </span>
+                        ) : (
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                            <span
+                              className={`flow-provider-pill ${
+                                workerHealth?.isProvisioned ? "ready" : "offline"
+                              }`}
+                            >
+                              <span className="flow-status-dot" />
+                              <span>
+                                {workerHealth?.isProvisioned ? "Flow Worker Paired" : "Worker Offline"}
+                              </span>
+                            </span>
+                            <button
+                              type="button"
+                              className="flow-btn secondary sm flow-open-browser-btn"
+                              disabled={isSessionBusy}
+                              onClick={() => openBrowser(effectiveProjectUrl || undefined)}
+                              title="Launch or bring up visible Google Flow companion browser"
+                            >
+                              <span>Open Flow Browser ↗</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Bottom Bar: Filters & Batch Actions */}
+                  <div className="flow-production-toolbar-bottom">
+                    <div className="flow-toolbar-filter-group">
+                      <div className="flow-segmented-control">
+                        <button
+                          type="button"
+                          className={`flow-segment-btn ${bgFilter === "all" ? "active" : ""}`}
+                          onClick={() => setBgFilter("all")}
+                        >
+                          All <span className="flow-segment-count">({storyContext?.summary?.totalScenes || 0})</span>
+                        </button>
+                        <button
+                          type="button"
+                          className={`flow-segment-btn ${bgFilter === "ready" ? "active" : ""}`}
+                          onClick={() => setBgFilter("ready")}
+                        >
+                          Ready <span className="flow-segment-count">({storyContext?.summary?.scenesWithBackground || 0})</span>
+                        </button>
+                        <button
+                          type="button"
+                          className={`flow-segment-btn ${bgFilter === "missing" ? "active" : ""}`}
+                          onClick={() => setBgFilter("missing")}
+                        >
+                          Missing <span className="flow-segment-count">({storyContext?.summary?.missingBackgroundCount || 0})</span>
+                        </button>
+                      </div>
+
+                      {allScenes.length > 0 && (
+                        <label className="flow-select-all-label">
+                          <input
+                            type="checkbox"
+                            className="flow-standard-checkbox"
+                            checked={isAllFilteredSelected}
+                            onChange={() => toggleSelectAllScenes(filteredScenes)}
+                          />
+                          <span>Select All ({filteredScenes.length})</span>
+                        </label>
+                      )}
+                    </div>
+
+                    <div className="flow-toolbar-actions-group">
+                      {selectedSceneIdsForBatch.length > 0 && (
+                        <button
+                          type="button"
+                          className="flow-btn secondary sm"
+                          disabled={isBatchBgRunning}
+                          onClick={handleGenerateSelectedBackgrounds}
+                        >
+                          <span>↻ Regenerate Selected ({selectedSceneIdsForBatch.length})</span>
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        className="flow-btn primary sm flow-batch-generate-btn"
+                        disabled={
+                          isBatchBgRunning ||
+                          (storyContext?.summary?.missingBackgroundCount || 0) === 0
+                        }
+                        onClick={handleBatchGenerateMissingBackgrounds}
+                      >
+                        <SparklesIcon size={14} />
+                        <span>
+                          {isBatchBgRunning
+                            ? "Generating..."
+                            : `Generate All Missing (${storyContext?.summary?.missingBackgroundCount || 0})`}
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Batch Status Message */}
+                {batchBgSummary && (
+                  <div className="flow-callout info" style={{ marginBottom: "12px" }}>
+                    <span>{batchBgSummary}</span>
+                    <button
+                      type="button"
+                      className="flow-btn secondary sm"
+                      style={{ marginLeft: "auto", padding: "2px 8px", fontSize: "11px" }}
+                      onClick={() => setBatchBgSummary(null)}
+                    >
+                      Dismiss
+                    </button>
+                  </div>
                 )}
-              </div>
-            </div>
 
-            {/* Filter and Batch Actions Row */}
-            <div className="flow-production-actions-row">
-              <div className="flow-filter-pills">
-                <button
-                  type="button"
-                  className={`flow-filter-btn ${bgFilter === "all" ? "active" : ""}`}
-                  onClick={() => setBgFilter("all")}
-                >
-                  All ({storyContext?.summary?.totalScenes || 0})
-                </button>
-                <button
-                  type="button"
-                  className={`flow-filter-btn ${bgFilter === "ready" ? "active" : ""}`}
-                  onClick={() => setBgFilter("ready")}
-                >
-                  Ready ({storyContext?.summary?.scenesWithBackground || 0})
-                </button>
-                <button
-                  type="button"
-                  className={`flow-filter-btn ${bgFilter === "missing" ? "active" : ""}`}
-                  onClick={() => setBgFilter("missing")}
-                >
-                  Missing ({storyContext?.summary?.missingBackgroundCount || 0})
-                </button>
-              </div>
-
-              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
-                {storyContext?.scenes && storyContext.scenes.length > 0 && (
-                  <button
-                    type="button"
-                    className="flow-btn secondary sm"
-                    onClick={() => {
-                      const scenesToToggle = (storyContext?.scenes || []).filter((sc) => {
-                        if (bgFilter === "ready") return sc.hasBackground;
-                        if (bgFilter === "missing") return !sc.hasBackground;
-                        return true;
-                      });
-                      toggleSelectAllScenes(scenesToToggle);
-                    }}
-                  >
-                    {selectedSceneIdsForBatch.length > 0 ? "Deselect All" : "Select All"}
-                  </button>
+                {/* Context Loading / Error */}
+                {isLoadingStoryContext && (
+                  <div className="flow-card" style={{ textAlign: "center", padding: "30px" }}>
+                    <SparklesIcon size={24} color="#8b5cf6" />
+                    <p style={{ marginTop: "8px" }}>Loading scenes from PostgreSQL story context...</p>
+                  </div>
                 )}
 
-                {selectedSceneIdsForBatch.length > 0 && (
-                  <button
-                    type="button"
-                    className="flow-btn secondary sm"
-                    disabled={isBatchBgRunning}
-                    onClick={handleGenerateSelectedBackgrounds}
-                  >
-                    <span>↻ Regenerate Selected ({selectedSceneIdsForBatch.length})</span>
-                  </button>
+                {storyContextError && (
+                  <div className="flow-callout warning">
+                    <AlertTriangleIcon size={14} />
+                    <span>{storyContextError}</span>
+                    <button
+                      type="button"
+                      className="flow-btn secondary sm"
+                      onClick={() => selectedStoryId && loadStoryContext(selectedStoryId)}
+                    >
+                      Retry
+                    </button>
+                  </div>
                 )}
 
-                <button
-                  type="button"
-                  className="flow-btn primary sm"
-                  disabled={isBatchBgRunning || (storyContext?.summary?.missingBackgroundCount || 0) === 0}
-                  onClick={handleBatchGenerateMissingBackgrounds}
-                >
-                  <SparklesIcon size={14} />
-                  <span>
-                    {isBatchBgRunning
-                      ? "Generating..."
-                      : `Generate All Missing (${storyContext?.summary?.missingBackgroundCount || 0})`}
-                  </span>
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Batch Status Message */}
-          {batchBgSummary && (
-            <div className="flow-callout info" style={{ marginBottom: "12px" }}>
-              <span>{batchBgSummary}</span>
-              <button
-                type="button"
-                className="flow-btn secondary sm"
-                style={{ marginLeft: "auto", padding: "2px 8px", fontSize: "11px" }}
-                onClick={() => setBatchBgSummary(null)}
-              >
-                Dismiss
-              </button>
-            </div>
-          )}
-
-          {/* Context Loading / Error */}
-          {isLoadingStoryContext && (
-            <div className="flow-card" style={{ textAlign: "center", padding: "30px" }}>
-              <SparklesIcon size={24} color="#8b5cf6" />
-              <p style={{ marginTop: "8px" }}>Loading scenes from PostgreSQL story context...</p>
-            </div>
-          )}
-
-          {storyContextError && (
-            <div className="flow-callout warning">
-              <AlertTriangleIcon size={14} />
-              <span>{storyContextError}</span>
-              <button
-                type="button"
-                className="flow-btn secondary sm"
-                onClick={() => selectedStoryId && loadStoryContext(selectedStoryId)}
-              >
-                Retry
-              </button>
-            </div>
-          )}
-
-          {/* Scene Cards Grid */}
-          {!isLoadingStoryContext &&
-            (() => {
-              const filteredScenes = (storyContext?.scenes || []).filter((sc) => {
-                if (bgFilter === "ready") return sc.hasBackground;
-                if (bgFilter === "missing") return !sc.hasBackground;
-                return true;
-              });
-
-              if (filteredScenes.length === 0) {
-                return (
+                {/* Scene Cards Grid */}
+                {!isLoadingStoryContext && filteredScenes.length === 0 ? (
                   <div className="flow-card" style={{ textAlign: "center", padding: "40px" }}>
                     <ImageIcon size={32} color="#64748b" />
                     <h4 style={{ marginTop: "10px", color: "var(--color-text)" }}>No scenes found</h4>
@@ -2231,194 +2314,243 @@ export default function GoogleFlowPage() {
                       </button>
                     )}
                   </div>
-                );
-              }
+                ) : (
+                  !isLoadingStoryContext && (
+                    <div className="flow-scene-grid">
+                      {filteredScenes.map((sc) => {
+                        const isGenerating = Boolean(generatingSceneIds[sc.sceneId]);
+                        const isSelected = selectedSceneIdsForBatch.includes(sc.sceneId);
+                        const isSettingsOpen = Boolean(expandedSceneSettings[sc.sceneId]);
+                        const error = sceneErrors[sc.sceneId];
+                        const cleanDirection = cleanScriptText(
+                          sc.visualPrompt || sc.narration || sc.environmentDescription
+                        );
 
-              return (
-                <div className="flow-scene-grid">
-                  {filteredScenes.map((sc) => {
-                    const isGenerating = Boolean(generatingSceneIds[sc.sceneId]);
-                    const isSelected = selectedSceneIdsForBatch.includes(sc.sceneId);
-                    const isSettingsOpen = Boolean(expandedSceneSettings[sc.sceneId]);
-                    const error = sceneErrors[sc.sceneId];
-
-                    return (
-                      <div
-                        key={sc.sceneId}
-                        className={`flow-scene-card ${isSelected ? "selected" : ""} ${isGenerating ? "generating" : ""}`}
-                      >
-                        {/* Card Header */}
-                        <div className="flow-scene-card-header">
-                          <div className="flow-scene-header-left">
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              onChange={() => toggleSceneSelectForBatch(sc.sceneId)}
-                              title="Select for batch regeneration"
-                            />
-                            <span className="flow-scene-num-badge">Scene {sc.number}</span>
-                            <span className="flow-scene-title" title={sc.title || "Untitled"}>
-                              {sc.title || "Untitled"}
-                            </span>
-                          </div>
-                          <span
-                            className="flow-status-badge"
-                            style={{
-                              background: sc.hasBackground ? "rgba(16, 185, 129, 0.15)" : "rgba(245, 158, 11, 0.15)",
-                              color: sc.hasBackground ? "#10b981" : "#f59e0b",
-                              borderColor: sc.hasBackground ? "rgba(16, 185, 129, 0.35)" : "rgba(245, 158, 11, 0.35)",
-                              fontSize: "11px",
-                              fontWeight: 700,
-                            }}
+                        return (
+                          <div
+                            key={sc.sceneId}
+                            className={`flow-scene-card ${isSelected ? "selected" : ""} ${
+                              isGenerating ? "generating" : ""
+                            }`}
                           >
-                            {sc.hasBackground ? "✓ Ready" : "Missing"}
-                          </span>
-                        </div>
-
-                        {/* Thumbnail Section */}
-                        <div className="flow-scene-thumb">
-                          {sc.backgroundUrl ? (
-                            <div
-                              style={{ width: "100%", height: "100%", position: "relative", cursor: "pointer" }}
-                              onClick={() => setPreviewModalUrl(sc.backgroundUrl)}
-                              title="Click to view high-resolution preview"
-                            >
-                              <img src={sc.backgroundUrl} alt={sc.title || `Scene ${sc.number}`} />
-                              <div className="flow-thumb-hover-overlay">
-                                <span>🔍 Preview</span>
+                            {/* Card Header */}
+                            <div className="flow-scene-card-header">
+                              <div className="flow-scene-header-left">
+                                <input
+                                  type="checkbox"
+                                  className="flow-standard-checkbox"
+                                  checked={isSelected}
+                                  onChange={() => toggleSceneSelectForBatch(sc.sceneId)}
+                                  title="Select for batch regeneration"
+                                />
+                                <span className="flow-scene-num-badge">Scene {sc.number}</span>
+                                <span className="flow-scene-title" title={sc.title || "Untitled"}>
+                                  {sc.title || "Untitled"}
+                                </span>
                               </div>
+                              <span className={`flow-status-badge ${sc.hasBackground ? "ready" : "missing"}`}>
+                                {sc.hasBackground ? "✓ Plate Ready" : "● Missing Plate"}
+                              </span>
                             </div>
-                          ) : (
-                            <div className="flow-scene-empty-thumb">
-                              <ImageIcon size={28} color="#64748b" />
-                              <span>No Background Plate</span>
-                              <small>Environment only &bull; Zero characters</small>
-                            </div>
-                          )}
-                        </div>
 
-                        {/* Card Body */}
-                        <div className="flow-scene-body">
-                          {/* Environmental Tags */}
-                          <div className="flow-scene-tags">
-                            <span className="flow-tag" title="Location">📍 {sc.location}</span>
-                            <span className="flow-tag" title="Time of Day">☀️ {sc.timeOfDay}</span>
-                            <span className="flow-tag" title="Lighting">💡 {sc.lighting}</span>
-                            <span className="flow-tag" title="Weather">🌧️ {sc.weather}</span>
-                            <span className="flow-tag" title="Aspect Ratio">📐 {sc.aspectRatio}</span>
-                          </div>
-
-                          {/* Narration Preview */}
-                          <div className="flow-scene-narration" title={sc.narration}>
-                            {sc.narration ? `"${sc.narration}"` : <em>No narration text entered</em>}
-                          </div>
-
-                          {/* Characters in Scene */}
-                          <div className="flow-scene-characters">
-                            <UsersIcon size={12} />
-                            <span>Characters:</span>
-                            {sc.charactersInScene.length > 0 ? (
-                              <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>
-                                {sc.charactersInScene.map((c) => (
-                                  <span key={c.id} className="flow-char-pill">
-                                    {c.name}
+                            {/* Thumbnail Area */}
+                            <div className="flow-scene-thumb">
+                              {isGenerating ? (
+                                <div className="flow-scene-generating-thumb">
+                                  <div className="flow-generating-spinner" />
+                                  <span className="flow-generating-title">Synthesizing Plate...</span>
+                                  <small className="flow-generating-sub">
+                                    {generationProvider === "gemini_api"
+                                      ? "Rendering Imagen 3 backdrop"
+                                      : "Automating Google Flow canvas"}
+                                  </small>
+                                </div>
+                              ) : sc.backgroundUrl ? (
+                                <div
+                                  style={{ width: "100%", height: "100%", position: "relative", cursor: "pointer" }}
+                                  onClick={() =>
+                                    setPreviewAsset({
+                                      url: sc.backgroundUrl!,
+                                      title: `Scene ${sc.number}: ${sc.title || "Untitled Scene"}`,
+                                      subtitle: `${sc.location} • ${sc.timeOfDay} • ${sc.lighting}`,
+                                      aspectRatio: sc.aspectRatio,
+                                      sceneId: sc.sceneId,
+                                      type: "background",
+                                    })
+                                  }
+                                  title="Click to view enlarged high-resolution preview"
+                                >
+                                  <img
+                                    src={sc.backgroundUrl}
+                                    alt={sc.title || `Scene ${sc.number}`}
+                                    onError={(e) => {
+                                      (e.target as HTMLElement).style.display = "none";
+                                      const parent = (e.target as HTMLElement).parentElement;
+                                      const fallback = parent?.querySelector(".flow-thumb-fallback") as HTMLElement;
+                                      if (fallback) fallback.style.display = "flex";
+                                    }}
+                                  />
+                                  <div className="flow-thumb-fallback" style={{ display: "none" }}>
+                                    <ImageIcon size={22} color="#f59e0b" />
+                                    <span style={{ fontSize: "11px", fontWeight: 600 }}>Image Load Failed</span>
+                                    <small style={{ fontSize: "10px", color: "var(--color-text-secondary)" }}>
+                                      Click to view or regenerate
+                                    </small>
+                                  </div>
+                                  <div className="flow-thumb-hover-overlay">
+                                    <span>🔍 Enlarge Preview</span>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div
+                                  className="flow-scene-empty-thumb"
+                                  onClick={() => handleGenerateSceneBackground(sc.sceneId)}
+                                  title="Click to generate this background plate"
+                                >
+                                  <div className="flow-empty-plate-icon-wrap">
+                                    <svg
+                                      width="30"
+                                      height="30"
+                                      viewBox="0 0 24 24"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      strokeWidth="1.6"
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                    >
+                                      <path d="m8 3 4 8 5-5 5 15H2L8 3z" />
+                                      <circle cx="17.5" cy="6.5" r="2.5" />
+                                    </svg>
+                                  </div>
+                                  <span className="flow-empty-plate-badge">No Background Plate</span>
+                                  <small className="flow-empty-plate-desc">
+                                    Character-free environment backdrop
+                                  </small>
+                                  <span className="flow-empty-plate-action">
+                                    Click to Generate Plate ⚡
                                   </span>
-                                ))}
-                              </div>
-                            ) : (
-                              <span style={{ fontStyle: "italic", opacity: 0.7 }}>None assigned</span>
-                            )}
-                          </div>
-
-                          {/* Error Banner */}
-                          {error && (
-                            <div className="flow-scene-error">
-                              <span>{error}</span>
-                              <button
-                                type="button"
-                                className="flow-btn danger sm"
-                                onClick={() => handleGenerateSceneBackground(sc.sceneId)}
-                              >
-                                Retry
-                              </button>
+                                </div>
+                              )}
                             </div>
-                          )}
 
-                          {/* Settings Drawer */}
-                          {isSettingsOpen && (
-                            <div className="flow-scene-drawer">
-                              <div>
-                                <strong>Default Environment Prompt:</strong>
-                                <p style={{ margin: "4px 0", color: "var(--color-text-secondary)", fontStyle: "italic" }}>
-                                  {sc.visualPrompt || sc.environmentDescription || "Strict character-free environment plate matching story visual style."}
+                            {/* Card Body */}
+                            <div className="flow-scene-body">
+                              {/* Metadata Chips */}
+                              <div className="flow-scene-tags">
+                                <span className="flow-tag" title="Location">📍 {sc.location}</span>
+                                <span className="flow-tag" title="Time of Day">☀️ {sc.timeOfDay}</span>
+                                <span className="flow-tag" title="Lighting">💡 {sc.lighting}</span>
+                                <span className="flow-tag" title="Weather">🌧️ {sc.weather}</span>
+                                <span className="flow-tag" title="Aspect Ratio">📐 {sc.aspectRatio}</span>
+                              </div>
+
+                              {/* Direction / Narration Preview */}
+                              <div className="flow-scene-direction" title={cleanDirection}>
+                                <span className="flow-direction-label">🎬 Visual Direction:</span>
+                                <p className="flow-direction-text">
+                                  "{cleanDirection || "Atmospheric scenery matching visual look."}"
                                 </p>
                               </div>
-                              <div className="flow-form-group" style={{ margin: 0 }}>
-                                <label className="flow-form-label" style={{ fontSize: "11px" }}>
-                                  Custom Prompt Override (Characters strictly excluded)
-                                </label>
-                                <textarea
-                                  className="flow-textarea"
-                                  rows={3}
-                                  placeholder="Add specific landscape or architecture details..."
-                                  value={sceneCustomPrompts[sc.sceneId] || ""}
-                                  onChange={(e) =>
-                                    setSceneCustomPrompts((prev) => ({
-                                      ...prev,
-                                      [sc.sceneId]: e.target.value,
-                                    }))
-                                  }
-                                />
+
+                              {/* Characters in Scene */}
+                              <div className="flow-scene-characters">
+                                <UsersIcon size={12} />
+                                <span className="flow-char-label">Cast:</span>
+                                {sc.charactersInScene.length > 0 ? (
+                                  <div style={{ display: "flex", gap: "5px", flexWrap: "wrap" }}>
+                                    {sc.charactersInScene.map((c) => (
+                                      <span key={c.id} className="flow-char-pill">
+                                        👤 {c.name}
+                                      </span>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <span className="flow-char-empty-tag">
+                                    🎙️ Voice-Over Narration • Zero Characters on Plate
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Error Banner */}
+                              {error && (
+                                <div className="flow-scene-error">
+                                  <div style={{ display: "flex", alignItems: "center", gap: "6px", minWidth: 0 }}>
+                                    <span>⚠️</span>
+                                    <span className="flow-error-text" title={error}>
+                                      {error}
+                                    </span>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    className="flow-btn danger sm"
+                                    onClick={async () => {
+                                      if (error?.toLowerCase().includes("flow worker") || error?.toLowerCase().includes("bearer token")) {
+                                        try { await reconnectWorker(); } catch {}
+                                      }
+                                      await handleGenerateSceneBackground(sc.sceneId);
+                                    }}
+                                    style={{ flexShrink: 0 }}
+                                  >
+                                    Retry
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Card Footer Actions */}
+                            <div className="flow-scene-card-footer">
+                              <button
+                                type="button"
+                                className="flow-btn primary sm"
+                                disabled={isGenerating || isBatchBgRunning}
+                                onClick={() => handleGenerateSceneBackground(sc.sceneId)}
+                                title={`Generate character-free plate using ${
+                                  generationProvider === "gemini_api" ? "Gemini Imagen 3" : "Google Flow"
+                                }`}
+                              >
+                                <SparklesIcon size={13} />
+                                <span>
+                                  {isGenerating
+                                    ? "Generating..."
+                                    : sc.hasBackground
+                                    ? "↻ Regenerate"
+                                    : "✨ Generate Plate"}
+                                </span>
+                              </button>
+
+                              <div style={{ display: "flex", gap: "6px" }}>
+                                <button
+                                  type="button"
+                                  className={`flow-btn secondary sm ${sceneCustomPrompts[sc.sceneId]?.trim() ? "active" : ""}`}
+                                  onClick={() => setActiveDirectivesSceneId(sc.sceneId)}
+                                  title="View / Customize prompt directives in dedicated modal"
+                                >
+                                  <SettingsIcon size={13} />
+                                  <span>Directives</span>
+                                  {sceneCustomPrompts[sc.sceneId]?.trim() && (
+                                    <span className="flow-active-dot" title="Custom override active" />
+                                  )}
+                                </button>
+
+                                <button
+                                  type="button"
+                                  className="flow-btn secondary sm"
+                                  onClick={() => navigate(`/editor/${selectedStoryId}?sceneId=${sc.sceneId}`)}
+                                  title="Open scene in Story Editor"
+                                >
+                                  <span>Editor ↗</span>
+                                </button>
                               </div>
                             </div>
-                          )}
-                        </div>
-
-                        {/* Card Footer Actions */}
-                        <div className="flow-scene-card-footer">
-                          <button
-                            type="button"
-                            className="flow-btn primary sm"
-                            disabled={isGenerating || isBatchBgRunning}
-                            onClick={() => handleGenerateSceneBackground(sc.sceneId)}
-                            title={`Generate character-free plate using ${generationProvider === "gemini_api" ? "Gemini Imagen 3" : "Google Flow"}`}
-                          >
-                            <SparklesIcon size={13} />
-                            <span>
-                              {isGenerating
-                                ? "Generating..."
-                                : sc.hasBackground
-                                  ? "↻ Regenerate"
-                                  : "✨ Generate Plate"}
-                            </span>
-                          </button>
-
-                          <div style={{ display: "flex", gap: "4px" }}>
-                            <button
-                              type="button"
-                              className={`flow-btn secondary sm ${isSettingsOpen ? "active" : ""}`}
-                              onClick={() => toggleSceneSettings(sc.sceneId)}
-                              title="View / Customize prompt directives"
-                            >
-                              <SettingsIcon size={13} />
-                            </button>
-
-                            <button
-                              type="button"
-                              className="flow-btn secondary sm"
-                              onClick={() => navigate(`/editor/${selectedStoryId}?sceneId=${sc.sceneId}`)}
-                              title="Open scene in Story Editor"
-                            >
-                              <span>Editor ↗</span>
-                            </button>
                           </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              );
-            })()}
+                        );
+                      })}
+                    </div>
+                  )
+                )}
+              </>
+            );
+          })()}
         </div>
       )}
 
@@ -2427,269 +2559,375 @@ export default function GoogleFlowPage() {
       {/* ==================================================== */}
       {activeTab === "character" && (
         <div className="flow-tab-content">
-          {/* Production Toolbar */}
-          <div className="flow-production-toolbar">
-            <div className="flow-production-toolbar-row">
-              {/* Active Story selector */}
-              <div className="flow-form-group" style={{ margin: 0, minWidth: "220px" }}>
-                <label className="flow-form-label">Active Story</label>
-                <select
-                  className="flow-select"
-                  value={selectedStoryId}
-                  onChange={(e) => setSelectedStoryId(e.target.value)}
-                >
-                  {stories.map((st) => (
-                    <option key={st.storyId} value={st.storyId}>
-                      {st.title}
-                    </option>
-                  ))}
-                </select>
-              </div>
+          {(() => {
+            const allCharacters = storyContext?.characters || [];
+            const filteredCharacters = allCharacters.filter((ch) => {
+              if (charFilter === "ready") return ch.hasMasterReference;
+              if (charFilter === "missing") return !ch.hasMasterReference;
+              return true;
+            });
 
-              {/* Provider selector */}
-              <div className="flow-form-group" style={{ margin: 0, minWidth: "240px" }}>
-                <label className="flow-form-label">Generation Engine</label>
-                <select
-                  className="flow-select flow-provider-select"
-                  value={generationProvider}
-                  onChange={(e) => setGenerationProvider(e.target.value as any)}
-                >
-                  <option value="gemini_api">Gemini Imagen 3 (Direct Cloud API)</option>
-                  <option value="google_flow">Google Flow (Loopback Playwright Worker)</option>
-                </select>
-              </div>
-
-              {/* Provider Health Pill */}
-              <div style={{ display: "flex", alignItems: "flex-end", height: "100%", paddingBottom: "2px" }}>
-                {generationProvider === "gemini_api" ? (
-                  <span className={`flow-provider-pill ${providersStatus?.gemini_api?.available !== false ? "ready" : "offline"}`}>
-                    {providersStatus?.gemini_api?.available !== false ? "⚡ Gemini API Ready" : "⚠️ API Key Needed"}
-                  </span>
-                ) : (
-                  <span className={`flow-provider-pill ${workerHealth?.isProvisioned ? "ready" : "offline"}`}>
-                    {workerHealth?.isProvisioned ? "🤖 Flow Worker Paired" : "⚠️ Flow Worker Offline"}
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {/* Actions Row */}
-            <div className="flow-production-actions-row">
-              <div style={{ fontSize: "12px", color: "var(--color-text-secondary)", fontWeight: 600 }}>
-                {storyContext?.summary?.charactersWithMasterReference || 0} of {storyContext?.summary?.totalCharacters || 0} characters have canonical Master References
-              </div>
-
-              <button
-                type="button"
-                className="flow-btn primary sm"
-                disabled={isBatchCharRunning || (storyContext?.summary?.missingReferenceCount || 0) === 0}
-                onClick={handleBatchGenerateMissingCharacters}
-              >
-                <SparklesIcon size={14} />
-                <span>
-                  {isBatchCharRunning
-                    ? "Generating..."
-                    : `Generate All Missing Master References (${storyContext?.summary?.missingReferenceCount || 0})`}
-                </span>
-              </button>
-            </div>
-          </div>
-
-          {/* Batch Status Message */}
-          {batchCharSummary && (
-            <div className="flow-callout info" style={{ marginBottom: "12px" }}>
-              <span>{batchCharSummary}</span>
-              <button
-                type="button"
-                className="flow-btn secondary sm"
-                style={{ marginLeft: "auto", padding: "2px 8px", fontSize: "11px" }}
-                onClick={() => setBatchCharSummary(null)}
-              >
-                Dismiss
-              </button>
-            </div>
-          )}
-
-          {/* Context Loading / Error */}
-          {isLoadingStoryContext && (
-            <div className="flow-card" style={{ textAlign: "center", padding: "30px" }}>
-              <SparklesIcon size={24} color="#8b5cf6" />
-              <p style={{ marginTop: "8px" }}>Loading characters from PostgreSQL story context...</p>
-            </div>
-          )}
-
-          {/* Character Gallery Grid */}
-          {!isLoadingStoryContext && (storyContext?.characters || []).length === 0 ? (
-            <div className="flow-card" style={{ textAlign: "center", padding: "40px" }}>
-              <UsersIcon size={32} color="#64748b" />
-              <h4 style={{ marginTop: "10px", color: "var(--color-text)" }}>No characters found in this story</h4>
-              <p style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}>
-                Add or link characters to this story in Character Studio or the Story Editor.
-              </p>
-              <button
-                type="button"
-                className="flow-btn primary sm"
-                style={{ marginTop: "12px" }}
-                onClick={() => navigate("/characters")}
-              >
-                Open Character Studio ↗
-              </button>
-            </div>
-          ) : (
-            <div className="flow-char-grid">
-              {(storyContext?.characters || []).map((ch) => {
-                const isGenerating = Boolean(generatingCharIds[ch.id]);
-                const error = charErrors[ch.id];
-
-                return (
-                  <div key={ch.id} className="flow-char-card">
-                    {/* Top Row: Portrait + Details */}
-                    <div className="flow-char-card-top">
-                      <div className="flow-char-portrait">
-                        {ch.referenceImageUrl ? (
-                          <div
-                            style={{ width: "100%", height: "100%", position: "relative", cursor: "pointer" }}
-                            onClick={() => setPreviewModalUrl(ch.referenceImageUrl)}
-                            title="Click to view enlarged master reference"
+            return (
+              <>
+                {/* Production Toolbar */}
+                <div className="flow-production-toolbar">
+                  {/* Top Bar */}
+                  <div className="flow-production-toolbar-top">
+                    <div className="flow-toolbar-left-group">
+                      <div className="flow-story-selector-box">
+                        <label className="flow-toolbar-label">
+                          <BookOpenIcon size={13} />
+                          <span>Active Story</span>
+                        </label>
+                        <div className="flow-select-wrapper">
+                          <select
+                            className="flow-select flow-story-select"
+                            value={selectedStoryId}
+                            onChange={(e) => setSelectedStoryId(e.target.value)}
                           >
-                            <img src={ch.referenceImageUrl} alt={ch.name} />
-                          </div>
+                            {stories.map((st) => (
+                              <option key={st.storyId} value={st.storyId}>
+                                {st.title}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className="flow-story-stat-badge">
+                        <span>{allCharacters.length} Characters</span>
+                        <span className="dot-divider">•</span>
+                        <span>
+                          {storyContext?.summary?.charactersWithMasterReference || 0} Canonical References
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flow-toolbar-right-group">
+                      <div className="flow-engine-selector-box">
+                        <label className="flow-toolbar-label">
+                          <SparklesIcon size={13} />
+                          <span>Generation Engine</span>
+                        </label>
+                        <div className="flow-select-wrapper">
+                          <select
+                            className="flow-select flow-provider-select"
+                            value={generationProvider}
+                            onChange={(e) => setGenerationProvider(e.target.value as any)}
+                          >
+                            <option value="gemini_api">⚡ Gemini Imagen 3 (Direct Cloud API)</option>
+                            <option value="google_flow">🤖 Google Flow (Loopback Playwright Worker)</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className="flow-engine-status-box">
+                        {generationProvider === "gemini_api" ? (
+                          <span
+                            className={`flow-provider-pill ${
+                              providersStatus?.gemini_api?.available !== false ? "ready" : "offline"
+                            }`}
+                          >
+                            <span className="flow-status-dot" />
+                            <span>
+                              {providersStatus?.gemini_api?.available !== false
+                                ? "Gemini API Ready"
+                                : "API Key Needed"}
+                            </span>
+                          </span>
                         ) : (
-                          <div className="flow-char-empty-portrait">
-                            <UsersIcon size={24} color="#64748b" />
-                            <small>No Ref</small>
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                            <span
+                              className={`flow-provider-pill ${
+                                workerHealth?.isProvisioned ? "ready" : "offline"
+                              }`}
+                            >
+                              <span className="flow-status-dot" />
+                              <span>
+                                {workerHealth?.isProvisioned ? "Flow Worker Paired" : "Worker Offline"}
+                              </span>
+                            </span>
+                            <button
+                              type="button"
+                              className="flow-btn secondary sm flow-open-browser-btn"
+                              disabled={isSessionBusy}
+                              onClick={() => openBrowser(effectiveProjectUrl || undefined)}
+                              title="Launch or bring up visible Google Flow companion browser"
+                            >
+                              <span>Open Flow Browser ↗</span>
+                            </button>
                           </div>
                         )}
                       </div>
-
-                      <div className="flow-char-info">
-                        <div className="flow-char-name-row">
-                          <h4 className="flow-char-name">{ch.name}</h4>
-                          <span
-                            className="flow-status-badge"
-                            style={{
-                              background: ch.hasMasterReference ? "rgba(16, 185, 129, 0.15)" : "rgba(245, 158, 11, 0.15)",
-                              color: ch.hasMasterReference ? "#10b981" : "#f59e0b",
-                              borderColor: ch.hasMasterReference ? "rgba(16, 185, 129, 0.35)" : "rgba(245, 158, 11, 0.35)",
-                              fontSize: "10px",
-                              fontWeight: 700,
-                            }}
-                          >
-                            {ch.hasMasterReference ? "✓ Master Ready" : "Missing Ref"}
-                          </span>
-                        </div>
-
-                        <div style={{ fontSize: "11.5px", color: "var(--color-text-secondary)" }}>
-                          Species: <strong>{ch.species || "Character"}</strong> &bull; Personality: <strong>{ch.personality || "Friendly"}</strong>
-                        </div>
-
-                        <div style={{ fontSize: "11px", color: "var(--color-text-secondary)", marginTop: "4px", lineHeight: 1.4 }}>
-                          <strong>Visual Traits:</strong> {ch.visualDescription || ch.distinctiveFeatures || "Standard animation style."}
-                        </div>
-                      </div>
                     </div>
+                  </div>
 
-                    {/* Database Scene Appearances */}
-                    <div className="flow-char-scenes-list">
-                      <span className="flow-char-scenes-header">
-                        Appears in {ch.scenesCount} scene{ch.scenesCount === 1 ? "" : "s"}:
-                      </span>
-                      {ch.scenesAppearedIn.length > 0 ? (
-                        <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginTop: "2px" }}>
-                          {ch.scenesAppearedIn.map((sc) => (
-                            <span
-                              key={sc.sceneId}
-                              className="flow-char-scene-chip"
-                              onClick={() => navigate(`/editor/${selectedStoryId}?sceneId=${sc.sceneId}`)}
-                              title="Click to jump to this scene in Story Editor"
-                              style={{ cursor: "pointer" }}
-                            >
-                              Scene {sc.number}: {sc.title}
-                            </span>
-                          ))}
-                        </div>
-                      ) : (
-                        <span style={{ fontStyle: "italic", opacity: 0.7 }}>Not placed in any scene yet</span>
-                      )}
-                    </div>
-
-                    {/* Error Banner */}
-                    {error && (
-                      <div className="flow-char-error">
-                        <span>{error}</span>
+                  {/* Bottom Bar: Filters & Batch Action */}
+                  <div className="flow-production-toolbar-bottom">
+                    <div className="flow-toolbar-filter-group">
+                      <div className="flow-segmented-control">
                         <button
                           type="button"
-                          className="flow-btn danger sm"
-                          onClick={() => handleGenerateCharacterAsset(ch.id, "master_reference")}
+                          className={`flow-segment-btn ${charFilter === "all" ? "active" : ""}`}
+                          onClick={() => setCharFilter("all")}
                         >
-                          Retry
+                          All <span className="flow-segment-count">({allCharacters.length})</span>
+                        </button>
+                        <button
+                          type="button"
+                          className={`flow-segment-btn ${charFilter === "ready" ? "active" : ""}`}
+                          onClick={() => setCharFilter("ready")}
+                        >
+                          Master Ready <span className="flow-segment-count">({storyContext?.summary?.charactersWithMasterReference || 0})</span>
+                        </button>
+                        <button
+                          type="button"
+                          className={`flow-segment-btn ${charFilter === "missing" ? "active" : ""}`}
+                          onClick={() => setCharFilter("missing")}
+                        >
+                          Missing Ref <span className="flow-segment-count">({storyContext?.summary?.missingReferenceCount || 0})</span>
                         </button>
                       </div>
-                    )}
+                    </div>
 
-                    {/* Actions Row */}
-                    <div className="flow-char-actions">
+                    <div className="flow-toolbar-actions-group">
                       <button
                         type="button"
-                        className="flow-btn primary sm"
-                        disabled={isGenerating || isBatchCharRunning}
-                        onClick={() => handleGenerateCharacterAsset(ch.id, "master_reference")}
-                        title="Generate canonical master reference portrait"
+                        className="flow-btn primary sm flow-batch-generate-btn"
+                        disabled={
+                          isBatchCharRunning ||
+                          (storyContext?.summary?.missingReferenceCount || 0) === 0
+                        }
+                        onClick={handleBatchGenerateMissingCharacters}
                       >
-                        <SparklesIcon size={13} />
+                        <SparklesIcon size={14} />
                         <span>
-                          {isGenerating
+                          {isBatchCharRunning
                             ? "Generating..."
-                            : ch.hasMasterReference
-                              ? "↻ Regenerate Reference"
-                              : "✨ Generate Reference"}
+                            : `Generate All Missing References (${storyContext?.summary?.missingReferenceCount || 0})`}
                         </span>
-                      </button>
-
-                      <button
-                        type="button"
-                        className="flow-btn secondary sm"
-                        disabled={!ch.hasMasterReference || isGenerating}
-                        onClick={() => handleGenerateCharacterAsset(ch.id, "turnaround")}
-                        title="Generate 8-way directional turnaround sheet"
-                      >
-                        <span>🔄 Turnaround (8-Way)</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        className="flow-btn secondary sm"
-                        disabled={!ch.hasMasterReference || isGenerating}
-                        onClick={() => handleGenerateCharacterAsset(ch.id, "expression")}
-                        title="Generate expression sheet"
-                      >
-                        <span>😊 Expressions</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        className="flow-btn secondary sm"
-                        disabled={!ch.hasMasterReference || isGenerating}
-                        onClick={() => handleGenerateCharacterAsset(ch.id, "pose")}
-                        title="Generate action pose sheet"
-                      >
-                        <span>🏃 Action Poses</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        className="flow-btn secondary sm"
-                        onClick={() => navigate(`/characters?characterId=${ch.id}`)}
-                        title="Open in Character Studio"
-                      >
-                        <span>Studio ↗</span>
                       </button>
                     </div>
                   </div>
-                );
-              })}
-            </div>
-          )}
+                </div>
+
+                {/* Batch Status Message */}
+                {batchCharSummary && (
+                  <div className="flow-callout info" style={{ marginBottom: "12px" }}>
+                    <span>{batchCharSummary}</span>
+                    <button
+                      type="button"
+                      className="flow-btn secondary sm"
+                      style={{ marginLeft: "auto", padding: "2px 8px", fontSize: "11px" }}
+                      onClick={() => setBatchCharSummary(null)}
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                )}
+
+                {/* Context Loading / Error */}
+                {isLoadingStoryContext && (
+                  <div className="flow-card" style={{ textAlign: "center", padding: "30px" }}>
+                    <SparklesIcon size={24} color="#8b5cf6" />
+                    <p style={{ marginTop: "8px" }}>Loading characters from PostgreSQL story context...</p>
+                  </div>
+                )}
+
+                {/* Character Gallery Grid */}
+                {!isLoadingStoryContext && allCharacters.length === 0 ? (
+                  <div className="flow-card" style={{ textAlign: "center", padding: "40px" }}>
+                    <UsersIcon size={32} color="#64748b" />
+                    <h4 style={{ marginTop: "10px", color: "var(--color-text)" }}>No characters found in this story</h4>
+                    <p style={{ fontSize: "13px", color: "var(--color-text-secondary)" }}>
+                      Add or link characters to this story in Character Studio or the Story Editor.
+                    </p>
+                    <button
+                      type="button"
+                      className="flow-btn primary sm"
+                      style={{ marginTop: "12px" }}
+                      onClick={() => navigate("/characters")}
+                    >
+                      Open Character Studio ↗
+                    </button>
+                  </div>
+                ) : (
+                  !isLoadingStoryContext && (
+                    <div className="flow-char-grid">
+                      {filteredCharacters.map((ch) => {
+                        const isGenerating = Boolean(generatingCharIds[ch.id]);
+                        const error = charErrors[ch.id];
+
+                        return (
+                          <div key={ch.id} className="flow-char-card">
+                            {/* Top Row: Portrait + Details */}
+                            <div className="flow-char-card-top">
+                              <div className="flow-char-portrait">
+                                {isGenerating ? (
+                                  <div className="flow-scene-generating-thumb" style={{ borderRadius: "10px" }}>
+                                    <div className="flow-generating-spinner" style={{ width: "22px", height: "22px", borderWidth: "2px" }} />
+                                    <small style={{ fontSize: "9px", color: "#cbd5e1" }}>Rendering...</small>
+                                  </div>
+                                ) : ch.referenceImageUrl ? (
+                                  <div
+                                    style={{ width: "100%", height: "100%", position: "relative", cursor: "pointer" }}
+                                    onClick={() =>
+                                      setPreviewAsset({
+                                        url: ch.referenceImageUrl!,
+                                        title: ch.name,
+                                        subtitle: `${ch.species || "Character"} • Canonical Master Reference`,
+                                        characterId: ch.id,
+                                        type: "character",
+                                      })
+                                    }
+                                    title="Click to view enlarged master reference"
+                                  >
+                                    <img
+                                      src={ch.referenceImageUrl}
+                                      alt={ch.name}
+                                      onError={(e) => {
+                                        (e.target as HTMLElement).style.display = "none";
+                                        const parent = (e.target as HTMLElement).parentElement;
+                                        const fallback = parent?.querySelector(".flow-thumb-fallback") as HTMLElement;
+                                        if (fallback) fallback.style.display = "flex";
+                                      }}
+                                    />
+                                    <div className="flow-thumb-fallback" style={{ display: "none" }}>
+                                      <UsersIcon size={18} color="#f59e0b" />
+                                      <small style={{ fontSize: "8px" }}>Load Error</small>
+                                    </div>
+                                    <div className="flow-thumb-hover-overlay">
+                                      <span>🔍</span>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div
+                                    className="flow-char-empty-portrait"
+                                    onClick={() => handleGenerateCharacterAsset(ch.id, "master_reference")}
+                                    title="Click to generate master reference"
+                                  >
+                                    <UsersIcon size={24} color="#818cf8" />
+                                    <small>No Ref</small>
+                                    <span style={{ fontSize: "8.5px", color: "#a78bfa", fontWeight: 700 }}>Generate ⚡</span>
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="flow-char-info">
+                                <div className="flow-char-name-row">
+                                  <h4 className="flow-char-name">{ch.name}</h4>
+                                  <span className={`flow-status-badge ${ch.hasMasterReference ? "ready" : "missing"}`}>
+                                    {ch.hasMasterReference ? "✓ Master Ready" : "● Missing Ref"}
+                                  </span>
+                                </div>
+
+                                <div className="flow-char-tags-row">
+                                  <span className="flow-tag">👤 {ch.species || "Character"}</span>
+                                  <span className="flow-tag">✨ {ch.personality || "Friendly"}</span>
+                                </div>
+
+                                <div className="flow-char-description">
+                                  <span style={{ fontWeight: 600, color: "var(--color-text)" }}>Look: </span>
+                                  {cleanScriptText(ch.visualDescription || ch.distinctiveFeatures) || "Canonical cartoon look."}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Database Scene Appearances */}
+                            <div className="flow-char-scenes-list">
+                              <span className="flow-char-scenes-header">
+                                Appears in {ch.scenesCount} scene{ch.scenesCount === 1 ? "" : "s"}:
+                              </span>
+                              {ch.scenesAppearedIn.length > 0 ? (
+                                <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginTop: "2px" }}>
+                                  {ch.scenesAppearedIn.map((sc) => (
+                                    <span
+                                      key={sc.sceneId}
+                                      className="flow-char-scene-chip"
+                                      onClick={() => navigate(`/editor/${selectedStoryId}?sceneId=${sc.sceneId}`)}
+                                      title="Click to jump to this scene in Story Editor"
+                                    >
+                                      Scene {sc.number}: {sc.title}
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span style={{ fontStyle: "italic", opacity: 0.75, fontSize: "11px" }}>
+                                  Not placed in any scene yet
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Error Banner */}
+                            {error && (
+                              <div className="flow-char-error">
+                                <div style={{ display: "flex", alignItems: "center", gap: "6px", minWidth: 0 }}>
+                                  <span>⚠️</span>
+                                  <span className="flow-error-text" title={error}>{error}</span>
+                                </div>
+                                <button
+                                  type="button"
+                                  className="flow-btn danger sm"
+                                  onClick={async () => {
+                                    if (error?.toLowerCase().includes("flow worker") || error?.toLowerCase().includes("bearer token")) {
+                                      try { await reconnectWorker(); } catch {}
+                                    }
+                                    await handleGenerateCharacterAsset(ch.id, "master_reference");
+                                  }}
+                                  style={{ flexShrink: 0 }}
+                                >
+                                  Retry
+                                </button>
+                              </div>
+                            )}
+
+                            {/* Actions Row */}
+                            <div className="flow-char-actions">
+                              <button
+                                type="button"
+                                className="flow-btn primary sm"
+                                disabled={isGenerating || isBatchCharRunning}
+                                onClick={() => handleGenerateCharacterAsset(ch.id, "master_reference")}
+                                title="Generate canonical master reference portrait"
+                              >
+                                <SparklesIcon size={13} />
+                                <span>
+                                  {isGenerating
+                                    ? "Generating..."
+                                    : ch.hasMasterReference
+                                    ? "↻ Regenerate Reference"
+                                    : "✨ Generate Reference"}
+                                </span>
+                              </button>
+
+                              <button
+                                type="button"
+                                className="flow-btn secondary sm"
+                                disabled={!ch.hasMasterReference || isGenerating}
+                                onClick={() => handleGenerateCharacterAsset(ch.id, "turnaround")}
+                                title="Generate 8-way directional turnaround sheet"
+                              >
+                                <span>🔄 Turnaround</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                className="flow-btn secondary sm"
+                                onClick={() => navigate(`/characters?characterId=${ch.id}`)}
+                                title="Open in Character Studio"
+                              >
+                                <span>Studio ↗</span>
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )
+                )}
+              </>
+            );
+          })()}
         </div>
       )}
 
@@ -2734,39 +2972,258 @@ export default function GoogleFlowPage() {
         </div>
       )}
 
-      {/* Lightbox Preview Modal */}
-      {previewModalUrl && (
-        <div className="flow-lightbox-backdrop" onClick={() => setPreviewModalUrl(null)}>
+      {/* Lightbox / Enlarged Asset Preview Modal */}
+      {previewAsset && (
+        <div className="flow-lightbox-backdrop" onClick={() => setPreviewAsset(null)}>
           <div className="flow-lightbox-content" onClick={(e) => e.stopPropagation()}>
-            <button
-              type="button"
-              className="flow-lightbox-close"
-              onClick={() => setPreviewModalUrl(null)}
-              title="Close Preview"
-            >
-              ✕
-            </button>
-            <img src={previewModalUrl} alt="Enlarged asset preview" className="flow-lightbox-image" />
-            <div className="flow-lightbox-actions">
-              <a
-                href={previewModalUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flow-btn secondary sm"
-              >
-                Open Full Window ↗
-              </a>
+            {/* Header */}
+            <div className="flow-lightbox-header">
+              <div className="flow-lightbox-title-box">
+                <h3 className="flow-lightbox-title">{previewAsset.title}</h3>
+                {previewAsset.subtitle && (
+                  <p className="flow-lightbox-subtitle">{previewAsset.subtitle}</p>
+                )}
+              </div>
               <button
                 type="button"
-                className="flow-btn primary sm"
-                onClick={() => setPreviewModalUrl(null)}
+                className="flow-lightbox-close"
+                onClick={() => setPreviewAsset(null)}
+                title="Close Preview (Esc)"
               >
-                Close
+                ✕
               </button>
+            </div>
+
+            {/* Viewing Canvas */}
+            <div className="flow-lightbox-stage">
+              <img
+                src={previewAsset.url}
+                alt={previewAsset.title}
+                className="flow-lightbox-image"
+                onError={(e) => {
+                  (e.target as HTMLElement).style.display = "none";
+                  const parent = (e.target as HTMLElement).parentElement;
+                  const errorBox = parent?.querySelector(".flow-lightbox-error-box") as HTMLElement;
+                  if (errorBox) errorBox.style.display = "flex";
+                }}
+              />
+              <div className="flow-lightbox-error-box" style={{ display: "none" }}>
+                <AlertTriangleIcon size={32} color="#f59e0b" />
+                <h4>Image Plate Not Accessible</h4>
+                <p>The image could not be loaded from storage or is incomplete. Click below to regenerate this asset plate.</p>
+                {previewAsset.type === "background" && previewAsset.sceneId && (
+                  <button
+                    type="button"
+                    className="flow-btn primary sm"
+                    onClick={() => {
+                      const scId = previewAsset.sceneId!;
+                      setPreviewAsset(null);
+                      handleGenerateSceneBackground(scId);
+                    }}
+                  >
+                    ⚡ Regenerate Background Plate
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Footer with Metadata & Actions */}
+            <div className="flow-lightbox-footer">
+              <div className="flow-lightbox-meta">
+                <span className="flow-status-badge ready">
+                  {previewAsset.type === "background" ? "✓ Scene Environment Plate" : "✓ Master Character Reference"}
+                </span>
+                {previewAsset.aspectRatio && (
+                  <span className="flow-tag" style={{ margin: 0 }}>📐 {previewAsset.aspectRatio}</span>
+                )}
+              </div>
+
+              <div className="flow-lightbox-actions">
+                <a
+                  href={previewAsset.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flow-btn secondary sm"
+                >
+                  Open Full Image ↗
+                </a>
+                {previewAsset.type === "background" && previewAsset.sceneId && (
+                  <button
+                    type="button"
+                    className="flow-btn primary sm"
+                    onClick={() => {
+                      const scId = previewAsset.sceneId!;
+                      setPreviewAsset(null);
+                      handleGenerateSceneBackground(scId);
+                    }}
+                  >
+                    ↻ Regenerate Plate
+                  </button>
+                )}
+                {previewAsset.type === "character" && previewAsset.characterId && (
+                  <button
+                    type="button"
+                    className="flow-btn primary sm"
+                    onClick={() => {
+                      const cId = previewAsset.characterId!;
+                      setPreviewAsset(null);
+                      handleGenerateCharacterAsset(cId, "master_reference");
+                    }}
+                  >
+                    ↻ Regenerate Reference
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="flow-btn secondary sm"
+                  onClick={() => setPreviewAsset(null)}
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         </div>
       )}
+
+      {/* Scene Directives & Prompt Studio Modal */}
+      {activeDirectivesSceneId && (() => {
+        const activeScene = (storyContext?.scenes || []).find((s) => s.sceneId === activeDirectivesSceneId);
+        if (!activeScene) return null;
+        const cleanDirection = cleanScriptText(
+          activeScene.visualPrompt || activeScene.narration || activeScene.environmentDescription
+        );
+        const synthPrompt = `Create a cinematic 3D storybook illustration of ${activeScene.location}, ${activeScene.timeOfDay}. Storybook animation style, rich natural colors, soft ambient depth of field. ${activeScene.aspectRatio} composition, open central foreground for character animation. Environment backdrop only. No characters, people, figures, text, captions, subtitles, logos or watermarks.`;
+
+        return (
+          <div
+            className="flow-modal-overlay"
+            onClick={() => setActiveDirectivesSceneId(null)}
+          >
+            <div
+              className="flow-modal flow-directives-modal"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flow-directives-modal-header">
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                  <span className="flow-scene-num-badge">Scene {activeScene.number}</span>
+                  <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 700 }}>
+                    {activeScene.title || "Untitled Scene"} — Directives
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  className="flow-btn-ghost sm"
+                  onClick={() => setActiveDirectivesSceneId(null)}
+                  style={{ fontSize: "14px", padding: "4px 8px" }}
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Story Context summary pill */}
+              <div className="flow-directives-meta-bar">
+                <span className="flow-tag">📍 {activeScene.location}</span>
+                <span className="flow-tag">☀️ {activeScene.timeOfDay}</span>
+                <span className="flow-tag">💡 {activeScene.lighting}</span>
+                <span className="flow-tag">🌧️ {activeScene.weather}</span>
+                <span className="flow-tag">📐 {activeScene.aspectRatio}</span>
+              </div>
+
+              {/* Visual Direction Narrative */}
+              <div className="flow-directives-section">
+                <label className="flow-toolbar-label">
+                  <span>🎬 Script Visual Direction</span>
+                </label>
+                <div className="flow-scene-direction" style={{ margin: 0 }}>
+                  <p className="flow-direction-text" style={{ WebkitLineClamp: "unset", maxHeight: "80px", overflowY: "auto" }}>
+                    "{cleanDirection || "Atmospheric scenery matching story visual style."}"
+                  </p>
+                </div>
+              </div>
+
+              {/* Synthesized Prompt Preview */}
+              <div className="flow-directives-section">
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                  <label className="flow-toolbar-label" style={{ margin: 0 }}>
+                    <span>Synthesized Environment Prompt (Characters Strictly Excluded)</span>
+                  </label>
+                  <button
+                    type="button"
+                    className="flow-btn secondary sm"
+                    style={{ fontSize: "10.5px", padding: "2px 8px" }}
+                    onClick={() => {
+                      navigator.clipboard?.writeText(synthPrompt);
+                      setCopiedPromptSceneId(activeScene.sceneId);
+                      setTimeout(() => setCopiedPromptSceneId(null), 2000);
+                    }}
+                  >
+                    {copiedPromptSceneId === activeScene.sceneId ? "✓ Copied" : "📋 Copy Prompt"}
+                  </button>
+                </div>
+                <div className="flow-code-block" style={{ fontSize: "11px", maxHeight: "90px", overflowY: "auto", margin: 0 }}>
+                  {synthPrompt}
+                </div>
+              </div>
+
+              {/* Custom Prompt Override */}
+              <div className="flow-directives-section">
+                <label className="flow-toolbar-label">
+                  <span>Custom Prompt Override (Add landscape, architecture, or mood details)</span>
+                </label>
+                <textarea
+                  className="flow-textarea"
+                  rows={3}
+                  placeholder="e.g. Glowing blue mushrooms on mossy tree trunks, fireflies hovering over quiet stream..."
+                  value={sceneCustomPrompts[activeScene.sceneId] || ""}
+                  onChange={(e) =>
+                    setSceneCustomPrompts((prev) => ({
+                      ...prev,
+                      [activeScene.sceneId]: e.target.value,
+                    }))
+                  }
+                  style={{ width: "100%", fontSize: "12px", resize: "vertical" }}
+                />
+                <small style={{ fontSize: "10.5px", color: "var(--color-text-secondary)", marginTop: "4px", display: "block" }}>
+                  Characters and living figures are automatically excluded from plate generation.
+                </small>
+              </div>
+
+              {/* Modal Actions */}
+              <div className="flow-modal-actions" style={{ justifyContent: "space-between", alignItems: "center" }}>
+                <button
+                  type="button"
+                  className="flow-btn secondary sm"
+                  onClick={() => setActiveDirectivesSceneId(null)}
+                >
+                  Close
+                </button>
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <button
+                    type="button"
+                    className="flow-btn primary sm"
+                    disabled={generatingSceneIds[activeScene.sceneId]}
+                    onClick={async () => {
+                      const scId = activeScene.sceneId;
+                      setActiveDirectivesSceneId(null);
+                      await handleGenerateSceneBackground(scId);
+                    }}
+                  >
+                    <SparklesIcon size={13} />
+                    <span>
+                      {generatingSceneIds[activeScene.sceneId]
+                        ? "Generating..."
+                        : activeScene.hasBackground
+                        ? "↻ Regenerate Plate"
+                        : "✨ Generate Plate Now"}
+                    </span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

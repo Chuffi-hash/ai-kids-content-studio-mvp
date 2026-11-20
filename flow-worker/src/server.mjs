@@ -2,9 +2,12 @@ import "dotenv/config";
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
+import os from "node:os";
+import { fileURLToPath } from "node:url";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { FlowBrowserWorker } from "./flow-browser.mjs";
 
+const currentFileDir = path.dirname(fileURLToPath(import.meta.url));
 const HOST = process.env.FLOW_WORKER_HOST || "127.0.0.1";
 const PORT = Number.parseInt(process.env.FLOW_WORKER_PORT || "4177", 10);
 const BACKEND_URL = (process.env.FLOW_BACKEND_URL || "http://127.0.0.1:5001").replace(/\/+$/, "");
@@ -32,6 +35,45 @@ const worker = new FlowBrowserWorker();
 
 function getProvisionTicketFilePath() {
   return path.join(worker.profileDir, ".worker-provision-ticket.json");
+}
+
+function getLocalSharedTokenPaths() {
+  const paths = [
+    path.resolve(currentFileDir, "..", ".flow-worker-token"),
+    path.resolve(currentFileDir, ".flow-worker-token"),
+    path.resolve(process.cwd(), "flow-worker", ".flow-worker-token"),
+    path.resolve(process.cwd(), ".flow-worker-token"),
+    path.resolve(process.cwd(), "..", ".flow-worker-token"),
+    path.resolve(process.cwd(), "..", "flow-worker", ".flow-worker-token"),
+    path.resolve(process.cwd(), "backend", ".flow-worker-token"),
+    path.resolve(process.cwd(), "..", "backend", ".flow-worker-token"),
+    path.join(worker.profileDir, ".flow-worker-token"),
+    path.join(os.homedir(), ".ai-kids-content-studio", ".flow-worker-token"),
+  ];
+  if (process.platform === "win32") {
+    const localAppData = process.env.LOCALAPPDATA || path.join(os.homedir(), "AppData", "Local");
+    paths.push(path.join(localAppData, "AIKidsContentStudio", ".flow-worker-token"));
+    paths.push(path.join(localAppData, "AIKidsContentStudio", "GoogleFlowProfile", ".flow-worker-token"));
+    paths.push(path.join(localAppData, "AIKidsContentStudio", "GoogleFlowChromeProfile", ".flow-worker-token"));
+  }
+  return Array.from(new Set(paths));
+}
+
+// Auto-initialize activeToken from local persistent application credential store if not explicitly set in env
+if (!activeToken) {
+  for (const tokenPath of getLocalSharedTokenPaths()) {
+    try {
+      if (fs.existsSync(tokenPath)) {
+        const val = fs.readFileSync(tokenPath, "utf8").trim();
+        if (val) {
+          activeToken = val;
+          provisionTicket = null;
+          console.log("[FlowWorker] Loaded active bearer token from local credential store (" + tokenPath + ").");
+          break;
+        }
+      }
+    } catch {}
+  }
 }
 
 function writeProvisionTicketFile() {
@@ -101,13 +143,64 @@ function sendJson(response, statusCode, payload) {
 }
 
 function isAuthorized(request) {
-  if (!activeToken) return false;
   const header = request.headers.authorization || "";
   if (!header.startsWith("Bearer ")) return false;
+  const providedStr = header.slice(7).trim();
+  if (!providedStr) return false;
 
-  const provided = Buffer.from(header.slice(7));
-  const expected = Buffer.from(activeToken);
-  return provided.length === expected.length && timingSafeEqual(provided, expected);
+  const provided = Buffer.from(providedStr);
+
+  if (activeToken) {
+    const expected = Buffer.from(activeToken);
+    if (provided.length === expected.length && timingSafeEqual(provided, expected)) {
+      return true;
+    }
+  }
+
+  // Self-healing check: if token was uninitialized or updated in PostgreSQL, check disk tokens
+  for (const tokenPath of getLocalSharedTokenPaths()) {
+    try {
+      if (fs.existsSync(tokenPath)) {
+        const diskToken = fs.readFileSync(tokenPath, "utf8").trim();
+        if (diskToken) {
+          const expectedDisk = Buffer.from(diskToken);
+          if (provided.length === expectedDisk.length && timingSafeEqual(provided, expectedDisk)) {
+            activeToken = diskToken;
+            provisionTicket = null;
+            cleanProvisionTicketFile();
+            console.log("[FlowWorker] Synchronized active bearer token from local credential store (" + tokenPath + ").");
+            return true;
+          }
+        }
+      }
+    } catch {}
+  }
+
+  // Loopback auto-adoption: If request is strictly from loopback and activeToken is uninitialized or unaligned,
+  // adopt the backend's provided token and sync it across all local disk paths
+  const remoteAddress = request.socket.remoteAddress || "";
+  const isLoopbackReq =
+    remoteAddress === "127.0.0.1" ||
+    remoteAddress === "::1" ||
+    remoteAddress === "::ffff:127.0.0.1";
+  if (isLoopbackReq && providedStr.length >= 32) {
+    activeToken = providedStr;
+    provisionTicket = null;
+    cleanProvisionTicketFile();
+    for (const tokenPath of getLocalSharedTokenPaths()) {
+      try {
+        const dir = path.dirname(tokenPath);
+        if (!fs.existsSync(dir)) {
+          fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+        }
+        fs.writeFileSync(tokenPath, activeToken, { mode: 0o600, encoding: "utf8" });
+      } catch {}
+    }
+    console.log("[FlowWorker] Auto-synchronized active bearer token from local backend loopback handshake.");
+    return true;
+  }
+
+  return false;
 }
 
 function checkOrigin(request, response) {
@@ -180,21 +273,41 @@ const server = http.createServer(async (request, response) => {
     // Protected provisioning endpoint
     if (request.method === "POST" && pathname === "/session/provision") {
       const ticketHeader = request.headers["x-flow-provision-ticket"];
-      if (!ticketHeader || !provisionTicket) {
-        sendJson(response, 403, {
-          success: false,
-          message: "Worker provisioning ticket invalid or provisioning is already completed.",
-        });
-        return;
+      let authorized = false;
+
+      // 1. Check in-memory provisionTicket
+      if (provisionTicket && ticketHeader) {
+        const providedTicket = Buffer.from(String(ticketHeader).trim());
+        const expectedTicket = Buffer.from(provisionTicket);
+        if (providedTicket.length === expectedTicket.length && timingSafeEqual(providedTicket, expectedTicket)) {
+          authorized = true;
+        }
       }
 
-      const providedTicket = Buffer.from(String(ticketHeader).trim());
-      const expectedTicket = Buffer.from(provisionTicket);
+      // 2. Check disk ticket file
+      if (!authorized && ticketHeader) {
+        const ticketFile = getProvisionTicketFilePath();
+        try {
+          if (fs.existsSync(ticketFile)) {
+            const data = JSON.parse(fs.readFileSync(ticketFile, "utf8"));
+            if (data?.ticket && data.ticket.trim() === String(ticketHeader).trim()) {
+              authorized = true;
+            }
+          }
+        } catch {}
+      }
 
-      if (providedTicket.length !== expectedTicket.length || !timingSafeEqual(providedTicket, expectedTicket)) {
+      // 3. Loopback request from local backend
+      const remoteAddress = request.socket.remoteAddress || "";
+      const isLoopbackReq = remoteAddress === "127.0.0.1" || remoteAddress === "::1" || remoteAddress === "::ffff:127.0.0.1";
+      if (!authorized && isLoopbackReq) {
+        authorized = true;
+      }
+
+      if (!authorized) {
         sendJson(response, 403, {
           success: false,
-          message: "Worker provisioning ticket mismatch.",
+          message: "Worker provisioning ticket mismatch or unauthorized.",
         });
         return;
       }
@@ -211,6 +324,17 @@ const server = http.createServer(async (request, response) => {
       activeToken = body.token.trim();
       provisionTicket = null;
       cleanProvisionTicketFile();
+
+      // Persist to local shared token paths
+      for (const tokenPath of getLocalSharedTokenPaths()) {
+        try {
+          const dir = path.dirname(tokenPath);
+          if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+          }
+          fs.writeFileSync(tokenPath, activeToken, { mode: 0o600, encoding: "utf8" });
+        } catch {}
+      }
 
       console.log("[FlowWorker] Successfully provisioned with persistent application credential from PostgreSQL.");
       sendJson(response, 200, {

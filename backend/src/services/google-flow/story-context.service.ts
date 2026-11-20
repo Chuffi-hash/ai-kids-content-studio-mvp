@@ -244,6 +244,8 @@ export class StoryContextService {
 
       // Extract environmental cues from visual prompt or narration
       const promptText = scene.visualPrompt || scene.narration || '';
+      const cleanNarration = stripMarkdownProductionLabels(scene.narration || '');
+      const cleanPrompt = stripMarkdownProductionLabels(scene.visualPrompt || scene.narration || '');
       const location = extractLocation(promptText, scene.title);
       const timeOfDay = extractTimeOfDay(promptText);
       const lighting = extractLighting(promptText, timeOfDay);
@@ -255,8 +257,8 @@ export class StoryContextService {
         number: scene.number,
         order: scene.order,
         title: scene.title || `Scene ${scene.number}`,
-        narration: scene.narration || '',
-        visualPrompt: scene.visualPrompt || scene.narration || '',
+        narration: cleanNarration,
+        visualPrompt: cleanPrompt,
         cameraDirection: scene.cameraDirection || bgData.cameraDirection || 'Eye-level wide shot',
         aspectRatio: bgData.aspectRatio || defaultAspectRatio,
         hasBackground,
@@ -266,7 +268,7 @@ export class StoryContextService {
         timeOfDay,
         lighting,
         weather,
-        environmentDescription: promptText,
+        environmentDescription: cleanPrompt || promptText,
         characterIds: sceneCharIds,
         charactersInScene,
         animationData: animData,
@@ -356,4 +358,12 @@ function extractWeather(text: string): string {
   if (lower.includes('mist') || lower.includes('fog')) return 'Dreamy Misty Air';
   if (lower.includes('breeze') || lower.includes('wind')) return 'Pleasant Gentle Breeze';
   return 'Clear & Sunny';
+}
+
+export function stripMarkdownProductionLabels(text: string): string {
+  if (!text) return '';
+  return text
+    .replace(/^[*_#\s]*(?:Visual Direction|Visual Style|Environment|Camera Angle|Lighting|Narration|Action|Scene Description|Shot Instruction)\s*:?[\s*_#:]*\s*/i, '')
+    .replace(/^[*_~`#\s]+|[*_~`#\s]+$/g, '')
+    .trim();
 }

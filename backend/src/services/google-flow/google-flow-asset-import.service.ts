@@ -113,6 +113,9 @@ export class GoogleFlowAssetImportService {
     }
 
     const { width, height } = parseImageDimensions(buffer);
+    if ((width > 0 && width < 32) || (height > 0 && height < 32)) {
+      throw new Error(`Invalid image dimensions (${width}x${height}px). Assets must be full-resolution scenes or character references, not placeholder pixels.`);
+    }
     const fileId = randomUUID();
     const storageFilename = `flow-${target}-${Date.now()}-${fileId.slice(0, 8)}.${detected.ext}`;
 

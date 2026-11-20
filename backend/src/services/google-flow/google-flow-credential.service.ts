@@ -24,9 +24,25 @@ export function getDefaultFlowProfileDir(): string {
   if (process.env.FLOW_PROFILE_DIR && process.env.FLOW_PROFILE_DIR.trim()) {
     return path.resolve(process.env.FLOW_PROFILE_DIR.trim());
   }
+  // Check flow-worker/.env for FLOW_PROFILE_DIR
+  try {
+    const workerEnvPath = path.resolve(process.cwd(), '../flow-worker/.env');
+    if (fs.existsSync(workerEnvPath)) {
+      const content = fs.readFileSync(workerEnvPath, 'utf8');
+      const match = content.match(/^FLOW_PROFILE_DIR=(.+)$/m);
+      if (match && match[1]?.trim()) {
+        return path.resolve(match[1].trim());
+      }
+    }
+  } catch {}
+
   if (process.platform === 'win32') {
     const localAppData = process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local');
-    return path.join(localAppData, 'AIKidsContentStudio', 'GoogleFlowChromeProfile');
+    const p1 = path.join(localAppData, 'AIKidsContentStudio', 'GoogleFlowProfile');
+    const p2 = path.join(localAppData, 'AIKidsContentStudio', 'GoogleFlowChromeProfile');
+    if (fs.existsSync(p1)) return p1;
+    if (fs.existsSync(p2)) return p2;
+    return p1;
   }
   if (process.platform === 'darwin') {
     return path.join(
@@ -49,7 +65,64 @@ export function getProvisionTicketPath(profileDir?: string): string {
   return path.join(dir, '.worker-provision-ticket.json');
 }
 
+export function getAllProvisionTicketPaths(profileDir?: string): string[] {
+  const paths: string[] = [];
+  if (profileDir) paths.push(path.join(profileDir, '.worker-provision-ticket.json'));
+  paths.push(getProvisionTicketPath());
+  if (process.platform === 'win32') {
+    const localAppData = process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local');
+    paths.push(path.join(localAppData, 'AIKidsContentStudio', 'GoogleFlowProfile', '.worker-provision-ticket.json'));
+    paths.push(path.join(localAppData, 'AIKidsContentStudio', 'GoogleFlowChromeProfile', '.worker-provision-ticket.json'));
+  }
+  return Array.from(new Set(paths));
+}
+
 export class GoogleFlowCredentialService {
+  /**
+   * Syncs the active decrypted worker bearer token to local protected filesystem paths.
+   * This provides automatic, self-healing authorization between the local background
+   * services, orchestrator, and loopback Playwright worker.
+   */
+  public static syncLocalWorkerTokenFile(token: string, profileDir?: string): void {
+    if (!token || !token.trim()) return;
+    const cleanToken = token.trim();
+    const targetDirs = [
+      profileDir || getDefaultFlowProfileDir(),
+      path.join(os.homedir(), '.ai-kids-content-studio'),
+      path.resolve(process.cwd()),
+      path.resolve(process.cwd(), '..'),
+      path.resolve(process.cwd(), 'backend'),
+      path.resolve(process.cwd(), '../backend'),
+    ];
+
+    // Find actual flow-worker directory in repository
+    const workerCandidates = [
+      path.resolve(process.cwd(), 'flow-worker'),
+      path.resolve(process.cwd(), '../flow-worker'),
+    ];
+    for (const cand of workerCandidates) {
+      if (fs.existsSync(path.join(cand, 'src', 'server.mjs'))) {
+        targetDirs.push(cand);
+      }
+    }
+    if (process.platform === 'win32') {
+      const localAppData = process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local');
+      targetDirs.push(path.join(localAppData, 'AIKidsContentStudio'));
+      targetDirs.push(path.join(localAppData, 'AIKidsContentStudio', 'GoogleFlowProfile'));
+      targetDirs.push(path.join(localAppData, 'AIKidsContentStudio', 'GoogleFlowChromeProfile'));
+    }
+
+    for (const dir of targetDirs) {
+      try {
+        if (!fs.existsSync(dir)) {
+          fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+        }
+        const tokenPath = path.join(dir, '.flow-worker-token');
+        fs.writeFileSync(tokenPath, cleanToken, { mode: 0o600, encoding: 'utf8' });
+      } catch {}
+    }
+  }
+
   /**
    * Reads existing metadata directly from PostgreSQL without decrypting the token.
    * Guaranteed never to fail due to decryption or master key issues.
@@ -165,6 +238,7 @@ export class GoogleFlowCredentialService {
           profileDir: getDefaultFlowProfileDir(),
           pairingStatus: 'unpaired',
         };
+        this.syncLocalWorkerTokenFile(decrypted, meta.profileDir);
         return {
           token: decrypted,
           metadata: meta,
@@ -191,14 +265,16 @@ export class GoogleFlowCredentialService {
             fresh.authTag,
             fresh.keyVersion
           );
+          const freshMeta = (fresh.metadata as unknown as GoogleFlowMetadata) || {
+            workerUrl: DEFAULT_WORKER_URL,
+            browserChannel: 'chrome',
+            profileDir: getDefaultFlowProfileDir(),
+            pairingStatus: 'unpaired',
+          };
+          this.syncLocalWorkerTokenFile(decryptedFresh, freshMeta.profileDir);
           return {
             token: decryptedFresh,
-            metadata: (fresh.metadata as unknown as GoogleFlowMetadata) || {
-              workerUrl: DEFAULT_WORKER_URL,
-              browserChannel: 'chrome',
-              profileDir: getDefaultFlowProfileDir(),
-              pairingStatus: 'unpaired',
-            },
+            metadata: freshMeta,
             keyVersion: fresh.keyVersion,
             updatedAt: fresh.updatedAt,
           };
@@ -250,6 +326,8 @@ export class GoogleFlowCredentialService {
         metadata: initialMeta as any,
       },
     });
+
+    this.syncLocalWorkerTokenFile(initialToken, initialMeta.profileDir);
 
     return {
       token: initialToken,
@@ -379,6 +457,8 @@ export class GoogleFlowCredentialService {
         metadata: mergedMeta as any,
       },
     });
+
+    this.syncLocalWorkerTokenFile(newToken, mergedMeta.profileDir);
 
     // Proactively attempt to push the regenerated token to the running worker if ticket exists
     let provisioned = false;
@@ -540,23 +620,24 @@ export class GoogleFlowCredentialService {
     }
 
     const workerUrl = (workerUrlOverride || metadata.workerUrl || DEFAULT_WORKER_URL).replace(/\/+$/, '');
+    this.syncLocalWorkerTokenFile(token, metadata.profileDir);
 
     let ticket = suppliedTicket?.trim() || '';
 
-    // Check local ticket file if not supplied
+    // Check local ticket file candidates if not supplied
     if (!ticket) {
-      const profileDir = metadata.profileDir || getDefaultFlowProfileDir();
-      const ticketPath = getProvisionTicketPath(profileDir);
-      try {
-        if (fs.existsSync(ticketPath)) {
-          const raw = fs.readFileSync(ticketPath, 'utf8');
-          const parsed = JSON.parse(raw);
-          if (parsed && typeof parsed.ticket === 'string') {
-            ticket = parsed.ticket.trim();
+      const candidates = getAllProvisionTicketPaths(metadata.profileDir);
+      for (const ticketPath of candidates) {
+        try {
+          if (fs.existsSync(ticketPath)) {
+            const raw = fs.readFileSync(ticketPath, 'utf8');
+            const parsed = JSON.parse(raw);
+            if (parsed && typeof parsed.ticket === 'string' && parsed.ticket.trim()) {
+              ticket = parsed.ticket.trim();
+              break;
+            }
           }
-        }
-      } catch {
-        // Ticket file read failed or doesn't exist
+        } catch {}
       }
     }
 

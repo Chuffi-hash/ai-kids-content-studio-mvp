@@ -107,17 +107,21 @@
   color: #94a3b8 !important;
   opacity: 1 !important;
   font-weight: 500 !important;
+  -webkit-text-fill-color: #94a3b8 !important;
 }
 
+:root[data-theme="light"] .google-flow-panel input::placeholder,
 [data-theme="light"] .google-flow-panel input::placeholder,
 body.theme-light .google-flow-panel input::placeholder,
 html[data-theme="light"] .google-flow-panel input::placeholder,
+:root[data-theme="light"] .google-flow-panel textarea::placeholder,
 [data-theme="light"] .google-flow-panel textarea::placeholder,
 body.theme-light .google-flow-panel textarea::placeholder,
 html[data-theme="light"] .google-flow-panel textarea::placeholder {
   color: #334155 !important;
   opacity: 1 !important;
   font-weight: 500 !important;
+  -webkit-text-fill-color: #334155 !important;
 }
 
 .google-flow-actions {

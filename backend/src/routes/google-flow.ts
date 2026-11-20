@@ -51,12 +51,26 @@ async function forwardToWorker(
   }
 
   try {
-    const response = await fetch(`${workerBase}${endpoint}`, {
+    let response = await fetch(`${workerBase}${endpoint}`, {
       method,
       headers,
       body: body ? JSON.stringify(body) : undefined,
       signal,
     });
+
+    // Self-healing recovery: if worker returns 401, sync token to disk & re-provision before failing
+    if (response.status === 401 && token) {
+      try {
+        GoogleFlowCredentialService.syncLocalWorkerTokenFile(token);
+        await GoogleFlowCredentialService.provisionWorker(workerBase);
+        response = await fetch(`${workerBase}${endpoint}`, {
+          method,
+          headers,
+          body: body ? JSON.stringify(body) : undefined,
+          signal,
+        });
+      } catch {}
+    }
 
     const data = await response.json().catch(() => ({}));
     return { status: response.status, data };

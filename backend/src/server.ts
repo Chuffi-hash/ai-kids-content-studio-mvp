@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import path from "path";
+import fs from "fs";
 import { contentRouter } from "./routes/content.js";
 import { productionRouter } from "./routes/production.js";
 import { characterRouter } from "./routes/characters.js";
@@ -25,25 +26,33 @@ app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
 // Serve static files from storage directory with proper streaming, CORS, and audio/video MIME headers
-app.use(
-  "/storage",
-  express.static(path.join(process.cwd(), storageDir), {
-    setHeaders: (res, filePath) => {
-      res.setHeader("Access-Control-Allow-Origin", "*");
-      res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
-      res.setHeader("Accept-Ranges", "bytes");
-      if (filePath.endsWith(".mp3")) {
-        res.setHeader("Content-Type", "audio/mpeg");
-      } else if (filePath.endsWith(".wav")) {
-        res.setHeader("Content-Type", "audio/wav");
-      } else if (filePath.endsWith(".m4a")) {
-        res.setHeader("Content-Type", "audio/mp4");
-      } else if (filePath.endsWith(".mp4")) {
-        res.setHeader("Content-Type", "video/mp4");
-      }
-    },
-  })
-);
+const candidateStorageDirs = [
+  path.resolve(process.cwd(), storageDir),
+  path.resolve(process.cwd(), "backend", storageDir),
+  path.resolve(process.cwd(), "..", storageDir),
+].filter((dir, idx, self) => fs.existsSync(dir) && self.indexOf(dir) === idx);
+
+for (const dir of candidateStorageDirs) {
+  app.use(
+    "/storage",
+    express.static(dir, {
+      setHeaders: (res, filePath) => {
+        res.setHeader("Access-Control-Allow-Origin", "*");
+        res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+        res.setHeader("Accept-Ranges", "bytes");
+        if (filePath.endsWith(".mp3")) {
+          res.setHeader("Content-Type", "audio/mpeg");
+        } else if (filePath.endsWith(".wav")) {
+          res.setHeader("Content-Type", "audio/wav");
+        } else if (filePath.endsWith(".m4a")) {
+          res.setHeader("Content-Type", "audio/mp4");
+        } else if (filePath.endsWith(".mp4")) {
+          res.setHeader("Content-Type", "video/mp4");
+        }
+      },
+    })
+  );
+}
 
 app.get("/api/health", (_req, res) => {
   res.json({ status: "ok", service: "ai-kids-content-studio-api" });

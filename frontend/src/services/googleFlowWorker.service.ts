@@ -1,6 +1,10 @@
-import { getApiUrl } from '../utils/urlHelper';
+import { getApiUrl } from "../utils/urlHelper";
 
-export type FlowAuthenticationStatus = 'authenticated' | 'login_required' | 'blocked' | 'unknown';
+export type FlowAuthenticationStatus =
+  | "authenticated"
+  | "login_required"
+  | "blocked"
+  | "unknown";
 
 export interface FlowProfileDiagnostics {
   browserChannel: string;
@@ -58,7 +62,7 @@ export interface FlowCredentialMetadata {
   selectedProjectUrl?: string;
   lastSelectedStoryId?: string;
   lastSelectedCharacterId?: string;
-  pairingStatus: 'paired' | 'awaiting_provisioning' | 'unpaired';
+  pairingStatus: "paired" | "awaiting_provisioning" | "unpaired";
   lastVerifiedAt?: string;
 }
 
@@ -97,19 +101,21 @@ async function flowRequest<T>(
   directWorkerEndpoint: string,
   workerUrl?: string,
   token?: string,
-  init: RequestInit = {}
+  init: RequestInit = {},
 ): Promise<T> {
   const apiUrl = getApiUrl();
-  const useDirect = Boolean(token && token.trim() && workerUrl && workerUrl.includes(':4177'));
+  const useDirect = Boolean(
+    token && token.trim() && workerUrl && workerUrl.includes(":4177"),
+  );
 
   let url: string;
   let headers: HeadersInit = {
-    ...(init.body ? { 'Content-Type': 'application/json' } : {}),
+    ...(init.body ? { "Content-Type": "application/json" } : {}),
     ...init.headers,
   };
 
   if (useDirect) {
-    const base = workerUrl!.trim().replace(/\/+$/, '');
+    const base = workerUrl!.trim().replace(/\/+$/, "");
     url = `${base}${directWorkerEndpoint}`;
     headers = {
       ...headers,
@@ -125,14 +131,17 @@ async function flowRequest<T>(
   } catch (err: any) {
     throw new Error(
       useDirect
-        ? 'Cannot reach the local Flow worker. Verify the process is running on loopback.'
-        : `Cannot reach studio backend: ${err.message}`
+        ? "Cannot reach the local Flow worker. Verify the process is running on loopback."
+        : `Cannot reach studio backend: ${err.message}`,
     );
   }
 
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || payload.success === false) {
-    const errorMsg = payload.error || payload.message || `Flow worker request failed (HTTP ${response.status}).`;
+    const errorMsg =
+      payload.error ||
+      payload.message ||
+      `Flow worker request failed (HTTP ${response.status}).`;
     const err = new Error(errorMsg);
     (err as any).code = payload.code;
     throw err;
@@ -146,13 +155,15 @@ export async function openFlowWorkerSession(
   projectUrl?: string,
 ): Promise<FlowWorkerSession> {
   const payload = await flowRequest<{ session: FlowWorkerSession }>(
-    '/worker/session/open',
-    '/session/open',
+    "/worker/session/open",
+    "/session/open",
     workerUrl,
     token,
     {
-      method: 'POST',
-      body: JSON.stringify(projectUrl?.trim() ? { projectUrl: projectUrl.trim() } : {}),
+      method: "POST",
+      body: JSON.stringify(
+        projectUrl?.trim() ? { projectUrl: projectUrl.trim() } : {},
+      ),
     },
   );
   return payload.session;
@@ -163,21 +174,24 @@ export async function getFlowWorkerSession(
   token?: string,
 ): Promise<FlowWorkerSession> {
   const payload = await flowRequest<{ session: FlowWorkerSession }>(
-    '/worker/session',
-    '/session/status',
+    "/worker/session",
+    "/session/status",
     workerUrl,
     token,
   );
   return payload.session;
 }
 
-export async function closeFlowWorkerSession(workerUrl?: string, token?: string) {
+export async function closeFlowWorkerSession(
+  workerUrl?: string,
+  token?: string,
+) {
   const payload = await flowRequest<{ session: FlowWorkerSession }>(
-    '/worker/session/close',
-    '/session/close',
+    "/worker/session/close",
+    "/session/close",
     workerUrl,
     token,
-    { method: 'POST', body: JSON.stringify({}) },
+    { method: "POST", body: JSON.stringify({}) },
   );
   return payload.session;
 }
@@ -190,17 +204,17 @@ export async function createFlowCharacterJob(
     characterName: string;
     view: string;
     projectUrl?: string;
-    assetType: 'main' | 'custom';
+    assetType: "main" | "custom";
     isMasterReference: boolean;
     additionalInstructions?: string;
   },
 ): Promise<FlowWorkerJob> {
   const payload = await flowRequest<{ job: FlowWorkerJob }>(
-    '/worker/jobs',
-    '/jobs',
+    "/worker/jobs",
+    "/jobs",
     workerUrl,
     token,
-    { method: 'POST', body: JSON.stringify(input) },
+    { method: "POST", body: JSON.stringify(input) },
   );
   return payload.job;
 }
@@ -216,7 +230,7 @@ export async function prepareFlowCharacterJob(
     `/jobs/${encoded}/prepare`,
     workerUrl,
     token,
-    { method: 'POST', body: JSON.stringify({}) },
+    { method: "POST", body: JSON.stringify({}) },
   );
   return payload.job;
 }
@@ -233,7 +247,7 @@ export async function requestFlowCharacterGeneration(
     workerUrl,
     token,
     {
-      method: 'POST',
+      method: "POST",
       body: JSON.stringify({ confirmGenerate: true, referenceConfirmed: true }),
     },
   );
@@ -266,20 +280,25 @@ export async function retryFlowCharacterAssetRegistration(
     `/jobs/${encoded}/retry-import`,
     workerUrl,
     token,
-    { method: 'POST', body: JSON.stringify({}) },
+    { method: "POST", body: JSON.stringify({}) },
   );
   return payload.job;
 }
 
-export async function checkFlowWorkerHealth(workerUrl?: string): Promise<FlowWorkerHealthStatus> {
+export async function checkFlowWorkerHealth(
+  workerUrl?: string,
+): Promise<FlowWorkerHealthStatus> {
   const apiUrl = getApiUrl();
   const start = performance.now();
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 4000);
-    const response = await fetch(`${apiUrl}/api/integrations/google-flow/worker/health`, {
-      signal: controller.signal,
-    });
+    const response = await fetch(
+      `${apiUrl}/api/integrations/google-flow/worker/health`,
+      {
+        signal: controller.signal,
+      },
+    );
     clearTimeout(timeout);
     const latencyMs = Math.round(performance.now() - start);
 
@@ -294,8 +313,11 @@ export async function checkFlowWorkerHealth(workerUrl?: string): Promise<FlowWor
         masterKeyAvailable: data.masterKeyAvailable,
         credentialDecryptable: data.credentialDecryptable,
         credentialError: data.credentialError,
-        error: data.error || data.message || `Worker proxy returned HTTP ${response.status}`,
-        code: data.code || 'ERR_PROXY_HTTP',
+        error:
+          data.error ||
+          data.message ||
+          `Worker proxy returned HTTP ${response.status}`,
+        code: data.code || "ERR_PROXY_HTTP",
       };
     }
 
@@ -324,13 +346,19 @@ export async function checkFlowWorkerHealth(workerUrl?: string): Promise<FlowWor
       online: false,
       workerReachable: false,
       latencyMs,
-      error: err.name === 'AbortError' ? 'Worker health check timed out.' : 'Backend API is unreachable.',
-      code: err.name === 'AbortError' ? 'ERR_TIMEOUT' : 'ERR_BACKEND_UNREACHABLE',
+      error:
+        err.name === "AbortError"
+          ? "Worker health check timed out."
+          : "Backend API is unreachable.",
+      code:
+        err.name === "AbortError" ? "ERR_TIMEOUT" : "ERR_BACKEND_UNREACHABLE",
     };
   }
 }
 
-export async function getFlowWorkerHealth(workerUrl?: string): Promise<boolean> {
+export async function getFlowWorkerHealth(
+  workerUrl?: string,
+): Promise<boolean> {
   const status = await checkFlowWorkerHealth(workerUrl);
   return status.online;
 }
@@ -341,15 +369,21 @@ export async function getFlowWorkerHealth(workerUrl?: string): Promise<boolean> 
 
 export async function getFlowCredentialStatus(): Promise<FlowCredentialStatus> {
   const apiUrl = getApiUrl();
-  const res = await fetch(`${apiUrl}/api/integrations/google-flow/credential/status`);
+  const res = await fetch(
+    `${apiUrl}/api/integrations/google-flow/credential/status`,
+  );
   const data = await res.json();
   if (!res.ok || !data.success) {
-    throw new Error(data.message || data.error || 'Could not fetch credential status.');
+    throw new Error(
+      data.message || data.error || "Could not fetch credential status.",
+    );
   }
   return data;
 }
 
-export async function verifyFlowWorkerAuthentication(workerUrl?: string): Promise<{
+export async function verifyFlowWorkerAuthentication(
+  workerUrl?: string,
+): Promise<{
   ok: boolean;
   workerOnline: boolean;
   authenticated: boolean;
@@ -357,15 +391,20 @@ export async function verifyFlowWorkerAuthentication(workerUrl?: string): Promis
   error?: string;
 }> {
   const apiUrl = getApiUrl();
-  const res = await fetch(`${apiUrl}/api/integrations/google-flow/credential/verify`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ workerUrl }),
-  });
+  const res = await fetch(
+    `${apiUrl}/api/integrations/google-flow/credential/verify`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ workerUrl }),
+    },
+  );
   return res.json();
 }
 
-export async function recoverFlowCredential(metadataUpdates?: Partial<FlowCredentialMetadata>): Promise<{
+export async function recoverFlowCredential(
+  metadataUpdates?: Partial<FlowCredentialMetadata>,
+): Promise<{
   success: boolean;
   message: string;
   keyVersion?: string;
@@ -373,19 +412,26 @@ export async function recoverFlowCredential(metadataUpdates?: Partial<FlowCreden
   provisioned?: boolean;
 }> {
   const apiUrl = getApiUrl();
-  const res = await fetch(`${apiUrl}/api/integrations/google-flow/credential/recover`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ metadata: metadataUpdates }),
-  });
+  const res = await fetch(
+    `${apiUrl}/api/integrations/google-flow/credential/recover`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ metadata: metadataUpdates }),
+    },
+  );
   const data = await res.json();
   if (!res.ok || !data.success) {
-    throw new Error(data.message || data.error || 'Credential recovery failed.');
+    throw new Error(
+      data.message || data.error || "Credential recovery failed.",
+    );
   }
   return data;
 }
 
-export async function regenerateFlowCredential(metadataUpdates?: Partial<FlowCredentialMetadata>): Promise<{
+export async function regenerateFlowCredential(
+  metadataUpdates?: Partial<FlowCredentialMetadata>,
+): Promise<{
   success: boolean;
   message: string;
   keyVersion: string;
@@ -393,14 +439,17 @@ export async function regenerateFlowCredential(metadataUpdates?: Partial<FlowCre
   metadata: FlowCredentialMetadata;
 }> {
   const apiUrl = getApiUrl();
-  const res = await fetch(`${apiUrl}/api/integrations/google-flow/credential/regenerate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ metadata: metadataUpdates }),
-  });
+  const res = await fetch(
+    `${apiUrl}/api/integrations/google-flow/credential/regenerate`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ metadata: metadataUpdates }),
+    },
+  );
   const data = await res.json();
   if (!res.ok || !data.success) {
-    throw new Error(data.message || 'Could not regenerate credential.');
+    throw new Error(data.message || "Could not regenerate credential.");
   }
   return data;
 }
@@ -411,50 +460,68 @@ export async function reconnectFlowWorker(workerUrl?: string): Promise<{
   message: string;
 }> {
   const apiUrl = getApiUrl();
-  const res = await fetch(`${apiUrl}/api/integrations/google-flow/credential/reconnect`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ workerUrl }),
-  });
+  const res = await fetch(
+    `${apiUrl}/api/integrations/google-flow/credential/reconnect`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ workerUrl }),
+    },
+  );
   return res.json();
 }
 
-export async function updateFlowWorkerConfig(config: Partial<FlowCredentialMetadata>): Promise<FlowCredentialMetadata> {
+export async function updateFlowWorkerConfig(
+  config: Partial<FlowCredentialMetadata>,
+): Promise<FlowCredentialMetadata> {
   const apiUrl = getApiUrl();
-  const res = await fetch(`${apiUrl}/api/integrations/google-flow/credential/config`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(config),
-  });
+  const res = await fetch(
+    `${apiUrl}/api/integrations/google-flow/credential/config`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(config),
+    },
+  );
   const data = await res.json();
   if (!res.ok || !data.success) {
-    throw new Error(data.message || 'Could not update configuration.');
+    throw new Error(data.message || "Could not update configuration.");
   }
   return data.metadata;
 }
 
-export async function resetFlowBrowserProfile(): Promise<{ success: boolean; message: string }> {
+export async function resetFlowBrowserProfile(): Promise<{
+  success: boolean;
+  message: string;
+}> {
   const apiUrl = getApiUrl();
-  const res = await fetch(`${apiUrl}/api/integrations/google-flow/worker/session/reset-profile`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-  });
+  const res = await fetch(
+    `${apiUrl}/api/integrations/google-flow/worker/session/reset-profile`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    },
+  );
   const data = await res.json().catch(() => ({}));
   if (!res.ok || !data.success) {
-    throw new Error(data.message || 'Could not reset Google Flow profile.');
+    throw new Error(data.message || "Could not reset Google Flow profile.");
   }
   return data;
 }
 
 export interface FlowImportAssetPayload {
-  target: 'scene_background' | 'background_library' | 'character_view' | 'character_reference';
+  target:
+    | "scene_background"
+    | "background_library"
+    | "character_view"
+    | "character_reference";
   imageData: string;
   filename?: string;
   sceneId?: string;
   characterId?: string;
   view?: string;
   isMasterReference?: boolean;
-  fit?: 'cover' | 'contain';
+  fit?: "cover" | "contain";
   prompt?: string;
   aspectRatio?: string;
   name?: string;
@@ -462,16 +529,21 @@ export interface FlowImportAssetPayload {
   notes?: string;
 }
 
-export async function importFlowAsset(payload: FlowImportAssetPayload): Promise<any> {
+export async function importFlowAsset(
+  payload: FlowImportAssetPayload,
+): Promise<any> {
   const apiUrl = getApiUrl();
-  const res = await fetch(`${apiUrl}/api/integrations/google-flow/import-asset`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
+  const res = await fetch(
+    `${apiUrl}/api/integrations/google-flow/import-asset`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+  );
   const data = await res.json().catch(() => ({}));
   if (!res.ok || !data.success) {
-    throw new Error(data.message || 'Asset import failed.');
+    throw new Error(data.message || "Asset import failed.");
   }
   return data;
 }
@@ -545,33 +617,40 @@ export interface StoryFlowContextResponse {
 
 export interface ProvidersStatusResponse {
   gemini_api: { available: boolean; model: string; message: string };
-  google_flow: { available: boolean; browserRunning: boolean; authenticated: boolean; message: string };
+  google_flow: {
+    available: boolean;
+    browserRunning: boolean;
+    authenticated: boolean;
+    message: string;
+  };
 }
 
 export async function fetchStoryFlowContext(
   storyId: string,
-  options?: { sceneId?: string; characterId?: string }
+  options?: { sceneId?: string; characterId?: string },
 ): Promise<StoryFlowContextResponse> {
   const apiUrl = getApiUrl();
   const params = new URLSearchParams();
-  if (options?.sceneId) params.append('sceneId', options.sceneId);
-  if (options?.characterId) params.append('characterId', options.characterId);
+  if (options?.sceneId) params.append("sceneId", options.sceneId);
+  if (options?.characterId) params.append("characterId", options.characterId);
 
   const url = `${apiUrl}/api/integrations/google-flow/stories/${encodeURIComponent(storyId)}/context?${params.toString()}`;
   const res = await fetch(url);
   const data = await res.json();
   if (!res.ok || !data.success) {
-    throw new Error(data.message || 'Failed to load story context.');
+    throw new Error(data.message || "Failed to load story context.");
   }
   return data.context;
 }
 
 export async function fetchGenerationProvidersStatus(): Promise<ProvidersStatusResponse> {
   const apiUrl = getApiUrl();
-  const res = await fetch(`${apiUrl}/api/integrations/google-flow/providers/status`);
+  const res = await fetch(
+    `${apiUrl}/api/integrations/google-flow/providers/status`,
+  );
   const data = await res.json();
   if (!res.ok || !data.success) {
-    throw new Error(data.message || 'Failed to fetch provider status.');
+    throw new Error(data.message || "Failed to fetch provider status.");
   }
   return data.providers;
 }
@@ -579,19 +658,31 @@ export async function fetchGenerationProvidersStatus(): Promise<ProvidersStatusR
 export async function generateBackgroundDirect(payload: {
   storyId: string;
   sceneId: string;
-  provider?: 'gemini_api' | 'google_flow';
+  provider?: "gemini_api" | "google_flow";
   promptOverride?: string;
   aspectRatio?: string;
 }): Promise<any> {
   const apiUrl = getApiUrl();
-  const res = await fetch(`${apiUrl}/api/integrations/google-flow/generate/background`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-  const data = await res.json();
+  const res = await fetch(
+    `${apiUrl}/api/integrations/google-flow/generate/background`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+  );
+  const data = await res.json().catch(() => ({}));
   if (!res.ok || !data.success) {
-    throw new Error(data.message || 'Background generation failed.');
+    const rawMsg = data.message || "Background generation failed.";
+    if (
+      rawMsg.toLowerCase().includes("bearer token") ||
+      rawMsg.includes("401")
+    ) {
+      throw new Error(
+        "Flow worker authentication out of sync. Click Retry to re-synchronize credentials.",
+      );
+    }
+    throw new Error(rawMsg);
   }
   return data.asset;
 }
@@ -599,54 +690,82 @@ export async function generateBackgroundDirect(payload: {
 export async function generateCharacterAssetDirect(payload: {
   storyId: string;
   characterId: string;
-  provider?: 'gemini_api' | 'google_flow';
-  assetType?: 'master_reference' | 'turnaround' | 'expression' | 'pose';
+  provider?: "gemini_api" | "google_flow";
+  assetType?: "master_reference" | "turnaround" | "expression" | "pose";
   variation?: string;
   promptOverride?: string;
 }): Promise<any> {
   const apiUrl = getApiUrl();
-  const res = await fetch(`${apiUrl}/api/integrations/google-flow/generate/character`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-  const data = await res.json();
+  const res = await fetch(
+    `${apiUrl}/api/integrations/google-flow/generate/character`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+  );
+  const data = await res.json().catch(() => ({}));
   if (!res.ok || !data.success) {
-    throw new Error(data.message || 'Character generation failed.');
+    const rawMsg = data.message || "Character generation failed.";
+    if (
+      rawMsg.toLowerCase().includes("bearer token") ||
+      rawMsg.includes("401")
+    ) {
+      throw new Error(
+        "Flow worker authentication out of sync. Click Retry to re-synchronize credentials.",
+      );
+    }
+    throw new Error(rawMsg);
   }
   return data.asset;
 }
 
 export async function generateAllMissingBackgroundsDirect(
   storyId: string,
-  provider?: 'gemini_api' | 'google_flow'
-): Promise<{ total: number; generated: number; failed: number; results: any[] }> {
+  provider?: "gemini_api" | "google_flow",
+): Promise<{
+  total: number;
+  generated: number;
+  failed: number;
+  results: any[];
+}> {
   const apiUrl = getApiUrl();
-  const res = await fetch(`${apiUrl}/api/integrations/google-flow/generate/batch-backgrounds`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ storyId, provider }),
-  });
+  const res = await fetch(
+    `${apiUrl}/api/integrations/google-flow/generate/batch-backgrounds`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ storyId, provider }),
+    },
+  );
   const data = await res.json();
   if (!res.ok || !data.success) {
-    throw new Error(data.message || 'Batch background generation failed.');
+    throw new Error(data.message || "Batch background generation failed.");
   }
   return data.result;
 }
 
 export async function generateAllMissingCharacterReferencesDirect(
   storyId: string,
-  provider?: 'gemini_api' | 'google_flow'
-): Promise<{ total: number; generated: number; failed: number; results: any[] }> {
+  provider?: "gemini_api" | "google_flow",
+): Promise<{
+  total: number;
+  generated: number;
+  failed: number;
+  results: any[];
+}> {
   const apiUrl = getApiUrl();
-  const res = await fetch(`${apiUrl}/api/integrations/google-flow/generate/batch-characters`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ storyId, provider }),
-  });
+  const res = await fetch(
+    `${apiUrl}/api/integrations/google-flow/generate/batch-characters`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ storyId, provider }),
+    },
+  );
   const data = await res.json();
   if (!res.ok || !data.success) {
-    throw new Error(data.message || 'Batch character generation failed.');
+    throw new Error(data.message || "Batch character generation failed.");
   }
   return data.result;
 }

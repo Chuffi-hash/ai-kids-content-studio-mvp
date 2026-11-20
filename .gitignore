@@ -22,6 +22,9 @@ backend/prisma/*.sqlite3
 backend/prisma/*.db-journal
 
 # Storage and generated media files (never commit to git / GitHub)
+.flow-worker-token
+*.flow-worker-token
+*.worker-provision-ticket.json
 storage/**
 !storage/**/.gitkeep
 backend/storage/**
