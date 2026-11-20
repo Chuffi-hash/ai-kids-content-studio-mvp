@@ -404,7 +404,9 @@ export const ModelName = {
   Image: 'Image',
   Character: 'Character',
   IntegrationCredential: 'IntegrationCredential',
-  StoryCharacter: 'StoryCharacter'
+  StoryCharacter: 'StoryCharacter',
+  FlowCharacterMapping: 'FlowCharacterMapping',
+  GenerationJob: 'GenerationJob'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -420,7 +422,7 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
     omit: GlobalOmitOptions
   }
   meta: {
-    modelProps: "story" | "scene" | "sceneVersion" | "shot" | "image" | "character" | "integrationCredential" | "storyCharacter"
+    modelProps: "story" | "scene" | "sceneVersion" | "shot" | "image" | "character" | "integrationCredential" | "storyCharacter" | "flowCharacterMapping" | "generationJob"
     txIsolationLevel: TransactionIsolationLevel
   }
   model: {
@@ -1016,6 +1018,154 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         }
       }
     }
+    FlowCharacterMapping: {
+      payload: Prisma.$FlowCharacterMappingPayload<ExtArgs>
+      fields: Prisma.FlowCharacterMappingFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.FlowCharacterMappingFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$FlowCharacterMappingPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.FlowCharacterMappingFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$FlowCharacterMappingPayload>
+        }
+        findFirst: {
+          args: Prisma.FlowCharacterMappingFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$FlowCharacterMappingPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.FlowCharacterMappingFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$FlowCharacterMappingPayload>
+        }
+        findMany: {
+          args: Prisma.FlowCharacterMappingFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$FlowCharacterMappingPayload>[]
+        }
+        create: {
+          args: Prisma.FlowCharacterMappingCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$FlowCharacterMappingPayload>
+        }
+        createMany: {
+          args: Prisma.FlowCharacterMappingCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.FlowCharacterMappingCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$FlowCharacterMappingPayload>[]
+        }
+        delete: {
+          args: Prisma.FlowCharacterMappingDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$FlowCharacterMappingPayload>
+        }
+        update: {
+          args: Prisma.FlowCharacterMappingUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$FlowCharacterMappingPayload>
+        }
+        deleteMany: {
+          args: Prisma.FlowCharacterMappingDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.FlowCharacterMappingUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.FlowCharacterMappingUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$FlowCharacterMappingPayload>[]
+        }
+        upsert: {
+          args: Prisma.FlowCharacterMappingUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$FlowCharacterMappingPayload>
+        }
+        aggregate: {
+          args: Prisma.FlowCharacterMappingAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateFlowCharacterMapping>
+        }
+        groupBy: {
+          args: Prisma.FlowCharacterMappingGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.FlowCharacterMappingGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.FlowCharacterMappingCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.FlowCharacterMappingCountAggregateOutputType> | number
+        }
+      }
+    }
+    GenerationJob: {
+      payload: Prisma.$GenerationJobPayload<ExtArgs>
+      fields: Prisma.GenerationJobFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.GenerationJobFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GenerationJobPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.GenerationJobFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GenerationJobPayload>
+        }
+        findFirst: {
+          args: Prisma.GenerationJobFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GenerationJobPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.GenerationJobFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GenerationJobPayload>
+        }
+        findMany: {
+          args: Prisma.GenerationJobFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GenerationJobPayload>[]
+        }
+        create: {
+          args: Prisma.GenerationJobCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GenerationJobPayload>
+        }
+        createMany: {
+          args: Prisma.GenerationJobCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.GenerationJobCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GenerationJobPayload>[]
+        }
+        delete: {
+          args: Prisma.GenerationJobDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GenerationJobPayload>
+        }
+        update: {
+          args: Prisma.GenerationJobUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GenerationJobPayload>
+        }
+        deleteMany: {
+          args: Prisma.GenerationJobDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.GenerationJobUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.GenerationJobUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GenerationJobPayload>[]
+        }
+        upsert: {
+          args: Prisma.GenerationJobUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$GenerationJobPayload>
+        }
+        aggregate: {
+          args: Prisma.GenerationJobAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateGenerationJob>
+        }
+        groupBy: {
+          args: Prisma.GenerationJobGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.GenerationJobGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.GenerationJobCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.GenerationJobCountAggregateOutputType> | number
+        }
+      }
+    }
   }
 } & {
   other: {
@@ -1218,6 +1368,51 @@ export const StoryCharacterScalarFieldEnum = {
 } as const
 
 export type StoryCharacterScalarFieldEnum = (typeof StoryCharacterScalarFieldEnum)[keyof typeof StoryCharacterScalarFieldEnum]
+
+
+export const FlowCharacterMappingScalarFieldEnum = {
+  id: 'id',
+  storyId: 'storyId',
+  characterId: 'characterId',
+  flowProjectId: 'flowProjectId',
+  flowCharacterName: 'flowCharacterName',
+  syncStatus: 'syncStatus',
+  sourceReferenceUrl: 'sourceReferenceUrl',
+  sourceFingerprint: 'sourceFingerprint',
+  lastSyncedAt: 'lastSyncedAt',
+  lastError: 'lastError',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type FlowCharacterMappingScalarFieldEnum = (typeof FlowCharacterMappingScalarFieldEnum)[keyof typeof FlowCharacterMappingScalarFieldEnum]
+
+
+export const GenerationJobScalarFieldEnum = {
+  id: 'id',
+  storyId: 'storyId',
+  sceneId: 'sceneId',
+  characterId: 'characterId',
+  provider: 'provider',
+  model: 'model',
+  targetType: 'targetType',
+  assetType: 'assetType',
+  prompt: 'prompt',
+  flowProjectId: 'flowProjectId',
+  workerJobId: 'workerJobId',
+  status: 'status',
+  progress: 'progress',
+  error: 'error',
+  resultAssetId: 'resultAssetId',
+  resultUrl: 'resultUrl',
+  metadata: 'metadata',
+  retryCount: 'retryCount',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt',
+  completedAt: 'completedAt'
+} as const
+
+export type GenerationJobScalarFieldEnum = (typeof GenerationJobScalarFieldEnum)[keyof typeof GenerationJobScalarFieldEnum]
 
 
 export const SortOrder = {
@@ -1502,6 +1697,8 @@ export type GlobalOmitConfig = {
   character?: Prisma.CharacterOmit
   integrationCredential?: Prisma.IntegrationCredentialOmit
   storyCharacter?: Prisma.StoryCharacterOmit
+  flowCharacterMapping?: Prisma.FlowCharacterMappingOmit
+  generationJob?: Prisma.GenerationJobOmit
 }
 
 /* Types for Logging */

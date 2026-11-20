@@ -37,6 +37,12 @@ export interface CharacterContextItem {
   hasMasterReference: boolean;
   scenesAppearedIn: Array<{ sceneId: string; number: number; title: string }>;
   scenesCount: number;
+  flowMapping?: {
+    flowCharacterName: string;
+    flowProjectId: string;
+    syncStatus: string;
+    lastSyncedAt: string | null;
+  } | null;
 }
 
 export interface StoryFlowContext {
@@ -116,8 +122,12 @@ export class StoryContextService {
     const defaultAspectRatio = visualBible.aspectRatio || '16:9';
     const visualStyle = story.visualStyle || visualBible.artStyle || 'storybook_illustrated';
 
-    // 3. Map Characters from StoryCharacters
+    // 3. Map Characters & Story Flow Character Mappings
     const charactersMap = new Map<string, CharacterContextItem>();
+    const mappings = await prisma.flowCharacterMapping.findMany({
+      where: { storyId: story.storyId },
+    });
+    const mappingsMap = new Map(mappings.map((m) => [m.characterId, m]));
 
     for (const sc of story.storyCharacters) {
       const char = sc.character;
@@ -125,6 +135,7 @@ export class StoryContextService {
 
       const visualDesc = char.visualDescription || '';
       const clothing = char.distinctiveFeatures || '';
+      const mapping = mappingsMap.get(char.id);
 
       charactersMap.set(char.id, {
         id: char.id,
@@ -140,6 +151,14 @@ export class StoryContextService {
         hasMasterReference: Boolean(char.referenceImageUrl && char.referenceImageUrl.trim().length > 0),
         scenesAppearedIn: [],
         scenesCount: 0,
+        flowMapping: mapping
+          ? {
+              flowCharacterName: mapping.flowCharacterName,
+              flowProjectId: mapping.flowProjectId,
+              syncStatus: mapping.syncStatus,
+              lastSyncedAt: mapping.lastSyncedAt ? mapping.lastSyncedAt.toISOString() : null,
+            }
+          : null,
       });
     }
 

@@ -18,6 +18,10 @@ export interface ImportAssetOptions {
   imageData: string | Buffer;
   filename?: string;
   mimeType?: string;
+  provider?: 'google_flow' | 'gemini_api' | 'manual_upload' | string;
+  model?: string;
+  sourceJobId?: string;
+  flowProjectId?: string;
 
   // Scene background options
   storyId?: string;
@@ -142,6 +146,8 @@ export class GoogleFlowAssetImportService {
       const fit = options.fit === 'contain' ? 'contain' : 'cover';
       const prompt = options.prompt || currentAnim.background?.prompt || scene.visualPrompt || 'Google Flow scene background';
       const cameraDirection = options.cameraDirection || scene.cameraDirection || 'Eye-level wide shot';
+      const provider = options.provider || 'google_flow';
+      const model = options.model || (provider === 'google_flow' ? 'google_flow' : (provider === 'gemini_api' ? 'gemini-imagen' : 'manual_upload'));
 
       const updatedAnimData = {
         ...currentAnim,
@@ -149,13 +155,15 @@ export class GoogleFlowAssetImportService {
           ...currentAnim.background,
           imageUrl: url,
           fit,
-          source: 'google_flow_manual',
+          source: provider,
           prompt,
           cameraDirection,
           aspectRatio,
           dimensions: { width, height },
           filename: rawFilename || storageFilename,
           sizeBytes: buffer.length,
+          sourceJobId: options.sourceJobId,
+          flowProjectId: options.flowProjectId,
           removed: false,
         },
       };
@@ -165,12 +173,12 @@ export class GoogleFlowAssetImportService {
         animationData: updatedAnimData,
       });
 
-      // Track in Image table
+      // Track in Image table with authentic provider
       await createImage({
         id: randomUUID(),
         sceneId: scene.sceneId,
-        provider: 'google_flow_manual',
-        model: 'google-flow-imagen',
+        provider,
+        model,
         prompt,
         storageKey: storageFilename,
         imageUrl: url,
@@ -244,13 +252,16 @@ export class GoogleFlowAssetImportService {
       const isMaster = Boolean(options.isMasterReference || target === 'character_reference');
       const assetId = `flow-${options.characterId}-${view}-${Date.now()}`;
 
+      const provider = options.provider || 'google_flow';
+      const model = options.model || (provider === 'google_flow' ? 'google_flow' : (provider === 'gemini_api' ? 'gemini-imagen' : 'manual_upload'));
+
       const registered = await this.getCharacterReferenceService().saveAssetToCharacter(options.characterId, {
         id: assetId,
         assetType: isMaster ? 'main' : (view === 'front' ? 'main' : 'turnaround'),
         direction: view,
         prompt: options.prompt || `${character.name} reference view (${view})`,
-        provider: 'google_flow',
-        model: 'flow-imagen',
+        provider,
+        model,
         url,
         isMasterReference: isMaster,
         createdAt: new Date().toISOString(),

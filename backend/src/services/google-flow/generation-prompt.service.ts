@@ -101,13 +101,22 @@ export class GenerationPromptService {
       };
     }
 
-    const baseIdentity = [
-      `Character: ${character.name}`,
-      `Species: ${character.species}`,
-      `Personality: ${character.personality}`,
-      `Appearance: ${character.visualDescription}`,
-      `Clothing & Features: ${character.clothing || character.distinctiveFeatures || 'Standard storybook attire'}`,
-    ].join('. ');
+    const hasFlowMapping = Boolean(
+      character.flowMapping &&
+      character.flowMapping.syncStatus === 'synced' &&
+      character.flowMapping.flowCharacterName
+    );
+    const flowTag = hasFlowMapping ? `@${character.flowMapping!.flowCharacterName}` : character.name;
+
+    const baseIdentity = hasFlowMapping
+      ? `Using character model reference ${flowTag}.`
+      : [
+          `Character: ${character.name}`,
+          `Species: ${character.species}`,
+          `Personality: ${character.personality}`,
+          `Appearance: ${character.visualDescription}`,
+          `Clothing & Features: ${character.clothing || character.distinctiveFeatures || 'Standard storybook attire'}`,
+        ].join('. ');
 
     let prompt = '';
     const variation = options?.variation || '';
@@ -117,7 +126,13 @@ export class GenerationPromptService {
         prompt = [
           `Master canonical character reference sheet for ${character.name}.`,
           `Art Style: ${artStyle}.`,
-          baseIdentity,
+          [
+            `Character: ${character.name}`,
+            `Species: ${character.species}`,
+            `Personality: ${character.personality}`,
+            `Appearance: ${character.visualDescription}`,
+            `Clothing & Features: ${character.clothing || character.distinctiveFeatures || 'Standard storybook attire'}`,
+          ].join('. '),
           `Full-body portrait, standing pose facing forward with a welcoming friendly expression.`,
           `Complete character design visible from head to toe. Centered in frame.`,
           `Background: Isolated on pure solid neutral off-white background with soft ground shadow. No scenery, no background clutter.`,
@@ -128,7 +143,7 @@ export class GenerationPromptService {
       case 'turnaround': {
         const direction = variation || 'front view';
         prompt = [
-          `Character turnaround reference of ${character.name} in ${direction}.`,
+          `Character turnaround reference of ${flowTag} in ${direction}.`,
           `Art Style: ${artStyle}.`,
           baseIdentity,
           `Directional view: ${direction}. Consistent character proportions, clothing, and colors exactly matching the master reference.`,
@@ -141,7 +156,7 @@ export class GenerationPromptService {
       case 'expression': {
         const expr = variation || 'happy and smiling';
         prompt = [
-          `Expressive character facial sheet for ${character.name}.`,
+          `Expressive character facial sheet for ${flowTag}.`,
           `Art Style: ${artStyle}.`,
           baseIdentity,
           `Facial emotion: ${expr}. Expressive, animated children storybook expression while strictly maintaining identical face shape, eyes, and character features.`,
@@ -154,7 +169,7 @@ export class GenerationPromptService {
       case 'pose': {
         const actionPose = variation || 'waving hand and greeting';
         prompt = [
-          `Dynamic action character pose of ${character.name}.`,
+          `Dynamic action character pose of ${flowTag}.`,
           `Art Style: ${artStyle}.`,
           baseIdentity,
           `Full-body action pose: ${actionPose}. Dynamic gesture suitable for 2D animation, maintaining exact character design, attire, and colors.`,

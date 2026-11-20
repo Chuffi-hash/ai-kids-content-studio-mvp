@@ -227,11 +227,36 @@ describe('Story-Aware Direct Generation & Context Resolver Test Suite', () => {
     assert.ok(exprPrompt.prompt.includes('surprised and curious'));
   });
 
+  const validPngBuffer = Buffer.from([
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, // PNG signature
+    0x00, 0x00, 0x00, 0x0d, // IHDR chunk length (13 bytes)
+    0x49, 0x48, 0x44, 0x52, // "IHDR"
+    0x00, 0x00, 0x07, 0x80, // width: 1920
+    0x00, 0x00, 0x04, 0x38, // height: 1080
+    0x08, 0x06, 0x00, 0x00, 0x00, // bit depth, color type, compression, filter, interlace
+    0x5d, 0xb7, 0x54, 0xef, // CRC
+  ]);
+
   test('4. GenerationOrchestratorService: Direct scene background generation updates Scene and Image records', async () => {
+    // Verify that without API key or mock, it rejects with descriptive error (Finding-002: no fake placeholders)
+    if (!process.env.GEMINI_API_KEY) {
+      await assert.rejects(
+        async () => {
+          await GenerationOrchestratorService.generateSceneBackground({
+            storyId: testStoryId,
+            sceneId: scene2Id,
+            provider: 'gemini_api',
+          });
+        },
+        /GEMINI_API_KEY is not configured/
+      );
+    }
+
     const res = await GenerationOrchestratorService.generateSceneBackground({
       storyId: testStoryId,
       sceneId: scene2Id,
       provider: 'gemini_api',
+      testMockBuffer: validPngBuffer,
     });
 
     assert.strictEqual(res.success, true);
@@ -260,6 +285,7 @@ describe('Story-Aware Direct Generation & Context Resolver Test Suite', () => {
       characterId: char2Id,
       provider: 'gemini_api',
       assetType: 'master_reference',
+      testMockBuffer: validPngBuffer,
     });
 
     assert.strictEqual(res.success, true);
@@ -273,7 +299,11 @@ describe('Story-Aware Direct Generation & Context Resolver Test Suite', () => {
 
   test('6. GenerationOrchestratorService: Batch missing generation executes across remaining targets', async () => {
     // Scene 3 is still missing a background
-    const batchBg = await GenerationOrchestratorService.generateAllMissingBackgrounds(testStoryId, 'gemini_api');
+    const batchBg = await GenerationOrchestratorService.generateAllMissingBackgrounds(
+      testStoryId,
+      'gemini_api',
+      { testMockBuffer: validPngBuffer }
+    );
     assert.strictEqual(batchBg.total, 1);
     assert.strictEqual(batchBg.generated, 1);
     assert.strictEqual(batchBg.failed, 0);

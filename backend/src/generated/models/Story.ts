@@ -311,6 +311,7 @@ export type StoryWhereInput = {
   scenes?: Prisma.SceneListRelationFilter
   storyCharacters?: Prisma.StoryCharacterListRelationFilter
   shots?: Prisma.ShotListRelationFilter
+  flowCharacterMappings?: Prisma.FlowCharacterMappingListRelationFilter
 }
 
 export type StoryOrderByWithRelationInput = {
@@ -334,6 +335,7 @@ export type StoryOrderByWithRelationInput = {
   scenes?: Prisma.SceneOrderByRelationAggregateInput
   storyCharacters?: Prisma.StoryCharacterOrderByRelationAggregateInput
   shots?: Prisma.ShotOrderByRelationAggregateInput
+  flowCharacterMappings?: Prisma.FlowCharacterMappingOrderByRelationAggregateInput
 }
 
 export type StoryWhereUniqueInput = Prisma.AtLeast<{
@@ -360,6 +362,7 @@ export type StoryWhereUniqueInput = Prisma.AtLeast<{
   scenes?: Prisma.SceneListRelationFilter
   storyCharacters?: Prisma.StoryCharacterListRelationFilter
   shots?: Prisma.ShotListRelationFilter
+  flowCharacterMappings?: Prisma.FlowCharacterMappingListRelationFilter
 }, "id" | "storyId">
 
 export type StoryOrderByWithAggregationInput = {
@@ -431,6 +434,7 @@ export type StoryCreateInput = {
   scenes?: Prisma.SceneCreateNestedManyWithoutStoryInput
   storyCharacters?: Prisma.StoryCharacterCreateNestedManyWithoutStoryInput
   shots?: Prisma.ShotCreateNestedManyWithoutStoryInput
+  flowCharacterMappings?: Prisma.FlowCharacterMappingCreateNestedManyWithoutStoryInput
 }
 
 export type StoryUncheckedCreateInput = {
@@ -454,6 +458,7 @@ export type StoryUncheckedCreateInput = {
   scenes?: Prisma.SceneUncheckedCreateNestedManyWithoutStoryInput
   storyCharacters?: Prisma.StoryCharacterUncheckedCreateNestedManyWithoutStoryInput
   shots?: Prisma.ShotUncheckedCreateNestedManyWithoutStoryInput
+  flowCharacterMappings?: Prisma.FlowCharacterMappingUncheckedCreateNestedManyWithoutStoryInput
 }
 
 export type StoryUpdateInput = {
@@ -477,6 +482,7 @@ export type StoryUpdateInput = {
   scenes?: Prisma.SceneUpdateManyWithoutStoryNestedInput
   storyCharacters?: Prisma.StoryCharacterUpdateManyWithoutStoryNestedInput
   shots?: Prisma.ShotUpdateManyWithoutStoryNestedInput
+  flowCharacterMappings?: Prisma.FlowCharacterMappingUpdateManyWithoutStoryNestedInput
 }
 
 export type StoryUncheckedUpdateInput = {
@@ -500,6 +506,7 @@ export type StoryUncheckedUpdateInput = {
   scenes?: Prisma.SceneUncheckedUpdateManyWithoutStoryNestedInput
   storyCharacters?: Prisma.StoryCharacterUncheckedUpdateManyWithoutStoryNestedInput
   shots?: Prisma.ShotUncheckedUpdateManyWithoutStoryNestedInput
+  flowCharacterMappings?: Prisma.FlowCharacterMappingUncheckedUpdateManyWithoutStoryNestedInput
 }
 
 export type StoryCreateManyInput = {
@@ -695,6 +702,20 @@ export type StoryUpdateOneRequiredWithoutStoryCharactersNestedInput = {
   update?: Prisma.XOR<Prisma.XOR<Prisma.StoryUpdateToOneWithWhereWithoutStoryCharactersInput, Prisma.StoryUpdateWithoutStoryCharactersInput>, Prisma.StoryUncheckedUpdateWithoutStoryCharactersInput>
 }
 
+export type StoryCreateNestedOneWithoutFlowCharacterMappingsInput = {
+  create?: Prisma.XOR<Prisma.StoryCreateWithoutFlowCharacterMappingsInput, Prisma.StoryUncheckedCreateWithoutFlowCharacterMappingsInput>
+  connectOrCreate?: Prisma.StoryCreateOrConnectWithoutFlowCharacterMappingsInput
+  connect?: Prisma.StoryWhereUniqueInput
+}
+
+export type StoryUpdateOneRequiredWithoutFlowCharacterMappingsNestedInput = {
+  create?: Prisma.XOR<Prisma.StoryCreateWithoutFlowCharacterMappingsInput, Prisma.StoryUncheckedCreateWithoutFlowCharacterMappingsInput>
+  connectOrCreate?: Prisma.StoryCreateOrConnectWithoutFlowCharacterMappingsInput
+  upsert?: Prisma.StoryUpsertWithoutFlowCharacterMappingsInput
+  connect?: Prisma.StoryWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.StoryUpdateToOneWithWhereWithoutFlowCharacterMappingsInput, Prisma.StoryUpdateWithoutFlowCharacterMappingsInput>, Prisma.StoryUncheckedUpdateWithoutFlowCharacterMappingsInput>
+}
+
 export type StoryCreateWithoutScenesInput = {
   id?: string
   storyId: string
@@ -715,6 +736,7 @@ export type StoryCreateWithoutScenesInput = {
   updatedAt?: Date | string
   storyCharacters?: Prisma.StoryCharacterCreateNestedManyWithoutStoryInput
   shots?: Prisma.ShotCreateNestedManyWithoutStoryInput
+  flowCharacterMappings?: Prisma.FlowCharacterMappingCreateNestedManyWithoutStoryInput
 }
 
 export type StoryUncheckedCreateWithoutScenesInput = {
@@ -737,6 +759,7 @@ export type StoryUncheckedCreateWithoutScenesInput = {
   updatedAt?: Date | string
   storyCharacters?: Prisma.StoryCharacterUncheckedCreateNestedManyWithoutStoryInput
   shots?: Prisma.ShotUncheckedCreateNestedManyWithoutStoryInput
+  flowCharacterMappings?: Prisma.FlowCharacterMappingUncheckedCreateNestedManyWithoutStoryInput
 }
 
 export type StoryCreateOrConnectWithoutScenesInput = {
@@ -775,6 +798,7 @@ export type StoryUpdateWithoutScenesInput = {
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   storyCharacters?: Prisma.StoryCharacterUpdateManyWithoutStoryNestedInput
   shots?: Prisma.ShotUpdateManyWithoutStoryNestedInput
+  flowCharacterMappings?: Prisma.FlowCharacterMappingUpdateManyWithoutStoryNestedInput
 }
 
 export type StoryUncheckedUpdateWithoutScenesInput = {
@@ -797,6 +821,7 @@ export type StoryUncheckedUpdateWithoutScenesInput = {
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   storyCharacters?: Prisma.StoryCharacterUncheckedUpdateManyWithoutStoryNestedInput
   shots?: Prisma.ShotUncheckedUpdateManyWithoutStoryNestedInput
+  flowCharacterMappings?: Prisma.FlowCharacterMappingUncheckedUpdateManyWithoutStoryNestedInput
 }
 
 export type StoryCreateWithoutShotsInput = {
@@ -819,6 +844,7 @@ export type StoryCreateWithoutShotsInput = {
   updatedAt?: Date | string
   scenes?: Prisma.SceneCreateNestedManyWithoutStoryInput
   storyCharacters?: Prisma.StoryCharacterCreateNestedManyWithoutStoryInput
+  flowCharacterMappings?: Prisma.FlowCharacterMappingCreateNestedManyWithoutStoryInput
 }
 
 export type StoryUncheckedCreateWithoutShotsInput = {
@@ -841,6 +867,7 @@ export type StoryUncheckedCreateWithoutShotsInput = {
   updatedAt?: Date | string
   scenes?: Prisma.SceneUncheckedCreateNestedManyWithoutStoryInput
   storyCharacters?: Prisma.StoryCharacterUncheckedCreateNestedManyWithoutStoryInput
+  flowCharacterMappings?: Prisma.FlowCharacterMappingUncheckedCreateNestedManyWithoutStoryInput
 }
 
 export type StoryCreateOrConnectWithoutShotsInput = {
@@ -879,6 +906,7 @@ export type StoryUpdateWithoutShotsInput = {
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   scenes?: Prisma.SceneUpdateManyWithoutStoryNestedInput
   storyCharacters?: Prisma.StoryCharacterUpdateManyWithoutStoryNestedInput
+  flowCharacterMappings?: Prisma.FlowCharacterMappingUpdateManyWithoutStoryNestedInput
 }
 
 export type StoryUncheckedUpdateWithoutShotsInput = {
@@ -901,6 +929,7 @@ export type StoryUncheckedUpdateWithoutShotsInput = {
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   scenes?: Prisma.SceneUncheckedUpdateManyWithoutStoryNestedInput
   storyCharacters?: Prisma.StoryCharacterUncheckedUpdateManyWithoutStoryNestedInput
+  flowCharacterMappings?: Prisma.FlowCharacterMappingUncheckedUpdateManyWithoutStoryNestedInput
 }
 
 export type StoryCreateWithoutStoryCharactersInput = {
@@ -923,6 +952,7 @@ export type StoryCreateWithoutStoryCharactersInput = {
   updatedAt?: Date | string
   scenes?: Prisma.SceneCreateNestedManyWithoutStoryInput
   shots?: Prisma.ShotCreateNestedManyWithoutStoryInput
+  flowCharacterMappings?: Prisma.FlowCharacterMappingCreateNestedManyWithoutStoryInput
 }
 
 export type StoryUncheckedCreateWithoutStoryCharactersInput = {
@@ -945,6 +975,7 @@ export type StoryUncheckedCreateWithoutStoryCharactersInput = {
   updatedAt?: Date | string
   scenes?: Prisma.SceneUncheckedCreateNestedManyWithoutStoryInput
   shots?: Prisma.ShotUncheckedCreateNestedManyWithoutStoryInput
+  flowCharacterMappings?: Prisma.FlowCharacterMappingUncheckedCreateNestedManyWithoutStoryInput
 }
 
 export type StoryCreateOrConnectWithoutStoryCharactersInput = {
@@ -983,6 +1014,7 @@ export type StoryUpdateWithoutStoryCharactersInput = {
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   scenes?: Prisma.SceneUpdateManyWithoutStoryNestedInput
   shots?: Prisma.ShotUpdateManyWithoutStoryNestedInput
+  flowCharacterMappings?: Prisma.FlowCharacterMappingUpdateManyWithoutStoryNestedInput
 }
 
 export type StoryUncheckedUpdateWithoutStoryCharactersInput = {
@@ -1005,6 +1037,115 @@ export type StoryUncheckedUpdateWithoutStoryCharactersInput = {
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   scenes?: Prisma.SceneUncheckedUpdateManyWithoutStoryNestedInput
   shots?: Prisma.ShotUncheckedUpdateManyWithoutStoryNestedInput
+  flowCharacterMappings?: Prisma.FlowCharacterMappingUncheckedUpdateManyWithoutStoryNestedInput
+}
+
+export type StoryCreateWithoutFlowCharacterMappingsInput = {
+  id?: string
+  storyId: string
+  title: string
+  logline: string
+  lesson: string
+  topic?: string | null
+  ageGroup?: string | null
+  audience?: string | null
+  genre?: string | null
+  visualStyle?: string | null
+  targetDuration?: number | null
+  visualBible?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  flowProjectId?: string | null
+  originalScript?: string | null
+  productionStage?: string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  scenes?: Prisma.SceneCreateNestedManyWithoutStoryInput
+  storyCharacters?: Prisma.StoryCharacterCreateNestedManyWithoutStoryInput
+  shots?: Prisma.ShotCreateNestedManyWithoutStoryInput
+}
+
+export type StoryUncheckedCreateWithoutFlowCharacterMappingsInput = {
+  id?: string
+  storyId: string
+  title: string
+  logline: string
+  lesson: string
+  topic?: string | null
+  ageGroup?: string | null
+  audience?: string | null
+  genre?: string | null
+  visualStyle?: string | null
+  targetDuration?: number | null
+  visualBible?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  flowProjectId?: string | null
+  originalScript?: string | null
+  productionStage?: string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  scenes?: Prisma.SceneUncheckedCreateNestedManyWithoutStoryInput
+  storyCharacters?: Prisma.StoryCharacterUncheckedCreateNestedManyWithoutStoryInput
+  shots?: Prisma.ShotUncheckedCreateNestedManyWithoutStoryInput
+}
+
+export type StoryCreateOrConnectWithoutFlowCharacterMappingsInput = {
+  where: Prisma.StoryWhereUniqueInput
+  create: Prisma.XOR<Prisma.StoryCreateWithoutFlowCharacterMappingsInput, Prisma.StoryUncheckedCreateWithoutFlowCharacterMappingsInput>
+}
+
+export type StoryUpsertWithoutFlowCharacterMappingsInput = {
+  update: Prisma.XOR<Prisma.StoryUpdateWithoutFlowCharacterMappingsInput, Prisma.StoryUncheckedUpdateWithoutFlowCharacterMappingsInput>
+  create: Prisma.XOR<Prisma.StoryCreateWithoutFlowCharacterMappingsInput, Prisma.StoryUncheckedCreateWithoutFlowCharacterMappingsInput>
+  where?: Prisma.StoryWhereInput
+}
+
+export type StoryUpdateToOneWithWhereWithoutFlowCharacterMappingsInput = {
+  where?: Prisma.StoryWhereInput
+  data: Prisma.XOR<Prisma.StoryUpdateWithoutFlowCharacterMappingsInput, Prisma.StoryUncheckedUpdateWithoutFlowCharacterMappingsInput>
+}
+
+export type StoryUpdateWithoutFlowCharacterMappingsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  storyId?: Prisma.StringFieldUpdateOperationsInput | string
+  title?: Prisma.StringFieldUpdateOperationsInput | string
+  logline?: Prisma.StringFieldUpdateOperationsInput | string
+  lesson?: Prisma.StringFieldUpdateOperationsInput | string
+  topic?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ageGroup?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  audience?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  genre?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  visualStyle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  targetDuration?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  visualBible?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  flowProjectId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  originalScript?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  productionStage?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  scenes?: Prisma.SceneUpdateManyWithoutStoryNestedInput
+  storyCharacters?: Prisma.StoryCharacterUpdateManyWithoutStoryNestedInput
+  shots?: Prisma.ShotUpdateManyWithoutStoryNestedInput
+}
+
+export type StoryUncheckedUpdateWithoutFlowCharacterMappingsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  storyId?: Prisma.StringFieldUpdateOperationsInput | string
+  title?: Prisma.StringFieldUpdateOperationsInput | string
+  logline?: Prisma.StringFieldUpdateOperationsInput | string
+  lesson?: Prisma.StringFieldUpdateOperationsInput | string
+  topic?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  ageGroup?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  audience?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  genre?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  visualStyle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  targetDuration?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  visualBible?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  flowProjectId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  originalScript?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  productionStage?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  scenes?: Prisma.SceneUncheckedUpdateManyWithoutStoryNestedInput
+  storyCharacters?: Prisma.StoryCharacterUncheckedUpdateManyWithoutStoryNestedInput
+  shots?: Prisma.ShotUncheckedUpdateManyWithoutStoryNestedInput
 }
 
 
@@ -1016,12 +1157,14 @@ export type StoryCountOutputType = {
   scenes: number
   storyCharacters: number
   shots: number
+  flowCharacterMappings: number
 }
 
 export type StoryCountOutputTypeSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   scenes?: boolean | StoryCountOutputTypeCountScenesArgs
   storyCharacters?: boolean | StoryCountOutputTypeCountStoryCharactersArgs
   shots?: boolean | StoryCountOutputTypeCountShotsArgs
+  flowCharacterMappings?: boolean | StoryCountOutputTypeCountFlowCharacterMappingsArgs
 }
 
 /**
@@ -1055,6 +1198,13 @@ export type StoryCountOutputTypeCountShotsArgs<ExtArgs extends runtime.Types.Ext
   where?: Prisma.ShotWhereInput
 }
 
+/**
+ * StoryCountOutputType without action
+ */
+export type StoryCountOutputTypeCountFlowCharacterMappingsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.FlowCharacterMappingWhereInput
+}
+
 
 export type StorySelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
   id?: boolean
@@ -1077,6 +1227,7 @@ export type StorySelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = 
   scenes?: boolean | Prisma.Story$scenesArgs<ExtArgs>
   storyCharacters?: boolean | Prisma.Story$storyCharactersArgs<ExtArgs>
   shots?: boolean | Prisma.Story$shotsArgs<ExtArgs>
+  flowCharacterMappings?: boolean | Prisma.Story$flowCharacterMappingsArgs<ExtArgs>
   _count?: boolean | Prisma.StoryCountOutputTypeDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["story"]>
 
@@ -1145,6 +1296,7 @@ export type StoryInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs =
   scenes?: boolean | Prisma.Story$scenesArgs<ExtArgs>
   storyCharacters?: boolean | Prisma.Story$storyCharactersArgs<ExtArgs>
   shots?: boolean | Prisma.Story$shotsArgs<ExtArgs>
+  flowCharacterMappings?: boolean | Prisma.Story$flowCharacterMappingsArgs<ExtArgs>
   _count?: boolean | Prisma.StoryCountOutputTypeDefaultArgs<ExtArgs>
 }
 export type StoryIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {}
@@ -1156,6 +1308,7 @@ export type $StoryPayload<ExtArgs extends runtime.Types.Extensions.InternalArgs 
     scenes: Prisma.$ScenePayload<ExtArgs>[]
     storyCharacters: Prisma.$StoryCharacterPayload<ExtArgs>[]
     shots: Prisma.$ShotPayload<ExtArgs>[]
+    flowCharacterMappings: Prisma.$FlowCharacterMappingPayload<ExtArgs>[]
   }
   scalars: runtime.Types.Extensions.GetPayloadResult<{
     id: string
@@ -1572,6 +1725,7 @@ export interface Prisma__StoryClient<T, Null = never, ExtArgs extends runtime.Ty
   scenes<T extends Prisma.Story$scenesArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Story$scenesArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$ScenePayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   storyCharacters<T extends Prisma.Story$storyCharactersArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Story$storyCharactersArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$StoryCharacterPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   shots<T extends Prisma.Story$shotsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Story$shotsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$ShotPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  flowCharacterMappings<T extends Prisma.Story$flowCharacterMappingsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Story$flowCharacterMappingsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$FlowCharacterMappingPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   /**
    * Attaches callbacks for the resolution and/or rejection of the Promise.
    * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -2080,6 +2234,30 @@ export type Story$shotsArgs<ExtArgs extends runtime.Types.Extensions.InternalArg
   take?: number
   skip?: number
   distinct?: Prisma.ShotScalarFieldEnum | Prisma.ShotScalarFieldEnum[]
+}
+
+/**
+ * Story.flowCharacterMappings
+ */
+export type Story$flowCharacterMappingsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the FlowCharacterMapping
+   */
+  select?: Prisma.FlowCharacterMappingSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the FlowCharacterMapping
+   */
+  omit?: Prisma.FlowCharacterMappingOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.FlowCharacterMappingInclude<ExtArgs> | null
+  where?: Prisma.FlowCharacterMappingWhereInput
+  orderBy?: Prisma.FlowCharacterMappingOrderByWithRelationInput | Prisma.FlowCharacterMappingOrderByWithRelationInput[]
+  cursor?: Prisma.FlowCharacterMappingWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.FlowCharacterMappingScalarFieldEnum | Prisma.FlowCharacterMappingScalarFieldEnum[]
 }
 
 /**

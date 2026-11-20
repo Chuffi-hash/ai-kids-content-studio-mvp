@@ -29,6 +29,7 @@ model Story {
   scenes         Scene[]
   storyCharacters StoryCharacter[]
   shots          Shot[]
+  flowCharacterMappings FlowCharacterMapping[]
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
 
@@ -154,6 +155,7 @@ model Character {
   referenceImageUrl   String?
   referenceImagePrompt String?
   storyCharacters     StoryCharacter[]
+  flowCharacterMappings FlowCharacterMapping[]
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt
 
@@ -188,3 +190,55 @@ model StoryCharacter {
   @@index([storyId])
   @@index([characterId])
 }
+
+model FlowCharacterMapping {
+  id                 String    @id @default(cuid())
+  storyId            String
+  characterId        String
+  flowProjectId      String
+  flowCharacterName  String
+  syncStatus         String    @default("pending")
+  sourceReferenceUrl String?
+  sourceFingerprint  String?
+  lastSyncedAt       DateTime?
+  lastError          String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  story     Story     @relation(fields: [storyId], references: [storyId], onDelete: Cascade)
+  character Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@unique([storyId, characterId])
+  @@index([flowProjectId])
+}
+
+model GenerationJob {
+  id            String    @id @default(cuid())
+  storyId       String?
+  sceneId       String?
+  characterId   String?
+  provider      String    @default("google_flow")
+  model         String?
+  targetType    String    @default("scene_background")
+  assetType     String?
+  prompt        String
+  flowProjectId String?
+  workerJobId   String?
+  status        String    @default("queued")
+  progress      Int       @default(0)
+  error         String?
+  resultAssetId String?
+  resultUrl     String?
+  metadata      Json?
+  retryCount    Int       @default(0)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  completedAt   DateTime?
+
+  @@index([storyId])
+  @@index([sceneId])
+  @@index([characterId])
+  @@index([workerJobId])
+  @@index([status])
+}
+

@@ -397,6 +397,17 @@ const server = http.createServer(async (request, response) => {
       return;
     }
 
+    if (request.method === "POST" && pathname === "/characters/sync") {
+      const body = await readJson(request);
+      if (!worker.context || !worker.page || (typeof worker.page.isClosed === "function" && worker.page.isClosed())) {
+        sendJson(response, 409, { success: false, message: "Open the visible Flow browser session first." });
+        return;
+      }
+      const result = await worker.synchronizeCharacter(body);
+      sendJson(response, 200, { success: true, ...result });
+      return;
+    }
+
     if (request.method === "POST" && pathname === "/jobs") {
       const body = await readJson(request);
       if (!worker.context || !worker.page || worker.page.isClosed()) {

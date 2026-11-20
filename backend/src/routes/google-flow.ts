@@ -499,18 +499,53 @@ googleFlowRouter.post('/generate/batch-characters', async (req: Request, res: Re
   }
 });
 
-googleFlowRouter.get('/jobs', (req: Request, res: Response) => {
-  const storyId = req.query.storyId ? String(req.query.storyId) : undefined;
-  const jobs = GenerationOrchestratorService.listJobs(storyId);
-  res.json({ success: true, jobs });
+googleFlowRouter.post('/stories/:storyId/characters/:characterId/sync-flow', async (req: Request, res: Response) => {
+  try {
+    const rawStoryId = Array.isArray(req.params.storyId) ? req.params.storyId[0] : req.params.storyId;
+    const rawCharId = Array.isArray(req.params.characterId) ? req.params.characterId[0] : req.params.characterId;
+    const storyId = String(rawStoryId);
+    const characterId = String(rawCharId);
+
+    const result = await GenerationOrchestratorService.syncCharacterToGoogleFlow(storyId, characterId);
+    res.json(result);
+  } catch (err: any) {
+    console.error('[GoogleFlowRouter] Character sync failed:', err);
+    res.status(500).json({ success: false, message: err.message || 'Character sync to Google Flow failed' });
+  }
 });
 
-googleFlowRouter.get('/jobs/:id', (req: Request, res: Response) => {
-  const rawId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const jobId = String(rawId);
-  const job = GenerationOrchestratorService.getJob(jobId);
-  if (!job) {
-    return res.status(404).json({ success: false, message: 'Job not found' });
+googleFlowRouter.get('/stories/:storyId/character-mappings', async (req: Request, res: Response) => {
+  try {
+    const rawStoryId = Array.isArray(req.params.storyId) ? req.params.storyId[0] : req.params.storyId;
+    const storyId = String(rawStoryId);
+
+    const mappings = await GenerationOrchestratorService.getCharacterMappings(storyId);
+    res.json({ success: true, mappings });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message || 'Failed to list character mappings' });
   }
-  res.json({ success: true, job });
+});
+
+googleFlowRouter.get('/jobs', async (req: Request, res: Response) => {
+  try {
+    const storyId = req.query.storyId ? String(req.query.storyId) : undefined;
+    const jobs = await GenerationOrchestratorService.listJobs(storyId);
+    res.json({ success: true, jobs });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message || 'Failed to list jobs' });
+  }
+});
+
+googleFlowRouter.get('/jobs/:id', async (req: Request, res: Response) => {
+  try {
+    const rawId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const jobId = String(rawId);
+    const job = await GenerationOrchestratorService.getJob(jobId);
+    if (!job) {
+      return res.status(404).json({ success: false, message: 'Job not found' });
+    }
+    res.json({ success: true, job });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message || 'Failed to get job' });
+  }
 });

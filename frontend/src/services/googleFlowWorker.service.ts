@@ -586,6 +586,12 @@ export interface StoryFlowCharacterItem {
   hasMasterReference: boolean;
   scenesAppearedIn: Array<{ sceneId: string; number: number; title: string }>;
   scenesCount: number;
+  flowMapping?: {
+    flowCharacterName: string;
+    flowProjectId: string;
+    syncStatus: string;
+    lastSyncedAt: string | null;
+  } | null;
 }
 
 export interface StoryFlowContextResponse {
@@ -769,3 +775,51 @@ export async function generateAllMissingCharacterReferencesDirect(
   }
   return data.result;
 }
+
+export async function syncCharacterToGoogleFlowDirect(
+  storyId: string,
+  characterId: string
+): Promise<{ success: boolean; mapping: any; message: string }> {
+  const apiUrl = getApiUrl();
+  const res = await fetch(
+    `${apiUrl}/api/integrations/google-flow/stories/${encodeURIComponent(storyId)}/characters/${encodeURIComponent(characterId)}/sync-flow`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    }
+  );
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.success) {
+    throw new Error(data.message || "Character synchronization failed.");
+  }
+  return data;
+}
+
+export async function fetchStoryCharacterMappings(
+  storyId: string
+): Promise<any[]> {
+  const apiUrl = getApiUrl();
+  const res = await fetch(
+    `${apiUrl}/api/integrations/google-flow/stories/${encodeURIComponent(storyId)}/character-mappings`
+  );
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.success) {
+    throw new Error(data.message || "Failed to load character mappings.");
+  }
+  return data.mappings || [];
+}
+
+export async function fetchGenerationJob(
+  jobId: string
+): Promise<any> {
+  const apiUrl = getApiUrl();
+  const res = await fetch(
+    `${apiUrl}/api/integrations/google-flow/jobs/${encodeURIComponent(jobId)}`
+  );
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.success) {
+    throw new Error(data.message || "Failed to load generation job status.");
+  }
+  return data.job;
+}
+

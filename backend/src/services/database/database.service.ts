@@ -1182,5 +1182,163 @@ export async function replaceSceneShots(
   return reconcileAndUpsertSceneShots(storyId, sceneId, shots);
 }
 
+// -------------------------------------------------------------------------
+// Flow Character Mapping operations
+// -------------------------------------------------------------------------
+
+export async function getFlowCharacterMapping(storyId: string, characterId: string) {
+  return prisma.flowCharacterMapping.findUnique({
+    where: {
+      storyId_characterId: { storyId, characterId },
+    },
+    include: {
+      character: true,
+      story: true,
+    },
+  });
+}
+
+export async function listFlowCharacterMappings(storyId: string) {
+  return prisma.flowCharacterMapping.findMany({
+    where: { storyId },
+    include: {
+      character: true,
+    },
+    orderBy: { createdAt: 'asc' },
+  });
+}
+
+export async function upsertFlowCharacterMapping(data: {
+  storyId: string;
+  characterId: string;
+  flowProjectId: string;
+  flowCharacterName: string;
+  syncStatus?: string;
+  sourceReferenceUrl?: string | null;
+  sourceFingerprint?: string | null;
+  lastSyncedAt?: Date | null;
+  lastError?: string | null;
+}) {
+  return prisma.flowCharacterMapping.upsert({
+    where: {
+      storyId_characterId: {
+        storyId: data.storyId,
+        characterId: data.characterId,
+      },
+    },
+    create: {
+      storyId: data.storyId,
+      characterId: data.characterId,
+      flowProjectId: data.flowProjectId,
+      flowCharacterName: data.flowCharacterName,
+      syncStatus: data.syncStatus || 'synced',
+      sourceReferenceUrl: data.sourceReferenceUrl,
+      sourceFingerprint: data.sourceFingerprint,
+      lastSyncedAt: data.lastSyncedAt || new Date(),
+      lastError: data.lastError,
+    },
+    update: {
+      flowProjectId: data.flowProjectId,
+      flowCharacterName: data.flowCharacterName,
+      syncStatus: data.syncStatus || 'synced',
+      sourceReferenceUrl: data.sourceReferenceUrl,
+      sourceFingerprint: data.sourceFingerprint,
+      lastSyncedAt: data.lastSyncedAt || new Date(),
+      lastError: data.lastError,
+    },
+  });
+}
+
+export async function deleteFlowCharacterMapping(storyId: string, characterId: string) {
+  return prisma.flowCharacterMapping.deleteMany({
+    where: { storyId, characterId },
+  });
+}
+
+// -------------------------------------------------------------------------
+// GenerationJob operations
+// -------------------------------------------------------------------------
+
+export async function createGenerationJob(data: {
+  id?: string;
+  storyId?: string | null;
+  sceneId?: string | null;
+  characterId?: string | null;
+  provider?: string;
+  model?: string | null;
+  targetType: string;
+  assetType?: string | null;
+  prompt: string;
+  flowProjectId?: string | null;
+  workerJobId?: string | null;
+  status?: string;
+  progress?: number;
+  metadata?: any;
+}) {
+  return prisma.generationJob.create({
+    data: {
+      id: data.id || randomUUID(),
+      storyId: data.storyId,
+      sceneId: data.sceneId,
+      characterId: data.characterId,
+      provider: data.provider || 'google_flow',
+      model: data.model,
+      targetType: data.targetType,
+      assetType: data.assetType,
+      prompt: data.prompt,
+      flowProjectId: data.flowProjectId,
+      workerJobId: data.workerJobId,
+      status: data.status || 'queued',
+      progress: data.progress ?? 0,
+      metadata: data.metadata,
+    },
+  });
+}
+
+export async function updateGenerationJob(
+  id: string,
+  data: {
+    status?: string;
+    progress?: number;
+    error?: string | null;
+    resultAssetId?: string | null;
+    resultUrl?: string | null;
+    workerJobId?: string | null;
+    metadata?: any;
+    completedAt?: Date | null;
+    retryCount?: number;
+  }
+) {
+  return prisma.generationJob.update({
+    where: { id },
+    data,
+  });
+}
+
+export async function getGenerationJob(id: string) {
+  return prisma.generationJob.findUnique({
+    where: { id },
+  });
+}
+
+export async function listGenerationJobs(filters?: {
+  storyId?: string;
+  sceneId?: string;
+  characterId?: string;
+  status?: string;
+  limit?: number;
+}) {
+  return prisma.generationJob.findMany({
+    where: {
+      ...(filters?.storyId ? { storyId: filters.storyId } : {}),
+      ...(filters?.sceneId ? { sceneId: filters.sceneId } : {}),
+      ...(filters?.characterId ? { characterId: filters.characterId } : {}),
+      ...(filters?.status ? { status: filters.status } : {}),
+    },
+    orderBy: { createdAt: 'desc' },
+    take: filters?.limit || 50,
+  });
+}
+
 export { prisma };
 export default prisma;

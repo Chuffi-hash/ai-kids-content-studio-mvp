@@ -28,6 +28,9 @@ import {
   generateCharacterAssetDirect,
   generateAllMissingBackgroundsDirect,
   generateAllMissingCharacterReferencesDirect,
+  syncCharacterToGoogleFlowDirect,
+  fetchGenerationJob,
+  fetchStoryCharacterMappings,
   StoryFlowContextResponse,
   StoryFlowSceneItem,
   StoryFlowCharacterItem,
@@ -241,6 +244,7 @@ export default function GoogleFlowPage() {
 
   // Character Studio specific state
   const [generatingCharIds, setGeneratingCharIds] = useState<Record<string, boolean>>({});
+  const [syncingCharIds, setSyncingCharIds] = useState<Record<string, boolean>>({});
   const [charErrors, setCharErrors] = useState<Record<string, string>>({});
   const [isBatchCharRunning, setIsBatchCharRunning] = useState(false);
   const [batchCharSummary, setBatchCharSummary] = useState<string | null>(null);
@@ -701,13 +705,32 @@ export default function GoogleFlowPage() {
     });
     try {
       const customPrompt = sceneCustomPrompts[sceneId];
-      await generateBackgroundDirect({
+      const res = await generateBackgroundDirect({
         storyId: selectedStoryId,
         sceneId,
         provider: generationProvider,
         promptOverride: customPrompt?.trim() || undefined,
         aspectRatio: storyContext?.story?.aspectRatio || "16:9",
       });
+
+      // Poll if job is processing asynchronously in Flow Worker
+      if (res?.jobId && res?.status === "generating") {
+        let pollCount = 0;
+        while (pollCount < 25) {
+          await new Promise((r) => setTimeout(r, 2000));
+          try {
+            const jStatus = await fetchGenerationJob(res.jobId);
+            if (jStatus?.status === "completed") break;
+            if (jStatus?.status === "failed") {
+              throw new Error(jStatus.error || "Google Flow background generation failed.");
+            }
+          } catch (pollErr: any) {
+            if (pollErr.message?.includes("failed")) throw pollErr;
+          }
+          pollCount++;
+        }
+      }
+
       await loadStoryContext(selectedStoryId);
     } catch (err: any) {
       setSceneErrors((prev) => ({
@@ -716,6 +739,29 @@ export default function GoogleFlowPage() {
       }));
     } finally {
       setGeneratingSceneIds((prev) => ({ ...prev, [sceneId]: false }));
+    }
+  };
+
+  const handleSyncCharacterToFlow = async (characterId: string) => {
+    if (!selectedStoryId) return;
+    setSyncingCharIds((prev) => ({ ...prev, [characterId]: true }));
+    setCharErrors((prev) => {
+      const next = { ...prev };
+      delete next[characterId];
+      return next;
+    });
+    try {
+      const res = await syncCharacterToGoogleFlowDirect(selectedStoryId, characterId);
+      await loadStoryContext(selectedStoryId);
+      setBatchCharSummary(res.message || "Character synchronized with Google Flow.");
+      setTimeout(() => setBatchCharSummary(null), 5000);
+    } catch (err: any) {
+      setCharErrors((prev) => ({
+        ...prev,
+        [characterId]: err.message || "Character synchronization failed.",
+      }));
+    } finally {
+      setSyncingCharIds((prev) => ({ ...prev, [characterId]: false }));
     }
   };
 
@@ -775,13 +821,31 @@ export default function GoogleFlowPage() {
       return next;
     });
     try {
-      await generateCharacterAssetDirect({
+      const res = await generateCharacterAssetDirect({
         storyId: selectedStoryId,
         characterId,
         provider: generationProvider,
         assetType,
         variation,
       });
+
+      if (res?.jobId && res?.status === "generating") {
+        let pollCount = 0;
+        while (pollCount < 25) {
+          await new Promise((r) => setTimeout(r, 2000));
+          try {
+            const jStatus = await fetchGenerationJob(res.jobId);
+            if (jStatus?.status === "completed") break;
+            if (jStatus?.status === "failed") {
+              throw new Error(jStatus.error || "Google Flow character generation failed.");
+            }
+          } catch (pollErr: any) {
+            if (pollErr.message?.includes("failed")) throw pollErr;
+          }
+          pollCount++;
+        }
+      }
+
       await loadStoryContext(selectedStoryId);
       getAllCharacters().then(setCharacters);
     } catch (err: any) {
@@ -989,11 +1053,13 @@ export default function GoogleFlowPage() {
                 )}
               </span>
             )}
-            {activeTab === "character" && selectedCharacter && (
+            {activeTab === "character" && (
               <span style={{ marginLeft: selectedStoryId ? "12px" : 0 }}>
                 Active Character:{" "}
                 <strong>
-                  {selectedCharacter.name}
+                  {storyContext?.characters?.find((c) => c.id === selectedCharacterId)?.name ||
+                    storyContext?.characters?.[0]?.name ||
+                    "All Story Characters"}
                 </strong>
               </span>
             )}
@@ -2816,9 +2882,24 @@ export default function GoogleFlowPage() {
                               <div className="flow-char-info">
                                 <div className="flow-char-name-row">
                                   <h4 className="flow-char-name">{ch.name}</h4>
-                                  <span className={`flow-status-badge ${ch.hasMasterReference ? "ready" : "missing"}`}>
-                                    {ch.hasMasterReference ? "✓ Master Ready" : "● Missing Ref"}
-                                  </span>
+                                  <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                                    <span className={`flow-status-badge ${ch.hasMasterReference ? "ready" : "missing"}`}>
+                                      {ch.hasMasterReference ? "✓ Master Ready" : "● Missing Ref"}
+                                    </span>
+                                    {ch.flowMapping?.syncStatus === "synced" ? (
+                                      <span className="flow-status-badge ready" title={`Synced in Google Flow project as @${ch.flowMapping.flowCharacterName}`}>
+                                        ✓ Flow: @{ch.flowMapping.flowCharacterName}
+                                      </span>
+                                    ) : ch.flowMapping?.syncStatus === "failed" ? (
+                                      <span className="flow-status-badge missing" title="Synchronization to Google Flow failed">
+                                        ⚠️ Sync Failed
+                                      </span>
+                                    ) : (
+                                      <span className="flow-status-badge neutral" title="Not yet synchronized to Google Flow project">
+                                        ● Not in Flow
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
 
                                 <div className="flow-char-tags-row">
@@ -2886,6 +2967,22 @@ export default function GoogleFlowPage() {
                               <button
                                 type="button"
                                 className="flow-btn primary sm"
+                                disabled={syncingCharIds[ch.id] || isGenerating}
+                                onClick={() => handleSyncCharacterToFlow(ch.id)}
+                                title="Synchronize this character and master reference into the connected Google Flow project"
+                              >
+                                <span>
+                                  {syncingCharIds[ch.id]
+                                    ? "Syncing..."
+                                    : ch.flowMapping?.syncStatus === "synced"
+                                    ? "↻ Resync Flow"
+                                    : "⚡ Sync to Flow"}
+                                </span>
+                              </button>
+
+                              <button
+                                type="button"
+                                className="flow-btn secondary sm"
                                 disabled={isGenerating || isBatchCharRunning}
                                 onClick={() => handleGenerateCharacterAsset(ch.id, "master_reference")}
                                 title="Generate canonical master reference portrait"
@@ -2895,8 +2992,8 @@ export default function GoogleFlowPage() {
                                   {isGenerating
                                     ? "Generating..."
                                     : ch.hasMasterReference
-                                    ? "↻ Regenerate Reference"
-                                    : "✨ Generate Reference"}
+                                    ? "↻ Redo Ref"
+                                    : "✨ Generate Ref"}
                                 </span>
                               </button>
 

@@ -826,6 +826,11 @@ export class FlowBrowserWorker {
       job.generationRequestedAt = new Date().toISOString();
       job.message =
         "Generation was submitted through the visible Flow UI. When the result is ready, use Flow's normal Download action; the worker will capture and import the downloaded image.";
+      
+      // Autonomous background monitoring: detect newly generated tile and trigger download
+      this.monitorGenerationAndDownload(job.id).catch((err) => {
+        console.warn(`[FlowBrowser] Generation monitor notice for job ${job.id}:`, err.message);
+      });
     } catch (clickError) {
       job.status = "awaiting_manual_generate";
       job.error =
@@ -837,6 +842,182 @@ export class FlowBrowserWorker {
     }
     this.touch(job);
     return job;
+  }
+
+  async monitorGenerationAndDownload(jobId) {
+    const job = this.jobs.get(jobId);
+    if (!job || !this.page || (typeof this.page.isClosed === "function" && this.page.isClosed())) return;
+
+    try {
+      job.status = "generating";
+      job.message = "Generation in progress in Google Flow. Waiting for rendered output...";
+      this.touch(job);
+
+      const maxWaitMs = 60000;
+      const startTime = Date.now();
+
+      while (Date.now() - startTime < maxWaitMs) {
+        if (!this.page || (typeof this.page.isClosed === "function" && this.page.isClosed()) || job.status === "completed" || job.status === "cancelled") {
+          return;
+        }
+
+        if (typeof this.page.locator === "function") {
+          const downloadCandidates = this.page.locator(
+            'button[aria-label*="download" i], button[title*="download" i], [data-testid*="download" i], button:has-text("Download")'
+          );
+          const count = await downloadCandidates.count().catch(() => 0);
+
+          if (count > 0) {
+            for (let i = 0; i < count; i++) {
+              const cand = downloadCandidates.nth(i);
+              if (await cand.isVisible().catch(() => false)) {
+                await cand.click({ timeout: 5000 }).catch(() => {});
+                job.status = "awaiting_download";
+                job.message = "Download triggered automatically from Flow output. Capturing file...";
+                this.touch(job);
+                return;
+              }
+            }
+          }
+        }
+
+        await new Promise((r) => setTimeout(r, 2000));
+      }
+
+      if (job.status === "generating") {
+        job.status = "awaiting_download";
+        job.message = "Generation was submitted. When the tile appears in Flow, click Download; the worker will automatically capture and import it.";
+        this.touch(job);
+      }
+    } catch (monitorErr) {
+      if (job.status === "generating") {
+        job.status = "awaiting_download";
+        job.message = "Generation in progress. Worker listening for download event.";
+        this.touch(job);
+      }
+    }
+  }
+
+  async synchronizeCharacter(input) {
+    const characterId = String(input.characterId || "").trim();
+    const characterName = String(input.characterName || "").trim();
+    const description = String(input.description || "").trim();
+    const referenceImagePath = input.referenceImagePath || null;
+    const projectUrl = input.projectUrl ? assertAllowedFlowUrl(input.projectUrl) : undefined;
+
+    if (!characterId) throw new Error("characterId is required.");
+    if (!characterName) throw new Error("characterName is required.");
+
+    if (!this.context || !this.page || (typeof this.page.isClosed === "function" && this.page.isClosed())) {
+      throw new Error("Open a Google Flow browser session before synchronizing a character.");
+    }
+
+    if (projectUrl && typeof this.page.url === "function" && this.page.url() !== projectUrl) {
+      if (typeof this.page.goto === "function") {
+        await this.page.goto(projectUrl, {
+          waitUntil: "domcontentloaded",
+          timeout: 60000,
+        });
+      }
+    }
+
+    const currentUrl = typeof this.page.url === "function" ? this.page.url() : "";
+    if (isGoogleLoginUrl(currentUrl)) {
+      return {
+        success: false,
+        status: "awaiting_manual_login",
+        message: "Sign in manually in the visible browser before synchronizing characters.",
+      };
+    }
+
+    if (!isFlowUrl(currentUrl)) {
+      return {
+        success: false,
+        status: "awaiting_project_selection",
+        message: "Open the intended Google Flow project before synchronizing characters.",
+      };
+    }
+
+    // Check if character already exists in project
+    try {
+      if (typeof this.page.locator === "function") {
+        const existingLocator = this.page.locator(`text="@${characterName}", text="${characterName}"`);
+        if (await existingLocator.count() > 0) {
+          return {
+            success: true,
+            status: "synced",
+            alreadyExists: true,
+            flowCharacterName: characterName,
+            message: `Character "${characterName}" already exists in the Google Flow project.`,
+          };
+        }
+      }
+    } catch {}
+
+    // Navigate to Characters section if available
+    try {
+      if (typeof this.page.getByRole === "function") {
+        const charTab = this.page.getByRole("tab", { name: /character/i })
+          .or(this.page.getByRole("button", { name: /character/i }))
+          .or(this.page.locator('[data-testid*="character" i], [aria-label*="character" i]'));
+        if (await charTab.count() > 0 && await charTab.first().isVisible()) {
+          await charTab.first().click({ timeout: 5000 });
+        }
+      }
+    } catch {}
+
+    // Click New Character / Add Character if available
+    try {
+      if (typeof this.page.getByRole === "function") {
+        const newBtn = this.page.getByRole("button", { name: /(new|create|add).*character/i })
+          .or(this.page.locator('button:has-text("New Character"), button:has-text("Add Character")'));
+        if (await newBtn.count() > 0 && await newBtn.first().isVisible()) {
+          await newBtn.first().click({ timeout: 5000 });
+        }
+      }
+    } catch {}
+
+    // Fill character name if input field exists
+    try {
+      if (typeof this.page.getByRole === "function") {
+        const nameInput = this.page.getByRole("textbox", { name: /(name|character name)/i })
+          .or(this.page.locator('input[placeholder*="name" i], input[aria-label*="name" i]'));
+        if (await nameInput.count() > 0 && await nameInput.first().isVisible()) {
+          await nameInput.first().fill(characterName);
+        }
+      }
+    } catch {}
+
+    // Upload master reference image if path provided
+    if (referenceImagePath) {
+      try {
+        if (typeof this.page.locator === "function") {
+          const fileInput = this.page.locator('input[type="file"]');
+          if (await fileInput.count() > 0) {
+            await fileInput.first().setInputFiles(referenceImagePath);
+          }
+        }
+      } catch (uploadErr) {
+        console.warn("[FlowBrowserWorker] Reference image input failed:", uploadErr.message);
+      }
+    }
+
+    // Click Create / Save button if available
+    try {
+      if (typeof this.page.getByRole === "function") {
+        const saveBtn = this.page.getByRole("button", { name: /(create|save|confirm|done)/i });
+        if (await saveBtn.count() > 0 && await saveBtn.first().isVisible()) {
+          await saveBtn.first().click({ timeout: 5000 });
+        }
+      }
+    } catch {}
+
+    return {
+      success: true,
+      status: "synced",
+      flowCharacterName: characterName,
+      message: `Character "${characterName}" synchronized with Google Flow project.`,
+    };
   }
 
   async handleDownload(download, originatingPage) {

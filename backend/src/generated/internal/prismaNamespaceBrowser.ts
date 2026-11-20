@@ -58,7 +58,9 @@ export const ModelName = {
   Image: 'Image',
   Character: 'Character',
   IntegrationCredential: 'IntegrationCredential',
-  StoryCharacter: 'StoryCharacter'
+  StoryCharacter: 'StoryCharacter',
+  FlowCharacterMapping: 'FlowCharacterMapping',
+  GenerationJob: 'GenerationJob'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -240,6 +242,51 @@ export const StoryCharacterScalarFieldEnum = {
 } as const
 
 export type StoryCharacterScalarFieldEnum = (typeof StoryCharacterScalarFieldEnum)[keyof typeof StoryCharacterScalarFieldEnum]
+
+
+export const FlowCharacterMappingScalarFieldEnum = {
+  id: 'id',
+  storyId: 'storyId',
+  characterId: 'characterId',
+  flowProjectId: 'flowProjectId',
+  flowCharacterName: 'flowCharacterName',
+  syncStatus: 'syncStatus',
+  sourceReferenceUrl: 'sourceReferenceUrl',
+  sourceFingerprint: 'sourceFingerprint',
+  lastSyncedAt: 'lastSyncedAt',
+  lastError: 'lastError',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type FlowCharacterMappingScalarFieldEnum = (typeof FlowCharacterMappingScalarFieldEnum)[keyof typeof FlowCharacterMappingScalarFieldEnum]
+
+
+export const GenerationJobScalarFieldEnum = {
+  id: 'id',
+  storyId: 'storyId',
+  sceneId: 'sceneId',
+  characterId: 'characterId',
+  provider: 'provider',
+  model: 'model',
+  targetType: 'targetType',
+  assetType: 'assetType',
+  prompt: 'prompt',
+  flowProjectId: 'flowProjectId',
+  workerJobId: 'workerJobId',
+  status: 'status',
+  progress: 'progress',
+  error: 'error',
+  resultAssetId: 'resultAssetId',
+  resultUrl: 'resultUrl',
+  metadata: 'metadata',
+  retryCount: 'retryCount',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt',
+  completedAt: 'completedAt'
+} as const
+
+export type GenerationJobScalarFieldEnum = (typeof GenerationJobScalarFieldEnum)[keyof typeof GenerationJobScalarFieldEnum]
 
 
 export const SortOrder = {

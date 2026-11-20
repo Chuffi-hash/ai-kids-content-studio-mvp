@@ -235,6 +235,7 @@ export type CharacterWhereInput = {
   createdAt?: Prisma.DateTimeFilter<"Character"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"Character"> | Date | string
   storyCharacters?: Prisma.StoryCharacterListRelationFilter
+  flowCharacterMappings?: Prisma.FlowCharacterMappingListRelationFilter
 }
 
 export type CharacterOrderByWithRelationInput = {
@@ -251,6 +252,7 @@ export type CharacterOrderByWithRelationInput = {
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
   storyCharacters?: Prisma.StoryCharacterOrderByRelationAggregateInput
+  flowCharacterMappings?: Prisma.FlowCharacterMappingOrderByRelationAggregateInput
 }
 
 export type CharacterWhereUniqueInput = Prisma.AtLeast<{
@@ -270,6 +272,7 @@ export type CharacterWhereUniqueInput = Prisma.AtLeast<{
   createdAt?: Prisma.DateTimeFilter<"Character"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"Character"> | Date | string
   storyCharacters?: Prisma.StoryCharacterListRelationFilter
+  flowCharacterMappings?: Prisma.FlowCharacterMappingListRelationFilter
 }, "id">
 
 export type CharacterOrderByWithAggregationInput = {
@@ -322,6 +325,7 @@ export type CharacterCreateInput = {
   createdAt?: Date | string
   updatedAt?: Date | string
   storyCharacters?: Prisma.StoryCharacterCreateNestedManyWithoutCharacterInput
+  flowCharacterMappings?: Prisma.FlowCharacterMappingCreateNestedManyWithoutCharacterInput
 }
 
 export type CharacterUncheckedCreateInput = {
@@ -338,6 +342,7 @@ export type CharacterUncheckedCreateInput = {
   createdAt?: Date | string
   updatedAt?: Date | string
   storyCharacters?: Prisma.StoryCharacterUncheckedCreateNestedManyWithoutCharacterInput
+  flowCharacterMappings?: Prisma.FlowCharacterMappingUncheckedCreateNestedManyWithoutCharacterInput
 }
 
 export type CharacterUpdateInput = {
@@ -354,6 +359,7 @@ export type CharacterUpdateInput = {
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   storyCharacters?: Prisma.StoryCharacterUpdateManyWithoutCharacterNestedInput
+  flowCharacterMappings?: Prisma.FlowCharacterMappingUpdateManyWithoutCharacterNestedInput
 }
 
 export type CharacterUncheckedUpdateInput = {
@@ -370,6 +376,7 @@ export type CharacterUncheckedUpdateInput = {
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   storyCharacters?: Prisma.StoryCharacterUncheckedUpdateManyWithoutCharacterNestedInput
+  flowCharacterMappings?: Prisma.FlowCharacterMappingUncheckedUpdateManyWithoutCharacterNestedInput
 }
 
 export type CharacterCreateManyInput = {
@@ -483,6 +490,20 @@ export type CharacterUpdateOneRequiredWithoutStoryCharactersNestedInput = {
   update?: Prisma.XOR<Prisma.XOR<Prisma.CharacterUpdateToOneWithWhereWithoutStoryCharactersInput, Prisma.CharacterUpdateWithoutStoryCharactersInput>, Prisma.CharacterUncheckedUpdateWithoutStoryCharactersInput>
 }
 
+export type CharacterCreateNestedOneWithoutFlowCharacterMappingsInput = {
+  create?: Prisma.XOR<Prisma.CharacterCreateWithoutFlowCharacterMappingsInput, Prisma.CharacterUncheckedCreateWithoutFlowCharacterMappingsInput>
+  connectOrCreate?: Prisma.CharacterCreateOrConnectWithoutFlowCharacterMappingsInput
+  connect?: Prisma.CharacterWhereUniqueInput
+}
+
+export type CharacterUpdateOneRequiredWithoutFlowCharacterMappingsNestedInput = {
+  create?: Prisma.XOR<Prisma.CharacterCreateWithoutFlowCharacterMappingsInput, Prisma.CharacterUncheckedCreateWithoutFlowCharacterMappingsInput>
+  connectOrCreate?: Prisma.CharacterCreateOrConnectWithoutFlowCharacterMappingsInput
+  upsert?: Prisma.CharacterUpsertWithoutFlowCharacterMappingsInput
+  connect?: Prisma.CharacterWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.CharacterUpdateToOneWithWhereWithoutFlowCharacterMappingsInput, Prisma.CharacterUpdateWithoutFlowCharacterMappingsInput>, Prisma.CharacterUncheckedUpdateWithoutFlowCharacterMappingsInput>
+}
+
 export type CharacterCreateWithoutStoryCharactersInput = {
   id?: string
   name: string
@@ -496,6 +517,7 @@ export type CharacterCreateWithoutStoryCharactersInput = {
   referenceImagePrompt?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
+  flowCharacterMappings?: Prisma.FlowCharacterMappingCreateNestedManyWithoutCharacterInput
 }
 
 export type CharacterUncheckedCreateWithoutStoryCharactersInput = {
@@ -511,6 +533,7 @@ export type CharacterUncheckedCreateWithoutStoryCharactersInput = {
   referenceImagePrompt?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
+  flowCharacterMappings?: Prisma.FlowCharacterMappingUncheckedCreateNestedManyWithoutCharacterInput
 }
 
 export type CharacterCreateOrConnectWithoutStoryCharactersInput = {
@@ -542,6 +565,7 @@ export type CharacterUpdateWithoutStoryCharactersInput = {
   referenceImagePrompt?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  flowCharacterMappings?: Prisma.FlowCharacterMappingUpdateManyWithoutCharacterNestedInput
 }
 
 export type CharacterUncheckedUpdateWithoutStoryCharactersInput = {
@@ -557,6 +581,87 @@ export type CharacterUncheckedUpdateWithoutStoryCharactersInput = {
   referenceImagePrompt?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  flowCharacterMappings?: Prisma.FlowCharacterMappingUncheckedUpdateManyWithoutCharacterNestedInput
+}
+
+export type CharacterCreateWithoutFlowCharacterMappingsInput = {
+  id?: string
+  name: string
+  species: string
+  personality: string
+  visualDescription: string
+  distinctiveFeatures: string
+  isLocked?: boolean
+  canonicalAppearance?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  referenceImageUrl?: string | null
+  referenceImagePrompt?: string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  storyCharacters?: Prisma.StoryCharacterCreateNestedManyWithoutCharacterInput
+}
+
+export type CharacterUncheckedCreateWithoutFlowCharacterMappingsInput = {
+  id?: string
+  name: string
+  species: string
+  personality: string
+  visualDescription: string
+  distinctiveFeatures: string
+  isLocked?: boolean
+  canonicalAppearance?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  referenceImageUrl?: string | null
+  referenceImagePrompt?: string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  storyCharacters?: Prisma.StoryCharacterUncheckedCreateNestedManyWithoutCharacterInput
+}
+
+export type CharacterCreateOrConnectWithoutFlowCharacterMappingsInput = {
+  where: Prisma.CharacterWhereUniqueInput
+  create: Prisma.XOR<Prisma.CharacterCreateWithoutFlowCharacterMappingsInput, Prisma.CharacterUncheckedCreateWithoutFlowCharacterMappingsInput>
+}
+
+export type CharacterUpsertWithoutFlowCharacterMappingsInput = {
+  update: Prisma.XOR<Prisma.CharacterUpdateWithoutFlowCharacterMappingsInput, Prisma.CharacterUncheckedUpdateWithoutFlowCharacterMappingsInput>
+  create: Prisma.XOR<Prisma.CharacterCreateWithoutFlowCharacterMappingsInput, Prisma.CharacterUncheckedCreateWithoutFlowCharacterMappingsInput>
+  where?: Prisma.CharacterWhereInput
+}
+
+export type CharacterUpdateToOneWithWhereWithoutFlowCharacterMappingsInput = {
+  where?: Prisma.CharacterWhereInput
+  data: Prisma.XOR<Prisma.CharacterUpdateWithoutFlowCharacterMappingsInput, Prisma.CharacterUncheckedUpdateWithoutFlowCharacterMappingsInput>
+}
+
+export type CharacterUpdateWithoutFlowCharacterMappingsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  species?: Prisma.StringFieldUpdateOperationsInput | string
+  personality?: Prisma.StringFieldUpdateOperationsInput | string
+  visualDescription?: Prisma.StringFieldUpdateOperationsInput | string
+  distinctiveFeatures?: Prisma.StringFieldUpdateOperationsInput | string
+  isLocked?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  canonicalAppearance?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  referenceImageUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  referenceImagePrompt?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  storyCharacters?: Prisma.StoryCharacterUpdateManyWithoutCharacterNestedInput
+}
+
+export type CharacterUncheckedUpdateWithoutFlowCharacterMappingsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  species?: Prisma.StringFieldUpdateOperationsInput | string
+  personality?: Prisma.StringFieldUpdateOperationsInput | string
+  visualDescription?: Prisma.StringFieldUpdateOperationsInput | string
+  distinctiveFeatures?: Prisma.StringFieldUpdateOperationsInput | string
+  isLocked?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  canonicalAppearance?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  referenceImageUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  referenceImagePrompt?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  storyCharacters?: Prisma.StoryCharacterUncheckedUpdateManyWithoutCharacterNestedInput
 }
 
 
@@ -566,10 +671,12 @@ export type CharacterUncheckedUpdateWithoutStoryCharactersInput = {
 
 export type CharacterCountOutputType = {
   storyCharacters: number
+  flowCharacterMappings: number
 }
 
 export type CharacterCountOutputTypeSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   storyCharacters?: boolean | CharacterCountOutputTypeCountStoryCharactersArgs
+  flowCharacterMappings?: boolean | CharacterCountOutputTypeCountFlowCharacterMappingsArgs
 }
 
 /**
@@ -589,6 +696,13 @@ export type CharacterCountOutputTypeCountStoryCharactersArgs<ExtArgs extends run
   where?: Prisma.StoryCharacterWhereInput
 }
 
+/**
+ * CharacterCountOutputType without action
+ */
+export type CharacterCountOutputTypeCountFlowCharacterMappingsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.FlowCharacterMappingWhereInput
+}
+
 
 export type CharacterSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
   id?: boolean
@@ -604,6 +718,7 @@ export type CharacterSelect<ExtArgs extends runtime.Types.Extensions.InternalArg
   createdAt?: boolean
   updatedAt?: boolean
   storyCharacters?: boolean | Prisma.Character$storyCharactersArgs<ExtArgs>
+  flowCharacterMappings?: boolean | Prisma.Character$flowCharacterMappingsArgs<ExtArgs>
   _count?: boolean | Prisma.CharacterCountOutputTypeDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["character"]>
 
@@ -655,6 +770,7 @@ export type CharacterSelectScalar = {
 export type CharacterOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "name" | "species" | "personality" | "visualDescription" | "distinctiveFeatures" | "isLocked" | "canonicalAppearance" | "referenceImageUrl" | "referenceImagePrompt" | "createdAt" | "updatedAt", ExtArgs["result"]["character"]>
 export type CharacterInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   storyCharacters?: boolean | Prisma.Character$storyCharactersArgs<ExtArgs>
+  flowCharacterMappings?: boolean | Prisma.Character$flowCharacterMappingsArgs<ExtArgs>
   _count?: boolean | Prisma.CharacterCountOutputTypeDefaultArgs<ExtArgs>
 }
 export type CharacterIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {}
@@ -664,6 +780,7 @@ export type $CharacterPayload<ExtArgs extends runtime.Types.Extensions.InternalA
   name: "Character"
   objects: {
     storyCharacters: Prisma.$StoryCharacterPayload<ExtArgs>[]
+    flowCharacterMappings: Prisma.$FlowCharacterMappingPayload<ExtArgs>[]
   }
   scalars: runtime.Types.Extensions.GetPayloadResult<{
     id: string
@@ -1073,6 +1190,7 @@ readonly fields: CharacterFieldRefs;
 export interface Prisma__CharacterClient<T, Null = never, ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs, GlobalOmitOptions = {}> extends Prisma.PrismaPromise<T> {
   readonly [Symbol.toStringTag]: "PrismaPromise"
   storyCharacters<T extends Prisma.Character$storyCharactersArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Character$storyCharactersArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$StoryCharacterPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  flowCharacterMappings<T extends Prisma.Character$flowCharacterMappingsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Character$flowCharacterMappingsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$FlowCharacterMappingPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   /**
    * Attaches callbacks for the resolution and/or rejection of the Promise.
    * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -1528,6 +1646,30 @@ export type Character$storyCharactersArgs<ExtArgs extends runtime.Types.Extensio
   take?: number
   skip?: number
   distinct?: Prisma.StoryCharacterScalarFieldEnum | Prisma.StoryCharacterScalarFieldEnum[]
+}
+
+/**
+ * Character.flowCharacterMappings
+ */
+export type Character$flowCharacterMappingsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the FlowCharacterMapping
+   */
+  select?: Prisma.FlowCharacterMappingSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the FlowCharacterMapping
+   */
+  omit?: Prisma.FlowCharacterMappingOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.FlowCharacterMappingInclude<ExtArgs> | null
+  where?: Prisma.FlowCharacterMappingWhereInput
+  orderBy?: Prisma.FlowCharacterMappingOrderByWithRelationInput | Prisma.FlowCharacterMappingOrderByWithRelationInput[]
+  cursor?: Prisma.FlowCharacterMappingWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.FlowCharacterMappingScalarFieldEnum | Prisma.FlowCharacterMappingScalarFieldEnum[]
 }
 
 /**

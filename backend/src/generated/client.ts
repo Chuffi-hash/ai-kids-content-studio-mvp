@@ -81,3 +81,13 @@ export type IntegrationCredential = Prisma.IntegrationCredentialModel
  * 
  */
 export type StoryCharacter = Prisma.StoryCharacterModel
+/**
+ * Model FlowCharacterMapping
+ * 
+ */
+export type FlowCharacterMapping = Prisma.FlowCharacterMappingModel
+/**
+ * Model GenerationJob
+ * 
+ */
+export type GenerationJob = Prisma.GenerationJobModel
