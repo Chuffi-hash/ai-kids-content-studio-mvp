@@ -606,6 +606,8 @@ export class GenerationOrchestratorService {
 
         if (genRes.status === 401 && token) {
           try {
+            GoogleFlowCredentialService.syncLocalWorkerTokenFile(token);
+            await GoogleFlowCredentialService.provisionWorker(workerUrl);
             genRes = await fetch(`${workerUrl}/jobs/${workerJobId}/generate`, {
               method: 'POST',
               headers: {
@@ -621,6 +623,9 @@ export class GenerationOrchestratorService {
         }
 
         if (!genRes.ok) {
+          if (genRes.status === 401) {
+            throw new Error("Flow worker authentication out of sync. Please retry or click 'Verify / Reconnect' in Integration Studio.");
+          }
           const errData = (await genRes.json().catch(() => ({}))) as any;
           throw new Error(errData.message || 'Flow worker generation trigger failed');
         }
@@ -661,26 +666,36 @@ export class GenerationOrchestratorService {
               resultUrl: completedResult.imageUrl || completedResult.url,
               completedAt: new Date(),
             });
-          } catch {}
+          } catch (dbErr: any) {
+            console.warn('[GenerationOrchestrator] Could not persist job completion to database:', dbErr.message);
+          }
 
           return {
             success: true,
+            jobId: jobRecord.id,
+            workerJobId,
+            status: 'completed',
             target: 'scene_background',
             assetId: scene.sceneId,
+            sceneId: scene.sceneId,
             imageUrl: completedResult.imageUrl || completedResult.url,
             aspectRatio: promptData.aspectRatio,
             message: 'Google Flow background generation completed and imported successfully.',
           };
         }
 
-        // Return ongoing job info
+        // Return ongoing job info with persistent job ID and generating status
         return {
           success: true,
+          jobId: jobRecord.id,
+          workerJobId,
+          status: 'generating',
           target: 'scene_background',
+          sceneId: scene.sceneId,
           assetId: scene.sceneId,
-          imageUrl: scene.backgroundUrl || '',
+          imageUrl: null,
           aspectRatio: promptData.aspectRatio,
-          message: 'Google Flow background generation dispatched and being automated by worker. Polling in progress.',
+          message: 'Google Flow generation started.',
         };
       }
 
@@ -995,6 +1010,8 @@ export class GenerationOrchestratorService {
 
         if (genRes.status === 401 && token) {
           try {
+            GoogleFlowCredentialService.syncLocalWorkerTokenFile(token);
+            await GoogleFlowCredentialService.provisionWorker(workerUrl);
             genRes = await fetch(`${workerUrl}/jobs/${workerJobId}/generate`, {
               method: 'POST',
               headers: {
@@ -1010,6 +1027,9 @@ export class GenerationOrchestratorService {
         }
 
         if (!genRes.ok) {
+          if (genRes.status === 401) {
+            throw new Error("Flow worker authentication out of sync. Please retry or click 'Verify / Reconnect' in Integration Studio.");
+          }
           const errData = (await genRes.json().catch(() => ({}))) as any;
           throw new Error(errData.message || 'Flow worker character generation trigger failed');
         }
@@ -1054,8 +1074,12 @@ export class GenerationOrchestratorService {
 
           return {
             success: true,
+            jobId: jobRecord.id,
+            workerJobId,
+            status: 'completed',
             target: 'character_reference',
             assetId: character.id,
+            characterId: character.id,
             imageUrl: completedResult.imageUrl || completedResult.url,
             message: 'Google Flow character view generation completed and imported successfully.',
           };
@@ -1063,10 +1087,14 @@ export class GenerationOrchestratorService {
 
         return {
           success: true,
+          jobId: jobRecord.id,
+          workerJobId,
+          status: 'generating',
           target: 'character_reference',
           assetId: character.id,
-          imageUrl: character.referenceImageUrl || '',
-          message: 'Google Flow character generation dispatched and being automated by worker. Polling in progress.',
+          characterId: character.id,
+          imageUrl: null,
+          message: 'Google Flow generation started.',
         };
       }
 
@@ -1229,7 +1257,7 @@ export class GenerationOrchestratorService {
         results.push({
           sceneId: scene.sceneId,
           success: true,
-          imageUrl: res.imageUrl,
+          imageUrl: res.imageUrl || undefined,
         });
         generated++;
       } catch (err: any) {
@@ -1283,7 +1311,7 @@ export class GenerationOrchestratorService {
           characterId: char.id,
           name: char.name,
           success: true,
-          imageUrl: res.imageUrl,
+          imageUrl: res.imageUrl || undefined,
         });
         generated++;
       } catch (err: any) {

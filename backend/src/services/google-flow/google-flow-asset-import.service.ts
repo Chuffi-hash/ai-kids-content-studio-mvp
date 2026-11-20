@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto';
 import path from 'path';
+import { prisma } from '../database/database.service.js';
 import { LocalStorageService } from '../storage/local-storage.service.js';
 import {
   getSceneBySceneId,
@@ -46,12 +47,17 @@ export interface ImportAssetResult {
   success: boolean;
   target: string;
   assetId: string;
-  imageUrl: string;
+  imageUrl?: string | null;
   width?: number;
   height?: number;
   aspectRatio?: string;
   metadata?: Record<string, any>;
   message: string;
+  jobId?: string;
+  workerJobId?: string;
+  status?: string;
+  sceneId?: string;
+  characterId?: string;
 }
 
 export { detectImageMime, parseImageDimensions } from './image-dimension-helper.js';
@@ -117,8 +123,8 @@ export class GoogleFlowAssetImportService {
     }
 
     const { width, height } = parseImageDimensions(buffer);
-    if ((width > 0 && width < 32) || (height > 0 && height < 32)) {
-      throw new Error(`Invalid image dimensions (${width}x${height}px). Assets must be full-resolution scenes or character references, not placeholder pixels.`);
+    if (!Number.isInteger(width) || !Number.isInteger(height) || width < 32 || height < 32) {
+      throw new Error(`Invalid or unknown dimensions: ${width}x${height}px. Assets must be full-resolution scenes or character references, not placeholder pixels.`);
     }
     const fileId = randomUUID();
     const storageFilename = `flow-${target}-${Date.now()}-${fileId.slice(0, 8)}.${detected.ext}`;
@@ -138,6 +144,22 @@ export class GoogleFlowAssetImportService {
 
       if (options.storyId && scene.storyId !== options.storyId) {
         throw new Error(`Scene ${options.sceneId} does not belong to story ${options.storyId}`);
+      }
+
+      if (options.sourceJobId) {
+        try {
+          const genJob = await prisma.generationJob.findUnique({ where: { id: options.sourceJobId } });
+          if (genJob) {
+            if (genJob.sceneId && genJob.sceneId !== options.sceneId) {
+              throw new Error(`Generation job ${options.sourceJobId} does not belong to scene ${options.sceneId}`);
+            }
+            if (genJob.storyId && options.storyId && genJob.storyId !== options.storyId) {
+              throw new Error(`Generation job ${options.sourceJobId} does not belong to story ${options.storyId}`);
+            }
+          }
+        } catch (jobCheckErr: any) {
+          if (jobCheckErr.message?.includes("does not belong to")) throw jobCheckErr;
+        }
       }
 
       const { url } = await this.storageService.saveFile(buffer, storageFilename, detected.mimeType);

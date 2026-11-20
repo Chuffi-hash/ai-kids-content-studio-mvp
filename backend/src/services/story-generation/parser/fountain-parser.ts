@@ -80,6 +80,7 @@ export class FountainParser {
     this.computeLineOffsets();
 
     let inTitlePage = true;
+    let inCharacterBlock = false;
     let currentCharacterCue: {
       name: string;
       extension?: string;
@@ -167,7 +168,27 @@ export class FountainParser {
         }
       }
 
-      // 2. Scene Heading Check
+      // 2. Global Characters / Cast Block Check (prevents character lists from becoming dialogue)
+      if (/^##?\s*(?:Characters|Cast|Character Roster|पात्र|पात्र परिचय|चरित्र)/i.test(trimmed)) {
+        inCharacterBlock = true;
+        flushPendingDialogue(lineNum);
+        flushPendingInstruction();
+        continue;
+      }
+
+      if (inCharacterBlock) {
+        if (
+          this.matchSceneHeading(trimmed, lineNum, range, rawLine) ||
+          (trimmed.startsWith('#') && !/^##?\s*(?:Characters|Cast|Character Roster|पात्र|पात्र परिचय|चरित्र)/i.test(trimmed))
+        ) {
+          inCharacterBlock = false;
+        } else {
+          // Inside global character declarations block: do not parse as scene dialogue
+          continue;
+        }
+      }
+
+      // 3. Scene Heading Check
       const sceneHeading = this.matchSceneHeading(trimmed, lineNum, range, rawLine);
       if (sceneHeading) {
         flushPendingDialogue(lineNum);
@@ -176,7 +197,7 @@ export class FountainParser {
         continue;
       }
 
-      // 3. Explicit Production Instruction or Block Dialogue Header
+      // 4. Explicit Production Instruction or Block Dialogue Header
       const prodOrCue = this.matchProductionInstruction(trimmed, lineNum, range, rawLine);
       if (prodOrCue) {
         flushPendingDialogue(lineNum);
@@ -509,7 +530,10 @@ export class FountainParser {
       /^(?:\*{1,2})?([A-Za-z0-9\u0900-\u097F\s\-_]+?)(?:\s+(?:dialogue|speech|लाइन|संवाद))?(?:\s*[\(—–-]\s*(.*?)\s*[\)]|\s*[-—–]\s*(.*?))?(?::\*{1,2}|\*{1,2}:|:)\s*["“']?(.*?)["”']?\s*$/i
     );
     if (dlgMatch) {
-      const rawSpeaker = dlgMatch[1].replace(/^\*{1,2}|\*{1,2}$/g, '').trim();
+      const rawSpeaker = dlgMatch[1]
+        .replace(/^[-–—•*_\s#]+|[-–—•*_\s#]+$/g, '')
+        .replace(/^\*{1,2}|\*{1,2}$/g, '')
+        .trim();
       let emotion = (dlgMatch[2] || dlgMatch[3] || '').replace(/^\*{1,2}|\*{1,2}$/g, '').trim();
       let speech = (dlgMatch[4] || '').trim();
       speech = speech.replace(/^["“]|["”]$/g, '').trim();

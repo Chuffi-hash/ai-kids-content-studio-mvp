@@ -23,6 +23,21 @@ export type ImageStylePreset =
   | 'stylized_3d'
   | 'photorealistic';
 
+export function buildBackgroundStyleDirective(stylePreset: ImageStylePreset): string {
+  if (stylePreset === 'illustrated_2d') {
+    return 'Warm storybook 2D hand-painted illustration with charming storybook textures and clean outlines.';
+  } else if (stylePreset === 'stylized_3d') {
+    return 'Tastefully stylized animated storybook 3D environment with gentle tactile textures.';
+  } else if (stylePreset === 'photorealistic') {
+    return 'Cinematic natural realism with believable lighting and environmental depth.';
+  }
+  return 'Moderately stylized illustrated realism with subtle 3D depth, natural proportions, softly painterly surfaces and believable environmental detail.';
+}
+
+export function normalizeBackgroundDescription(rawPrompt: string): string {
+  return cleanVisualPrompt(rawPrompt);
+}
+
 export function cleanVisualPrompt(raw: string): string {
   if (!raw || typeof raw !== 'string') return '';
   let cleaned = raw
@@ -64,42 +79,29 @@ export class GenerationPromptService {
     const aspectRatio = scene.aspectRatio || story.aspectRatio || '16:9';
     const dims = getDimensionsForRatio(aspectRatio);
 
-    if (promptOverride && promptOverride.trim().length > 0) {
-      return {
-        prompt: promptOverride.trim(),
-        negativePrompt:
-          'characters, people, humans, animals, living creatures, figures, faces, crowds, text, watermark, signature, blurry, low resolution',
-        aspectRatio,
-        width: dims.width,
-        height: dims.height,
-      };
-    }
+    const sceneDescription = normalizeBackgroundDescription(
+      promptOverride || scene.visualPrompt || scene.narration || scene.title || 'the scene'
+    );
 
-    const cleanedCore = cleanVisualPrompt(scene.visualPrompt || scene.narration || scene.title);
+    const style = buildBackgroundStyleDirective(stylePreset);
+
     const sceneCues = [
       scene.location ? `Setting: ${scene.location}` : '',
-      scene.timeOfDay ? `Time of day: ${scene.timeOfDay}` : '',
+      scene.timeOfDay ? `Time: ${scene.timeOfDay}` : '',
       scene.lighting ? `Lighting: ${scene.lighting}` : '',
-      scene.weather ? `Atmosphere: ${scene.weather}` : '',
+      scene.weather ? `Weather: ${scene.weather}` : '',
+      scene.cameraDirection ? `Camera: ${scene.cameraDirection}` : 'Camera: Eye-level wide establishing shot',
     ].filter(Boolean).join('. ');
-
-    let styleDirective = 'Moderately stylized illustrated realism with subtle 3D depth, natural proportions, softly painterly surfaces and believable environmental detail.';
-    if (stylePreset === 'illustrated_2d') {
-      styleDirective = 'Warm storybook 2D hand-painted illustration with charming storybook textures and clean outlines.';
-    } else if (stylePreset === 'stylized_3d') {
-      styleDirective = 'Tastefully stylized animated storybook 3D environment with gentle tactile textures.';
-    } else if (stylePreset === 'photorealistic') {
-      styleDirective = 'Cinematic natural realism with believable lighting and environmental depth.';
-    }
 
     const prompt = [
       `Create one premium cinematic storybook environment illustration of ${scene.title || scene.location || 'the scene'}.`,
-      `Style: ${styleDirective}`,
-      cleanedCore ? `Scenic Landscape Details: ${cleanedCore}.` : '',
+      `Style: ${style}`,
+      sceneDescription ? `Scene: ${sceneDescription}.` : '',
       sceneCues ? `Atmospheric conditions: ${sceneCues}.` : '',
       `Format: Exactly one environment-only landscape image in ${aspectRatio} aspect ratio.`,
       `Composition: Wide scenic backdrop with open central foreground reserved for character staging.`,
       `STRICT INSTRUCTION: Environment only! Empty scenic background plate. Absolutely NO characters, NO humans, NO animals, NO figures, NO faces, NO text, NO captions, NO logos, NO watermarks.`,
+      `Keep foreground and central areas suitable for independently animated characters.`
     ].filter(Boolean).join(' ');
 
     const negativePrompt =

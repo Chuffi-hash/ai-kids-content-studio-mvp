@@ -54,6 +54,7 @@ import {
   ScriptWarning,
   DEFAULT_PROJECT_LOOK,
 } from './parser/index.js';
+import { isNonCharacterProductionLabel, looksLikeProductionInstruction } from './parser/metadata-registry.js';
 
 export interface StoryImportInput {
   rawText: string;
@@ -1380,10 +1381,23 @@ export function isReservedMetadataKey(str: string): boolean {
 export function cleanSpeakerName(rawSpeaker: string): string {
   if (!rawSpeaker || typeof rawSpeaker !== 'string') return '';
   let cleaned = rawSpeaker
-    .replace(/^[-–—•*_#\s]+|[-–—•*_#:\s]+$/g, '')
+    .replace(/^[-–—•*_\s#"'“”«»\d\.\)]+/, '')
+    .replace(/[-–—•*_\s#"'“”«»:]+$/, '')
     .trim();
 
-  if (!cleaned || isReservedMetadataKey(cleaned)) return '';
+  const lowerCheck = cleaned.toLowerCase();
+  if (lowerCheck === 'narrator' || cleaned.includes('सूत्रधार') || cleaned.includes('कथावाचक')) {
+    return 'Narrator';
+  }
+
+  if (
+    !cleaned ||
+    isReservedMetadataKey(cleaned) ||
+    isNonCharacterProductionLabel(cleaned) ||
+    looksLikeProductionInstruction(cleaned)
+  ) {
+    return '';
+  }
 
   // If passed "Earth dialogue — surprised" or "Earth: ...", take the first part before em-dash or dash with spaces
   if (cleaned.includes('—') || cleaned.includes('–')) {
@@ -1398,6 +1412,11 @@ export function cleanSpeakerName(rawSpeaker: string): string {
     }
   }
 
+  cleaned = cleaned
+    .replace(/^[-–—•*_\s#"'“”«»\d\.\)]+/, '')
+    .replace(/[-–—•*_\s#"'“”«»:]+$/, '')
+    .trim();
+
   // Strip parentheticals like (the bear), (V.O.), (O.S.), (angry) unless the whole string is inside parens
   if (/^[^(].*\([^)]*\)/.test(cleaned)) {
     cleaned = cleaned.replace(/\s*\([^)]*\)/g, '').trim();
@@ -1406,7 +1425,14 @@ export function cleanSpeakerName(rawSpeaker: string): string {
   // Strip dialogue/speech/character suffixes
   cleaned = cleaned.replace(/\s+(?:dialogue|speech|speaking|line|lines|character|संवाद|बोली)$/i, '').trim();
 
-  if (!cleaned || isReservedMetadataKey(cleaned)) return '';
+  if (
+    !cleaned ||
+    isReservedMetadataKey(cleaned) ||
+    isNonCharacterProductionLabel(cleaned) ||
+    looksLikeProductionInstruction(cleaned)
+  ) {
+    return '';
+  }
 
   // Strip descriptive suffix with "the ...": "Pip the bear" -> "Pip", "Bruno the bear" -> "Bruno", "Maya the little girl" -> "Maya"
   // Keep names like "Professor Owl", "Mama Bear", "Barnaby Bear" intact!

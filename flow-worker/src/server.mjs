@@ -179,12 +179,11 @@ function isAuthorized(request) {
   // Loopback auto-adoption: If request is strictly from loopback and activeToken is uninitialized or unaligned,
   // adopt the backend's provided token and sync it across all local disk paths
   const remoteAddress = request.socket.remoteAddress || "";
-  const isLoopbackReq =
-    remoteAddress === "127.0.0.1" ||
-    remoteAddress === "::1" ||
-    remoteAddress === "::ffff:127.0.0.1" ||
-    remoteAddress.endsWith("127.0.0.1") ||
-    remoteAddress === "";
+  const isLoopbackReq = [
+    "127.0.0.1",
+    "::1",
+    "::ffff:127.0.0.1"
+  ].includes(remoteAddress);
   if (isLoopbackReq && providedStr.length >= 32) {
     activeToken = providedStr;
     provisionTicket = null;

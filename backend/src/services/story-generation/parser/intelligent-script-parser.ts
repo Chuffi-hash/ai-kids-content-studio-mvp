@@ -20,7 +20,8 @@ import {
   ProjectBibles,
   isReservedMetadataKey,
 } from './types.js';
-import type { DraftStoryboardResult } from '../story-importer.service.js';
+import { isNonCharacterProductionLabel, looksLikeProductionInstruction } from './metadata-registry.js';
+import { cleanSpeakerName, type DraftStoryboardResult } from '../story-importer.service.js';
 import { randomUUID } from 'crypto';
 import { FountainParser } from './fountain-parser.js';
 import { ProductionBreakdownExtractor } from './production-breakdown.js';
@@ -237,21 +238,37 @@ export class IntelligentScriptParser {
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i].trim();
-      if (line.match(/^##?\s*Characters/i)) {
+      if (line.match(/^##?\s*(?:Characters|Cast|Character Roster|पात्र|पात्र परिचय|चरित्र)/i)) {
         inCharBlock = true;
         continue;
       }
       if (inCharBlock) {
-        if (line.startsWith('#') || line.match(/^Scene\s+\d+/i) || line.match(/^दृश्य\s+\d+/i)) {
+        if (
+          (line.startsWith('#') && !line.match(/^##?\s*(?:Characters|Cast|Character Roster|पात्र|पात्र परिचय|चरित्र)/i)) ||
+          line.match(/^Scene\s+\d+/i) ||
+          line.match(/^दृश्य\s+\d+/i)
+        ) {
           inCharBlock = false;
-        } else if (line.startsWith('-') || line.startsWith('*')) {
-          const charLine = line.replace(/^[-*]\s*/, '');
+        } else if (line.startsWith('-') || line.startsWith('*') || line.startsWith('•')) {
+          const charLine = line.replace(/^[-*•\s]+/, '');
           const match = charLine.match(/^([A-Za-z0-9\u0900-\u097F\s\-_]+?)(?:\s*\((.*?)\))?:\s*(.*)$/);
           if (match) {
-            const charName = match[1].trim();
+            const rawName = match[1].trim();
+            const charName = cleanSpeakerName(rawName);
+            if (
+              !charName ||
+              isReservedMetadataKey(charName) ||
+              isNonCharacterProductionLabel(charName) ||
+              looksLikeProductionInstruction(charName) ||
+              charName.toLowerCase() === 'narrator'
+            ) {
+              continue;
+            }
             const role = match[2] ? match[2].trim() : 'protagonist';
             const desc = match[3].trim();
-            declaredCharacters.push({ name: charName, role, description: desc });
+            if (!declaredCharacters.some((c) => c.name.toLowerCase() === charName.toLowerCase())) {
+              declaredCharacters.push({ name: charName, role, description: desc });
+            }
           }
         }
       }
@@ -616,6 +633,19 @@ export class IntelligentScriptParser {
         });
       }
 
+      // Auto-associate characters mentioned in scene narration, title, or visual direction if no explicit dialogue/presence was found
+      if (sceneCharacterNames.size === 0 && declaredCharacters.length > 0) {
+        const fullSceneText = `${titleClean} ${narration} ${visualPrompt}`;
+        for (const decChar of declaredCharacters) {
+          if (!decChar.name || decChar.name.length < 2) continue;
+          const escapedName = decChar.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          const regex = new RegExp(`(?:^|[^A-Za-z0-9\u0900-\u097F])${escapedName}(?:$|[^A-Za-z0-9\u0900-\u097F])`, 'iu');
+          if (regex.test(fullSceneText)) {
+            sceneCharacterNames.add(decChar.name);
+          }
+        }
+      }
+
       // Fallback character action if none specified for this scene
       if (characterActions.length === 0) {
         const sceneChars = Array.from(sceneCharacterNames);
@@ -625,14 +655,8 @@ export class IntelligentScriptParser {
             action: 'idle',
             description: 'Default scene idle pose',
           });
-        } else if (declaredCharacters.length > 0) {
-          characterActions.push({
-            characterName: declaredCharacters[0].name,
-            action: 'idle',
-            description: 'Default scene idle pose',
-          });
         }
-        // If pure narrator scene with no characters declared, characterActions remains empty []
+        // If pure narrator scene with no characters present, characterActions remains empty []
       }
 
       // 5. Run Production Breakdown Extractor with Scene Characters ONLY
@@ -841,6 +865,19 @@ export class IntelligentScriptParser {
           const res = resolveCharacter(cp);
           if (res.name.toLowerCase() !== 'narrator' && !isReservedMetadataKey(res.name)) {
             sceneCharNames.add(res.name);
+          }
+        }
+      }
+
+      // Auto-associate characters mentioned in scene narration or title if not explicitly provided
+      if (sceneCharNames.size === 0 && declaredCharacters.length > 0) {
+        const fullSceneText = `${sceneTitle} ${narration} ${sc.background?.prompt || sc.visualPrompt || ''}`;
+        for (const decChar of declaredCharacters) {
+          if (!decChar.name || decChar.name.length < 2) continue;
+          const escapedName = decChar.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          const regex = new RegExp(`(?:^|[^A-Za-z0-9\u0900-\u097F])${escapedName}(?:$|[^A-Za-z0-9\u0900-\u097F])`, 'iu');
+          if (regex.test(fullSceneText)) {
+            sceneCharNames.add(decChar.name);
           }
         }
       }

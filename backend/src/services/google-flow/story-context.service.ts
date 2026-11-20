@@ -174,22 +174,26 @@ export class StoryContextService {
       const bgData = animData.background || {};
       const isBgExplicitlyRemoved = Boolean(bgData.removed);
 
-      // Determine active background URL
+      // Determine active background URL and verified asset readiness
       let backgroundUrl: string | null = null;
       let backgroundImageId: string | null = null;
+      let hasBackground = false;
 
-      if (!isBgExplicitlyRemoved) {
-        if (scene.imageUrl && scene.imageUrl.trim().length > 0) {
-          backgroundUrl = scene.imageUrl;
+      if (!isBgExplicitlyRemoved && scene.generationStatus !== 'failed' && bgData.status !== 'failed') {
+        const completedImage = scene.images && scene.images.length > 0 ? scene.images[0] : null;
+
+        if (completedImage && completedImage.status === 'completed' && completedImage.imageUrl) {
+          backgroundUrl = completedImage.imageUrl;
+          backgroundImageId = completedImage.id;
+          hasBackground = true;
+        } else if (scene.imageUrl && scene.imageUrl.trim().length > 0) {
+          backgroundUrl = scene.imageUrl.trim();
+          hasBackground = true;
         } else if (bgData.imageUrl && bgData.imageUrl.trim().length > 0) {
-          backgroundUrl = bgData.imageUrl;
-        } else if (scene.images && scene.images.length > 0) {
-          backgroundUrl = scene.images[0].imageUrl;
-          backgroundImageId = scene.images[0].id;
+          backgroundUrl = bgData.imageUrl.trim();
+          hasBackground = true;
         }
       }
-
-      const hasBackground = Boolean(backgroundUrl && backgroundUrl.trim().length > 0);
 
       // Parse scene character IDs
       const rawCharIds = scene.characterIds || '';

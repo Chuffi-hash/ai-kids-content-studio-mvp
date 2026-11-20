@@ -65,19 +65,19 @@ type ActiveTab = "setup" | "connection" | "project" | "background" | "character"
 function cleanScriptText(text?: string): string {
   if (!text) return "";
   let clean = text;
+  // First strip leading and trailing quotes, backticks, asterisks, hashes
+  clean = clean.replace(/^[*_~`#\s"“”'«»]+/, "");
   // Aggressively strip known script/fountain labels and markdown markers
   clean = clean.replace(
-    /^[*_#\s]*(?:Visual Direction|Visual Style|Environment|Camera Angle|Lighting|Narration|Action|Scene Description|Shot Instruction)\s*:?[\s*_#:]*\s*/gi,
+    /^(?:Visual Direction|Visual Style|Environment|Camera Angle|Lighting|Narration|Action|Scene Description|Shot Instruction)\s*:?[\s*_#:"“”'«»]*\s*/gi,
     ""
   );
-  clean = clean.replace(/^[*_~`#\s]+|[*_~`#\s]+$/g, "");
-  clean = clean.replace(/^["“”'«»]+|["“”'«»]+$/g, "");
+  clean = clean.replace(/^[*_~`#\s"“”'«»]+|[*_~`#\s"“”'«»]+$/g, "");
   clean = clean.replace(
-    /^[*_#\s]*(?:Visual Direction|Visual Style|Environment|Camera Angle|Lighting|Narration|Action|Scene Description|Shot Instruction)\s*:?[\s*_#:]*\s*/gi,
+    /^(?:Visual Direction|Visual Style|Environment|Camera Angle|Lighting|Narration|Action|Scene Description|Shot Instruction)\s*:?[\s*_#:"“”'«»]*\s*/gi,
     ""
   );
-  clean = clean.replace(/^[*_~`#\s]+|[*_~`#\s]+$/g, "");
-  clean = clean.replace(/^["“”'«»]+|["“”'«»]+$/g, "");
+  clean = clean.replace(/^[*_~`#\s"“”'«»]+|[*_~`#\s"“”'«»]+$/g, "");
   return clean.trim();
 }
 
@@ -719,19 +719,28 @@ export default function GoogleFlowPage() {
 
       // Poll if job is processing asynchronously in Flow Worker
       if (res?.jobId && res?.status === "generating") {
-        let pollCount = 0;
-        while (pollCount < 25) {
-          await new Promise((r) => setTimeout(r, 2000));
-          try {
-            const jStatus = await fetchGenerationJob(res.jobId);
-            if (jStatus?.status === "completed") break;
-            if (jStatus?.status === "failed") {
-              throw new Error(jStatus.error || "Google Flow background generation failed.");
-            }
-          } catch (pollErr: any) {
-            if (pollErr.message?.includes("failed")) throw pollErr;
+        let completed = false;
+        const timeoutMs = 90000;
+        const pollStart = Date.now();
+
+        while (!completed) {
+          if (Date.now() - pollStart > timeoutMs) {
+            console.warn("UI timeout reached while generation job is still active on server.");
+            break;
           }
-          pollCount++;
+
+          const job = await fetchGenerationJob(res.jobId);
+          switch (job?.status) {
+            case "completed":
+              completed = true;
+              break;
+            case "failed":
+              throw new Error(job?.error || "Google Flow background generation failed.");
+            case "cancelled":
+              throw new Error("Google Flow generation was cancelled.");
+            default:
+              await new Promise((resolve) => setTimeout(resolve, 2000));
+          }
         }
       }
 
@@ -834,19 +843,28 @@ export default function GoogleFlowPage() {
       });
 
       if (res?.jobId && res?.status === "generating") {
-        let pollCount = 0;
-        while (pollCount < 25) {
-          await new Promise((r) => setTimeout(r, 2000));
-          try {
-            const jStatus = await fetchGenerationJob(res.jobId);
-            if (jStatus?.status === "completed") break;
-            if (jStatus?.status === "failed") {
-              throw new Error(jStatus.error || "Google Flow character generation failed.");
-            }
-          } catch (pollErr: any) {
-            if (pollErr.message?.includes("failed")) throw pollErr;
+        let completed = false;
+        const timeoutMs = 90000;
+        const pollStart = Date.now();
+
+        while (!completed) {
+          if (Date.now() - pollStart > timeoutMs) {
+            console.warn("UI timeout reached while character generation job is still active on server.");
+            break;
           }
-          pollCount++;
+
+          const job = await fetchGenerationJob(res.jobId);
+          switch (job?.status) {
+            case "completed":
+              completed = true;
+              break;
+            case "failed":
+              throw new Error(job?.error || "Google Flow character generation failed.");
+            case "cancelled":
+              throw new Error("Google Flow generation was cancelled.");
+            default:
+              await new Promise((resolve) => setTimeout(resolve, 2000));
+          }
         }
       }
 
@@ -1056,14 +1074,12 @@ export default function GoogleFlowPage() {
                 )}
               </span>
             )}
-            {activeTab === "character" && (
-              <span style={{ marginLeft: selectedStoryId ? "12px" : 0 }}>
+            {activeTab === "character" && selectedStoryId && storyContext?.characters && storyContext.characters.length > 0 && (
+              <span style={{ marginLeft: "12px" }}>
                 Active Character:{" "}
                 <strong>
-                  {storyContext?.characters?.find((c) => c.id === selectedCharacterId)?.name ||
-                    (storyContext?.characters && storyContext.characters.length > 0
-                      ? storyContext.characters[0].name
-                      : "All Story Characters")}
+                  {storyContext.characters.find((c) => c.id === selectedCharacterId)?.name ||
+                    storyContext.characters[0].name}
                 </strong>
               </span>
             )}

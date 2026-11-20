@@ -2110,7 +2110,9 @@ html[data-theme="light"] .flow-modal p {
 .flow-lightbox-content {
   position: relative;
   width: 820px;
+  min-width: 340px;
   max-width: 94vw;
+  min-height: 420px;
   max-height: 94vh;
   display: flex;
   flex-direction: column;
@@ -2179,6 +2181,7 @@ html[data-theme="light"] .flow-modal p {
 
 .flow-lightbox-stage {
   width: 100%;
+  min-height: 280px;
   height: 440px;
   max-height: 62vh;
   background: #060911;
@@ -2528,8 +2531,38 @@ html[data-theme="light"] .flow-lightbox-close:hover {
 [data-theme="light"] .flow-lightbox-stage,
 body.theme-light .flow-lightbox-stage,
 html[data-theme="light"] .flow-lightbox-stage {
-  background: #f8fafc;
-  border-color: #e2e8f0;
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+[data-theme="light"] .flow-lightbox-title,
+body.theme-light .flow-lightbox-title,
+html[data-theme="light"] .flow-lightbox-title {
+  color: #0f172a;
+}
+
+[data-theme="light"] .flow-lightbox-subtitle,
+body.theme-light .flow-lightbox-subtitle,
+html[data-theme="light"] .flow-lightbox-subtitle {
+  color: #475569;
+}
+
+[data-theme="light"] .flow-lightbox-error-box,
+body.theme-light .flow-lightbox-error-box,
+html[data-theme="light"] .flow-lightbox-error-box {
+  color: #334155;
+}
+
+[data-theme="light"] .flow-lightbox-error-box h4,
+body.theme-light .flow-lightbox-error-box h4,
+html[data-theme="light"] .flow-lightbox-error-box h4 {
+  color: #0f172a;
+}
+
+[data-theme="light"] .flow-lightbox-error-box p,
+body.theme-light .flow-lightbox-error-box p,
+html[data-theme="light"] .flow-lightbox-error-box p {
+  color: #64748b;
 }
 
 /* Status Badges in Scene & Character Cards */
