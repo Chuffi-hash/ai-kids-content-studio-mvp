@@ -748,8 +748,17 @@ export async function createBackgroundImageVersion(data: {
           googleFlowProjectId: parsedMetadata?.googleFlowProjectId ?? currentBg.googleFlowProjectId,
           googleFlowEditId: parsedMetadata?.googleFlowEditId ?? currentBg.googleFlowEditId,
           googleFlowEditUrl: parsedMetadata?.googleFlowEditUrl ?? currentBg.googleFlowEditUrl,
-          googleFlowImageId: parsedMetadata?.googleFlowImageId ?? currentBg.googleFlowImageId ?? null,
+          googleFlowPrompt: parsedMetadata?.googleFlowPrompt ?? data.prompt ?? currentBg.googleFlowPrompt ?? null,
+          googleFlowImageId:
+            parsedMetadata?.googleFlowImageId ??
+            parsedMetadata?.googleFlowEditId ??
+            currentBg.googleFlowImageId ??
+            currentBg.googleFlowEditId ??
+            null,
           googleFlowImageRef: parsedMetadata?.googleFlowImageRef ?? currentBg.googleFlowImageRef ?? null,
+          googleFlowImageSourceUrl: parsedMetadata?.googleFlowImageSourceUrl ?? currentBg.googleFlowImageSourceUrl ?? null,
+          googleFlowParentAssetId: parsedMetadata?.googleFlowParentAssetId ?? currentBg.googleFlowParentAssetId ?? null,
+          googleFlowVersion: parsedMetadata?.googleFlowVersion ?? targetVersion,
         },
       };
 
@@ -839,8 +848,15 @@ export async function restoreBackgroundImageVersion(
         googleFlowProjectId: providerMeta.googleFlowProjectId ?? currentBg.googleFlowProjectId,
         googleFlowEditId: providerMeta.googleFlowEditId ?? currentBg.googleFlowEditId,
         googleFlowEditUrl: providerMeta.googleFlowEditUrl ?? currentBg.googleFlowEditUrl,
-        googleFlowImageId: providerMeta.googleFlowImageId ?? null,
+        googleFlowPrompt: providerMeta.googleFlowPrompt ?? targetVersion.prompt ?? currentBg.googleFlowPrompt ?? null,
+        googleFlowImageId:
+          providerMeta.googleFlowImageId ??
+          providerMeta.googleFlowEditId ??
+          null,
         googleFlowImageRef: providerMeta.googleFlowImageRef ?? null,
+        googleFlowImageSourceUrl: providerMeta.googleFlowImageSourceUrl ?? null,
+        googleFlowParentAssetId: providerMeta.googleFlowParentAssetId ?? null,
+        googleFlowVersion: providerMeta.googleFlowVersion ?? targetVersion.version,
       },
     };
 
