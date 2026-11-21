@@ -622,7 +622,8 @@ export class FlowBrowserWorker {
             ? await nav.count().catch(() => 0)
             : 1;
         if (navCount === 1) {
-          const navFirst = nav.first();
+          const navFirst =
+            typeof nav.first === "function" ? nav.first() : nav;
           const visible =
             typeof navFirst.isVisible === "function"
               ? await navFirst.isVisible().catch(() => false)
