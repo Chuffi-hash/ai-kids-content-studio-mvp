@@ -95,6 +95,7 @@ export interface SceneContextItem {
   googleFlowParentAssetId?: string | null;
   googleFlowImageId?: string | null;
   googleFlowImageRef?: string | null;
+  googleFlowImageSourceUrl?: string | null;
   googleFlowVersions?: GoogleFlowBackgroundVersionContext[];
   activeBackgroundVersion?: number | null;
   totalBackgroundVersions?: number;
@@ -463,6 +464,12 @@ export class StoryContextService {
           activeVersionFlow.googleFlowImageRef ||
           (completedImage as any)?.googleFlowImageRef ||
           bgData.googleFlowImageRef ||
+          null,
+        googleFlowImageSourceUrl:
+          activeVersionFlow.googleFlowImageSourceUrl ||
+          activeProviderMetadata.googleFlowImageSourceUrl ||
+          (completedImage as any)?.googleFlowImageSourceUrl ||
+          bgData.googleFlowImageSourceUrl ||
           null,
         googleFlowVersions: backgroundVersions.filter(
           (version) => version.provider === "google_flow",
