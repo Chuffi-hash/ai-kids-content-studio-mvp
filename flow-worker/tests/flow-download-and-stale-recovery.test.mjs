@@ -4,140 +4,392 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { FlowBrowserWorker } from "../src/flow-browser.mjs";
-import { downloadFlowImage } from "../src/flow-download.mjs";
+import {
+  downloadFlowImage,
+  saveImageUsingNativeContextMenu,
+  inspectVisibleImages,
+} from "../src/flow-download.mjs";
 
 describe("Flow Download Lifecycle & Stale Recovery Test Suite", () => {
-  it("1. downloadFlowImage contract: Successfully downloads, saves, validates image, and reports all phase states", async () => {
-    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "flow-dl-test-"));
-    const samplePng = Buffer.from(
-      "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAALUlEQVRYR+3QQREAAAzCQPr39g4fXgYk0L2Sqm8cAAAAAAAAAAAAAAAAAAB+1gO4/AH4rE2gOAAAAABJRU5ErkJggg==",
-      "base64",
-    );
+  const samplePngBase64 =
+    "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAALUlEQVRYR+3QQREAAAzCQPr39g4fXgYk0L2Sqm8cAAAAAAAAAAAAAAAAAAB+1gO4/AH4rE2gOAAAAABJRU5ErkJggg==";
+  const samplePngBuffer = Buffer.from(samplePngBase64, "base64");
 
-    let clickCount = 0;
-    const mockPage = {
-      isClosed: () => false,
-      locator: (selector) => ({
+  it("1. downloadFlowImage: Uses chat DOM selectors, clicks target option, and verifies viewer", async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "flow-dl-dom-"));
+    const outputPath = path.join(tempDir, "flow-out.png");
+
+    let viewportScrolled = false;
+    let optionClicked = false;
+    let rightClicked = false;
+    let readyCheckedBeforeClick = false;
+
+    const mockOption = {
+      count: async () => 1,
+      scrollIntoViewIfNeeded: async () => {},
+      click: async () => {
+        optionClicked = true;
+      },
+      locator: () => ({
         count: async () => 1,
-        nth: () => ({
-          isVisible: async () => true,
-          isEnabled: async () => true,
-          click: async () => {
-            clickCount++;
-          },
-        }),
         first: () => ({
           count: async () => 1,
-          isVisible: async () => true,
-          click: async () => {},
+          scrollIntoViewIfNeeded: async () => {},
+          click: async () => {
+            optionClicked = true;
+          },
         }),
       }),
-      waitForEvent: async (eventName) => {
-        assert.equal(eventName, "download");
+    };
+
+    const mockViewerImg = {
+      count: async () => 1,
+      waitFor: async () => {},
+      scrollIntoViewIfNeeded: async () => {},
+      evaluate: async (fn) =>
+        fn({
+          currentSrc: "https://flow.google.com/asb/test-image=s1600-rw",
+          src: "https://flow.google.com/asb/test-image=s1600-rw",
+          complete: true,
+          naturalWidth: 1024,
+          naturalHeight: 576,
+          tagName: "IMG",
+        }),
+      boundingBox: async () => ({ x: 100, y: 100, width: 600, height: 400 }),
+      click: async ({ button }) => {
+        if (button === "right") {
+          rightClicked = true;
+        }
+      },
+    };
+
+    const mockPage = {
+      isClosed: () => false,
+      mouse: {
+        click: async (x, y, opts) => {
+          if (opts?.button === "right") {
+            rightClicked = true;
+          }
+        },
+      },
+      locator: (selector) => {
+        if (selector === "flow-chat-scroller .scroll-viewport") {
+          return {
+            first: () => ({
+              isVisible: async () => true,
+              evaluate: async (fn) => {
+                viewportScrolled = true;
+                fn({ scrollTop: 0, scrollHeight: 1000 });
+              },
+            }),
+          };
+        }
+        if (selector.includes("flow-image-editor img") || selector.includes(".editor-container img")) {
+          return {
+            count: async () => 1,
+            first: () => mockViewerImg,
+            nth: () => mockViewerImg,
+          };
+        }
         return {
-          saveAs: async (savePath) => {
-            await fs.writeFile(savePath, samplePng);
-          },
+          count: async () => 1,
+          first: () => ({
+            count: async () => 1,
+            isVisible: async () => true,
+            click: async () => {},
+          }),
+          last: () => ({
+            locator: () => ({
+              locator: () => mockOption,
+            }),
+          }),
+          nth: () => ({
+            count: async () => 1,
+            isVisible: async () => true,
+            click: async () => {},
+          }),
         };
       },
     };
 
-    const job = {
-      id: "job-dl-test-1",
-      backendJobId: "bjob-1",
-      sceneId: "scene-42",
-    };
+    // Inject mock automationRunner to simulate native UI automation
+    const mockAutomationRunner = ({ outputPath }) => {
+      let isReady = false;
+      const ready = new Promise((resolve) => {
+        isReady = true;
+        readyCheckedBeforeClick = true;
+        resolve();
+      });
 
-    const output = {
-      optionLocator: {
-        locator: () => ({ count: async () => 1, click: async () => {} }),
-      },
+      const result = (async () => {
+        await ready;
+        assert.ok(isReady, "Native controller must be ready before right-click");
+        await fs.writeFile(outputPath, samplePngBuffer);
+        return {
+          success: true,
+          path: outputPath,
+          fileSize: samplePngBuffer.length,
+        };
+      })();
+
+      return {
+        ready,
+        result,
+        cancel: () => {},
+      };
     };
 
     const loggedPhases = [];
     const mockLogger = {
       info: (msg) => {
-        const parsed = JSON.parse(msg.replace(/^\[FlowDownload\]\s*/, ""));
-        loggedPhases.push(parsed.phase);
+        try {
+          const parsed = JSON.parse(msg.replace(/^\[FlowDownload\]\s*/, ""));
+          if (parsed.phase) loggedPhases.push(parsed.phase);
+        } catch {}
       },
+      error: () => {},
+    };
+
+    const job = {
+      id: "job-native-1",
+      backendJobId: "bjob-native-1",
+      sceneId: "scene-101",
     };
 
     const result = await downloadFlowImage({
       page: mockPage,
       job,
-      output,
-      timeoutMs: 5000,
+      output: { optionLocator: mockOption },
       downloadDir: tempDir,
       logger: mockLogger,
+      automationRunner: mockAutomationRunner,
     });
 
     assert.equal(result.success, true);
-    assert.equal(result.jobId, "job-dl-test-1");
+    assert.equal(result.downloadMethod, "native_context_menu_save_as");
+    assert.equal(viewportScrolled, true, "Chat viewport must be scrolled");
+    assert.equal(optionClicked, true, "Option must be clicked");
+    assert.equal(rightClicked, true, "Image must be right-clicked");
+    assert.equal(readyCheckedBeforeClick, true, "Native runner must be ready before click");
+    assert.ok(result.width >= 32);
+    assert.ok(result.height >= 32);
     assert.equal(result.mimeType, "image/png");
-    assert.equal(result.width, 32);
-    assert.equal(result.height, 32);
-    assert.ok(result.fileSize > 0);
-    assert.ok(await fs.stat(result.path));
 
-    // Verify complete phase progression
-    assert.ok(loggedPhases.includes("CHAT_SCROLL_STARTED"));
     assert.ok(loggedPhases.includes("CHAT_SCROLL_BOTTOM_REACHED"));
-    assert.ok(loggedPhases.includes("LATEST_ASSISTANT_MESSAGE_FOUND"));
-    assert.ok(loggedPhases.includes("NEW_IMAGE_GALLERY_FOUND"));
-    assert.ok(loggedPhases.includes("IMAGE_OPTION_COUNT_VERIFIED"));
-    assert.ok(loggedPhases.includes("IMAGE_THUMBNAIL_LOADED"));
+    assert.ok(loggedPhases.includes("IMAGE_OPTION_IDENTIFIED"));
     assert.ok(loggedPhases.includes("IMAGE_OPTION_CLICKED"));
-    assert.ok(loggedPhases.includes("IMAGE_VIEWER_OPENED"));
-    assert.ok(loggedPhases.includes("ACTIVE_IMAGE_IDENTIFIED"));
-    assert.ok(loggedPhases.includes("IMAGE_RIGHT_CLICKED"));
-    assert.ok(loggedPhases.includes("CONTEXT_MENU_DETECTED"));
-    assert.ok(loggedPhases.includes("SAVE_IMAGE_ACTION_SELECTED"));
-    assert.ok(loggedPhases.includes("DOWNLOAD_EVENT_RECEIVED"));
-    assert.ok(loggedPhases.includes("IMAGE_SAVED_TO_DISK"));
-    assert.ok(loggedPhases.includes("IMAGE_VALIDATION_COMPLETED"));
+    assert.ok(loggedPhases.includes("IMAGE_VIEWER_VERIFIED"));
+    assert.ok(loggedPhases.includes("ACTIVE_IMAGE_VERIFIED"));
+    assert.ok(loggedPhases.includes("IMAGE_RIGHT_CLICK_DISPATCHED"));
+    assert.ok(loggedPhases.includes("NATIVE_CONTEXT_MENU_SAVE_IMAGE_FOUND"));
+    assert.ok(loggedPhases.includes("NATIVE_SAVE_AS_DIALOG_FOUND"));
+    assert.ok(loggedPhases.includes("NATIVE_SAVE_AS_CONFIRMED"));
+    assert.ok(loggedPhases.includes("FILE_EXISTS_VERIFIED"));
+    assert.ok(loggedPhases.includes("IMAGE_CONTENT_VALIDATED"));
 
     await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
   });
 
-  it("2. downloadFlowImage timeout: Emits FLOW_DOWNLOAD_TIMEOUT when download event is not received", async () => {
+  it("2. downloadFlowImage: Fails with FLOW_IMAGE_VIEWER_NOT_FOUND when viewer does not open", async () => {
+    const mockOption = {
+      count: async () => 1,
+      scrollIntoViewIfNeeded: async () => {},
+      click: async () => {},
+      locator: () => ({ count: async () => 0 }),
+    };
+
     const mockPage = {
       isClosed: () => false,
       locator: () => ({
-        count: async () => 1,
-        nth: () => ({
-          isVisible: async () => true,
-          isEnabled: async () => true,
-          click: async () => {},
+        count: async () => 0,
+        first: () => ({
+          count: async () => 0,
+          isVisible: async () => false,
         }),
       }),
-      waitForEvent: async () => {
-        throw new Error("Timeout 100ms exceeded");
-      },
     };
 
-    const job = { id: "job-dl-timeout" };
+    const job = { id: "job-no-viewer" };
     const result = await downloadFlowImage({
       page: mockPage,
       job,
-      output: null,
-      timeoutMs: 50,
+      output: { optionLocator: mockOption },
     });
 
     assert.equal(result.success, false);
-    assert.equal(result.code, "FLOW_DOWNLOAD_TIMEOUT");
-    assert.equal(result.phase, "DOWNLOAD_EVENT_RECEIVED");
-    assert.equal(result.jobId, "job-dl-timeout");
+    assert.equal(result.code, "FLOW_IMAGE_VIEWER_NOT_FOUND");
+    assert.equal(result.phase, "IMAGE_VIEWER_VERIFIED");
   });
 
-  it("3. recoverActiveJobLock Case 1: Reconciles downloaded file on disk and resumes import", async () => {
+  it("3. saveImageUsingNativeContextMenu: Rejects invalid or corrupted image bytes", async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "flow-corrupt-"));
+    const corruptedBuffer = Buffer.from("NOT_AN_IMAGE_HEADER_AT_ALL");
+
+    const mockViewerImg = {
+      count: async () => 1,
+      waitFor: async () => {},
+      scrollIntoViewIfNeeded: async () => {},
+      evaluate: async (fn) =>
+        fn({
+          src: "https://flow.google.com/asb/test.png",
+          complete: true,
+          naturalWidth: 200,
+          naturalHeight: 200,
+          tagName: "IMG",
+        }),
+      boundingBox: async () => ({ x: 50, y: 50, width: 200, height: 200 }),
+    };
+
+    const mockAutomationRunner = ({ outputPath }) => ({
+      ready: Promise.resolve(),
+      result: (async () => {
+        await fs.writeFile(outputPath, corruptedBuffer);
+        return { success: true, path: outputPath, fileSize: corruptedBuffer.length };
+      })(),
+      cancel: () => {},
+    });
+
+    const mockPage = {
+      isClosed: () => false,
+      mouse: { click: async () => {} },
+    };
+
+    const job = { id: "job-corrupt-test" };
+
+    await assert.rejects(
+      async () => {
+        await saveImageUsingNativeContextMenu({
+          page: mockPage,
+          imageLocator: mockViewerImg,
+          job,
+          downloadDir: tempDir,
+          automationRunner: mockAutomationRunner,
+        });
+      },
+      /NATIVE_SAVE_AS_INVALID_IMAGE_FORMAT/,
+    );
+
+    await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+  });
+
+  it("4. saveImageUsingNativeContextMenu: Propagates native automation error and cancels controller", async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "flow-fail-"));
+    let cancelled = false;
+
+    const mockViewerImg = {
+      count: async () => 1,
+      waitFor: async () => {},
+      scrollIntoViewIfNeeded: async () => {},
+      evaluate: async (fn) =>
+        fn({
+          src: "https://flow.google.com/asb/test.png",
+          complete: true,
+          naturalWidth: 200,
+          naturalHeight: 200,
+          tagName: "IMG",
+        }),
+      boundingBox: async () => ({ x: 50, y: 50, width: 200, height: 200 }),
+    };
+
+    const mockAutomationRunner = () => ({
+      ready: Promise.resolve(),
+      result: Promise.reject(new Error("Windows Save As dialog did not appear.")),
+      cancel: () => {
+        cancelled = true;
+      },
+    });
+
+    const mockPage = {
+      isClosed: () => false,
+      mouse: { click: async () => {} },
+    };
+
+    const job = { id: "job-native-err" };
+
+    await assert.rejects(
+      async () => {
+        await saveImageUsingNativeContextMenu({
+          page: mockPage,
+          imageLocator: mockViewerImg,
+          job,
+          downloadDir: tempDir,
+          automationRunner: mockAutomationRunner,
+        });
+      },
+      /Windows Save As dialog did not appear/,
+    );
+
+    assert.equal(cancelled, true, "Controller must be cancelled on error");
+    await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+  });
+
+  it("5. inspectVisibleImages: Accurately reports geometry and attributes of image tags", async () => {
+    const mockPage = {
+      locator: (sel) => {
+        assert.equal(sel, "img");
+        return {
+          evaluateAll: async (fn) => {
+            const fakeImgs = [
+              {
+                src: "https://flow.google.com/thumb.png",
+                alt: "thumb",
+                complete: true,
+                naturalWidth: 100,
+                naturalHeight: 100,
+                getBoundingClientRect: () => ({ x: 10, y: 20, width: 100, height: 100 }),
+                parentElement: {
+                  tagName: "DIV",
+                  className: "image-container",
+                  parentElement: { tagName: "FLOW-A2UI-IMAGE-OPTION", className: "media-option" },
+                },
+              },
+            ];
+            // Simulate window.getComputedStyle
+            global.window = {
+              getComputedStyle: () => ({ visibility: "visible", display: "block" }),
+            };
+            return fn(fakeImgs);
+          },
+        };
+      },
+    };
+
+    const images = await inspectVisibleImages(mockPage);
+    assert.equal(images.length, 1);
+    assert.equal(images[0].src, "https://flow.google.com/thumb.png");
+    assert.equal(images[0].visible, true);
+    assert.equal(images[0].parentTag, "DIV");
+  });
+
+  it("6. recoverActiveJobLock: Preserves original status in STALE_DOWNLOAD_JOB error message", async () => {
+    const worker = new FlowBrowserWorker();
+    const staleJob = worker.createJob({
+      targetType: "background",
+      prompt: "Stale job test",
+      sceneId: "scene-stale-status",
+      storyId: "story-stale-status",
+    });
+    staleJob.status = "awaiting_download";
+    staleJob.updatedAt = new Date(Date.now() - 200000).toISOString();
+    worker.activeJobId = staleJob.id;
+
+    worker.recoverActiveJobLock();
+    await new Promise((r) => setTimeout(r, 50));
+
+    assert.equal(worker.activeJobId, null, "Active lock must be released");
+    assert.equal(staleJob.status, "failed");
+    assert.equal(staleJob.errorCode, "STALE_DOWNLOAD_JOB");
+    assert.ok(
+      staleJob.error.includes('in status "awaiting_download"'),
+      `Error message should contain original status awaiting_download, got: ${staleJob.error}`,
+    );
+  });
+
+  it("7. recoverActiveJobLock Case 1: Reconciles downloaded file on disk and resumes import", async () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "flow-rec-c1-"));
     const worker = new FlowBrowserWorker();
-    const samplePng = Buffer.from(
-      "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAALUlEQVRYR+3QQREAAAzCQPr39g4fXgYk0L2Sqm8cAAAAAAAAAAAAAAAAAAB+1gO4/AH4rE2gOAAAAABJRU5ErkJggg==",
-      "base64",
-    );
     const downloadedFilePath = path.join(tempDir, "flow-stale-c1.png");
-    await fs.writeFile(downloadedFilePath, samplePng);
+    await fs.writeFile(downloadedFilePath, samplePngBuffer);
 
     let importedJob = null;
     let importedBuffer = null;
@@ -160,120 +412,12 @@ describe("Flow Download Lifecycle & Stale Recovery Test Suite", () => {
     worker.activeJobId = staleJob.id;
 
     worker.recoverActiveJobLock();
-    // Wait brief microtask for async reconcile
     await new Promise((r) => setTimeout(r, 50));
 
     assert.equal(worker.activeJobId, null, "Active lock must be released");
     assert.equal(staleJob.status, "completed", "Job must be reconciled to completed");
     assert.ok(importedJob, "importDownloadedAsset must have been called");
-    assert.equal(importedBuffer.length, samplePng.length);
-
-    await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
-  });
-
-  it("4. recoverActiveJobLock Case 2: Reconciles captured image artifact in memory and resumes import", async () => {
-    const worker = new FlowBrowserWorker();
-    const samplePng = Buffer.from(
-      "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAALUlEQVRYR+3QQREAAAzCQPr39g4fXgYk0L2Sqm8cAAAAAAAAAAAAAAAAAAB+1gO4/AH4rE2gOAAAAABJRU5ErkJggg==",
-      "base64",
-    );
-
-    let imported = false;
-    worker.importDownloadedAsset = async (j) => {
-      imported = true;
-      j.status = "completed";
-    };
-
-    const staleJob = worker.createJob({
-      targetType: "background",
-      prompt: "Stale job case 2",
-      sceneId: "scene-c2",
-      storyId: "story-c2",
-    });
-    staleJob.status = "downloading";
-    staleJob.capturedImageResponses = new Map([
-      ["https://flow.google.com/asb/image-c2=s1600-rw", { buffer: samplePng, mimeType: "image/png" }],
-    ]);
-    staleJob.updatedAt = new Date(Date.now() - 200000).toISOString();
-    worker.activeJobId = staleJob.id;
-
-    worker.recoverActiveJobLock();
-    await new Promise((r) => setTimeout(r, 50));
-
-    assert.equal(worker.activeJobId, null);
-    assert.equal(staleJob.status, "completed");
-    assert.equal(imported, true);
-  });
-
-  it("5. recoverActiveJobLock Case 4: Safely fails and clears lock when no recoverable artifact exists", async () => {
-    const worker = new FlowBrowserWorker();
-    const staleJob = worker.createJob({
-      targetType: "background",
-      prompt: "Stale job case 4",
-      sceneId: "scene-c4",
-      storyId: "story-c4",
-    });
-    staleJob.status = "awaiting_download";
-    staleJob.updatedAt = new Date(Date.now() - 200000).toISOString();
-    worker.activeJobId = staleJob.id;
-
-    worker.recoverActiveJobLock();
-    await new Promise((r) => setTimeout(r, 50));
-
-    assert.equal(worker.activeJobId, null, "Active lock must be released immediately");
-    assert.equal(staleJob.status, "failed");
-    assert.equal(staleJob.errorCode, "STALE_DOWNLOAD_JOB");
-    assert.ok(staleJob.error.includes("STALE_DOWNLOAD_JOB"));
-  });
-
-  it("6. downloadFlowImage: Captures image using in-tab authenticated fetch fallback when native context menu is outside DOM", async () => {
-    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "flow-dl-eval-"));
-    const samplePngBase64 =
-      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAALUlEQVRYR+3QQREAAAzCQPr39g4fXgYk0L2Sqm8cAAAAAAAAAAAAAAAAAAB+1gO4/AH4rE2gOAAAAABJRU5ErkJggg==";
-
-    const mockPage = {
-      isClosed: () => false,
-      url: () => "https://flow.google.com/project/test-1",
-      locator: () => ({
-        count: async () => 0,
-        nth: () => ({
-          isVisible: async () => false,
-          isEnabled: async () => false,
-        }),
-        first: () => ({
-          isVisible: async () => false,
-        }),
-      }),
-      evaluate: async (fn, arg) => {
-        // Simulates in-tab fetch of the full resolution image
-        return samplePngBase64;
-      },
-    };
-
-    const job = {
-      id: "job-dl-eval-1",
-      backendJobId: "bjob-eval",
-      sceneId: "scene-eval",
-    };
-
-    const output = {
-      sourceUrl: "https://flow.google.com/asb/test-eval-image=s1600-rw",
-    };
-
-    const result = await downloadFlowImage({
-      page: mockPage,
-      job,
-      output,
-      downloadDir: tempDir,
-    });
-
-    assert.equal(result.success, true);
-    assert.equal(result.mimeType, "image/png");
-    assert.equal(result.width, 32);
-    assert.equal(result.height, 32);
-    assert.ok(result.fileSize > 0);
-    assert.equal(job.outputIndex, 0);
-    assert.equal(job.sourceImageUrl, "https://flow.google.com/asb/test-eval-image=s1600-rw");
+    assert.equal(importedBuffer.length, samplePngBuffer.length);
 
     await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
   });

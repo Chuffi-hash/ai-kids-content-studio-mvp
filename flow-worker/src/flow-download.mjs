@@ -1,7 +1,13 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
-import { detectImageType, parseImageDimensions } from "./image-validation.mjs";
+import { spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
+
+import {
+  detectImageType,
+  parseImageDimensions,
+} from "./image-validation.mjs";
 
 export function getFirstLocator(loc) {
   if (!loc) return null;
@@ -20,45 +26,447 @@ export function getNthLocator(loc, n = 0) {
 }
 
 /**
- * Downloads a generated image asset from Google Flow with explicit stage transitions,
- * discrete timeouts, chat scrolling, right-click context menu handling, and validation.
- *
- * @param {Object} options
- * @param {import("playwright").Page} options.page
- * @param {Object} options.job
- * @param {Object} [options.output]
- * @param {number} [options.timeoutMs=25000]
- * @param {string} [options.downloadDir]
- * @param {Object} [options.logger=console]
- * @returns {Promise<Object>}
+ * Controller to manage Windows UIAutomation powershell script for native
+ * Chrome context-menu "Save image as" and the Windows "Save As" file dialog.
+ */
+export function startWindowsSaveAsAutomation({
+  outputPath,
+  timeoutMs = 30000,
+  spawnFn = spawn,
+  scriptPathOverride,
+}) {
+  if (process.platform !== "win32" && !scriptPathOverride && spawnFn === spawn) {
+    throw new Error(
+      "NATIVE_SAVE_AS_UNSUPPORTED: This implementation requires Windows.",
+    );
+  }
+
+  const scriptPath =
+    scriptPathOverride ||
+    fileURLToPath(new URL("./windows-save-image-as.ps1", import.meta.url));
+
+  const child = spawnFn(
+    "powershell.exe",
+    [
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-WindowStyle",
+      "Hidden",
+      "-File",
+      scriptPath,
+      "-OutputPath",
+      outputPath,
+      "-TimeoutSeconds",
+      String(Math.ceil(timeoutMs / 1000)),
+    ],
+    {
+      windowsHide: true,
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
+
+  let stdout = "";
+  let stderr = "";
+
+  let readyResolve;
+  let readyReject;
+
+  const ready = new Promise((resolve, reject) => {
+    readyResolve = resolve;
+    readyReject = reject;
+  });
+
+  let readyReceived = false;
+
+  child.stdout?.on("data", (chunk) => {
+    stdout += chunk.toString();
+
+    if (!readyReceived && stdout.includes("READY")) {
+      readyReceived = true;
+      readyResolve();
+    }
+  });
+
+  child.stderr?.on("data", (chunk) => {
+    stderr += chunk.toString();
+  });
+
+  const result = new Promise((resolve, reject) => {
+    child.on("error", (error) => {
+      readyReject(error);
+      reject(error);
+    });
+
+    child.on("close", (code) => {
+      const lines = stdout
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .filter((line) => line !== "READY");
+
+      const jsonLine = lines.at(-1);
+
+      let resultData;
+
+      try {
+        resultData = JSON.parse(jsonLine || "{}");
+      } catch {
+        reject(
+          new Error(
+            `Invalid PowerShell result. Exit code=${code}. stderr=${stderr}`,
+          ),
+        );
+        return;
+      }
+
+      if (code !== 0 || resultData.success !== true) {
+        reject(
+          new Error(
+            resultData.error ||
+              `Native Save As failed. Exit code=${code}. ${stderr}`,
+          ),
+        );
+        return;
+      }
+
+      resolve(resultData);
+    });
+  });
+
+  const readyTimeout = setTimeout(() => {
+    if (!readyReceived) {
+      try {
+        child.kill();
+      } catch {}
+      readyReject(new Error("Native Save As controller did not become ready."));
+    }
+  }, 10000);
+
+  ready.finally(() => clearTimeout(readyTimeout)).catch(() => {});
+
+  const operationTimeout = setTimeout(() => {
+    try {
+      child.kill();
+    } catch {}
+  }, timeoutMs + 5000);
+
+  result.finally(() => clearTimeout(operationTimeout)).catch(() => {});
+
+  return {
+    ready,
+    result,
+    cancel: () => {
+      try {
+        child.kill();
+      } catch {}
+    },
+  };
+}
+
+/**
+ * Diagnostic helper that inspects all <img> tags in the page DOM.
+ */
+export async function inspectVisibleImages(page) {
+  if (!page || typeof page.locator !== "function") return [];
+  try {
+    return await page.locator("img").evaluateAll((images) => {
+      return images.map((img, index) => {
+        const rect = img.getBoundingClientRect();
+
+        return {
+          index,
+          src: img.currentSrc || img.src,
+          alt: img.alt || "",
+          complete: Boolean(img.complete),
+          naturalWidth: img.naturalWidth || 0,
+          naturalHeight: img.naturalHeight || 0,
+          visible:
+            rect.width > 0 &&
+            rect.height > 0 &&
+            window.getComputedStyle(img).visibility !== "hidden" &&
+            window.getComputedStyle(img).display !== "none",
+          rect: {
+            x: rect.x,
+            y: rect.y,
+            width: rect.width,
+            height: rect.height,
+          },
+          parentTag: img.parentElement?.tagName || "",
+          parentClass: img.parentElement?.className || "",
+          grandParentTag: img.parentElement?.parentElement?.tagName || "",
+          grandParentClass: img.parentElement?.parentElement?.className || "",
+        };
+      });
+    });
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Saves the active enlarged image by dispatching a right-click and invoking
+ * Chrome's native "Save image as" context menu through Windows UI Automation.
+ */
+export async function saveImageUsingNativeContextMenu({
+  page,
+  imageLocator,
+  job,
+  downloadDir,
+  timeoutMs = 30000,
+  logger = console,
+  automationRunner,
+  onPhase,
+}) {
+  if (!page || (typeof page.isClosed === "function" && page.isClosed())) {
+    throw new Error("FLOW_PAGE_CLOSED");
+  }
+
+  if (process.platform !== "win32" && !automationRunner) {
+    throw new Error("NATIVE_SAVE_AS_UNSUPPORTED");
+  }
+
+  if (!imageLocator) {
+    throw new Error("ACTIVE_IMAGE_LOCATOR_MISSING");
+  }
+
+  const imageCount = await imageLocator.count().catch(() => 0);
+  if (imageCount !== 1) {
+    throw new Error(
+      `ACTIVE_IMAGE_NOT_UNIQUE: Expected one image, found ${imageCount}`,
+    );
+  }
+
+  if (typeof imageLocator.waitFor === "function") {
+    await imageLocator.waitFor({
+      state: "visible",
+      timeout: 10000,
+    });
+  }
+
+  if (typeof imageLocator.scrollIntoViewIfNeeded === "function") {
+    await imageLocator.scrollIntoViewIfNeeded().catch(() => {});
+  }
+
+  const imageInfo = await imageLocator.evaluate((img) => ({
+    src: img.currentSrc || img.src,
+    complete: Boolean(img.complete),
+    naturalWidth: img.naturalWidth || 0,
+    naturalHeight: img.naturalHeight || 0,
+    tagName: img.tagName,
+  }));
+
+  if (
+    imageInfo.tagName !== "IMG" ||
+    !imageInfo.complete ||
+    imageInfo.naturalWidth < 32 ||
+    imageInfo.naturalHeight < 32
+  ) {
+    throw new Error(`ACTIVE_IMAGE_INVALID: ${JSON.stringify(imageInfo)}`);
+  }
+
+  const bounds = await imageLocator.boundingBox();
+  if (!bounds || bounds.width <= 0 || bounds.height <= 0) {
+    throw new Error("ACTIVE_IMAGE_HAS_NO_VISIBLE_BOUNDS");
+  }
+
+  const targetDir = downloadDir || path.join(os.tmpdir(), "flow-downloads");
+  await fs.mkdir(targetDir, { recursive: true, mode: 0o700 });
+
+  const outputPath = path.join(
+    targetDir,
+    `flow-${job?.id || Date.now()}-${Date.now()}.png`,
+  );
+
+  logger?.info?.(
+    `[FlowDownload] NATIVE_CONTEXT_MENU_CONTROLLER_STARTING ${job?.id || ""}`,
+  );
+
+  // Start native menu controller BEFORE right-click.
+  const runner = automationRunner || startWindowsSaveAsAutomation;
+  const nativeController = runner({
+    outputPath,
+    timeoutMs,
+  });
+
+  try {
+    // Wait until PowerShell UI Automation is ready.
+    await nativeController.ready;
+
+    // Right-click the actual displayed image.
+    if (page.mouse && typeof page.mouse.click === "function") {
+      await page.mouse.click(
+        bounds.x + bounds.width / 2,
+        bounds.y + bounds.height / 2,
+        {
+          button: "right",
+        },
+      );
+    } else if (typeof imageLocator.click === "function") {
+      await imageLocator.click({ button: "right", timeout: 4000 });
+    }
+
+    onPhase?.("IMAGE_RIGHT_CLICK_DISPATCHED", {
+      success: true,
+      downloadMethod: "native_context_menu_save_as",
+    });
+
+    logger?.info?.(`[FlowDownload] IMAGE_RIGHT_CLICK_DISPATCHED ${job?.id || ""}`);
+
+    // Wait for native Chrome Save image as and Windows Save As.
+    const saved = await nativeController.result;
+
+    onPhase?.("NATIVE_CONTEXT_MENU_SAVE_IMAGE_FOUND", {
+      success: true,
+      downloadMethod: "native_context_menu_save_as",
+    });
+    onPhase?.("NATIVE_SAVE_AS_DIALOG_FOUND", {
+      success: true,
+      downloadMethod: "native_context_menu_save_as",
+    });
+    onPhase?.("NATIVE_SAVE_AS_CONFIRMED", {
+      success: true,
+      downloadMethod: "native_context_menu_save_as",
+    });
+
+    const stat = await fs.stat(saved.path);
+    if (!stat.isFile() || stat.size <= 0) {
+      throw new Error("NATIVE_SAVE_AS_FILE_INVALID");
+    }
+
+    onPhase?.("FILE_EXISTS_VERIFIED", {
+      success: true,
+      fileSize: stat.size,
+      downloadMethod: "native_context_menu_save_as",
+    });
+
+    const buffer = await fs.readFile(saved.path);
+    const detected = detectImageType(buffer);
+    if (!detected) {
+      throw new Error("NATIVE_SAVE_AS_INVALID_IMAGE_FORMAT");
+    }
+
+    const dimensions = parseImageDimensions(buffer);
+    if (
+      !Number.isInteger(dimensions.width) ||
+      !Number.isInteger(dimensions.height) ||
+      dimensions.width < 32 ||
+      dimensions.height < 32
+    ) {
+      throw new Error(
+        `NATIVE_SAVE_AS_INVALID_DIMENSIONS: ${dimensions.width}x${dimensions.height}`,
+      );
+    }
+
+    onPhase?.("IMAGE_CONTENT_VALIDATED", {
+      success: true,
+      mimeType: detected.mimeType,
+      width: dimensions.width,
+      height: dimensions.height,
+      downloadMethod: "native_context_menu_save_as",
+    });
+
+    // Rename to canonical path matching detected format
+    const finalPath = path.join(
+      targetDir,
+      `flow-${job?.id || Date.now()}-${Date.now()}.${detected.extension}`,
+    );
+
+    if (saved.path !== finalPath) {
+      await fs.rename(saved.path, finalPath).catch(() => {});
+    }
+
+    if (job) {
+      job.downloadPath = finalPath;
+      job.sourceImageUrl = imageInfo.src;
+      job.mimeType = detected.mimeType;
+      job.width = dimensions.width;
+      job.height = dimensions.height;
+      job.fileSize = buffer.length;
+      job.downloadMethod = "native_context_menu_save_as";
+    }
+
+    logger?.info?.(
+      `[FlowDownload] NATIVE_SAVE_AS_VERIFIED ${JSON.stringify({
+        backendJobId: job?.backendJobId || job?.id,
+        workerJobId: job?.id,
+        sceneId: job?.sceneId,
+        path: finalPath,
+        fileSize: buffer.length,
+        mimeType: detected.mimeType,
+        width: dimensions.width,
+        height: dimensions.height,
+      })}`,
+    );
+
+    return {
+      success: true,
+      downloadMethod: "native_context_menu_save_as",
+      path: finalPath,
+      fileName: path.basename(finalPath),
+      fileSize: buffer.length,
+      mimeType: detected.mimeType,
+      width: dimensions.width,
+      height: dimensions.height,
+      buffer,
+    };
+  } catch (error) {
+    try {
+      nativeController.cancel();
+    } catch {}
+
+    logger?.error?.(
+      `[FlowDownload] NATIVE_SAVE_AS_FAILED ${JSON.stringify({
+        workerJobId: job?.id,
+        sceneId: job?.sceneId,
+        error: error.message,
+      })}`,
+    );
+
+    throw error;
+  }
+}
+
+/**
+ * Downloads a generated image asset from Google Flow.
+ * Operates through the chat DOM, clicks the generated option to open the editor/viewer,
+ * verifies the real viewer image, and executes native context-menu Save As.
  */
 export async function downloadFlowImage({
   page,
   job,
   output,
-  timeoutMs = 25000,
+  timeoutMs = 30000,
   downloadDir,
   logger = console,
+  automationRunner,
 }) {
   const startedAt = Date.now();
-  let currentPhase = "CHAT_SCROLL_STARTED";
+  let currentPhase = "CHAT_SCROLL_BOTTOM_REACHED";
 
   const logTransition = (phase, details = {}) => {
     currentPhase = phase;
     if (job) {
       job.downloadPhase = phase;
       job.lastProgressAt = new Date().toISOString();
+      if (details.downloadMethod) {
+        job.downloadMethod = details.downloadMethod;
+      }
     }
     const entry = {
       backendJobId: job?.backendJobId || job?.id,
       workerJobId: job?.id,
-      sceneId: job?.sceneId,
       storyId: job?.storyId,
+      sceneId: job?.sceneId,
       phase,
       timestamp: new Date().toISOString(),
       durationMs: Date.now() - startedAt,
+      success: details.success !== false,
+      errorCode: details.errorCode || undefined,
+      downloadMethod: details.downloadMethod || job?.downloadMethod || undefined,
       ...details,
     };
+
     if (logger && typeof logger.info === "function") {
       logger.info(`[FlowDownload] ${JSON.stringify(entry)}`);
     } else {
@@ -67,17 +475,18 @@ export async function downloadFlowImage({
   };
 
   if (!page || (typeof page.isClosed === "function" && page.isClosed())) {
-    return {
+    const errorEntry = {
       success: false,
       code: "FLOW_PAGE_CLOSED",
       phase: currentPhase,
       message: "Browser page is closed or unavailable",
       jobId: job?.id,
     };
+    logTransition("FLOW_PAGE_CLOSED", { success: false, errorCode: "FLOW_PAGE_CLOSED" });
+    return errorEntry;
   }
 
-  // 1. CHAT_SCROLL_STARTED & CHAT_SCROLL_BOTTOM_REACHED
-  logTransition("CHAT_SCROLL_STARTED");
+  // 1. Scroll chat viewport to bottom
   const chatViewport = page.locator("flow-chat-scroller .scroll-viewport");
   try {
     const isViewportVisible = await chatViewport
@@ -85,19 +494,16 @@ export async function downloadFlowImage({
       .isVisible()
       .catch(() => false);
     if (isViewportVisible) {
-      await chatViewport.first().evaluate((el) => {
-        el.scrollTop = el.scrollHeight;
+      await chatViewport.first().evaluate((element) => {
+        element.scrollTop = element.scrollHeight;
       });
     }
-  } catch (scrollErr) {
-    // Non-fatal if viewport not present
-  }
-  logTransition("CHAT_SCROLL_BOTTOM_REACHED");
+  } catch {}
+  logTransition("CHAT_SCROLL_BOTTOM_REACHED", { success: true });
 
-  // 2. LATEST_ASSISTANT_MESSAGE_FOUND & NEW_IMAGE_GALLERY_FOUND
-  const messagesList = page.locator("flow-chat-scroller .messages-list");
+  // 2. Identify latest assistant message and gallery
   const assistantMessages = page.locator(
-    "flow-chat-scroller .messages-list > .agent-row.message-row, flow-chat-scroller .messages-list > .agent-row, flow-chat-scroller .messages-list > .message-row.agent-row, .agent-row.message-row, .agent-row",
+    "flow-chat-scroller .messages-list > .agent-row.message-row, flow-chat-scroller .messages-list > .agent-row, .agent-row.message-row, .agent-row",
   );
 
   let assistantCount = 0;
@@ -106,396 +512,198 @@ export async function downloadFlowImage({
   } catch {}
 
   const sourceMessageIndex = assistantCount > 0 ? assistantCount - 1 : 0;
-  logTransition("LATEST_ASSISTANT_MESSAGE_FOUND", { sourceMessageIndex });
+  logTransition("LATEST_ASSISTANT_MESSAGE_FOUND", {
+    success: true,
+    sourceMessageIndex,
+  });
 
-  // Locate media gallery
-  let latestAssistant = page;
-  if (assistantCount > 0) {
-    if (typeof assistantMessages.last === "function") {
-      latestAssistant = assistantMessages.last();
-    } else if (typeof assistantMessages.nth === "function") {
-      latestAssistant = assistantMessages.nth(assistantCount - 1);
-    }
-  }
+  const latestAssistant =
+    assistantCount > 0
+      ? typeof assistantMessages.last === "function"
+        ? assistantMessages.last()
+        : assistantMessages.nth(assistantCount - 1)
+      : page;
 
-  const imageGallery =
+  const galleries =
     latestAssistant && typeof latestAssistant.locator === "function"
       ? latestAssistant.locator(
           'flow-a2ui-multiple-choice [role="group"][aria-label="Media options gallery"], flow-a2ui-multiple-choice .gallery-container, flow-a2ui-multiple-choice',
         )
-      : typeof page.locator === "function"
-        ? page.locator("flow-a2ui-multiple-choice")
-        : null;
+      : page.locator('flow-a2ui-multiple-choice [role="group"][aria-label="Media options gallery"]');
 
-  logTransition("NEW_IMAGE_GALLERY_FOUND");
+  logTransition("NEW_IMAGE_GALLERY_FOUND", { success: true });
 
-  // 3. IMAGE_OPTION_COUNT_VERIFIED
-  let imageOptions =
-    imageGallery && typeof imageGallery.locator === "function"
-      ? imageGallery.locator("flow-a2ui-image-option")
-      : null;
-  let optionCount = imageOptions
-    ? await imageOptions.count().catch(() => 0)
-    : 0;
-
-  if (optionCount === 0 && output?.optionLocator) {
-    imageOptions = output.optionLocator;
-    optionCount = 1;
+  // 3. IMAGE_OPTION_IDENTIFIED (Use exact target option from output detection)
+  let selectedOption = null;
+  if (output?.optionLocator) {
+    selectedOption = output.optionLocator;
+  } else if (galleries && typeof galleries.locator === "function") {
+    const imageOptions = galleries.locator("flow-a2ui-image-option");
+    const optCount = await imageOptions.count().catch(() => 0);
+    if (optCount > 0) {
+      const idx = Number.isInteger(job?.outputIndex) ? job.outputIndex : 0;
+      selectedOption = getNthLocator(imageOptions, idx);
+    }
   }
 
-  // Enforce single output constraint if not explicitly configured
-  const selectedIndex = Number.isInteger(job?.outputIndex)
-    ? job.outputIndex
-    : 0;
-  if (optionCount > 1 && job?.outputIndex === undefined) {
-    const mismatchErr = new Error(
-      `OUTPUT_COUNT_MISMATCH: Expected exactly 1 generated image, received ${optionCount}.`,
-    );
-    return {
+  if (!selectedOption) {
+    const err = {
       success: false,
-      code: "OUTPUT_COUNT_MISMATCH",
-      phase: "IMAGE_OPTION_COUNT_VERIFIED",
-      message: mismatchErr.message,
+      code: "IMAGE_OPTION_NOT_FOUND",
+      phase: "IMAGE_OPTION_IDENTIFIED",
+      message: "No generation image option could be identified in the gallery.",
       jobId: job?.id,
     };
+    logTransition("IMAGE_OPTION_IDENTIFIED", {
+      success: false,
+      errorCode: "IMAGE_OPTION_NOT_FOUND",
+    });
+    return err;
   }
 
-  logTransition("IMAGE_OPTION_COUNT_VERIFIED", {
-    optionCount,
-    selectedIndex,
-  });
+  logTransition("IMAGE_OPTION_IDENTIFIED", { success: true });
 
-  const selectedOption =
-    optionCount > 0 ? getNthLocator(imageOptions, selectedIndex) : null;
-
-  // 4. IMAGE_THUMBNAIL_LOADED
-  let sourceImageUrl = output?.sourceUrl || output?.rawSrc || null;
-  let thumbnailEl = null;
-
-  if (selectedOption && typeof selectedOption.locator === "function") {
-    thumbnailEl = getFirstLocator(
-      selectedOption.locator("img.image-thumbnail, img"),
-    );
-    if (
-      thumbnailEl &&
-      typeof thumbnailEl.evaluate === "function" &&
-      (await thumbnailEl.count().catch(() => 0)) > 0
-    ) {
-      const evalRes = await thumbnailEl
-        .evaluate((img) => ({
-          naturalWidth: img.naturalWidth || 0,
-          naturalHeight: img.naturalHeight || 0,
-          src: img.src || null,
-        }))
-        .catch(() => null);
-
-      if (evalRes?.src) {
-        sourceImageUrl = evalRes.src;
-      }
-    }
-  }
-
-  logTransition("IMAGE_THUMBNAIL_LOADED", { sourceImageUrl });
-
-  // 5. IMAGE_OPTION_CLICKED
-  let editorOpened = false;
-  if (selectedOption) {
-    const imageButton = getFirstLocator(
-      selectedOption.locator(
+  // 4. IMAGE_OPTION_CLICKED (Click image container to open enlarged viewer)
+  const imageButtons = selectedOption.locator
+    ? selectedOption.locator(
         'div.image-container[role="button"][aria-label="Open image in editor"], div.image-container.clickable, div.image-container',
-      ),
-    );
+      )
+    : null;
 
-    if (imageButton && (await imageButton.count().catch(() => 0)) > 0) {
-      if (typeof imageButton.scrollIntoViewIfNeeded === "function") {
-        await imageButton.scrollIntoViewIfNeeded().catch(() => {});
-      }
-      await imageButton.click({ timeout: 5000 }).catch(() => {});
-      editorOpened = true;
-    } else if (typeof selectedOption.click === "function") {
-      if (typeof selectedOption.scrollIntoViewIfNeeded === "function") {
-        await selectedOption.scrollIntoViewIfNeeded().catch(() => {});
-      }
-      await selectedOption.click({ timeout: 5000 }).catch(() => {});
-      editorOpened = true;
-    }
-  } else if (output?.optionLocator) {
-    await output.optionLocator.click({ timeout: 5000 }).catch(() => {});
-    editorOpened = true;
+  const clickTarget =
+    imageButtons && (await imageButtons.count().catch(() => 0)) > 0
+      ? getFirstLocator(imageButtons)
+      : selectedOption;
+
+  if (typeof clickTarget.scrollIntoViewIfNeeded === "function") {
+    await clickTarget.scrollIntoViewIfNeeded().catch(() => {});
   }
+  await clickTarget.click({ timeout: 6000 }).catch(() => {});
 
-  logTransition("IMAGE_OPTION_CLICKED", { editorOpened });
+  logTransition("IMAGE_OPTION_CLICKED", { success: true });
 
-  // 6. IMAGE_VIEWER_OPENED & ACTIVE_IMAGE_IDENTIFIED
+  // 5. IMAGE_VIEWER_VERIFIED & ACTIVE_IMAGE_VERIFIED
+  // Inspect DOM diagnostics for visible images
   await new Promise((r) => setTimeout(r, 600));
-  logTransition("IMAGE_VIEWER_OPENED");
 
-  let activeImage = null;
-  const viewerCandidates = page.locator(
-    'flow-image-editor img, .editor-container img, div[role="dialog"] img, img.editor-image, img.full-image, .image-viewer img',
+  const imageDiagnostics = await inspectVisibleImages(page);
+  logger?.info?.(
+    `[FlowDownload] VIEWER_IMAGE_DIAGNOSTICS ${JSON.stringify(imageDiagnostics)}`,
   );
 
-  if ((await viewerCandidates.count().catch(() => 0)) > 0) {
-    activeImage = getFirstLocator(viewerCandidates);
-  } else if (thumbnailEl) {
-    activeImage = thumbnailEl;
-  } else if (output?.imageLocator) {
-    activeImage = output.imageLocator;
-  }
-
-  let activeImageUrl = sourceImageUrl;
-  if (activeImage && typeof activeImage.getAttribute === "function") {
-    const candidateSrc = await activeImage
-      .getAttribute("src")
-      .catch(() => null);
-    if (candidateSrc) {
-      try {
-        activeImageUrl = new URL(candidateSrc, page.url()).href;
-      } catch {
-        activeImageUrl = candidateSrc;
-      }
-    }
-  }
-
-  logTransition("ACTIVE_IMAGE_IDENTIFIED", { activeImageUrl });
-
-  // 7. IMAGE_RIGHT_CLICKED
-  if (activeImage && typeof activeImage.click === "function") {
-    try {
-      if (typeof activeImage.scrollIntoViewIfNeeded === "function") {
-        await activeImage.scrollIntoViewIfNeeded().catch(() => {});
-      }
-      await activeImage.click({ button: "right", timeout: 4000 });
-    } catch (rcErr) {
-      // Non-fatal if right click dispatched via dom
-    }
-  }
-  logTransition("IMAGE_RIGHT_CLICKED");
-
-  // 8. CONTEXT_MENU_DETECTED & SAVE_IMAGE_ACTION_SELECTED
-  let contextMenuFound = false;
-  let saveMenuBtn = null;
-
-  try {
-    const contextMenu = page.locator(
-      '.cdk-overlay-container [role="menu"], [role="menu"], .context-menu, mat-menu',
-    );
-    if ((await contextMenu.count().catch(() => 0)) > 0) {
-      contextMenuFound = true;
-      const saveItem = contextMenu.locator(
-        'button[role="menuitem"]:has-text("Save"), button[role="menuitem"]:has-text("Download"), [role="menuitem"]',
-      );
-      if ((await saveItem.count().catch(() => 0)) > 0) {
-        saveMenuBtn = getFirstLocator(saveItem);
-      }
-    }
-  } catch {}
-
-  logTransition("CONTEXT_MENU_DETECTED", { contextMenuFound });
-
-  // Check for toolbar download button if no context menu button
-  if (!saveMenuBtn) {
-    const toolbarBtn = page.locator(
-      'button[aria-label*="download" i], button[title*="download" i], button:has-text("Download"), [data-testid*="download" i]',
-    );
-    const firstToolbar = getFirstLocator(toolbarBtn);
-    if (
-      (await toolbarBtn.count().catch(() => 0)) > 0 &&
-      (await firstToolbar.isVisible().catch(() => false))
-    ) {
-      saveMenuBtn = firstToolbar;
-    }
-  }
-
-  logTransition("SAVE_IMAGE_ACTION_SELECTED", {
-    hasButton: Boolean(saveMenuBtn),
-  });
-
-  // 9. DOWNLOAD_EVENT_RECEIVED (Dual capture: Playwright download event + in-tab authenticated fetch)
-  let downloadedBuffer = null;
-  const targetDir = downloadDir || path.join(os.tmpdir(), "flow-downloads");
-  await fs.mkdir(targetDir, { recursive: true, mode: 0o700 }).catch(() => {});
-  const tempPath = path.join(
-    targetDir,
-    `temp-${job?.id || Date.now()}-${Date.now()}.bin`,
+  // Locate the actual enlarged viewer image (inside editor, dialog, viewer container)
+  const viewerLocators = page.locator(
+    'flow-image-editor img, .editor-container img, div[role="dialog"] img, img.editor-image, img.full-image, .image-viewer img, flow-image-viewer img',
   );
 
-  // Strategy A: Try clicking save action and catching browser download event
-  if (saveMenuBtn && typeof page.waitForEvent === "function") {
-    try {
-      const [downloadEvent] = await Promise.all([
-        page.waitForEvent("download", { timeout: 8000 }).catch(() => null),
-        saveMenuBtn.click({ timeout: 4000 }).catch(() => {}),
-      ]);
-
-      if (downloadEvent && typeof downloadEvent.saveAs === "function") {
-        await downloadEvent.saveAs(tempPath);
-        const buf = await fs.readFile(tempPath).catch(() => null);
-        if (buf && buf.length > 50) {
-          downloadedBuffer = buf;
+  let activeViewerImage = null;
+  const viewerCount = await viewerLocators.count().catch(() => 0);
+  if (viewerCount > 0) {
+    activeViewerImage = getFirstLocator(viewerLocators);
+  } else {
+    // Check if any visible, complete image outside the thumbnail list exists with size >= 32
+    const nonThumb = page.locator(
+      'img:not(.image-thumbnail):not([alt*="avatar" i]):not([aria-hidden="true"])',
+    );
+    const countNonThumb = await nonThumb.count().catch(() => 0);
+    for (let i = 0; i < countNonThumb; i++) {
+      const candidate = nonThumb.nth(i);
+      const isVis = await candidate.isVisible().catch(() => false);
+      if (isVis) {
+        const info = await candidate
+          .evaluate((img) => ({
+            naturalWidth: img.naturalWidth || 0,
+            naturalHeight: img.naturalHeight || 0,
+            complete: Boolean(img.complete),
+          }))
+          .catch(() => null);
+        if (info && info.complete && info.naturalWidth >= 32 && info.naturalHeight >= 32) {
+          activeViewerImage = candidate;
+          break;
         }
+      }
+    }
+  }
+
+  // Strictly enforce that viewer image must be verifiable
+  if (!activeViewerImage) {
+    const viewerError = {
+      success: false,
+      code: "FLOW_IMAGE_VIEWER_NOT_FOUND",
+      phase: "IMAGE_VIEWER_VERIFIED",
+      message:
+        "The selected Google Flow output did not open a verifiable image viewer.",
+      jobId: job?.id,
+    };
+    logTransition("IMAGE_VIEWER_VERIFIED", {
+      success: false,
+      errorCode: "FLOW_IMAGE_VIEWER_NOT_FOUND",
+    });
+    return viewerError;
+  }
+
+  logTransition("IMAGE_VIEWER_VERIFIED", { success: true });
+  logTransition("ACTIVE_IMAGE_VERIFIED", { success: true });
+
+  // 6. Right-click and invoke Chrome native "Save image as"
+  const targetDir = downloadDir || path.join(os.tmpdir(), "flow-downloads");
+  try {
+    const nativeResult = await saveImageUsingNativeContextMenu({
+      page,
+      imageLocator: activeViewerImage,
+      job,
+      downloadDir: targetDir,
+      timeoutMs,
+      logger,
+      automationRunner,
+      onPhase: (ph, details) => logTransition(ph, details),
+    });
+
+    // Close viewer cleanly
+    try {
+      const closeBtn = getFirstLocator(
+        page.locator(
+          'button[aria-label="Close"], button[aria-label="Back"], button:has-text("Close"), button:has-text("Back")',
+        ),
+      );
+      if (
+        closeBtn &&
+        (await closeBtn.count().catch(() => 0)) > 0 &&
+        (await closeBtn.isVisible().catch(() => false))
+      ) {
+        await closeBtn.click().catch(() => {});
+      } else if (page.keyboard) {
+        await page.keyboard.press("Escape").catch(() => {});
       }
     } catch {}
-  }
 
-  // Strategy B: In-tab authenticated fetch of the exact active image URL
-  if (!downloadedBuffer && activeImageUrl && typeof page.evaluate === "function") {
-    try {
-      const base64Data = await page.evaluate(async (url) => {
-        try {
-          const res = await fetch(url, { credentials: "include" });
-          if (!res.ok) return null;
-          const blob = await res.blob();
-          return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result);
-            reader.onerror = reject;
-            reader.readAsDataURL(blob);
-          });
-        } catch {
-          return null;
-        }
-      }, activeImageUrl);
-
-      if (
-        typeof base64Data === "string" &&
-        base64Data.startsWith("data:")
-      ) {
-        const parts = base64Data.split(",");
-        if (parts[1]) {
-          const buf = Buffer.from(parts[1], "base64");
-          if (buf.length > 50) {
-            downloadedBuffer = buf;
-            await fs.writeFile(tempPath, buf);
-          }
-        }
-      }
-    } catch (evalErr) {
-      // Handled below
-    }
-  }
-
-  // Strategy C: Correlate with job.capturedImageResponses
-  if (!downloadedBuffer && job?.capturedImageResponses) {
-    const targetUrl = activeImageUrl || sourceImageUrl;
-    if (targetUrl && job.capturedImageResponses.has(targetUrl)) {
-      downloadedBuffer = job.capturedImageResponses.get(targetUrl).buffer;
-      await fs.writeFile(tempPath, downloadedBuffer);
-    }
-  }
-
-  if (!downloadedBuffer || downloadedBuffer.length === 0) {
-    await fs.rm(tempPath, { force: true }).catch(() => {});
+    return {
+      success: true,
+      downloadMethod: "native_context_menu_save_as",
+      path: nativeResult.path,
+      fileName: nativeResult.fileName,
+      fileSize: nativeResult.fileSize,
+      mimeType: nativeResult.mimeType,
+      width: nativeResult.width,
+      height: nativeResult.height,
+      buffer: nativeResult.buffer,
+      jobId: job?.id,
+      backendJobId: job?.backendJobId || job?.id,
+      storyId: job?.storyId,
+      sceneId: job?.sceneId,
+    };
+  } catch (nativeErr) {
+    logTransition("NATIVE_SAVE_AS_FAILED", {
+      success: false,
+      errorCode: nativeErr.message,
+      downloadMethod: "native_context_menu_save_as",
+    });
     return {
       success: false,
-      code: "FLOW_DOWNLOAD_TIMEOUT",
-      phase: "DOWNLOAD_EVENT_RECEIVED",
-      message:
-        "Playwright download event or authenticated image stream was not received",
+      code: "NATIVE_SAVE_AS_FAILED",
+      phase: currentPhase,
+      message: nativeErr.message,
       jobId: job?.id,
     };
   }
-
-  logTransition("DOWNLOAD_EVENT_RECEIVED", {
-    byteLength: downloadedBuffer.length,
-  });
-
-  // 10. IMAGE_SAVED_TO_DISK
-  logTransition("IMAGE_SAVED_TO_DISK", {
-    fileSize: downloadedBuffer.length,
-    tempPath,
-  });
-
-  // 11. IMAGE_VALIDATION_COMPLETED
-  const detected = detectImageType(downloadedBuffer);
-  if (!detected) {
-    await fs.rm(tempPath, { force: true }).catch(() => {});
-    return {
-      success: false,
-      code: "FLOW_IMAGE_INVALID_TYPE",
-      phase: "IMAGE_VALIDATION_COMPLETED",
-      message:
-        "Downloaded file is not a supported image format (PNG, JPEG, WebP)",
-      jobId: job?.id,
-    };
-  }
-
-  const dims = parseImageDimensions(downloadedBuffer);
-  if (
-    !Number.isInteger(dims.width) ||
-    !Number.isInteger(dims.height) ||
-    dims.width < 32 ||
-    dims.height < 32
-  ) {
-    await fs.rm(tempPath, { force: true }).catch(() => {});
-    return {
-      success: false,
-      code: "FLOW_IMAGE_INVALID_DIMENSIONS",
-      phase: "IMAGE_VALIDATION_COMPLETED",
-      message: `Downloaded image has invalid dimensions: ${dims.width}x${dims.height}`,
-      jobId: job?.id,
-    };
-  }
-
-  const finalPath = path.join(
-    targetDir,
-    `flow-${job?.id || Date.now()}.${detected.extension}`,
-  );
-  if (tempPath !== finalPath) {
-    await fs.rename(tempPath, finalPath).catch(() => {});
-  }
-
-  logTransition("IMAGE_VALIDATION_COMPLETED", {
-    mimeType: detected.mimeType,
-    width: dims.width,
-    height: dims.height,
-  });
-
-  // Close viewer view cleanly
-  try {
-    const closeBtn = getFirstLocator(
-      page.locator(
-        'button[aria-label="Close"], button[aria-label="Back"], button:has-text("Close"), button:has-text("Back")',
-      ),
-    );
-    if (
-      closeBtn &&
-      (await closeBtn.count().catch(() => 0)) > 0 &&
-      (await closeBtn.isVisible().catch(() => false))
-    ) {
-      await closeBtn.click().catch(() => {});
-    } else if (page.keyboard) {
-      await page.keyboard.press("Escape").catch(() => {});
-    }
-  } catch {}
-
-  // Correlation metadata
-  if (job) {
-    job.outputIndex = selectedIndex;
-    job.sourceMessageIndex = sourceMessageIndex;
-    job.sourceImageUrl = activeImageUrl || sourceImageUrl;
-    job.downloadPath = finalPath;
-    job.mimeType = detected.mimeType;
-    job.width = dims.width;
-    job.height = dims.height;
-    job.fileSize = downloadedBuffer.length;
-  }
-
-  return {
-    success: true,
-    jobId: job?.id,
-    backendJobId: job?.backendJobId || job?.id,
-    storyId: job?.storyId,
-    sceneId: job?.sceneId,
-    outputIndex: selectedIndex,
-    sourceMessageIndex,
-    sourceImageUrl: activeImageUrl || sourceImageUrl,
-    path: finalPath,
-    fileName: path.basename(finalPath),
-    fileSize: downloadedBuffer.length,
-    mimeType: detected.mimeType,
-    width: dims.width,
-    height: dims.height,
-    buffer: downloadedBuffer,
-  };
 }

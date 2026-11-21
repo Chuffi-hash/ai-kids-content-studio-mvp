@@ -730,9 +730,10 @@ export class FlowBrowserWorker {
       );
       // Immediately release active lock so new operations are unblocked
       this.activeJobId = null;
+      const previousStatus = active.status;
       active.status = "failed";
       active.errorCode = "STALE_DOWNLOAD_JOB";
-      active.error = `STALE_DOWNLOAD_JOB: Worker was interrupted during image download or processing in status "${active.status}".`;
+      active.error = `STALE_DOWNLOAD_JOB: Worker was interrupted during image download or processing in status "${previousStatus}".`;
       active.message = "Stale lock safely recovered due to timeout.";
       this.touch(active);
 
@@ -2052,40 +2053,35 @@ export class FlowBrowserWorker {
         job.message = "Downloading new asset from Google Flow...";
         this.touch(job);
 
-        let downloadedBuffer = null;
-        let downloadedType = null;
-
-        // Path A: Use structured downloadFlowImage with discrete phase states and timeouts
+        let dlResult = null;
         try {
-          const dlResult = await downloadFlowImage({
+          dlResult = await downloadFlowImage({
             page: this.page,
             job,
             output: targetOutput,
-            timeoutMs: 20000,
+            timeoutMs: 30000,
             downloadDir: this.downloadDir,
+            logger: console,
           });
-
-          if (dlResult.success && dlResult.buffer) {
-            downloadedBuffer = dlResult.buffer;
-            downloadedType = {
-              mimeType: dlResult.mimeType,
-              extension: dlResult.fileName.split(".").pop(),
-            };
-            job.downloadPath = dlResult.path;
-          } else {
-            console.warn(
-              `[FlowBrowser] Path A download notice (${dlResult.code}): ${dlResult.message}`,
-            );
-          }
         } catch (uiDlErr) {
-          console.warn(
-            "[FlowBrowser] UI download attempt notice:",
-            uiDlErr.message,
-          );
+          console.warn("[FlowBrowser] UI download attempt notice:", uiDlErr.message);
         }
 
-        // Path B: Fallback to exact Network Response Interceptor capture
-        if (!downloadedBuffer && job.capturedImageResponses) {
+        if (dlResult && dlResult.success && dlResult.buffer && dlResult.buffer.length > 0) {
+          job.status = "importing";
+          job.downloadPath = dlResult.path;
+          job.downloadMethod = dlResult.downloadMethod || "native_context_menu_save_as";
+          this.touch(job);
+
+          await this.importDownloadedAsset(job, dlResult.buffer, {
+            mimeType: dlResult.mimeType,
+            extension: dlResult.fileName.split(".").pop(),
+          });
+          return;
+        }
+
+        // Isolated fallback: Only if explicit captured responses exist and native download threw or timed out
+        if (job.capturedImageResponses && job.capturedImageResponses.size > 0) {
           if (
             Array.isArray(job.pendingImageCaptures) &&
             job.pendingImageCaptures.length > 0
@@ -2098,40 +2094,26 @@ export class FlowBrowserWorker {
             job.capturedImageResponses,
           );
           if (match && match.buffer && match.buffer.length > 500) {
-            downloadedBuffer = match.buffer;
-            downloadedType = detectImageType(match.buffer);
+            const detected = detectImageType(match.buffer);
+            const dims = parseImageDimensions(match.buffer);
+            if (detected && dims.width >= 32 && dims.height >= 32) {
+              job.status = "importing";
+              job.downloadMethod = "network_response_capture";
+              this.touch(job);
+              await this.importDownloadedAsset(job, match.buffer, detected);
+              return;
+            }
           }
-        }
-
-        if (downloadedBuffer && downloadedType) {
-          const dims = parseImageDimensions(downloadedBuffer);
-          if (
-            !Number.isInteger(dims.width) ||
-            !Number.isInteger(dims.height) ||
-            dims.width < 32 ||
-            dims.height < 32
-          ) {
-            throw new Error(
-              `Invalid image dimensions: ${dims.width}x${dims.height}`,
-            );
-          }
-
-          job.status = "importing";
-          this.touch(job);
-          await this.importDownloadedAsset(
-            job,
-            downloadedBuffer,
-            downloadedType,
-          );
-          return;
         }
 
         // If bytes were not captured, fail the job clearly and release lock instead of staying indefinitely in awaiting_download
+        const failureCode = dlResult?.code || "FLOW_NATIVE_DOWNLOAD_FAILED";
+        const failureMsg = dlResult?.message || "Generation output was detected, but image could not be downloaded via native context menu.";
         this.setJobTerminal(
           job,
           "failed",
-          "OUTPUT_BYTES_NOT_CAPTURED: Generation output was detected, but image bytes could not be automatically acquired.",
-          "Generation output detected in Google Flow, but image could not be downloaded. Please retry.",
+          `${failureCode}: ${failureMsg}`,
+          `Google Flow download failed: ${failureMsg}`,
         );
         return;
       }
