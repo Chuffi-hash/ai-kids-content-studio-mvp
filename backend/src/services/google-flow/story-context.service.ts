@@ -212,6 +212,11 @@ export class StoryContextService {
       if (Array.isArray(animData.characterInstances)) {
         for (const inst of animData.characterInstances) {
           if (inst.characterId && !sceneCharIds.includes(inst.characterId)) {
+            const rawName = inst.name || '';
+            const cleaned = cleanSpeakerName(rawName) || rawName.replace(/^[-–—•*_#\s]+|[-–—•*_#:\s]+$/g, '').trim();
+            if (!cleaned || isReservedMetadataKey(rawName) || isReservedMetadataKey(cleaned)) {
+              continue;
+            }
             sceneCharIds.push(inst.characterId);
           }
         }

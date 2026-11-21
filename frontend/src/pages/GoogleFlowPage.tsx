@@ -238,7 +238,7 @@ export default function GoogleFlowPage() {
   );
   const [generationProvider, setGenerationProvider] = useState<
     "gemini_api" | "google_flow"
-  >("gemini_api");
+  >("google_flow");
   const [providersStatus, setProvidersStatus] =
     useState<ProvidersStatusResponse | null>(null);
 
@@ -418,8 +418,10 @@ export default function GoogleFlowPage() {
     fetchGenerationProvidersStatus()
       .then((status) => {
         setProvidersStatus(status);
-        if (!status.gemini_api?.available && status.google_flow?.available) {
+        if (status.google_flow?.available) {
           setGenerationProvider("google_flow");
+        } else if (status.gemini_api?.available) {
+          setGenerationProvider("gemini_api");
         }
       })
       .catch((err) => console.warn("Failed to fetch provider status:", err));

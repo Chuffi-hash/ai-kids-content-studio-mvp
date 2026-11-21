@@ -20,6 +20,7 @@ export { downloadFlowImage };
 
 const VALID_ASSET_TYPES = new Set([
   "main",
+  "master_reference",
   "turnaround",
   "expression",
   "pose",
@@ -619,6 +620,7 @@ export class FlowBrowserWorker {
       };
 
       this.jobs.set(job.id, job);
+      this.emitLifecycleLog("JOB_CREATED", job);
       return job;
     }
 
@@ -631,18 +633,19 @@ export class FlowBrowserWorker {
     if (!CHARACTER_VIEW_LABELS[view])
       throw new Error("Unsupported character view: " + view);
 
-    const assetType = String(
+    const rawAssetType = String(
       input.assetType ||
         (view === "front" && input.isMasterReference === true
           ? "main"
           : "custom"),
     );
 
-    if (!VALID_ASSET_TYPES.has(assetType)) {
+    if (!VALID_ASSET_TYPES.has(rawAssetType)) {
       throw new Error(
         "assetType must be one of: " + Array.from(VALID_ASSET_TYPES).join(", "),
       );
     }
+    const assetType = rawAssetType === "master_reference" ? "main" : rawAssetType;
 
     const projectUrl = input.projectUrl
       ? assertAllowedFlowUrl(input.projectUrl)
@@ -665,7 +668,10 @@ export class FlowBrowserWorker {
       characterName,
       view,
       assetType,
-      isMasterReference: input.isMasterReference === true,
+      isMasterReference:
+        input.isMasterReference === true ||
+        assetType === "main" ||
+        input.assetType === "master_reference",
       projectUrl,
       prompt,
       status: "created",
@@ -676,7 +682,25 @@ export class FlowBrowserWorker {
     };
 
     this.jobs.set(job.id, job);
+    this.emitLifecycleLog("JOB_CREATED", job);
     return job;
+  }
+
+  emitLifecycleLog(event, job, extra = {}) {
+    if (!job) return;
+    const entry = {
+      event,
+      workerJobId: job.id,
+      backendJobId: job.backendJobId || job.id,
+      sceneId: job.sceneId,
+      storyId: job.storyId,
+      status: job.status,
+      previousStatus: extra.previousStatus || job._previousStatus || undefined,
+      timestamp: new Date().toISOString(),
+      ...extra,
+    };
+    job._previousStatus = job.status;
+    console.log(`[FlowLifecycle] ${event} ${JSON.stringify(entry)}`);
   }
 
   extractProjectId(url) {
@@ -687,15 +711,18 @@ export class FlowBrowserWorker {
 
   setJobTerminal(job, terminalStatus, error = undefined, message = undefined) {
     if (!job) return;
+    const prevStatus = job.status;
     job.status = terminalStatus;
     if (error !== undefined) job.error = error;
     if (message !== undefined) job.message = message;
     if (terminalStatus === "completed") {
       job.completedAt = new Date().toISOString();
       job.error = undefined;
+      this.emitLifecycleLog("IMPORT_COMPLETED", job);
     }
     if (this.activeJobId === job.id) {
       this.activeJobId = null;
+      this.emitLifecycleLog("ACTIVE_LOCK_RELEASED", job, { previousStatus: prevStatus });
     }
     this.touch(job);
   }
@@ -736,6 +763,7 @@ export class FlowBrowserWorker {
       active.error = `STALE_DOWNLOAD_JOB: Worker was interrupted during image download or processing in status "${previousStatus}".`;
       active.message = "Stale lock safely recovered due to timeout.";
       this.touch(active);
+      this.emitLifecycleLog("STALE_JOB_RECOVERED", active, { previousStatus });
 
       // Attempt state reconciliation if recoverable artifacts exist
       return this.reconcileStaleJob(active).catch((err) => {
@@ -1314,6 +1342,7 @@ export class FlowBrowserWorker {
     }
 
     this.activeJobId = job.id;
+    this.emitLifecycleLog("ACTIVE_LOCK_ACQUIRED", job);
 
     try {
       const promptEditor = await this.findPromptEditor();
@@ -1654,12 +1683,14 @@ export class FlowBrowserWorker {
       ) {
         await this.handleAgentConfirmationAction(job);
         job.status = "generation_submitted";
+        this.emitLifecycleLog("GENERATION_SUBMITTED", job);
         this.touch(job);
       } else {
         return job;
       }
     } else {
       job.status = "generation_submitted";
+      this.emitLifecycleLog("GENERATION_SUBMITTED", job);
       this.touch(job);
     }
 
@@ -1963,6 +1994,7 @@ export class FlowBrowserWorker {
       const baseline = await this.getOutputAssetBaseline();
       await button.click({ timeout: 15000 });
       job.status = "generation_submitted";
+      this.emitLifecycleLog("GENERATION_SUBMITTED", job);
       job.generationRequestedAt = new Date().toISOString();
       job.message =
         "Generation was submitted through the visible Flow UI. When the result is ready, use Flow's normal Download action; the worker will capture and import the downloaded image.";
@@ -2040,6 +2072,7 @@ export class FlowBrowserWorker {
           }
           targetOutput = newOutputs[0];
           job.status = "output_detected";
+          this.emitLifecycleLog("OUTPUT_DETECTED", job);
           job.message = "New generation output tile identified in Google Flow.";
           this.touch(job);
           break;
@@ -2050,6 +2083,7 @@ export class FlowBrowserWorker {
 
       if (targetOutput) {
         job.status = "downloading";
+        this.emitLifecycleLog("DOWNLOAD_STARTED", job);
         job.message = "Downloading new asset from Google Flow...";
         this.touch(job);
 
@@ -2068,6 +2102,10 @@ export class FlowBrowserWorker {
         }
 
         if (dlResult && dlResult.success && dlResult.buffer && dlResult.buffer.length > 0) {
+          this.emitLifecycleLog("DOWNLOAD_SUCCEEDED", job, {
+            downloadMethod: dlResult.downloadMethod,
+            path: dlResult.path,
+          });
           job.status = "importing";
           job.downloadPath = dlResult.path;
           job.downloadMethod = dlResult.downloadMethod || "native_context_menu_save_as";
@@ -2079,6 +2117,10 @@ export class FlowBrowserWorker {
           });
           return;
         }
+
+        this.emitLifecycleLog("DOWNLOAD_FAILED", job, {
+          error: dlResult?.message || "FLOW_NATIVE_DOWNLOAD_FAILED",
+        });
 
         // Isolated fallback: Only if explicit captured responses exist and native download threw or timed out
         if (job.capturedImageResponses && job.capturedImageResponses.size > 0) {
@@ -2621,6 +2663,7 @@ export class FlowBrowserWorker {
   }
 
   async importDownloadedAsset(job, buffer, imageType) {
+    this.emitLifecycleLog("IMPORT_STARTED", job);
     console.log(
       `[FlowDownload] BACKEND_IMPORT_STARTED`,
       JSON.stringify({

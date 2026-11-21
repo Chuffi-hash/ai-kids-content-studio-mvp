@@ -17,7 +17,6 @@ describe("Flow Download Lifecycle & Stale Recovery Test Suite", () => {
 
   it("1. downloadFlowImage: Uses chat DOM selectors, clicks target option, and verifies viewer", async () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "flow-dl-dom-"));
-    const outputPath = path.join(tempDir, "flow-out.png");
 
     let viewportScrolled = false;
     let optionClicked = false;
@@ -26,6 +25,7 @@ describe("Flow Download Lifecycle & Stale Recovery Test Suite", () => {
 
     const mockOption = {
       count: async () => 1,
+      waitFor: async () => {},
       scrollIntoViewIfNeeded: async () => {},
       click: async () => {
         optionClicked = true;
@@ -34,6 +34,7 @@ describe("Flow Download Lifecycle & Stale Recovery Test Suite", () => {
         count: async () => 1,
         first: () => ({
           count: async () => 1,
+          waitFor: async () => {},
           scrollIntoViewIfNeeded: async () => {},
           click: async () => {
             optionClicked = true;
@@ -75,11 +76,16 @@ describe("Flow Download Lifecycle & Stale Recovery Test Suite", () => {
       locator: (selector) => {
         if (selector === "flow-chat-scroller .scroll-viewport") {
           return {
+            waitFor: async () => {},
+            evaluate: async (fn) => {
+              viewportScrolled = true;
+              return fn({ scrollTop: 500, scrollHeight: 1000, clientHeight: 500 });
+            },
             first: () => ({
               isVisible: async () => true,
               evaluate: async (fn) => {
                 viewportScrolled = true;
-                fn({ scrollTop: 0, scrollHeight: 1000 });
+                return fn({ scrollTop: 500, scrollHeight: 1000, clientHeight: 500 });
               },
             }),
           };
@@ -95,6 +101,7 @@ describe("Flow Download Lifecycle & Stale Recovery Test Suite", () => {
           count: async () => 1,
           first: () => ({
             count: async () => 1,
+            waitFor: async () => {},
             isVisible: async () => true,
             click: async () => {},
           }),
@@ -105,6 +112,7 @@ describe("Flow Download Lifecycle & Stale Recovery Test Suite", () => {
           }),
           nth: () => ({
             count: async () => 1,
+            waitFor: async () => {},
             isVisible: async () => true,
             click: async () => {},
           }),
@@ -112,8 +120,8 @@ describe("Flow Download Lifecycle & Stale Recovery Test Suite", () => {
       },
     };
 
-    // Inject mock automationRunner to simulate native UI automation
-    const mockAutomationRunner = ({ outputPath }) => {
+    // Inject mock automationRunner to simulate native UI automation and machine-readable progress
+    const mockAutomationRunner = ({ outputPath, onProgress }) => {
       let isReady = false;
       const ready = new Promise((resolve) => {
         isReady = true;
@@ -124,7 +132,12 @@ describe("Flow Download Lifecycle & Stale Recovery Test Suite", () => {
       const result = (async () => {
         await ready;
         assert.ok(isReady, "Native controller must be ready before right-click");
+        onProgress?.("NATIVE_MENU_ITEM_FOUND");
+        onProgress?.("SAVE_DIALOG_FOUND");
+        onProgress?.("FILE_NAME_SET");
+        onProgress?.("SAVE_BUTTON_INVOKED");
         await fs.writeFile(outputPath, samplePngBuffer);
+        onProgress?.("FILE_EXISTS_VERIFIED");
         return {
           success: true,
           path: outputPath,
@@ -193,6 +206,7 @@ describe("Flow Download Lifecycle & Stale Recovery Test Suite", () => {
   it("2. downloadFlowImage: Fails with FLOW_IMAGE_VIEWER_NOT_FOUND when viewer does not open", async () => {
     const mockOption = {
       count: async () => 1,
+      waitFor: async () => {},
       scrollIntoViewIfNeeded: async () => {},
       click: async () => {},
       locator: () => ({ count: async () => 0 }),
@@ -200,13 +214,21 @@ describe("Flow Download Lifecycle & Stale Recovery Test Suite", () => {
 
     const mockPage = {
       isClosed: () => false,
-      locator: () => ({
-        count: async () => 0,
-        first: () => ({
+      locator: (sel) => {
+        if (sel === "flow-chat-scroller .scroll-viewport") {
+          return {
+            waitFor: async () => {},
+            evaluate: async (fn) => fn({ scrollTop: 500, scrollHeight: 1000, clientHeight: 500 }),
+          };
+        }
+        return {
           count: async () => 0,
-          isVisible: async () => false,
-        }),
-      }),
+          first: () => ({
+            count: async () => 0,
+            isVisible: async () => false,
+          }),
+        };
+      },
     };
 
     const job = { id: "job-no-viewer" };
@@ -344,7 +366,6 @@ describe("Flow Download Lifecycle & Stale Recovery Test Suite", () => {
                 },
               },
             ];
-            // Simulate window.getComputedStyle
             global.window = {
               getComputedStyle: () => ({ visibility: "visible", display: "block" }),
             };

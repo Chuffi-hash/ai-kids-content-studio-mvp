@@ -26,6 +26,10 @@ export class TTSProviderFactory {
       return this.googleProvider;
     }
 
+    if (pref === 'kokoro') {
+      return this.kokoroProvider;
+    }
+
     // Default to Kokoro, with automatic fallback
     const kokoroOk = await this.kokoroProvider.isAvailable();
     if (kokoroOk) {

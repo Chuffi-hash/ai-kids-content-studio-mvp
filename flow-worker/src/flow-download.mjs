@@ -32,8 +32,10 @@ export function getNthLocator(loc, n = 0) {
 export function startWindowsSaveAsAutomation({
   outputPath,
   timeoutMs = 30000,
+  browserProcessId = 0,
   spawnFn = spawn,
   scriptPathOverride,
+  onProgress,
 }) {
   if (process.platform !== "win32" && !scriptPathOverride && spawnFn === spawn) {
     throw new Error(
@@ -45,26 +47,28 @@ export function startWindowsSaveAsAutomation({
     scriptPathOverride ||
     fileURLToPath(new URL("./windows-save-image-as.ps1", import.meta.url));
 
-  const child = spawnFn(
-    "powershell.exe",
-    [
-      "-NoProfile",
-      "-ExecutionPolicy",
-      "Bypass",
-      "-WindowStyle",
-      "Hidden",
-      "-File",
-      scriptPath,
-      "-OutputPath",
-      outputPath,
-      "-TimeoutSeconds",
-      String(Math.ceil(timeoutMs / 1000)),
-    ],
-    {
-      windowsHide: true,
-      stdio: ["ignore", "pipe", "pipe"],
-    },
-  );
+  const args = [
+    "-NoProfile",
+    "-ExecutionPolicy",
+    "Bypass",
+    "-WindowStyle",
+    "Hidden",
+    "-File",
+    scriptPath,
+    "-OutputPath",
+    outputPath,
+    "-TimeoutSeconds",
+    String(Math.ceil(timeoutMs / 1000)),
+  ];
+
+  if (browserProcessId > 0) {
+    args.push("-BrowserProcessId", String(browserProcessId));
+  }
+
+  const child = spawnFn("powershell.exe", args, {
+    windowsHide: true,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
 
   let stdout = "";
   let stderr = "";
@@ -80,11 +84,17 @@ export function startWindowsSaveAsAutomation({
   let readyReceived = false;
 
   child.stdout?.on("data", (chunk) => {
-    stdout += chunk.toString();
+    const text = chunk.toString();
+    stdout += text;
 
-    if (!readyReceived && stdout.includes("READY")) {
-      readyReceived = true;
-      readyResolve();
+    const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    for (const line of lines) {
+      if (!readyReceived && line === "READY") {
+        readyReceived = true;
+        readyResolve();
+      } else if (readyReceived && onProgress) {
+        onProgress(line);
+      }
     }
   });
 
@@ -103,7 +113,17 @@ export function startWindowsSaveAsAutomation({
         .split(/\r?\n/)
         .map((line) => line.trim())
         .filter(Boolean)
-        .filter((line) => line !== "READY");
+        .filter(
+          (line) =>
+            ![
+              "READY",
+              "NATIVE_MENU_ITEM_FOUND",
+              "SAVE_DIALOG_FOUND",
+              "FILE_NAME_SET",
+              "SAVE_BUTTON_INVOKED",
+              "FILE_EXISTS_VERIFIED",
+            ].includes(line),
+        );
 
       const jsonLine = lines.at(-1);
 
@@ -214,6 +234,7 @@ export async function saveImageUsingNativeContextMenu({
   job,
   downloadDir,
   timeoutMs = 30000,
+  browserProcessId = 0,
   logger = console,
   automationRunner,
   onPhase,
@@ -282,11 +303,49 @@ export async function saveImageUsingNativeContextMenu({
     `[FlowDownload] NATIVE_CONTEXT_MENU_CONTROLLER_STARTING ${job?.id || ""}`,
   );
 
+  // Map progress signals from PowerShell into truthful phase events
+  const handleProgress = (progressMsg) => {
+    switch (progressMsg) {
+      case "NATIVE_MENU_ITEM_FOUND":
+        onPhase?.("NATIVE_CONTEXT_MENU_SAVE_IMAGE_FOUND", {
+          success: true,
+          downloadMethod: "native_context_menu_save_as",
+        });
+        break;
+      case "SAVE_DIALOG_FOUND":
+        onPhase?.("NATIVE_SAVE_AS_DIALOG_FOUND", {
+          success: true,
+          downloadMethod: "native_context_menu_save_as",
+        });
+        break;
+      case "FILE_NAME_SET":
+        onPhase?.("NATIVE_SAVE_AS_FILENAME_SET", {
+          success: true,
+          downloadMethod: "native_context_menu_save_as",
+        });
+        break;
+      case "SAVE_BUTTON_INVOKED":
+        onPhase?.("NATIVE_SAVE_AS_CONFIRMED", {
+          success: true,
+          downloadMethod: "native_context_menu_save_as",
+        });
+        break;
+      case "FILE_EXISTS_VERIFIED":
+        onPhase?.("FILE_EXISTS_VERIFIED", {
+          success: true,
+          downloadMethod: "native_context_menu_save_as",
+        });
+        break;
+    }
+  };
+
   // Start native menu controller BEFORE right-click.
   const runner = automationRunner || startWindowsSaveAsAutomation;
   const nativeController = runner({
     outputPath,
     timeoutMs,
+    browserProcessId,
+    onProgress: handleProgress,
   });
 
   try {
@@ -316,29 +375,10 @@ export async function saveImageUsingNativeContextMenu({
     // Wait for native Chrome Save image as and Windows Save As.
     const saved = await nativeController.result;
 
-    onPhase?.("NATIVE_CONTEXT_MENU_SAVE_IMAGE_FOUND", {
-      success: true,
-      downloadMethod: "native_context_menu_save_as",
-    });
-    onPhase?.("NATIVE_SAVE_AS_DIALOG_FOUND", {
-      success: true,
-      downloadMethod: "native_context_menu_save_as",
-    });
-    onPhase?.("NATIVE_SAVE_AS_CONFIRMED", {
-      success: true,
-      downloadMethod: "native_context_menu_save_as",
-    });
-
     const stat = await fs.stat(saved.path);
     if (!stat.isFile() || stat.size <= 0) {
       throw new Error("NATIVE_SAVE_AS_FILE_INVALID");
     }
-
-    onPhase?.("FILE_EXISTS_VERIFIED", {
-      success: true,
-      fileSize: stat.size,
-      downloadMethod: "native_context_menu_save_as",
-    });
 
     const buffer = await fs.readFile(saved.path);
     const detected = detectImageType(buffer);
@@ -438,6 +478,7 @@ export async function downloadFlowImage({
   output,
   timeoutMs = 30000,
   downloadDir,
+  browserProcessId = 0,
   logger = console,
   automationRunner,
 }) {
@@ -486,19 +527,38 @@ export async function downloadFlowImage({
     return errorEntry;
   }
 
-  // 1. Scroll chat viewport to bottom
-  const chatViewport = page.locator("flow-chat-scroller .scroll-viewport");
-  try {
-    const isViewportVisible = await chatViewport
-      .first()
-      .isVisible()
-      .catch(() => false);
-    if (isViewportVisible) {
-      await chatViewport.first().evaluate((element) => {
-        element.scrollTop = element.scrollHeight;
-      });
-    }
-  } catch {}
+  // 1. Scroll chat viewport to bottom and verify bottom reached
+  const viewport = page.locator("flow-chat-scroller .scroll-viewport");
+  if (typeof viewport.waitFor === "function") {
+    await viewport.waitFor({
+      state: "visible",
+      timeout: 10000,
+    });
+  }
+
+  await viewport.evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+  });
+
+  const reachedBottom = await viewport.evaluate((element) => {
+    return (element.scrollHeight - element.scrollTop - element.clientHeight) <= 5;
+  });
+
+  if (!reachedBottom) {
+    const scrollErr = {
+      success: false,
+      code: "FLOW_CHAT_SCROLL_BOTTOM_FAILED",
+      phase: "CHAT_SCROLL_BOTTOM_REACHED",
+      message: "Chat viewport could not be scrolled to the bottom.",
+      jobId: job?.id,
+    };
+    logTransition("CHAT_SCROLL_BOTTOM_REACHED", {
+      success: false,
+      errorCode: "FLOW_CHAT_SCROLL_BOTTOM_FAILED",
+    });
+    return scrollErr;
+  }
+
   logTransition("CHAT_SCROLL_BOTTOM_REACHED", { success: true });
 
   // 2. Identify latest assistant message and gallery
@@ -570,15 +630,34 @@ export async function downloadFlowImage({
       )
     : null;
 
-  const clickTarget =
-    imageButtons && (await imageButtons.count().catch(() => 0)) > 0
-      ? getFirstLocator(imageButtons)
-      : selectedOption;
+  let clickTarget = selectedOption;
+  if (imageButtons && (await imageButtons.count().catch(() => 0)) > 0) {
+    clickTarget = getFirstLocator(imageButtons);
+  }
+
+  if (!clickTarget) {
+    throw new Error("FLOW_IMAGE_CLICK_TARGET_MISSING");
+  }
+
+  const clickCount = await clickTarget.count().catch(() => 0);
+  if (clickCount !== 1) {
+    throw new Error(`FLOW_IMAGE_CLICK_TARGET_NOT_UNIQUE: ${clickCount}`);
+  }
+
+  if (typeof clickTarget.waitFor === "function") {
+    await clickTarget.waitFor({
+      state: "visible",
+      timeout: 10000,
+    });
+  }
 
   if (typeof clickTarget.scrollIntoViewIfNeeded === "function") {
     await clickTarget.scrollIntoViewIfNeeded().catch(() => {});
   }
-  await clickTarget.click({ timeout: 6000 }).catch(() => {});
+
+  await clickTarget.click({
+    timeout: 10000,
+  });
 
   logTransition("IMAGE_OPTION_CLICKED", { success: true });
 
@@ -593,32 +672,28 @@ export async function downloadFlowImage({
 
   // Locate the actual enlarged viewer image (inside editor, dialog, viewer container)
   const viewerLocators = page.locator(
-    'flow-image-editor img, .editor-container img, div[role="dialog"] img, img.editor-image, img.full-image, .image-viewer img, flow-image-viewer img',
+    'flow-image-editor img, .editor-container img, flow-creative-agent-image-viewer img, flow-image-viewer img, div[role="dialog"] img.editor-image, div[role="dialog"] img, .image-viewer img',
   );
 
   let activeViewerImage = null;
   const viewerCount = await viewerLocators.count().catch(() => 0);
-  if (viewerCount > 0) {
-    activeViewerImage = getFirstLocator(viewerLocators);
-  } else {
-    // Check if any visible, complete image outside the thumbnail list exists with size >= 32
-    const nonThumb = page.locator(
-      'img:not(.image-thumbnail):not([alt*="avatar" i]):not([aria-hidden="true"])',
-    );
-    const countNonThumb = await nonThumb.count().catch(() => 0);
-    for (let i = 0; i < countNonThumb; i++) {
-      const candidate = nonThumb.nth(i);
-      const isVis = await candidate.isVisible().catch(() => false);
+  if (viewerCount === 1) {
+    activeViewerImage = viewerLocators.first();
+  } else if (viewerCount > 1) {
+    // If multiple candidates exist inside the viewer, pick the one with natural dimensions >= 32
+    for (let i = 0; i < viewerCount; i++) {
+      const cand = viewerLocators.nth(i);
+      const isVis = await cand.isVisible().catch(() => false);
       if (isVis) {
-        const info = await candidate
+        const info = await cand
           .evaluate((img) => ({
+            complete: Boolean(img.complete),
             naturalWidth: img.naturalWidth || 0,
             naturalHeight: img.naturalHeight || 0,
-            complete: Boolean(img.complete),
           }))
           .catch(() => null);
         if (info && info.complete && info.naturalWidth >= 32 && info.naturalHeight >= 32) {
-          activeViewerImage = candidate;
+          activeViewerImage = cand;
           break;
         }
       }
@@ -654,6 +729,7 @@ export async function downloadFlowImage({
       job,
       downloadDir: targetDir,
       timeoutMs,
+      browserProcessId,
       logger,
       automationRunner,
       onPhase: (ph, details) => logTransition(ph, details),
