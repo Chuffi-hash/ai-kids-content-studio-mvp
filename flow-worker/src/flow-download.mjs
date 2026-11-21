@@ -407,21 +407,60 @@ export async function saveImageUsingNativeContextMenu({
     await imageLocator.scrollIntoViewIfNeeded().catch(() => {});
   }
 
-  const imageInfo = await imageLocator.evaluate((img) => ({
-    src: img.currentSrc || img.src,
-    complete: Boolean(img.complete),
-    naturalWidth: img.naturalWidth || 0,
-    naturalHeight: img.naturalHeight || 0,
-    tagName: img.tagName,
-  }));
+  // Google Flow can expose a visible, dimensioned image while the browser's
+  // HTMLImageElement.complete flag is still false (for example, while its
+  // high-resolution source is being finalized). Give decode() a short chance
+  // to finish, then validate the actual source and intrinsic dimensions.
+  const imageInfo = await imageLocator.evaluate(async (img) => {
+    let decoded = false;
 
+    if (!img.complete && typeof img.decode === "function") {
+      try {
+        await Promise.race([
+          img.decode().then(() => {
+            decoded = true;
+          }),
+          new Promise((resolve) => setTimeout(resolve, 2500)),
+        ]);
+      } catch {
+        // The intrinsic dimensions and the saved-file validation below are
+        // authoritative. Some Flow image elements replace src while loading.
+      }
+    }
+
+    return {
+      src: img.currentSrc || img.src || "",
+      complete: Boolean(img.complete),
+      decoded,
+      naturalWidth: img.naturalWidth || 0,
+      naturalHeight: img.naturalHeight || 0,
+      tagName: img.tagName,
+      connected: Boolean(img.isConnected),
+    };
+  });
+
+  // Do not reject only because complete=false. The user-visible Flow preview
+  // can already have valid intrinsic dimensions while the resource is still
+  // finishing. Save As is followed by strict MIME/dimension validation of the
+  // actual bytes on disk, which is the definitive integrity check.
   if (
     imageInfo.tagName !== "IMG" ||
-    !imageInfo.complete ||
+    !imageInfo.src ||
     imageInfo.naturalWidth < 32 ||
     imageInfo.naturalHeight < 32
   ) {
     throw new Error(`ACTIVE_IMAGE_INVALID: ${JSON.stringify(imageInfo)}`);
+  }
+
+  if (!imageInfo.complete && !imageInfo.decoded) {
+    logger?.warn?.(
+      `[FlowDownload] IMAGE_RESOURCE_STILL_LOADING ${JSON.stringify({
+        workerJobId: job?.id,
+        src: imageInfo.src,
+        naturalWidth: imageInfo.naturalWidth,
+        naturalHeight: imageInfo.naturalHeight,
+      })}`,
+    );
   }
 
   const bounds = await imageLocator.boundingBox();
