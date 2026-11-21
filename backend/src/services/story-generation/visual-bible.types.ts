@@ -6,6 +6,12 @@
  * and scene-specific environment plates while strictly enforcing character exclusion.
  */
 
+import {
+  ProjectVisualSettings,
+  SceneVisualOverrides,
+  ResolvedVisualSettings,
+} from '../visual-styles/visual-styles.types.js';
+
 export interface ArtDirection {
   style: string;                  // e.g. "Cinematic 3D storybook animation", "Whimsical watercolor"
   renderingTechnique: string;     // e.g. "Soft CGI render with tactile textures and gentle bevels"
@@ -84,6 +90,7 @@ export interface StoryVisualBible {
   lightingAndColor: LightingAndColorIdentity;
   compositionRules: CompositionRules;
   exclusionRules: ExclusionRules;
+  projectVisualSettings?: ProjectVisualSettings;
   createdAt: string;
   updatedAt: string;
 }
@@ -134,6 +141,10 @@ export interface SceneVisualSpecification {
   exclusionRules: string[];
   aspectRatio: string;
   continuityInstructions: string[];
+
+  // Visual Styles integration
+  resolvedVisualSettings?: ResolvedVisualSettings;
+  visualOverrides?: SceneVisualOverrides;
 }
 
 export interface PromptHistoryEntry {

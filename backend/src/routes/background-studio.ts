@@ -29,6 +29,12 @@ backgroundStudioRouter.get('/templates', (_req, res) => {
     styles: PROMPT_STYLE_MODIFIERS,
     stylePresets: VisualStylesService.getAllPresets(),
     stylePresetsMap: VISUAL_STYLE_PRESETS,
+    styleIntensityOptions: ['subtle', 'balanced', 'strong'],
+    colorPalettePresets: ['warm', 'cool', 'vibrant', 'pastel', 'natural', 'muted', 'dark_dramatic', 'custom'],
+    sceneMoodPresets: ['happy', 'peaceful', 'magical', 'mysterious', 'suspenseful', 'dramatic', 'emotional', 'adventurous', 'custom'],
+    lightingPresets: ['soft_daylight', 'bright_daytime', 'golden_hour', 'sunset', 'night', 'moonlight', 'dramatic_cinematic', 'diffused', 'custom'],
+    complexityOptions: ['simple', 'balanced', 'detailed'],
+    characterSafeAreaOptions: ['open_center', 'open_left', 'open_right', 'open_foreground', 'open_background', 'custom'],
     providerCapabilities: ProviderCapabilitiesService.getAllCapabilities(),
     environmentPresets: [
       { id: 'forest', name: 'Lush Storybook Forest', description: 'a vibrant sunny forest path with giant ancient trees, blooming wildflowers, mossy rocks, and soft sunbeams' },

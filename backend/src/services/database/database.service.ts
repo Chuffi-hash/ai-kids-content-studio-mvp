@@ -1451,13 +1451,16 @@ export async function upsertFlowCharacterMapping(data: {
   characterId: string;
   flowProjectId: string;
   flowCharacterName: string;
+  flowCharacterId?: string | null;
+  flowCharacterUrl?: string | null;
+  activeVersion?: number;
   syncStatus?: string;
   sourceReferenceUrl?: string | null;
   sourceFingerprint?: string | null;
   lastSyncedAt?: Date | null;
   lastError?: string | null;
 }) {
-  return prisma.flowCharacterMapping.upsert({
+  return (prisma as any).flowCharacterMapping.upsert({
     where: {
       storyId_characterId: {
         storyId: data.storyId,
@@ -1469,6 +1472,9 @@ export async function upsertFlowCharacterMapping(data: {
       characterId: data.characterId,
       flowProjectId: data.flowProjectId,
       flowCharacterName: data.flowCharacterName,
+      flowCharacterId: data.flowCharacterId || null,
+      flowCharacterUrl: data.flowCharacterUrl || null,
+      activeVersion: data.activeVersion ?? 1,
       syncStatus: data.syncStatus || 'synced',
       sourceReferenceUrl: data.sourceReferenceUrl,
       sourceFingerprint: data.sourceFingerprint,
@@ -1478,6 +1484,9 @@ export async function upsertFlowCharacterMapping(data: {
     update: {
       flowProjectId: data.flowProjectId,
       flowCharacterName: data.flowCharacterName,
+      ...(data.flowCharacterId !== undefined ? { flowCharacterId: data.flowCharacterId } : {}),
+      ...(data.flowCharacterUrl !== undefined ? { flowCharacterUrl: data.flowCharacterUrl } : {}),
+      ...(data.activeVersion !== undefined ? { activeVersion: data.activeVersion } : {}),
       syncStatus: data.syncStatus || 'synced',
       sourceReferenceUrl: data.sourceReferenceUrl,
       sourceFingerprint: data.sourceFingerprint,
@@ -1491,6 +1500,172 @@ export async function deleteFlowCharacterMapping(storyId: string, characterId: s
   return prisma.flowCharacterMapping.deleteMany({
     where: { storyId, characterId },
   });
+}
+
+// -------------------------------------------------------------------------
+// FlowCharacterVersion operations
+// -------------------------------------------------------------------------
+
+export async function createFlowCharacterVersion(data: {
+  id?: string;
+  mappingId: string;
+  version?: number;
+  provider?: string;
+  model?: string | null;
+  flowProjectId: string;
+  flowCharacterId: string;
+  flowCharacterUrl: string;
+  prompt?: string | null;
+  formattedPrompt?: string | null;
+  characterName?: string | null;
+  characterInfo?: string | null;
+  voiceName?: string | null;
+  voiceId?: string | null;
+  imageUrl?: string | null;
+  storageKey?: string | null;
+  parentCharacterId?: string | null;
+  metadata?: any;
+  status?: string;
+}) {
+  const versionModel = (prisma as any).flowCharacterVersion;
+  let targetVersion = data.version;
+  if (!targetVersion && versionModel?.findFirst) {
+    try {
+      const latest = await versionModel.findFirst({
+        where: { mappingId: data.mappingId },
+        orderBy: { version: 'desc' },
+      });
+      targetVersion = (latest?.version ?? 0) + 1;
+    } catch {
+      targetVersion = 1;
+    }
+  }
+  if (!targetVersion) targetVersion = 1;
+
+  const versionRecord = {
+    id: data.id || randomUUID(),
+    mappingId: data.mappingId,
+    version: targetVersion,
+    provider: data.provider || "google_flow",
+    model: data.model || null,
+    flowProjectId: data.flowProjectId,
+    flowCharacterId: data.flowCharacterId,
+    flowCharacterUrl: data.flowCharacterUrl,
+    prompt: data.prompt || null,
+    formattedPrompt: data.formattedPrompt || null,
+    characterName: data.characterName || null,
+    characterInfo: data.characterInfo || null,
+    voiceName: data.voiceName || null,
+    voiceId: data.voiceId || null,
+    imageUrl: data.imageUrl || null,
+    storageKey: data.storageKey || null,
+    parentCharacterId: data.parentCharacterId || null,
+    metadata: data.metadata || null,
+    status: data.status || "completed",
+    createdAt: new Date(),
+  };
+
+  if (versionModel?.create) {
+    try {
+      const created = await versionModel.create({ data: versionRecord });
+      // Update mapping activeVersion
+      await (prisma as any).flowCharacterMapping.update({
+        where: { id: data.mappingId },
+        data: {
+          activeVersion: targetVersion,
+          flowCharacterId: data.flowCharacterId,
+          flowCharacterUrl: data.flowCharacterUrl,
+        },
+      }).catch(() => {});
+      return created;
+    } catch (createErr) {
+      console.warn("[Database] FlowCharacterVersion create fallback:", (createErr as Error).message);
+    }
+  }
+
+  // Fallback update on mapping
+  await (prisma as any).flowCharacterMapping.update({
+    where: { id: data.mappingId },
+    data: {
+      activeVersion: targetVersion,
+      flowCharacterId: data.flowCharacterId,
+      flowCharacterUrl: data.flowCharacterUrl,
+    },
+  }).catch(() => {});
+
+  return versionRecord;
+}
+
+export async function getFlowCharacterVersions(mappingId: string) {
+  const versionModel = (prisma as any).flowCharacterVersion;
+  if (versionModel?.findMany) {
+    try {
+      return await versionModel.findMany({
+        where: { mappingId },
+        orderBy: { version: "desc" },
+      });
+    } catch (err) {
+      console.warn("[Database] getFlowCharacterVersions fallback:", (err as Error).message);
+    }
+  }
+  return [];
+}
+
+export async function getFlowCharacterVersion(id: string) {
+  const versionModel = (prisma as any).flowCharacterVersion;
+  if (versionModel?.findUnique) {
+    try {
+      return await versionModel.findUnique({
+        where: { id },
+      });
+    } catch (err) {
+      console.warn("[Database] getFlowCharacterVersion fallback:", (err as Error).message);
+    }
+  }
+  return null;
+}
+
+export async function restoreFlowCharacterVersion(mappingId: string, versionIdOrNumber: string | number) {
+  const versionModel = (prisma as any).flowCharacterVersion;
+  let targetVersion: any = null;
+
+  if (versionModel) {
+    try {
+      if (typeof versionIdOrNumber === "number") {
+        targetVersion = await versionModel.findFirst({
+          where: { mappingId, version: versionIdOrNumber },
+        });
+      } else {
+        targetVersion = await versionModel.findFirst({
+          where: { mappingId, id: versionIdOrNumber },
+        });
+      }
+    } catch (err) {
+      console.warn("[Database] restoreFlowCharacterVersion lookup fallback:", (err as Error).message);
+    }
+  }
+
+  if (targetVersion) {
+    await (prisma as any).flowCharacterMapping.update({
+      where: { id: mappingId },
+      data: {
+        activeVersion: targetVersion.version,
+        flowCharacterId: targetVersion.flowCharacterId,
+        flowCharacterUrl: targetVersion.flowCharacterUrl,
+      },
+    });
+    return targetVersion;
+  }
+
+  // If versions table is not present, update mapping directly if number passed
+  if (typeof versionIdOrNumber === "number") {
+    return await (prisma as any).flowCharacterMapping.update({
+      where: { id: mappingId },
+      data: { activeVersion: versionIdOrNumber },
+    });
+  }
+
+  throw new Error(`Flow character version not found: ${versionIdOrNumber}`);
 }
 
 // -------------------------------------------------------------------------

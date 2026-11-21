@@ -45,6 +45,7 @@ import { buildSceneImagePrompt } from "../services/image-generation/prompt-build
 import { PromptSynthesizer } from "../services/story-generation/parser/prompt-synthesizer.js";
 import { VisualBibleService } from "../services/story-generation/visual-bible.service.js";
 import { ScenePromptV2Service } from "../services/story-generation/scene-prompt-v2.service.js";
+import { VisualStylesService } from "../services/visual-styles/visual-styles.service.js";
 import { AudioGenerationService } from "../services/audio-generation/audio-generation.service.js";
 import { VideoAssemblyService } from "../services/video-assembly/video-assembly.service.js";
 import { suggestEmotionForText } from "../services/audio-generation/emotion-suggester.service.js";
@@ -2720,11 +2721,86 @@ contentRouter.put("/stories/:storyId/visual-bible", async (req, res) => {
   }
 });
 
+// 6a. Get Story Visual Settings (Inheritance Base)
+contentRouter.get(["/story/:storyId/visual-settings", "/stories/:storyId/visual-settings"], async (req, res) => {
+  try {
+    const storyId = String(req.params.storyId);
+    const visualBible = await VisualBibleService.getOrInitializeVisualBible(storyId);
+    const presets = VisualStylesService.getAllPresets();
+    return res.json({
+      success: true,
+      settings: visualBible.projectVisualSettings,
+      presets,
+    });
+  } catch (error: any) {
+    console.error("[Content] Failed to fetch visual settings:", error);
+    return res.status(500).json({ message: error.message || "Failed to fetch visual settings" });
+  }
+});
+
+// 6b. Update Story Visual Settings
+contentRouter.all(["/story/:storyId/visual-settings", "/stories/:storyId/visual-settings"], async (req, res, next) => {
+  if (req.method !== 'PUT' && req.method !== 'PATCH') return next();
+  try {
+    const storyId = String(req.params.storyId);
+    const updates = req.body;
+    const currentBible = await VisualBibleService.getOrInitializeVisualBible(storyId);
+    const mergedSettings = {
+      ...(currentBible.projectVisualSettings || {
+        visualStyle: 'storybook_illustration',
+        styleIntensity: 'balanced',
+        colorPalette: 'vibrant',
+        defaultLighting: 'soft_daylight',
+        backgroundComplexity: 'balanced',
+        aspectRatio: '16:9',
+      }),
+      ...updates,
+    };
+
+    const updatedBible = await VisualBibleService.updateVisualBible(storyId, {
+      projectVisualSettings: mergedSettings,
+      artDirection: VisualBibleService.resolveArtDirection(mergedSettings.visualStyle),
+    });
+
+    // Also sync story.visualStyle column
+    try {
+      await updateStoryMetadata(storyId, { visualStyle: mergedSettings.visualStyle });
+    } catch {
+      // ignore
+    }
+
+    return res.json({
+      success: true,
+      settings: updatedBible.projectVisualSettings,
+      visualBible: updatedBible,
+    });
+  } catch (error: any) {
+    console.error("[Content] Failed to update visual settings:", error);
+    return res.status(500).json({ message: error.message || "Failed to update visual settings" });
+  }
+});
+
 // 7. Generate V2 Scene Background Prompt (Workflow A - Prompt Only, No Image Credits Consumed)
 contentRouter.post("/scenes/:sceneId/background-prompt/generate", async (req, res) => {
   try {
     const { sceneId } = req.params;
-    const { aspectRatio, cameraDirection, visualStyle, overrides } = req.body;
+    const {
+      aspectRatio,
+      cameraDirection,
+      visualStyle,
+      styleIntensity,
+      colorPalette,
+      customColorPalette,
+      mood,
+      customMood,
+      lighting,
+      customLighting,
+      backgroundComplexity,
+      characterSafeArea,
+      customStagingArea,
+      customInstructions,
+      overrides,
+    } = req.body;
 
     const scene = await getSceneBySceneId(sceneId);
     if (!scene) {
@@ -2732,6 +2808,22 @@ contentRouter.post("/scenes/:sceneId/background-prompt/generate", async (req, re
     }
 
     const visualBible = await VisualBibleService.getOrInitializeVisualBible(scene.storyId);
+
+    const visualOverrides = {
+      ...(visualStyle ? { visualStyle } : {}),
+      ...(styleIntensity ? { styleIntensity } : {}),
+      ...(colorPalette ? { colorPalette } : {}),
+      ...(customColorPalette ? { customColorPalette } : {}),
+      ...(mood ? { mood } : {}),
+      ...(customMood ? { customMood } : {}),
+      ...(lighting ? { lighting } : {}),
+      ...(customLighting ? { customLighting } : {}),
+      ...(backgroundComplexity ? { backgroundComplexity } : {}),
+      ...(characterSafeArea ? { characterSafeArea } : {}),
+      ...(customStagingArea ? { customStagingArea } : {}),
+      ...(customInstructions ? { customInstructions } : {}),
+      ...(aspectRatio ? { aspectRatio } : {}),
+    };
 
     const spec = await ScenePromptV2Service.analyzeScene({
       storyId: scene.storyId,
@@ -2742,12 +2834,24 @@ contentRouter.post("/scenes/:sceneId/background-prompt/generate", async (req, re
         ...(aspectRatio ? { aspectRatio } : {}),
         ...(cameraDirection ? { cameraPerspective: cameraDirection } : {}),
       },
+      visualOverrides,
     });
 
     const prompt = ScenePromptV2Service.composePrompt(spec, visualBible, {
       aspectRatio,
       cameraDirection,
       visualStyle,
+      styleIntensity,
+      colorPalette,
+      customColorPalette,
+      mood,
+      customMood,
+      lighting,
+      customLighting,
+      backgroundComplexity,
+      characterSafeArea,
+      customStagingArea,
+      customInstructions,
     });
 
     const validation = ScenePromptV2Service.validatePrompt(prompt);
@@ -2769,6 +2873,7 @@ contentRouter.post("/scenes/:sceneId/background-prompt/generate", async (req, re
       success: true,
       prompt: validation.cleanPrompt,
       specification: spec,
+      resolvedSettings: spec.resolvedVisualSettings,
       validation,
       locationId: spec.locationId,
       visualBibleVersion: visualBible.version,

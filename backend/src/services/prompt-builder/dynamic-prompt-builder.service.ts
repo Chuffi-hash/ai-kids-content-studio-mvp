@@ -15,6 +15,9 @@ export interface DynamicBackgroundPromptOptions {
   cameraAngle?: string;
   lighting?: string;
   colorPalette?: string;
+  styleIntensity?: 'subtle' | 'balanced' | 'strong';
+  backgroundComplexity?: 'simple' | 'balanced' | 'detailed';
+  characterSafeArea?: 'open_center' | 'open_left' | 'open_right' | 'open_foreground' | 'open_background' | 'custom';
   visualBible?: any;
   characters?: Array<{
     name: string;
@@ -105,6 +108,9 @@ export class DynamicPromptBuilderService {
     const lightingStr = opts.lighting ? `. Lighting: ${opts.lighting}` : `. Lighting style: ${stylePreset.lighting}`;
     const paletteStr = opts.colorPalette ? `. Color palette: ${opts.colorPalette}` : `. Color palette: ${stylePreset.colorPalette}`;
     const customStyle = opts.customStyleInstructions ? ` ${opts.customStyleInstructions}` : '';
+    const intensityStr = opts.styleIntensity ? ` ${VisualStylesService.getIntensityInstruction(stylePreset, opts.styleIntensity)}.` : '';
+    const complexityStr = opts.backgroundComplexity ? ` ${VisualStylesService.getComplexityInstruction(opts.backgroundComplexity)}` : '';
+    const stagingStr = opts.characterSafeArea ? ` ${VisualStylesService.getCharacterSafeAreaInstruction(opts.characterSafeArea)}` : '';
 
     let promptBody = '';
     let negativePrompt = stylePreset.negativePrompt;
@@ -117,9 +123,9 @@ export class DynamicPromptBuilderService {
       promptBody = [
         `High-quality ${stylePreset.name} children's story environment: a rich, vibrant ${opts.environmentType}${detailsStr}${moodStr}.`,
         formatInstruction,
-        `Art style characteristics: ${stylePreset.rendering}. Textures: ${stylePreset.texture}.${lightingStr}.${paletteStr}.${customStyle}`,
+        `Art style characteristics: ${stylePreset.rendering}. Textures: ${stylePreset.texture}.${intensityStr}${lightingStr}.${paletteStr}.${customStyle}${complexityStr}`,
         'Show a complete, visually engaging environment with clear depth (foreground framing, open middleground staging, distant horizon).',
-        'Leave clear open ground space for independent animated characters to stand and move without background visual obstructions.',
+        stagingStr || 'Leave clear open ground space for independent animated characters to stand and move without background visual obstructions.',
         'Strictly NO characters, NO people, NO animals, NO figures, NO silhouettes, NO text, NO watermarks.',
       ].filter(Boolean).join(' ');
 

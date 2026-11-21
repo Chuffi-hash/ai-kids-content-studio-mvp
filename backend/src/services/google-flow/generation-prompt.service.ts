@@ -1,4 +1,5 @@
 import { SceneContextItem, CharacterContextItem } from './story-context.service.js';
+import { VisualStylesService } from '../visual-styles/visual-styles.service.js';
 
 export interface BackgroundPromptResult {
   prompt: string;
@@ -83,7 +84,10 @@ export class GenerationPromptService {
       promptOverride || scene.visualPrompt || scene.narration || scene.title || 'the scene'
     );
 
-    const style = buildBackgroundStyleDirective(stylePreset);
+    const preset = VisualStylesService.getPreset(story.visualStyle || stylePreset);
+    const style = preset
+      ? `${preset.name} visual style. ${preset.rendering}. ${preset.texture}.`
+      : buildBackgroundStyleDirective(stylePreset);
 
     const sceneCues = [
       scene.location ? `Setting: ${scene.location}` : '',

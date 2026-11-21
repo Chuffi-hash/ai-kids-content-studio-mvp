@@ -228,24 +228,57 @@ model StoryCharacter {
 }
 
 model FlowCharacterMapping {
-  id                 String    @id @default(cuid())
+  id                 String                 @id @default(cuid())
   storyId            String
   characterId        String
   flowProjectId      String
   flowCharacterName  String
-  syncStatus         String    @default("pending")
+  flowCharacterId    String?
+  flowCharacterUrl   String?
+  activeVersion      Int                    @default(1)
+  syncStatus         String                 @default("pending")
   sourceReferenceUrl String?
   sourceFingerprint  String?
   lastSyncedAt       DateTime?
   lastError          String?
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
 
-  story     Story     @relation(fields: [storyId], references: [storyId], onDelete: Cascade)
-  character Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  story     Story                  @relation(fields: [storyId], references: [storyId], onDelete: Cascade)
+  character Character              @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  versions  FlowCharacterVersion[]
 
   @@unique([storyId, characterId])
   @@index([flowProjectId])
+}
+
+model FlowCharacterVersion {
+  id                String               @id @default(cuid())
+  mappingId         String
+  version           Int
+  provider          String               @default("google_flow")
+  model             String?
+  flowProjectId     String
+  flowCharacterId   String
+  flowCharacterUrl  String
+  prompt            String?
+  formattedPrompt   String?
+  characterName     String?
+  characterInfo     String?
+  voiceName         String?
+  voiceId           String?
+  imageUrl          String?
+  storageKey        String?
+  parentCharacterId String?
+  metadata          Json?
+  status            String               @default("completed")
+  createdAt         DateTime             @default(now())
+
+  mapping           FlowCharacterMapping @relation(fields: [mappingId], references: [id], onDelete: Cascade)
+
+  @@unique([mappingId, version])
+  @@index([mappingId])
+  @@index([flowCharacterId])
 }
 
 model GenerationJob {

@@ -35,6 +35,13 @@ import {
   fetchSceneBackgroundVersions,
   restoreSceneBackgroundVersion,
   BackgroundImageVersionItem,
+  ResolvedVisualSettings,
+  StyleIntensity,
+  ColorPalettePreset,
+  SceneMoodPreset,
+  LightingPreset,
+  BackgroundComplexity,
+  CharacterSafeArea,
 } from '../../services/editor.service';
 import { EMOTION_OPTIONS } from '../../utils/emotionSuggester';
 import { FISH_VOICES_CATALOG } from '../characters/CharacterBuilderModal';
@@ -251,7 +258,24 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
   const [localAspectRatio, setLocalAspectRatio] = useState<string>(
     (scene.animationData as any)?.background?.aspectRatio || '16:9'
   );
-  const [localVisualStyle, setLocalVisualStyle] = useState<string>('Cinematic Storybook');
+  const [localVisualStyle, setLocalVisualStyle] = useState<string>('storybook_illustration');
+  const initBg = (scene.animationData as any)?.background || {};
+  const initOverrides = initBg.visualOverrides || {};
+  const [localStyleIntensity, setLocalStyleIntensity] = useState<StyleIntensity>(initOverrides.styleIntensity || 'balanced');
+  const [localColorPalette, setLocalColorPalette] = useState<ColorPalettePreset>(initOverrides.colorPalette || 'vibrant');
+  const [localCustomColorPalette, setLocalCustomColorPalette] = useState<string>(initOverrides.customColorPalette || '');
+  const [localMood, setLocalMood] = useState<string>(initOverrides.mood || '');
+  const [localCustomMood, setLocalCustomMood] = useState<string>(initOverrides.customMood || '');
+  const [localLighting, setLocalLighting] = useState<string>(initOverrides.lighting || '');
+  const [localCustomLighting, setLocalCustomLighting] = useState<string>(initOverrides.customLighting || '');
+  const [localComplexity, setLocalComplexity] = useState<BackgroundComplexity>(initOverrides.backgroundComplexity || 'balanced');
+  const [localCharacterSafeArea, setLocalCharacterSafeArea] = useState<CharacterSafeArea>(initOverrides.characterSafeArea || 'open_center');
+  const [localCustomStagingArea, setLocalCustomStagingArea] = useState<string>(initOverrides.customStagingArea || '');
+  const [localCustomInstructions, setLocalCustomInstructions] = useState<string>(initOverrides.customInstructions || '');
+  const [resolvedVisualSettings, setResolvedVisualSettings] = useState<ResolvedVisualSettings | null>(
+    initBg.visualSpecification?.resolvedVisualSettings || null
+  );
+  const [synthesizedPromptBaseline, setSynthesizedPromptBaseline] = useState<string>(scene.visualPrompt || '');
   const [isGeneratingBg, setIsGeneratingBg] = useState<boolean>(false);
   const [generatedPreview, setGeneratedPreview] = useState<{
     url: string;
@@ -383,6 +407,25 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
     if (typeof narrationCfg?.speed === 'number') {
       setVoiceSpeed(narrationCfg.speed);
     }
+
+    const currentBg = (scene.animationData as any)?.background || {};
+    const curOverrides = currentBg.visualOverrides || {};
+    if (curOverrides.visualStyle) setLocalVisualStyle(curOverrides.visualStyle);
+    if (curOverrides.styleIntensity) setLocalStyleIntensity(curOverrides.styleIntensity);
+    if (curOverrides.colorPalette) setLocalColorPalette(curOverrides.colorPalette);
+    if (curOverrides.customColorPalette) setLocalCustomColorPalette(curOverrides.customColorPalette);
+    if (curOverrides.mood) setLocalMood(curOverrides.mood);
+    if (curOverrides.customMood) setLocalCustomMood(curOverrides.customMood);
+    if (curOverrides.lighting) setLocalLighting(curOverrides.lighting);
+    if (curOverrides.customLighting) setLocalCustomLighting(curOverrides.customLighting);
+    if (curOverrides.backgroundComplexity) setLocalComplexity(curOverrides.backgroundComplexity);
+    if (curOverrides.characterSafeArea) setLocalCharacterSafeArea(curOverrides.characterSafeArea);
+    if (curOverrides.customStagingArea) setLocalCustomStagingArea(curOverrides.customStagingArea);
+    if (curOverrides.customInstructions) setLocalCustomInstructions(curOverrides.customInstructions);
+    if (currentBg.visualSpecification?.resolvedVisualSettings) {
+      setResolvedVisualSettings(currentBg.visualSpecification.resolvedVisualSettings);
+    }
+    setSynthesizedPromptBaseline(scene.visualPrompt || '');
   }, [
     scene.sceneId,
     scene.title,
@@ -825,23 +868,65 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
     setIsGeneratingV2Prompt(true);
     setBgError(null);
     try {
+      const overridesToSave = {
+        visualStyle: localVisualStyle,
+        styleIntensity: localStyleIntensity,
+        colorPalette: localColorPalette,
+        customColorPalette: localCustomColorPalette,
+        mood: (localMood as any) || undefined,
+        customMood: localCustomMood,
+        lighting: (localLighting as any) || undefined,
+        customLighting: localCustomLighting,
+        backgroundComplexity: localComplexity,
+        characterSafeArea: localCharacterSafeArea,
+        customStagingArea: localCustomStagingArea,
+        customInstructions: localCustomInstructions,
+      };
+
       const res = await generateSceneBackgroundPrompt(scene.sceneId, {
         aspectRatio: localAspectRatio,
         cameraDirection: localCamera,
         visualStyle: localVisualStyle,
+        styleIntensity: localStyleIntensity,
+        colorPalette: localColorPalette,
+        customColorPalette: localCustomColorPalette,
+        mood: (localMood as any) || undefined,
+        customMood: localCustomMood,
+        lighting: (localLighting as any) || undefined,
+        customLighting: localCustomLighting,
+        backgroundComplexity: localComplexity,
+        characterSafeArea: localCharacterSafeArea,
+        customStagingArea: localCustomStagingArea,
+        customInstructions: localCustomInstructions,
       });
 
       if (res.success && res.prompt) {
         setLocalPrompt(res.prompt);
+        setSynthesizedPromptBaseline(res.prompt);
+        if (res.resolvedSettings) {
+          setResolvedVisualSettings(res.resolvedSettings);
+        }
         if (res.validation) {
-          setPromptValidationInfo(res.validation);
+          setPromptValidationInfo({
+            valid: Boolean(res.validation.valid ?? res.validation.isValid ?? true),
+            violations: res.validation.violations ?? res.validation.warnings ?? [],
+          });
         }
         if (res.history) {
           setPromptHistory(res.history);
         }
+        const currentAnim = (scene.animationData || {}) as any;
+        const currentBg = currentAnim.background || {};
         onUpdateScene(scene.sceneId, {
           visualPrompt: res.prompt,
           cameraDirection: localCamera,
+          animationData: {
+            ...currentAnim,
+            background: {
+              ...currentBg,
+              visualOverrides: overridesToSave,
+            },
+          },
         });
       }
     } catch (err: any) {
@@ -849,6 +934,13 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
       setBgError(err.message || 'Failed to generate V2 scene prompt');
     } finally {
       setIsGeneratingV2Prompt(false);
+    }
+  };
+
+  const handleResetToSynthesizedPrompt = () => {
+    if (synthesizedPromptBaseline) {
+      setLocalPrompt(synthesizedPromptBaseline);
+      onUpdateScene(scene.sceneId, { visualPrompt: synthesizedPromptBaseline });
     }
   };
 
@@ -3357,6 +3449,256 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                 </div>
               </CollapsibleSection>
 
+              {/* 3. Visual Style & Art Direction */}
+              <CollapsibleSection
+                id="bg-style"
+                title="Visual Style & Art Direction"
+                icon={<SparklesIcon size={14} color="#8b5cf6" />}
+                badge={
+                  <span
+                    style={{
+                      fontSize: '9px',
+                      fontWeight: 600,
+                      padding: '1px 6px',
+                      borderRadius: '10px',
+                      background: (resolvedVisualSettings?.isStyleOverridden || (localVisualStyle && localVisualStyle !== 'storybook_illustration'))
+                        ? 'rgba(245, 158, 11, 0.15)'
+                        : 'rgba(16, 185, 129, 0.15)',
+                      color: (resolvedVisualSettings?.isStyleOverridden || (localVisualStyle && localVisualStyle !== 'storybook_illustration'))
+                        ? '#d97706'
+                        : '#059669',
+                      border: (resolvedVisualSettings?.isStyleOverridden || (localVisualStyle && localVisualStyle !== 'storybook_illustration'))
+                        ? '1px solid rgba(245, 158, 11, 0.3)'
+                        : '1px solid rgba(16, 185, 129, 0.3)',
+                    }}
+                  >
+                    {(resolvedVisualSettings?.isStyleOverridden || (localVisualStyle && localVisualStyle !== 'storybook_illustration'))
+                      ? 'Scene Override'
+                      : 'Inherited (Project)'}
+                  </span>
+                }
+                isOpen={isSectionOpen('bg-style', true)}
+                onToggle={() => toggleSection('bg-style', true)}
+                variant="card"
+              >
+                {/* Visual Style Preset Selector */}
+                <div className="ed-field-group" style={{ margin: 0 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                    <label className="ed-field-label" style={{ fontSize: '11px', margin: 0 }}>
+                      Art Direction / Visual Style
+                    </label>
+                    <span style={{ fontSize: '10px', color: '#8b5cf6', fontWeight: 600 }}>
+                      {localVisualStyle.replace('_', ' ').toUpperCase()}
+                    </span>
+                  </div>
+                  <select
+                    className="ed-select"
+                    value={localVisualStyle}
+                    onChange={(e) => setLocalVisualStyle(e.target.value)}
+                  >
+                    <option value="storybook_illustration">Storybook Illustration (Classic Illustrated)</option>
+                    <option value="cinematic">Cinematic (Filmic Lighting & Widescreen Depth)</option>
+                    <option value="cartoon">Cartoon (2D Animated Colorful Vector)</option>
+                    <option value="anime">Anime (Studio Ghibli Nature & Whimsy)</option>
+                    <option value="3d_animation">3D Animation (Modern Pixar/Disney 3D)</option>
+                    <option value="stylized_realism">Stylized Realism (Naturalistic Realism)</option>
+                    <option value="fantasy_illustration">Fantasy Illustration (Magical Painterly)</option>
+                    <option value="watercolor">Watercolor (Dreamy Soft Paper Washes)</option>
+                    <option value="pixel_art">Pixel Art (Charming Retro Gameworld)</option>
+                    <option value="custom">Custom (User-Defined Aesthetic)</option>
+                  </select>
+                </div>
+
+                {/* Intensity & Complexity */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                  <div className="ed-field-group" style={{ margin: 0 }}>
+                    <label className="ed-field-label" style={{ fontSize: '10.5px' }}>Style Intensity</label>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '2px' }}>
+                      {(['subtle', 'balanced', 'strong'] as const).map((lvl) => (
+                        <button
+                          key={lvl}
+                          type="button"
+                          className={`ed-tool-btn ${localStyleIntensity === lvl ? 'active' : ''}`}
+                          style={{
+                            fontSize: '9.5px',
+                            padding: '3px 2px',
+                            textAlign: 'center',
+                            background: localStyleIntensity === lvl ? '#8b5cf6' : undefined,
+                            color: localStyleIntensity === lvl ? '#fff' : undefined,
+                            borderColor: localStyleIntensity === lvl ? '#8b5cf6' : undefined,
+                          }}
+                          onClick={() => setLocalStyleIntensity(lvl)}
+                        >
+                          {lvl.charAt(0).toUpperCase() + lvl.slice(1)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="ed-field-group" style={{ margin: 0 }}>
+                    <label className="ed-field-label" style={{ fontSize: '10.5px' }}>Complexity</label>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '2px' }}>
+                      {(['simple', 'balanced', 'detailed'] as const).map((lvl) => (
+                        <button
+                          key={lvl}
+                          type="button"
+                          className={`ed-tool-btn ${localComplexity === lvl ? 'active' : ''}`}
+                          style={{
+                            fontSize: '9.5px',
+                            padding: '3px 2px',
+                            textAlign: 'center',
+                            background: localComplexity === lvl ? '#8b5cf6' : undefined,
+                            color: localComplexity === lvl ? '#fff' : undefined,
+                            borderColor: localComplexity === lvl ? '#8b5cf6' : undefined,
+                          }}
+                          onClick={() => setLocalComplexity(lvl)}
+                        >
+                          {lvl.charAt(0).toUpperCase() + lvl.slice(1)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Color Palette & Lighting */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                  <div className="ed-field-group" style={{ margin: 0 }}>
+                    <label className="ed-field-label" style={{ fontSize: '10.5px' }}>Color Palette</label>
+                    <select
+                      className="ed-select"
+                      value={localColorPalette}
+                      onChange={(e) => setLocalColorPalette(e.target.value as any)}
+                    >
+                      <option value="vibrant">Vibrant (Primaries)</option>
+                      <option value="warm">Warm (Golden & Amber)</option>
+                      <option value="cool">Cool (Teals & Blues)</option>
+                      <option value="pastel">Pastel (Soft Candy)</option>
+                      <option value="natural">Natural (Earth & Green)</option>
+                      <option value="muted">Muted (Desaturated)</option>
+                      <option value="dark_dramatic">Dark / Dramatic</option>
+                      <option value="custom">Custom...</option>
+                    </select>
+                    {localColorPalette === 'custom' && (
+                      <input
+                        type="text"
+                        className="ed-input"
+                        style={{ marginTop: '4px', fontSize: '10px' }}
+                        value={localCustomColorPalette}
+                        onChange={(e) => setLocalCustomColorPalette(e.target.value)}
+                        placeholder="Palette description..."
+                      />
+                    )}
+                  </div>
+
+                  <div className="ed-field-group" style={{ margin: 0 }}>
+                    <label className="ed-field-label" style={{ fontSize: '10.5px' }}>Lighting Style</label>
+                    <select
+                      className="ed-select"
+                      value={localLighting}
+                      onChange={(e) => setLocalLighting(e.target.value)}
+                    >
+                      <option value="">Inherit / Time of Day</option>
+                      <option value="soft_daylight">Soft Daylight</option>
+                      <option value="bright_daytime">Bright Daytime</option>
+                      <option value="golden_hour">Golden Hour</option>
+                      <option value="sunset">Sunset</option>
+                      <option value="night">Night / Lanterns</option>
+                      <option value="moonlight">Moonlight</option>
+                      <option value="dramatic_cinematic">Dramatic Cinematic</option>
+                      <option value="diffused">Diffused Clouds</option>
+                      <option value="custom">Custom...</option>
+                    </select>
+                    {localLighting === 'custom' && (
+                      <input
+                        type="text"
+                        className="ed-input"
+                        style={{ marginTop: '4px', fontSize: '10px' }}
+                        value={localCustomLighting}
+                        onChange={(e) => setLocalCustomLighting(e.target.value)}
+                        placeholder="Lighting description..."
+                      />
+                    )}
+                  </div>
+                </div>
+
+                {/* Scene Mood & Character-Safe Staging */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                  <div className="ed-field-group" style={{ margin: 0 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <label className="ed-field-label" style={{ fontSize: '10.5px', margin: 0 }}>Scene Mood</label>
+                      <span style={{ fontSize: '9px', color: '#059669', fontWeight: 600 }}>
+                        {resolvedVisualSettings?.isMoodAutoDetected ? '✨ Auto-Inferred' : 'Manual'}
+                      </span>
+                    </div>
+                    <select
+                      className="ed-select"
+                      value={localMood}
+                      onChange={(e) => setLocalMood(e.target.value)}
+                    >
+                      <option value="">Auto-Detect ({resolvedVisualSettings?.mood || 'peaceful'})</option>
+                      <option value="peaceful">Peaceful (Calm & Serene)</option>
+                      <option value="happy">Happy (Joyful & Playful)</option>
+                      <option value="magical">Magical (Enchanting Wonder)</option>
+                      <option value="mysterious">Mysterious (Curious Secrets)</option>
+                      <option value="adventurous">Adventurous (Energetic Quest)</option>
+                      <option value="suspenseful">Suspenseful (Anticipation)</option>
+                      <option value="dramatic">Dramatic (Emotional Peaks)</option>
+                      <option value="emotional">Emotional (Heartwarming/Tender)</option>
+                      <option value="custom">Custom...</option>
+                    </select>
+                    {localMood === 'custom' && (
+                      <input
+                        type="text"
+                        className="ed-input"
+                        style={{ marginTop: '4px', fontSize: '10px' }}
+                        value={localCustomMood}
+                        onChange={(e) => setLocalCustomMood(e.target.value)}
+                        placeholder="Mood description..."
+                      />
+                    )}
+                  </div>
+
+                  <div className="ed-field-group" style={{ margin: 0 }}>
+                    <label className="ed-field-label" style={{ fontSize: '10.5px' }}>Character Staging Area</label>
+                    <select
+                      className="ed-select"
+                      value={localCharacterSafeArea}
+                      onChange={(e) => setLocalCharacterSafeArea(e.target.value as any)}
+                    >
+                      <option value="open_center">Open Center (Rigs Centered)</option>
+                      <option value="open_left">Open Left (Scenery on Right)</option>
+                      <option value="open_right">Open Right (Scenery on Left)</option>
+                      <option value="open_foreground">Open Wide Foreground</option>
+                      <option value="open_background">Open Deep Background</option>
+                      <option value="custom">Custom Clearing...</option>
+                    </select>
+                    {localCharacterSafeArea === 'custom' && (
+                      <input
+                        type="text"
+                        className="ed-input"
+                        style={{ marginTop: '4px', fontSize: '10px' }}
+                        value={localCustomStagingArea}
+                        onChange={(e) => setLocalCustomStagingArea(e.target.value)}
+                        placeholder="e.g., Clear path down the middle"
+                      />
+                    )}
+                  </div>
+                </div>
+
+                {/* Custom Scene Visual Directives */}
+                <div className="ed-field-group" style={{ margin: 0 }}>
+                  <label className="ed-field-label" style={{ fontSize: '10.5px' }}>Custom Scene Directives (Optional)</label>
+                  <input
+                    type="text"
+                    className="ed-input"
+                    style={{ fontSize: '10.5px' }}
+                    value={localCustomInstructions}
+                    onChange={(e) => setLocalCustomInstructions(e.target.value)}
+                    placeholder="e.g., Add glowing fireflies near river, gentle fog rolling over hills..."
+                  />
+                </div>
+              </CollapsibleSection>
+
         {/* WORKFLOW A: Google Flow Manual Workflow (Zero API Cost) */}
         <CollapsibleSection
           id="bg-flow"
@@ -3436,9 +3778,29 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
               <label className="ed-field-label" style={{ margin: 0, fontWeight: 600 }}>
                 Visual Scene Prompt (Environment Plate Only)
               </label>
-              <span style={{ fontSize: '10px', color: '#059669', fontWeight: 600 }}>
-                Characters Excluded
-              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                {localPrompt && localPrompt !== synthesizedPromptBaseline && (
+                  <button
+                    type="button"
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#8b5cf6',
+                      fontSize: '10px',
+                      textDecoration: 'underline',
+                      cursor: 'pointer',
+                      padding: 0,
+                    }}
+                    onClick={handleResetToSynthesizedPrompt}
+                    title="Revert back to the AI-synthesized prompt"
+                  >
+                    ↺ Reset to Synthesized
+                  </button>
+                )}
+                <span style={{ fontSize: '10px', color: '#059669', fontWeight: 600 }}>
+                  {localPrompt && localPrompt !== synthesizedPromptBaseline ? '✏️ User Modified' : '✓ Characters Excluded'}
+                </span>
+              </div>
             </div>
             <textarea
               className="ed-textarea"
@@ -3456,8 +3818,17 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
             <span style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#047857', padding: '2px 6px', borderRadius: '4px', border: '1px solid rgba(16, 185, 129, 0.25)' }}>
               ✓ Character-Free Plate
             </span>
+            <span style={{ background: 'rgba(139, 92, 246, 0.1)', color: '#7c3aed', padding: '2px 6px', borderRadius: '4px', border: '1px solid rgba(139, 92, 246, 0.25)' }}>
+              🎨 Style: {resolvedVisualSettings?.visualStyle?.name || localVisualStyle.replace('_', ' ')}
+            </span>
+            <span style={{ background: 'rgba(139, 92, 246, 0.1)', color: '#7c3aed', padding: '2px 6px', borderRadius: '4px', border: '1px solid rgba(139, 92, 246, 0.25)' }}>
+              ⚡ Intensity: {localStyleIntensity}
+            </span>
             <span style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#047857', padding: '2px 6px', borderRadius: '4px', border: '1px solid rgba(16, 185, 129, 0.25)' }}>
-              ✓ Middleground Reserved for Rigs
+              🎭 Mood: {resolvedVisualSettings?.mood || (localMood || 'peaceful')}
+            </span>
+            <span style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#047857', padding: '2px 6px', borderRadius: '4px', border: '1px solid rgba(16, 185, 129, 0.25)' }}>
+              📐 Staging: {localCharacterSafeArea.replace('_', ' ')}
             </span>
             <span style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#047857', padding: '2px 6px', borderRadius: '4px', border: '1px solid rgba(16, 185, 129, 0.25)' }}>
               ✓ Aspect Ratio: {localAspectRatio}

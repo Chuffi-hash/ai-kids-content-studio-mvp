@@ -13,6 +13,8 @@ import {
   getScenesByStoryId,
 } from "../database/database.service.js";
 import { PromptSynthesizer } from "./parser/prompt-synthesizer.js";
+import { VisualStylesService } from "../visual-styles/visual-styles.service.js";
+import { ProjectVisualSettings } from "../visual-styles/visual-styles.types.js";
 
 export class VisualBibleService {
   /**
@@ -121,6 +123,24 @@ export class VisualBibleService {
    * Resolves art direction for a given style string or keyword.
    */
   public static resolveArtDirection(styleInput?: string | null): ArtDirection {
+    if (styleInput && styleInput.trim().length > 0) {
+      const preset = VisualStylesService.getPreset(styleInput);
+      if (preset && preset.id !== 'custom') {
+        return {
+          style: `${preset.name} - ${preset.description}`,
+          renderingTechnique: preset.rendering,
+          visualQuality: `8K masterpiece, ultra-detailed ${preset.name.toLowerCase()} environment plate`,
+          levelOfDetail: 'high',
+          colorPalette: preset.colorPalette,
+          textures: preset.texture,
+          lightingStyle: preset.lighting,
+          depthAndPerspective: preset.depth,
+          realismOrStylization: preset.visualTreatment,
+          overallTone: preset.atmosphere,
+        };
+      }
+    }
+
     const raw = (styleInput || "").toLowerCase().trim();
     let matchedProfile =
       VisualBibleService.STYLE_PROFILES["cinematic storybook"];
@@ -280,6 +300,15 @@ export class VisualBibleService {
     };
 
     const now = new Date().toISOString();
+    const preset = VisualStylesService.getPreset(visualStyle || 'storybook_illustration');
+    const projectVisualSettings: ProjectVisualSettings = {
+      visualStyle: preset.id,
+      styleIntensity: 'balanced',
+      colorPalette: 'vibrant',
+      defaultLighting: 'soft_daylight',
+      backgroundComplexity: 'balanced',
+      aspectRatio: '16:9',
+    };
 
     return {
       version: 1,
@@ -290,6 +319,7 @@ export class VisualBibleService {
       lightingAndColor,
       compositionRules,
       exclusionRules: DEFAULT_EXCLUSION_RULES,
+      projectVisualSettings,
       createdAt: now,
       updatedAt: now,
     };
@@ -372,6 +402,19 @@ export class VisualBibleService {
         ...current.exclusionRules,
         ...(updates.exclusionRules || {}),
       },
+      projectVisualSettings: updates.projectVisualSettings
+        ? {
+            ...(current.projectVisualSettings || {
+              visualStyle: 'storybook_illustration',
+              styleIntensity: 'balanced',
+              colorPalette: 'vibrant',
+              defaultLighting: 'soft_daylight',
+              backgroundComplexity: 'balanced',
+              aspectRatio: '16:9',
+            }),
+            ...updates.projectVisualSettings,
+          }
+        : current.projectVisualSettings,
       version: (current.version || 1) + 1,
       updatedAt: new Date().toISOString(),
     };

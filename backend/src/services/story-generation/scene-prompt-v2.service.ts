@@ -15,11 +15,34 @@ import {
   createSceneVersion,
 } from '../database/database.service.js';
 import { PromptSynthesizer } from './parser/prompt-synthesizer.js';
+import { VisualStylesService } from '../visual-styles/visual-styles.service.js';
+import {
+  ProjectVisualSettings,
+  SceneVisualOverrides,
+  ResolvedVisualSettings,
+  StyleIntensity,
+  ColorPalettePreset,
+  SceneMoodPreset,
+  LightingPreset,
+  BackgroundComplexity,
+  CharacterSafeArea,
+} from '../visual-styles/visual-styles.types.js';
 
 export interface PromptCompositionOptions {
   aspectRatio?: string;
   cameraDirection?: string;
   visualStyle?: string;
+  styleIntensity?: StyleIntensity;
+  colorPalette?: ColorPalettePreset;
+  customColorPalette?: string;
+  mood?: SceneMoodPreset;
+  customMood?: string;
+  lighting?: LightingPreset;
+  customLighting?: string;
+  backgroundComplexity?: BackgroundComplexity;
+  characterSafeArea?: CharacterSafeArea;
+  customStagingArea?: string;
+  customInstructions?: string;
   isManualEdit?: boolean;
 }
 
@@ -38,6 +61,7 @@ export class ScenePromptV2Service {
     sceneId: string;
     visualBible?: StoryVisualBible;
     overrides?: Partial<SceneVisualSpecification>;
+    visualOverrides?: Partial<SceneVisualOverrides>;
   }): Promise<SceneVisualSpecification> {
     const { storyId, sceneId, overrides } = options;
 
@@ -70,39 +94,86 @@ export class ScenePromptV2Service {
     const locationId = overrides?.locationId || LocationContinuityService.resolveLocationId(locationName);
     const locationAnchors = LocationContinuityService.inferLocationAnchors(locationName, visualBible);
 
-    // 2. Resolve Dynamic Attributes (Time of Day, Weather, Lighting, Camera)
+    // 2. Project Visual Settings & Scene Overrides
+    const projectSettings: Partial<ProjectVisualSettings> =
+      visualBible.projectVisualSettings ||
+      (story as any).visualBible?.projectVisualSettings || {
+        visualStyle: (story.visualStyle as any) || 'storybook_illustration',
+        styleIntensity: 'balanced',
+        colorPalette: 'vibrant',
+        defaultLighting: 'soft_daylight',
+        backgroundComplexity: 'balanced',
+        aspectRatio: '16:9',
+      };
+
+    const animBg = ((scene.animationData as any)?.background || {});
+    const existingSceneOverrides: Partial<SceneVisualOverrides> = animBg.visualOverrides || {};
+    const sceneOverrides: SceneVisualOverrides = {
+      ...existingSceneOverrides,
+      ...(options.visualOverrides || {}),
+      ...(overrides?.visualOverrides || {}),
+    };
+
+    // 3. Resolve Dynamic Attributes (Time of Day, Weather, Lighting, Camera)
     const combinedSceneText = `${scene.title} ${scene.visualPrompt || ''} ${scene.narration} ${scene.cameraDirection || ''}`;
     const timeOfDay = overrides?.timeOfDay || LocationContinuityService.detectTimeOfDay(combinedSceneText);
     const weather = overrides?.weather || LocationContinuityService.detectWeather(combinedSceneText);
     const season = overrides?.season || 'SPRING';
-    const mood = overrides?.mood || (visualBible.artDirection.overallTone.split(',')[0] || 'Joyful and serene');
-    const lighting = overrides?.lighting || LocationContinuityService.resolveLighting(timeOfDay, weather);
 
-    const rawCamera = overrides?.cameraPerspective || scene.cameraDirection || (scene.animationData as any)?.background?.cameraDirection || visualBible.compositionRules.defaultCameraPerspective;
+    // Intelligent Mood Inference from Scene Context
+    const inferredMood = VisualStylesService.inferSceneMood(combinedSceneText);
+
+    const aspectRatio =
+      overrides?.aspectRatio ||
+      sceneOverrides.aspectRatio ||
+      animBg.aspectRatio ||
+      visualBible.compositionRules.defaultAspectRatio ||
+      '16:9';
+
+    // Resolve Effective Visual Settings (Strict Inheritance: Scene Override -> Project Setting -> Default)
+    const resolvedVisualSettings = VisualStylesService.resolveEffectiveVisualSettings({
+      projectSettings,
+      sceneOverrides,
+      inferredMood,
+      aspectRatio,
+    });
+
+    const mood = overrides?.mood || resolvedVisualSettings.mood;
+    const lighting = overrides?.lighting || (
+      resolvedVisualSettings.isLightingOverridden
+        ? VisualStylesService.getLightingInstruction(resolvedVisualSettings.lighting, resolvedVisualSettings.customLighting)
+        : LocationContinuityService.resolveLighting(timeOfDay, weather)
+    );
+
+    const rawCamera = overrides?.cameraPerspective || scene.cameraDirection || animBg.cameraDirection || visualBible.compositionRules.defaultCameraPerspective;
     const cameraPerspective = LocationContinuityService.normalizeCameraPerspective(rawCamera);
 
-    // 3. Determine Character Placement Zone from animationData
+    // 4. Determine Character Placement Zone & Staging Clearance
     let characterPlacementZone: 'center' | 'left' | 'right' | 'open' = 'center';
-    const charInstances = (scene.animationData as any)?.characterInstances || [];
-    if (charInstances.length === 1) {
-      const x = charInstances[0].x ?? 640;
-      if (x < 500) characterPlacementZone = 'left';
-      else if (x > 780) characterPlacementZone = 'right';
-      else characterPlacementZone = 'center';
-    } else if (charInstances.length > 1) {
+    if (resolvedVisualSettings.characterSafeArea === 'open_left') {
+      characterPlacementZone = 'left';
+    } else if (resolvedVisualSettings.characterSafeArea === 'open_right') {
+      characterPlacementZone = 'right';
+    } else if (resolvedVisualSettings.characterSafeArea === 'open_foreground' || resolvedVisualSettings.characterSafeArea === 'open_background') {
       characterPlacementZone = 'open';
+    } else {
+      const charInstances = (scene.animationData as any)?.characterInstances || [];
+      if (charInstances.length === 1) {
+        const x = charInstances[0].x ?? 640;
+        if (x < 500) characterPlacementZone = 'left';
+        else if (x > 780) characterPlacementZone = 'right';
+        else characterPlacementZone = 'center';
+      } else if (charInstances.length > 1) {
+        characterPlacementZone = 'open';
+      }
     }
 
-    let clearingDescription = 'Keep the center-middleground clear and unobstructed for character action.';
-    if (characterPlacementZone === 'left') {
-      clearingDescription = 'Keep the left-middleground open and clear for characters; rich scenery on right.';
-    } else if (characterPlacementZone === 'right') {
-      clearingDescription = 'Keep the right-middleground open and clear for characters; rich scenery on left.';
-    } else if (characterPlacementZone === 'open') {
-      clearingDescription = 'Keep the wide central stage plane open for multiple separately animated characters.';
-    }
+    const clearingDescription = VisualStylesService.getCharacterSafeAreaInstruction(
+      resolvedVisualSettings.characterSafeArea,
+      resolvedVisualSettings.customStagingArea
+    );
 
-    // 4. Layering Composition
+    // 5. Layering Composition
     const composition = {
       foreground: `Low framing natural elements, gentle flowering blades and pathway entrance near bottom edge`,
       middleground: `Open clear ground plane. ${clearingDescription}`,
@@ -111,7 +182,7 @@ export class ScenePromptV2Service {
       clearingDescription,
     };
 
-    // 5. Environmental Changes from previous scene
+    // 6. Environmental Changes from previous scene
     const prevText = prevScene ? `${prevScene.title} ${prevScene.visualPrompt || ''} ${prevScene.narration}` : '';
     const prevTimeOfDay = prevScene ? LocationContinuityService.detectTimeOfDay(prevText) : undefined;
     const prevWeather = prevScene ? LocationContinuityService.detectWeather(prevText) : undefined;
@@ -121,22 +192,15 @@ export class ScenePromptV2Service {
       prevScene ? { timeOfDay: prevTimeOfDay, weather: prevWeather } : undefined
     );
 
-    // 6. Continuity Instructions
+    // 7. Continuity Instructions
     const continuityInstructions: string[] = [
       `Maintain exact spatial arrangement of ${locationName}`,
       `Permanent landmarks must match: ${locationAnchors.keyLandmarks.join(' and ')}`,
-      `Color harmony: ${visualBible.artDirection.colorPalette}`,
+      `Color harmony: ${VisualStylesService.getColorPaletteInstruction(resolvedVisualSettings.colorPalette, resolvedVisualSettings.customColorPalette)}`,
     ];
 
-    const aspectRatio =
-      overrides?.aspectRatio ||
-      (scene.animationData as any)?.background?.aspectRatio ||
-      visualBible.compositionRules.defaultAspectRatio ||
-      '16:9';
-
-    // 7. Clean visual description (without characters)
+    // 8. Clean visual description (without characters)
     let cleanVisualDesc = scene.visualPrompt || '';
-    // Strip any obvious character action phrasing from the description
     cleanVisualDesc = cleanVisualDesc
       .replace(/\b(pip|maya|aarav|bear|robot|earth|terra|children|child|boy|girl)\b[^,.;:]*/gi, '')
       .replace(/\s+/g, ' ')
@@ -169,6 +233,8 @@ export class ScenePromptV2Service {
       exclusionRules: DEFAULT_EXCLUSION_RULES.prohibitedElements,
       aspectRatio,
       continuityInstructions,
+      resolvedVisualSettings,
+      visualOverrides: sceneOverrides,
       ...(overrides || {}),
     };
 
@@ -176,14 +242,14 @@ export class ScenePromptV2Service {
   }
 
   /**
-   * Composes a production-ready, character-free background image prompt for Google Flow.
+   * Composes a production-ready, character-free background image prompt
+   * using the 15-section structured generation pipeline.
    */
   public static composePrompt(
     spec: SceneVisualSpecification,
     visualBible: StoryVisualBible,
     options?: PromptCompositionOptions
   ): string {
-    const art = visualBible.artDirection;
     const aspect = options?.aspectRatio || spec.aspectRatio || '16:9';
     const camera = options?.cameraDirection
       ? LocationContinuityService.normalizeCameraPerspective(options.cameraDirection)
@@ -191,54 +257,119 @@ export class ScenePromptV2Service {
 
     const aspectClause = PromptSynthesizer.formatAspectRatio(aspect);
 
+    // Merge any ad-hoc composition options into resolved settings
+    const baseResolved = spec.resolvedVisualSettings || VisualStylesService.resolveEffectiveVisualSettings({
+      projectSettings: visualBible.projectVisualSettings,
+      sceneOverrides: spec.visualOverrides,
+      aspectRatio: aspect,
+    });
+
+    const overridesFromOptions: Partial<SceneVisualOverrides> = {};
+    if (options?.visualStyle) overridesFromOptions.visualStyle = options.visualStyle as any;
+    if (options?.styleIntensity) overridesFromOptions.styleIntensity = options.styleIntensity;
+    if (options?.colorPalette) overridesFromOptions.colorPalette = options.colorPalette;
+    if (options?.customColorPalette) overridesFromOptions.customColorPalette = options.customColorPalette;
+    if (options?.mood) overridesFromOptions.mood = options.mood;
+    if (options?.customMood) overridesFromOptions.customMood = options.customMood;
+    if (options?.lighting) overridesFromOptions.lighting = options.lighting;
+    if (options?.customLighting) overridesFromOptions.customLighting = options.customLighting;
+    if (options?.backgroundComplexity) overridesFromOptions.backgroundComplexity = options.backgroundComplexity;
+    if (options?.characterSafeArea) overridesFromOptions.characterSafeArea = options.characterSafeArea;
+    if (options?.customStagingArea) overridesFromOptions.customStagingArea = options.customStagingArea;
+    if (options?.customInstructions) overridesFromOptions.customInstructions = options.customInstructions;
+
+    const resolved = (Object.keys(overridesFromOptions).length > 0)
+      ? VisualStylesService.resolveEffectiveVisualSettings({
+          projectSettings: visualBible.projectVisualSettings,
+          sceneOverrides: {
+            ...spec.visualOverrides,
+            ...overridesFromOptions,
+          },
+          inferredMood: baseResolved.mood,
+          aspectRatio: aspect,
+        })
+      : baseResolved;
+
     const parts: string[] = [];
 
-    // 1. Art Direction & Technique
-    parts.push(`${art.style}.`);
-    parts.push(`${art.renderingTechnique}.`);
+    // SECTION 1: Project Visual Style
+    parts.push(`${resolved.visualStyle.name} visual style. ${resolved.visualStyle.rendering}. ${resolved.visualStyle.texture}.`);
 
-    // 2. Location & Permanent Anchors
+    // SECTION 2: Style Intensity
+    parts.push(`${VisualStylesService.getIntensityInstruction(resolved.visualStyle, resolved.styleIntensity)}.`);
+
+    // SECTION 3: Scene Context
+    parts.push(`Storybook environment setting for "${spec.sceneTitle}".`);
+    if (spec.visualDescription && spec.visualDescription.length > 5) {
+      parts.push(`${spec.visualDescription}.`);
+    }
+
+    // SECTION 4: Environment & Location
     parts.push(`Environment setting: ${spec.locationName}.`);
+    if (spec.locationIdentity) {
+      parts.push(`${spec.locationIdentity}.`);
+    }
     if (spec.permanentAnchors && spec.permanentAnchors.length > 0) {
       parts.push(`Permanent landscape features: ${spec.permanentAnchors.join(', ')}.`);
     }
 
-    // 3. Scene Environment Details & Landmarks
-    if (spec.environmentalObjects && spec.environmentalObjects.length > 0) {
-      parts.push(`Key landmarks: ${spec.environmentalObjects.join(', ')}.`);
-    }
-    if (spec.visualDescription && spec.visualDescription.length > 8) {
-      parts.push(`${spec.visualDescription}.`);
-    }
-
-    // 4. Dynamic Time of Day, Weather & Lighting
+    // SECTION 5: Dynamic Time of Day, Weather & Season
     const todLabel = spec.timeOfDay.toLowerCase().replace('_', ' ');
     const weatherLabel = spec.weather.toLowerCase();
     parts.push(`Atmosphere: ${todLabel} with ${weatherLabel} weather.`);
-    parts.push(`${spec.lighting}.`);
-    parts.push(`Color palette: ${art.colorPalette}.`);
 
-    // 5. Environmental Changes
-    if (spec.environmentalChanges && spec.environmentalChanges.length > 0 && !spec.environmentalChanges[0].includes('Continuous')) {
-      parts.push(`${spec.environmentalChanges.join('. ')}.`);
-    }
+    // SECTION 6: Mood & Emotional Tone
+    parts.push(`${VisualStylesService.getMoodInstruction(resolved.mood, resolved.customMood)}.`);
 
-    // 6. Camera Perspective & Composition Staging
+    // SECTION 7: Lighting
+    const lightingInstruction = resolved.isLightingOverridden
+      ? VisualStylesService.getLightingInstruction(resolved.lighting, resolved.customLighting)
+      : spec.lighting;
+    parts.push(`${lightingInstruction}.`);
+
+    // SECTION 8: Color Palette
+    parts.push(`${VisualStylesService.getColorPaletteInstruction(resolved.colorPalette, resolved.customColorPalette)}.`);
+
+    // SECTION 9: Camera Perspective & Framing
     parts.push(`${camera}.`);
     parts.push(`${aspectClause}.`);
+
+    // SECTION 10: Layered Composition
     parts.push(`Foreground: ${spec.composition.foreground}.`);
     parts.push(`Background horizon: ${spec.composition.background}.`);
 
-    // 7. Character Placement Clearing Guarantee
-    parts.push(`Composition staging: ${spec.composition.clearingDescription}`);
+    // SECTION 11: Character-Safe Staging
+    const stagingInstruction = VisualStylesService.getCharacterSafeAreaInstruction(
+      resolved.characterSafeArea,
+      resolved.customStagingArea
+    );
+    parts.push(`${stagingInstruction}`);
     parts.push(`Open foreground and middleground space strictly reserved for separately animated 2D vector characters.`);
 
-    // 8. Strict Environment-Only Negative Constraints
-    parts.push(`Environment plate only.`);
-    parts.push(visualBible.exclusionRules.negativePrompt);
+    // SECTION 12: Environment Details & Complexity
+    parts.push(`${VisualStylesService.getComplexityInstruction(resolved.backgroundComplexity)}`);
+    if (spec.environmentalObjects && spec.environmentalObjects.length > 0) {
+      parts.push(`Key landmarks: ${spec.environmentalObjects.join(', ')}.`);
+    }
 
-    // 9. Aspect Ratio Parameter
+    // SECTION 13: Continuity Instructions
+    if (spec.continuityInstructions && spec.continuityInstructions.length > 0) {
+      parts.push(`${spec.continuityInstructions.join('. ')}.`);
+    }
+    if (spec.environmentalChanges && spec.environmentalChanges.length > 0 && !spec.environmentalChanges[0].includes('Continuous')) {
+      parts.push(`${spec.environmentalChanges.join('. ')}.`);
+    }
+    if (resolved.customInstructions) {
+      parts.push(`${resolved.customInstructions}.`);
+    }
+
+    // SECTION 14: Output Format & Aspect Ratio
+    parts.push(`Format: Single environment-only background plate in ${aspect} aspect ratio.`);
     parts.push(`--ar ${aspect}`);
+
+    // SECTION 15: Strict Environment-Only Negative Constraints
+    parts.push(`Environment plate only! Empty scenic background plate.`);
+    parts.push(visualBible.exclusionRules?.negativePrompt || DEFAULT_EXCLUSION_RULES.negativePrompt);
 
     // Join and format clean sentence casing
     let prompt = parts.join(' ').replace(/\s+/g, ' ').replace(/\.{2,}/g, '.').trim();
@@ -265,8 +396,9 @@ export class ScenePromptV2Service {
     // Isolate the positive scenic description from negative exclusions and clearance directives
     const positivePart = clean
       .replace(/Environment plate only[\s\S]*/i, '')
-      .replace(/Open (?:foreground and )?middleground space strictly reserved[\s\S]*/i, '')
-      .replace(/Composition staging:[\s\S]*?(?=\.|$)/i, '')
+      .replace(/Open [\s\S]*?strictly reserved[\s\S]*/i, '')
+      .replace(/(?:Character-safe staging|Composition staging):[\s\S]*?(?=\.|$)/gi, '')
+      .replace(/\b(?:children's|child's)\b/gi, '')
       .toLowerCase();
 
     // Check for character presence in the scenic description

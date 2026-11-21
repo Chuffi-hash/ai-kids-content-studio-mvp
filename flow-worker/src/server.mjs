@@ -360,6 +360,96 @@ const server = http.createServer(async (request, response) => {
       return;
     }
 
+    if (request.method === "GET" && pathname === "/session/tabs") {
+      const tabs = worker.getFlowPages().map((t) => ({
+        role: t.role,
+        isClosed: t.isClosed,
+        metadata: t.metadata,
+        url: !t.isClosed && typeof t.page.url === "function" ? t.page.url() : null,
+      }));
+      sendJson(response, 200, { success: true, tabs });
+      return;
+    }
+
+    if (request.method === "POST" && pathname === "/session/tabs/ensure") {
+      const body = await readJson(request);
+      const role = body.role || "background";
+      const page = await worker.ensureFlowPage(role, body.projectId, body.projectUrl);
+      const metadata = worker.getFlowPageMetadata(page);
+      sendJson(response, 200, {
+        success: true,
+        role,
+        url: typeof page.url === "function" ? page.url() : null,
+        metadata,
+      });
+      return;
+    }
+
+    if (request.method === "POST" && pathname === "/session/tabs/navigate") {
+      const body = await readJson(request);
+      const role = body.role || "background";
+      const page = await worker.ensureFlowPage(role, body.projectId, body.url);
+      if (body.url) {
+        await page.goto(body.url, { waitUntil: "domcontentloaded", timeout: 60000 });
+        worker.updateFlowPageRouteMetadata(page);
+      }
+      sendJson(response, 200, {
+        success: true,
+        role,
+        url: typeof page.url === "function" ? page.url() : null,
+        metadata: worker.getFlowPageMetadata(page),
+      });
+      return;
+    }
+
+    if (request.method === "POST" && pathname === "/character/prepare") {
+      const body = await readJson(request);
+      if (!worker.context) {
+        sendJson(response, 409, { success: false, message: "Open the visible Flow browser session first." });
+        return;
+      }
+      const result = await worker.navigateToCharacterTab(body.projectId);
+      sendJson(response, 200, { success: true, ...result });
+      return;
+    }
+
+    if (request.method === "POST" && pathname === "/character/open") {
+      const body = await readJson(request);
+      if (!worker.context) {
+        sendJson(response, 409, { success: false, message: "Open the visible Flow browser session first." });
+        return;
+      }
+      const result = await worker.openGoogleFlowCharacterEditor({
+        projectId: body.projectId,
+        characterId: body.characterId,
+        characterUrl: body.characterUrl,
+      });
+      sendJson(response, 200, { success: true, ...result });
+      return;
+    }
+
+    if (request.method === "GET" && pathname === "/character/status") {
+      const charPage = worker.getFlowPage("character");
+      if (!charPage || (typeof charPage.isClosed === "function" && charPage.isClosed())) {
+        sendJson(response, 200, {
+          success: true,
+          open: false,
+          message: "Character tab is not open.",
+        });
+        return;
+      }
+      const diagnostics = await worker.inspectFlowCharacterWorkspace(charPage);
+      sendJson(response, 200, {
+        success: true,
+        open: true,
+        url: typeof charPage.url === "function" ? charPage.url() : "",
+        routeType: worker.getFlowPageMetadata(charPage)?.currentRouteType || "unknown",
+        metadata: worker.getFlowPageMetadata(charPage),
+        diagnostics,
+      });
+      return;
+    }
+
     if (request.method === "GET" && pathname === "/diagnostics/inspect") {
       const inspection = await worker.inspectFlowPage();
       sendJson(response, 200, { success: true, inspection });
@@ -423,8 +513,14 @@ const server = http.createServer(async (request, response) => {
 
     if (request.method === "POST" && pathname === "/jobs") {
       const body = await readJson(request);
-      if (!worker.context || !worker.page || worker.page.isClosed()) {
+      if (!worker.context) {
         sendJson(response, 409, { success: false, message: "Open the visible Flow browser session first." });
+        return;
+      }
+      const role = body.pageRole || (body.targetType === "character" ? "character" : "background");
+      const targetPage = worker.getFlowPage(role) || worker.page;
+      if (!targetPage || (typeof targetPage.isClosed === "function" && targetPage.isClosed())) {
+        sendJson(response, 409, { success: false, message: `The ${role} Flow browser page is not open.` });
         return;
       }
       if (body.cancelPrevious) {

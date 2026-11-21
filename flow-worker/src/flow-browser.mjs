@@ -36,6 +36,91 @@ export {
   inspectGoogleFlowActiveImage,
 };
 
+export const FLOW_TAB_ROLES = Object.freeze({
+  BACKGROUND: "background",
+  CHARACTER: "character",
+});
+
+export const FLOW_TAB_METADATA_KEY = "ai-kids-content-studio.flow-tab-metadata";
+
+export function extractGoogleFlowCharacterReference(rawUrl) {
+  if (!rawUrl || typeof rawUrl !== "string") return null;
+  try {
+    const url = new URL(rawUrl.trim());
+    if (
+      url.hostname !== "flow.google.com" &&
+      url.hostname !== "labs.google"
+    ) {
+      return null;
+    }
+
+    let pathname = url.pathname;
+    if (pathname.startsWith("/flow/")) {
+      pathname = pathname.substring(5);
+    }
+
+    // Explicitly reject edit routes (/project/{projectId}/edit/...)
+    if (pathname.includes("/edit/")) {
+      return null;
+    }
+
+    // Character create route: /project/{projectId}/character or /project/{projectId}/character/
+    const createMatch = pathname.match(/^\/project\/([^/]+)\/character\/?$/);
+    if (createMatch) {
+      const projectId = createMatch[1];
+      return {
+        projectId,
+        characterId: null,
+        routeType: "character-create",
+        url: `https://flow.google.com/project/${projectId}/character`,
+      };
+    }
+
+    // Character editor route: /project/{projectId}/character/{characterId} or /project/{projectId}/character/{characterId}/
+    const editorMatch = pathname.match(/^\/project\/([^/]+)\/character\/([^/]+)\/?$/);
+    if (editorMatch) {
+      const projectId = editorMatch[1];
+      const characterId = editorMatch[2];
+      return {
+        projectId,
+        characterId,
+        routeType: "character-editor",
+        url: `https://flow.google.com/project/${projectId}/character/${characterId}`,
+      };
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export function detectFlowRouteType(rawUrl) {
+  if (!rawUrl || typeof rawUrl !== "string") return "unknown";
+  try {
+    const url = new URL(rawUrl.trim());
+    if (url.hostname !== "flow.google.com" && url.hostname !== "labs.google") {
+      return "unknown";
+    }
+
+    const charRef = extractGoogleFlowCharacterReference(rawUrl);
+    if (charRef) return charRef.routeType;
+
+    const editorRef = extractGoogleFlowEditorReference(rawUrl);
+    if (editorRef) return "image-editor";
+
+    let pathname = url.pathname;
+    if (pathname.startsWith("/flow/")) pathname = pathname.substring(5);
+
+    if (pathname.match(/^\/project\/[^/]+\/?$/)) {
+      return "project";
+    }
+    return "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
 const VALID_ASSET_TYPES = new Set([
   "main",
   "master_reference",
@@ -166,7 +251,10 @@ export function isValidFlowDownloadSource(page, activePage, context) {
 export class FlowBrowserWorker {
   constructor() {
     this.context = null;
-    this.page = null;
+    this._page = null;
+    this.pagesByRole = new Map();
+    this.pageMetadata = new WeakMap();
+    this.activeJobsByRole = new Map();
     this.jobs = new Map();
     this.activeJobId = null;
     this.profileDir = getDefaultFlowProfileDir();
@@ -180,6 +268,461 @@ export class FlowBrowserWorker {
     this.promptSelector = process.env.FLOW_PROMPT_SELECTOR || "";
     this.downloadInProgress = false;
     this.attachedPages = new WeakSet();
+  }
+
+  get page() {
+    const bgPage = this.getFlowPage(FLOW_TAB_ROLES.BACKGROUND);
+    if (bgPage && (typeof bgPage.isClosed !== "function" || !bgPage.isClosed())) {
+      return bgPage;
+    }
+    for (const p of this.pagesByRole.values()) {
+      if (p && (typeof p.isClosed !== "function" || !p.isClosed())) {
+        return p;
+      }
+    }
+    if (this._page && (typeof this._page.isClosed !== "function" || !this._page.isClosed())) {
+      return this._page;
+    }
+    return null;
+  }
+
+  set page(p) {
+    this._page = p;
+    if (p) {
+      if (!this.pagesByRole.has(FLOW_TAB_ROLES.BACKGROUND)) {
+        this.registerFlowPage(p, { role: FLOW_TAB_ROLES.BACKGROUND });
+      }
+    }
+  }
+
+  getActiveJob(role = FLOW_TAB_ROLES.BACKGROUND) {
+    const jobId = this.activeJobsByRole.get(role) || (role === FLOW_TAB_ROLES.BACKGROUND ? this.activeJobId : null);
+    return jobId ? this.jobs.get(jobId) || null : null;
+  }
+
+  setActiveJob(job, role = null) {
+    const assignedRole = role || job?.pageRole || (job?.targetType === "character" ? FLOW_TAB_ROLES.CHARACTER : FLOW_TAB_ROLES.BACKGROUND);
+    if (job) {
+      this.activeJobsByRole.set(assignedRole, job.id);
+      if (assignedRole === FLOW_TAB_ROLES.BACKGROUND) {
+        this.activeJobId = job.id;
+      }
+    } else if (assignedRole) {
+      this.activeJobsByRole.set(assignedRole, null);
+      if (assignedRole === FLOW_TAB_ROLES.BACKGROUND) {
+        this.activeJobId = null;
+      }
+    }
+  }
+
+  registerFlowPage(page, metadata = {}) {
+    if (!page) return null;
+    const existing = this.pageMetadata.get(page);
+    const role = metadata.role || existing?.role || FLOW_TAB_ROLES.BACKGROUND;
+    const tabId = metadata.tabId || existing?.tabId || randomUUID();
+    const projectId = metadata.projectId || existing?.projectId || null;
+    const purpose = metadata.purpose || existing?.purpose || (role === FLOW_TAB_ROLES.CHARACTER ? "character-generation" : "scene-background");
+    const currentUrl = typeof page.url === "function" ? page.url() : String(page.url || "");
+    const currentRouteType = detectFlowRouteType(currentUrl);
+
+    const record = {
+      tabId,
+      role,
+      projectId,
+      purpose,
+      createdAt: existing?.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      currentRouteType,
+      currentUrl,
+    };
+
+    if (currentRouteType === "character-create" || currentRouteType === "character-editor") {
+      record.characterReference = extractGoogleFlowCharacterReference(currentUrl);
+    }
+    if (currentRouteType === "image-editor") {
+      record.editorReference = extractGoogleFlowEditorReference(currentUrl);
+    }
+
+    this.pageMetadata.set(page, record);
+    this.pagesByRole.set(role, page);
+    this.writeTabMarkerToSessionStorage(page, record).catch(() => {});
+    return record;
+  }
+
+  async writeTabMarkerToSessionStorage(page, meta) {
+    if (!page || (typeof page.isClosed === "function" && page.isClosed())) return;
+    try {
+      if (typeof page.evaluate === "function") {
+        const payload = JSON.stringify({
+          tabId: meta.tabId,
+          role: meta.role,
+          projectId: meta.projectId,
+          purpose: meta.purpose,
+          updatedAt: meta.updatedAt,
+        });
+        await page.evaluate(
+          ({ key, val }) => {
+            try {
+              window.sessionStorage.setItem(key, val);
+            } catch {}
+          },
+          { key: FLOW_TAB_METADATA_KEY, val: payload },
+        );
+      }
+    } catch {
+      // Non-blocking
+    }
+  }
+
+  async readTabMarkerFromSessionStorage(page) {
+    if (!page || (typeof page.isClosed === "function" && page.isClosed())) return null;
+    try {
+      if (typeof page.evaluate === "function") {
+        const raw = await page.evaluate((key) => {
+          try {
+            return window.sessionStorage.getItem(key);
+          } catch {
+            return null;
+          }
+        }, FLOW_TAB_METADATA_KEY);
+        if (raw) {
+          return JSON.parse(raw);
+        }
+      }
+    } catch {
+      return null;
+    }
+    return null;
+  }
+
+  getFlowPage(role = FLOW_TAB_ROLES.BACKGROUND) {
+    const page = this.pagesByRole.get(role);
+    if (!page) return null;
+    if (typeof page.isClosed === "function" && page.isClosed()) {
+      this.pagesByRole.delete(role);
+      return null;
+    }
+    return page;
+  }
+
+  getFlowPageMetadata(page) {
+    if (!page) return null;
+    return this.pageMetadata.get(page) || null;
+  }
+
+  getFlowPages() {
+    const result = [];
+    for (const [role, page] of this.pagesByRole.entries()) {
+      const isClosed = typeof page.isClosed === "function" ? page.isClosed() : false;
+      const metadata = this.pageMetadata.get(page) || null;
+      result.push({
+        role,
+        page,
+        isClosed,
+        metadata,
+      });
+    }
+    return result;
+  }
+
+  setFlowPageRole(page, role, projectId = null, purpose = null) {
+    if (!page) throw new Error("A valid page is required to assign role.");
+    if (role !== FLOW_TAB_ROLES.BACKGROUND && role !== FLOW_TAB_ROLES.CHARACTER) {
+      throw new Error(`Invalid Flow page role: ${role}. Expected "background" or "character".`);
+    }
+    return this.registerFlowPage(page, { role, projectId, purpose });
+  }
+
+  updateFlowPageRouteMetadata(page) {
+    if (!page || (typeof page.isClosed === "function" && page.isClosed())) return null;
+    const meta = this.pageMetadata.get(page);
+    const currentUrl = typeof page.url === "function" ? page.url() : String(page.url || "");
+    const currentRouteType = detectFlowRouteType(currentUrl);
+
+    if (meta) {
+      meta.currentUrl = currentUrl;
+      meta.currentRouteType = currentRouteType;
+      meta.updatedAt = new Date().toISOString();
+      if (currentRouteType === "character-create" || currentRouteType === "character-editor") {
+        meta.characterReference = extractGoogleFlowCharacterReference(currentUrl);
+      } else {
+        delete meta.characterReference;
+      }
+      if (currentRouteType === "image-editor") {
+        meta.editorReference = extractGoogleFlowEditorReference(currentUrl);
+      } else {
+        delete meta.editorReference;
+      }
+      return meta;
+    }
+    return null;
+  }
+
+  getPageForJob(job) {
+    if (!job) return this.getFlowPage(FLOW_TAB_ROLES.BACKGROUND);
+    const role = job.pageRole || (job.targetType === "character" ? FLOW_TAB_ROLES.CHARACTER : FLOW_TAB_ROLES.BACKGROUND);
+    return this.getFlowPage(role);
+  }
+
+  async ensureFlowPage(role = FLOW_TAB_ROLES.BACKGROUND, projectId = null, projectUrl = null) {
+    if (role !== FLOW_TAB_ROLES.BACKGROUND && role !== FLOW_TAB_ROLES.CHARACTER) {
+      throw new Error(`Invalid tab role "${role}".`);
+    }
+
+    let page = this.getFlowPage(role);
+    if (page && (typeof page.isClosed !== "function" || !page.isClosed())) {
+      if (projectUrl) {
+        const cur = typeof page.url === "function" ? page.url() : "";
+        if (cur !== projectUrl && isFlowUrl(cur)) {
+          await page.goto(projectUrl, { waitUntil: "domcontentloaded", timeout: 60000 });
+        }
+      }
+      this.updateFlowPageRouteMetadata(page);
+      return page;
+    }
+
+    if (!this.context) {
+      throw new Error("Browser session is not open. Launch the persistent browser first.");
+    }
+
+    const contextPages = this.context.pages ? this.context.pages() : [];
+    for (const candidate of contextPages) {
+      if (typeof candidate.isClosed === "function" && candidate.isClosed()) continue;
+      const marker = await this.readTabMarkerFromSessionStorage(candidate);
+      if (marker && marker.role === role) {
+        page = candidate;
+        this.attachPage(page);
+        this.registerFlowPage(page, {
+          role,
+          tabId: marker.tabId,
+          projectId: projectId || marker.projectId,
+          purpose: marker.purpose,
+        });
+        break;
+      }
+    }
+
+    if (!page) {
+      const unassigned = contextPages.find((p) => {
+        if (typeof p.isClosed === "function" && p.isClosed()) return false;
+        const m = this.pageMetadata.get(p);
+        return !m || !m.role;
+      });
+
+      if (unassigned) {
+        page = unassigned;
+      } else {
+        page = await this.context.newPage();
+      }
+      this.attachPage(page);
+      this.registerFlowPage(page, {
+        role,
+        projectId,
+        purpose: role === FLOW_TAB_ROLES.CHARACTER ? "character-generation" : "scene-background",
+      });
+    }
+
+    const targetUrl = projectUrl || (projectId ? `https://flow.google.com/project/${projectId}` : FLOW_HOME_URL);
+    const currentUrl = typeof page.url === "function" ? page.url() : "";
+    if (!isFlowUrl(currentUrl) || (targetUrl && currentUrl !== targetUrl && targetUrl !== FLOW_HOME_URL)) {
+      await page.goto(targetUrl, {
+        waitUntil: "domcontentloaded",
+        timeout: 60000,
+      });
+    }
+
+    this.updateFlowPageRouteMetadata(page);
+    return page;
+  }
+
+  async navigateToCharacterTab(projectId = null) {
+    const charPage = await this.ensureFlowPage(FLOW_TAB_ROLES.CHARACTER, projectId);
+    if (typeof charPage.bringToFront === "function") {
+      await charPage.bringToFront().catch(() => {});
+    }
+
+    const currentUrl = typeof charPage.url === "function" ? charPage.url() : "";
+    const charRef = extractGoogleFlowCharacterReference(currentUrl);
+    if (charRef && (!projectId || charRef.projectId === projectId)) {
+      this.updateFlowPageRouteMetadata(charPage);
+      return {
+        success: true,
+        page: charPage,
+        url: currentUrl,
+        routeType: charRef.routeType,
+        diagnostics: await this.inspectFlowCharacterWorkspace(charPage),
+      };
+    }
+
+    let clicked = false;
+    try {
+      if (typeof charPage.getByRole === "function") {
+        const nav = charPage.getByRole("navigation", { name: /Project navigation/i });
+        let btn = nav.getByRole("button", { name: "Characters", exact: true });
+        if ((await btn.count()) === 0) {
+          btn = charPage.getByRole("button", { name: "Characters", exact: true });
+        }
+        if ((await btn.count()) > 0) {
+          await btn.first().click({ timeout: 10000 });
+          clicked = true;
+        }
+      }
+    } catch {}
+
+    if (!clicked && typeof charPage.locator === "function") {
+      const fallbackBtn = charPage.locator('button:has-text("Characters"), [aria-label="Characters"]').first();
+      if ((await fallbackBtn.count()) > 0) {
+        await fallbackBtn.click({ timeout: 10000 });
+        clicked = true;
+      }
+    }
+
+    if (!clicked && projectId) {
+      const directUrl = `https://flow.google.com/project/${projectId}/character`;
+      await charPage.goto(directUrl, { waitUntil: "domcontentloaded", timeout: 60000 });
+    }
+
+    try {
+      if (typeof charPage.waitForURL === "function") {
+        await charPage.waitForURL(/\/character/i, { timeout: 15000 });
+      }
+    } catch {}
+
+    this.updateFlowPageRouteMetadata(charPage);
+    const diagnostics = await this.inspectFlowCharacterWorkspace(charPage);
+
+    return {
+      success: true,
+      page: charPage,
+      url: charPage.url ? charPage.url() : "",
+      routeType: detectFlowRouteType(charPage.url ? charPage.url() : ""),
+      diagnostics,
+    };
+  }
+
+  async openGoogleFlowCharacterEditor({ projectId, characterId, characterUrl }) {
+    let resolvedProjectId = projectId;
+    let resolvedCharacterId = characterId;
+    let targetUrl = characterUrl;
+
+    if (characterUrl) {
+      const parsed = extractGoogleFlowCharacterReference(characterUrl);
+      if (parsed) {
+        resolvedProjectId = parsed.projectId;
+        resolvedCharacterId = parsed.characterId;
+        targetUrl = parsed.url;
+      }
+    } else if (projectId && characterId) {
+      targetUrl = `https://flow.google.com/project/${projectId}/character/${characterId}`;
+    } else if (projectId) {
+      targetUrl = `https://flow.google.com/project/${projectId}/character`;
+    } else {
+      throw new Error("Either characterUrl or (projectId + characterId) must be provided.");
+    }
+
+    const charPage = await this.ensureFlowPage(FLOW_TAB_ROLES.CHARACTER, resolvedProjectId, targetUrl);
+    if (typeof charPage.bringToFront === "function") {
+      await charPage.bringToFront().catch(() => {});
+    }
+
+    const cur = typeof charPage.url === "function" ? charPage.url() : "";
+    if (cur !== targetUrl) {
+      await charPage.goto(targetUrl, {
+        waitUntil: "domcontentloaded",
+        timeout: 60000,
+      });
+    }
+
+    this.updateFlowPageRouteMetadata(charPage);
+    const diagnostics = await this.inspectFlowCharacterWorkspace(charPage);
+
+    return {
+      success: true,
+      page: charPage,
+      url: charPage.url ? charPage.url() : "",
+      projectId: resolvedProjectId,
+      characterId: resolvedCharacterId,
+      routeType: detectFlowRouteType(charPage.url ? charPage.url() : ""),
+      diagnostics,
+    };
+  }
+
+  async inspectFlowCharacterWorkspace(page) {
+    if (!page || (typeof page.isClosed === "function" && page.isClosed())) {
+      return { available: false, reason: "Page is closed or missing." };
+    }
+
+    const diagnostics = {
+      available: true,
+      url: typeof page.url === "function" ? page.url() : "",
+      routeType: detectFlowRouteType(typeof page.url === "function" ? page.url() : ""),
+      promptTextbox: { found: false, count: 0 },
+      formatButtons: { found: false, count: 0 },
+      modelSelector: { found: false, count: 0 },
+      generateButton: { found: false, count: 0 },
+      navigation: { charactersButtonFound: false },
+    };
+
+    try {
+      if (typeof page.getByPlaceholder === "function") {
+        const descInput = page.getByPlaceholder(/Describe your character/i);
+        const count = await descInput.count().catch(() => 0);
+        if (count > 0) {
+          diagnostics.promptTextbox = { found: true, count, selector: "placeholder:Describe your character" };
+        }
+      }
+
+      if (!diagnostics.promptTextbox.found && typeof page.getByRole === "function") {
+        const textbox = page.getByRole("textbox", { name: /Describe your character/i });
+        const count = await textbox.count().catch(() => 0);
+        if (count > 0) {
+          diagnostics.promptTextbox = { found: true, count, selector: "role:textbox[Describe your character]" };
+        }
+      }
+
+      if (!diagnostics.promptTextbox.found && typeof page.locator === "function") {
+        const loc = page.locator('textarea, [contenteditable="true"], input[placeholder*="Describe" i]');
+        const count = await loc.count().catch(() => 0);
+        if (count > 0) {
+          diagnostics.promptTextbox = { found: true, count, selector: "fallback:textarea" };
+        }
+      }
+
+      if (typeof page.getByRole === "function") {
+        const formatBtn = page.getByRole("button", { name: /Format/i });
+        const count = await formatBtn.count().catch(() => 0);
+        if (count > 0) {
+          diagnostics.formatButtons = { found: true, count };
+        }
+      }
+
+      if (typeof page.getByRole === "function") {
+        const modelBtn = page.getByRole("button", { name: /Select model family|Model/i });
+        const count = await modelBtn.count().catch(() => 0);
+        if (count > 0) {
+          diagnostics.modelSelector = { found: true, count };
+        }
+      }
+
+      if (typeof page.getByRole === "function") {
+        const genBtn = page.getByRole("button", { name: /Start generation|Generate/i });
+        const count = await genBtn.count().catch(() => 0);
+        if (count > 0) {
+          diagnostics.generateButton = { found: true, count };
+        }
+      }
+
+      if (typeof page.getByRole === "function") {
+        const nav = page.getByRole("navigation", { name: /Project navigation/i });
+        const navCharBtn = nav.getByRole("button", { name: "Characters", exact: true });
+        const count = await navCharBtn.count().catch(() => 0);
+        diagnostics.navigation.charactersButtonFound = count > 0;
+      }
+    } catch (err) {
+      diagnostics.error = err.message;
+    }
+
+    return diagnostics;
   }
 
   configure(config = {}) {
@@ -287,55 +830,122 @@ export class FlowBrowserWorker {
       this.context.on("page", (page) => this.attachPage(page));
     }
 
-    // A user may close the Flow tab without closing the browser context.
-    // Recover an existing tab or create a new one, and attach handlers exactly once.
-    if (!this.page || this.page.isClosed()) {
-      const pages = this.context.pages();
-      this.page =
-        pages.find((candidate) => isFlowUrl(candidate.url())) ||
-        pages[0] ||
-        (await this.context.newPage());
-      this.attachPage(this.page);
-    }
-
+    const projectId = extractProjectIdFromFlowUrl(projectUrl) || null;
     const target = assertAllowedFlowUrl(projectUrl || FLOW_HOME_URL);
 
+    // 1. Scan context pages and recover any role markers from sessionStorage
+    const existingPages = this.context.pages ? this.context.pages() : [];
+    for (const p of existingPages) {
+      this.attachPage(p);
+      const marker = await this.readTabMarkerFromSessionStorage(p);
+      if (marker && marker.role) {
+        this.registerFlowPage(p, marker);
+      }
+    }
+
+    // 2. Ensure Background tab exists and is navigated
+    let bgPage = this.getFlowPage(FLOW_TAB_ROLES.BACKGROUND);
+    if (!bgPage) {
+      const candidates = (this.context.pages ? this.context.pages() : []).filter(
+        (p) => (!p.isClosed || !p.isClosed()) && !this.pageMetadata.get(p)?.role,
+      );
+      bgPage =
+        candidates.find((candidate) => isFlowUrl(candidate.url())) ||
+        candidates[0] ||
+        (await this.context.newPage());
+      this.attachPage(bgPage);
+      this.registerFlowPage(bgPage, {
+        role: FLOW_TAB_ROLES.BACKGROUND,
+        projectId,
+        purpose: "scene-background",
+      });
+    }
+
     if (
-      !isFlowUrl(this.page.url()) ||
-      (projectUrl && this.page.url() !== target)
+      !isFlowUrl(bgPage.url()) ||
+      (projectUrl && bgPage.url() !== target)
     ) {
-      await this.page.goto(target, {
+      await bgPage.goto(target, {
         waitUntil: "domcontentloaded",
         timeout: 60000,
       });
     }
+    this.updateFlowPageRouteMetadata(bgPage);
+
+    // 3. Ensure Character tab exists and is navigated
+    let charPage = this.getFlowPage(FLOW_TAB_ROLES.CHARACTER);
+    if (!charPage) {
+      const remainingCandidates = (this.context.pages ? this.context.pages() : []).filter(
+        (p) => (!p.isClosed || !p.isClosed()) && p !== bgPage && !this.pageMetadata.get(p)?.role,
+      );
+      charPage =
+        remainingCandidates.find((candidate) => isFlowUrl(candidate.url())) ||
+        remainingCandidates[0] ||
+        (await this.context.newPage());
+      this.attachPage(charPage);
+      this.registerFlowPage(charPage, {
+        role: FLOW_TAB_ROLES.CHARACTER,
+        projectId,
+        purpose: "character-generation",
+      });
+    }
+
+    const charTarget = projectId
+      ? `https://flow.google.com/project/${projectId}`
+      : target;
+    const charUrl = typeof charPage.url === "function" ? charPage.url() : "";
+    if (
+      !isFlowUrl(charUrl) ||
+      (projectId && !charUrl.includes(projectId) && !charUrl.includes("/character"))
+    ) {
+      await charPage.goto(charTarget, {
+        waitUntil: "domcontentloaded",
+        timeout: 60000,
+      });
+    }
+    this.updateFlowPageRouteMetadata(charPage);
 
     return this.getSessionStatus();
   }
 
   attachPage(page) {
-    if (this.attachedPages.has(page)) return;
+    if (!page || this.attachedPages.has(page)) return;
     this.attachedPages.add(page);
 
-    if (!this.page || this.page.isClosed() || isFlowUrl(page.url())) {
-      this.page = page;
-    }
-
-    page.on("framenavigated", (frame) => {
-      if (frame === page.mainFrame() && isFlowUrl(page.url())) {
-        this.page = page;
-      }
-    });
-
-    page.on("download", (download) => {
-      this.handleDownload(download, page).catch((error) => {
-        console.error("[FlowWorker] Download handling failed:", error.message);
+    if (typeof page.on === "function") {
+      page.on("framenavigated", async (frame) => {
+        try {
+          if (typeof page.mainFrame === "function" && frame === page.mainFrame()) {
+            this.updateFlowPageRouteMetadata(page);
+            const meta = this.pageMetadata.get(page);
+            if (!meta) {
+              const marker = await this.readTabMarkerFromSessionStorage(page);
+              if (marker && marker.role) {
+                this.registerFlowPage(page, marker);
+              }
+            }
+          }
+        } catch {}
       });
-    });
 
-    page.on("close", () => {
-      if (this.page === page) this.page = null;
-    });
+      page.on("download", (download) => {
+        this.handleDownload(download, page).catch((error) => {
+          console.error("[FlowWorker] Download handling failed:", error.message);
+        });
+      });
+
+      page.on("close", () => {
+        for (const [role, mappedPage] of this.pagesByRole.entries()) {
+          if (mappedPage === page) {
+            this.pagesByRole.delete(role);
+            break;
+          }
+        }
+        if (this._page === page) {
+          this._page = null;
+        }
+      });
+    }
   }
 
   async getSessionStatus() {
@@ -349,6 +959,26 @@ export class FlowBrowserWorker {
 
     const browserChannel = this.browserChannel || "bundled-chromium";
     const configuredProfileDir = this.profileDir;
+
+    const bgPage = this.getFlowPage(FLOW_TAB_ROLES.BACKGROUND);
+    const charPage = this.getFlowPage(FLOW_TAB_ROLES.CHARACTER);
+
+    const tabs = {
+      background: {
+        open: Boolean(bgPage && (typeof bgPage.isClosed !== "function" || !bgPage.isClosed())),
+        url: bgPage && typeof bgPage.url === "function" ? bgPage.url() : null,
+        routeType: bgPage ? detectFlowRouteType(typeof bgPage.url === "function" ? bgPage.url() : "") : null,
+        activeJobId: this.activeJobsByRole.get(FLOW_TAB_ROLES.BACKGROUND) || null,
+        metadata: bgPage ? this.getFlowPageMetadata(bgPage) : null,
+      },
+      character: {
+        open: Boolean(charPage && (typeof charPage.isClosed !== "function" || !charPage.isClosed())),
+        url: charPage && typeof charPage.url === "function" ? charPage.url() : null,
+        routeType: charPage ? detectFlowRouteType(typeof charPage.url === "function" ? charPage.url() : "") : null,
+        activeJobId: this.activeJobsByRole.get(FLOW_TAB_ROLES.CHARACTER) || null,
+        metadata: charPage ? this.getFlowPageMetadata(charPage) : null,
+      },
+    };
 
     if (!this.context) {
       return {
@@ -369,6 +999,8 @@ export class FlowBrowserWorker {
         configuredProfileDir,
         profileDirExists,
         ownsActiveBrowser: false,
+        tabs,
+        pageRoles: Array.from(this.pagesByRole.keys()),
         diagnostics: {
           browserChannel,
           configuredProfileDir,
@@ -404,6 +1036,8 @@ export class FlowBrowserWorker {
         configuredProfileDir,
         profileDirExists,
         ownsActiveBrowser: true,
+        tabs,
+        pageRoles: Array.from(this.pagesByRole.keys()),
         diagnostics: {
           browserChannel,
           configuredProfileDir,
@@ -570,15 +1204,19 @@ export class FlowBrowserWorker {
       configuredProfileDir,
       profileDirExists,
       ownsActiveBrowser: true,
+      tabs,
+      pageRoles: Array.from(this.pagesByRole.keys()),
       diagnostics,
     };
   }
 
   async close() {
     if (this.context) {
-      await this.context.close();
+      await this.context.close().catch(() => {});
       this.context = null;
-      this.page = null;
+      this.pagesByRole.clear();
+      this.activeJobsByRole.clear();
+      this._page = null;
     }
 
     return this.getSessionStatus();
@@ -631,6 +1269,7 @@ export class FlowBrowserWorker {
       const job = {
         id: randomUUID(),
         targetType: "background",
+        pageRole: input.pageRole || FLOW_TAB_ROLES.BACKGROUND,
         sceneId,
         storyId,
         aspectRatio: input.aspectRatio || "16:9",
@@ -696,6 +1335,7 @@ export class FlowBrowserWorker {
     const job = {
       id: randomUUID(),
       targetType: "character",
+      pageRole: input.pageRole || FLOW_TAB_ROLES.CHARACTER,
       characterId,
       characterName,
       view,

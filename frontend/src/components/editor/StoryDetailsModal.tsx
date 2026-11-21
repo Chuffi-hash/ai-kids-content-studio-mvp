@@ -6,6 +6,10 @@ import {
   setStoryCharacters,
   fetchStoryCharacters,
   regenerateStoryContent,
+  getStoryVisualSettings,
+  updateStoryVisualSettings,
+  ProjectVisualSettings,
+  VisualStylePreset,
 } from '../../services/editor.service';
 import { CloseIcon, CheckIcon, PlusIcon, SparklesIcon, AlertTriangleIcon } from '../common/Icons';
 import { useGoogleFlowProject } from '../../hooks/useGoogleFlowProject';
@@ -48,7 +52,21 @@ export const StoryDetailsModal: React.FC<StoryDetailsModalProps> = ({
   const [isRegenerating, setIsRegenerating] = useState<boolean>(false);
   const [showRegenerateConfirm, setShowRegenerateConfirm] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'details' | 'characters' | 'flow'>('details');
+  const [activeTab, setActiveTab] = useState<'details' | 'characters' | 'flow' | 'style'>('details');
+
+  // Project Visual Settings State
+  const [projectStyle, setProjectStyle] = useState<string>(story.visualStyle || 'storybook_illustration');
+  const [projectIntensity, setProjectIntensity] = useState<'subtle' | 'balanced' | 'strong'>('balanced');
+  const [projectPalette, setProjectPalette] = useState<string>('vibrant');
+  const [projectCustomPalette, setProjectCustomPalette] = useState<string>('');
+  const [projectLighting, setProjectLighting] = useState<string>('soft_daylight');
+  const [projectCustomLighting, setProjectCustomLighting] = useState<string>('');
+  const [projectComplexity, setProjectComplexity] = useState<'simple' | 'balanced' | 'detailed'>('balanced');
+  const [projectAspectRatio, setProjectAspectRatio] = useState<'16:9' | '9:16' | '1:1' | '4:5'>('16:9');
+  const [projectCustomInstructions, setProjectCustomInstructions] = useState<string>('');
+  const [stylePresetsList, setStylePresetsList] = useState<VisualStylePreset[]>([]);
+  const [isSavingStyle, setIsSavingStyle] = useState<boolean>(false);
+  const [styleSuccessMsg, setStyleSuccessMsg] = useState<string | null>(null);
 
   // Google Flow project management hook
   const {
@@ -103,8 +121,55 @@ export const StoryDetailsModal: React.FC<StoryDetailsModalProps> = ({
           console.error('Failed to load library characters:', err);
         })
         .finally(() => setIsLoadingChars(false));
+      // Fetch project visual settings and presets
+      getStoryVisualSettings(story.storyId)
+        .then((data) => {
+          if (data.settings) {
+            if (data.settings.visualStyle) setProjectStyle(data.settings.visualStyle);
+            if (data.settings.styleIntensity) setProjectIntensity(data.settings.styleIntensity);
+            if (data.settings.colorPalette) setProjectPalette(data.settings.colorPalette);
+            if (data.settings.customColorPalette) setProjectCustomPalette(data.settings.customColorPalette);
+            if (data.settings.defaultLighting) setProjectLighting(data.settings.defaultLighting);
+            if (data.settings.customLighting) setProjectCustomLighting(data.settings.customLighting);
+            if (data.settings.backgroundComplexity) setProjectComplexity(data.settings.backgroundComplexity);
+            if (data.settings.aspectRatio) setProjectAspectRatio(data.settings.aspectRatio);
+            if (data.settings.customStyleInstructions) setProjectCustomInstructions(data.settings.customStyleInstructions);
+          }
+          if (data.presets && data.presets.length > 0) {
+            setStylePresetsList(data.presets);
+          }
+        })
+        .catch((err) => {
+          console.warn('Failed to load project visual settings:', err);
+        });
     }
   }, [isOpen, story]);
+
+  const handleSaveVisualSettings = async () => {
+    setIsSavingStyle(true);
+    setStyleSuccessMsg(null);
+    setErrorMsg(null);
+    try {
+      const updated = await updateStoryVisualSettings(story.storyId, {
+        visualStyle: projectStyle,
+        styleIntensity: projectIntensity,
+        colorPalette: projectPalette as any,
+        customColorPalette: projectCustomPalette,
+        defaultLighting: projectLighting as any,
+        customLighting: projectCustomLighting,
+        backgroundComplexity: projectComplexity,
+        aspectRatio: projectAspectRatio,
+        customStyleInstructions: projectCustomInstructions,
+      });
+      setStyleSuccessMsg('Project Visual Style saved successfully! All scenes will inherit these settings.');
+      onStoryUpdated({ visualStyle: updated.visualStyle });
+      setTimeout(() => setStyleSuccessMsg(null), 3000);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Failed to save project visual settings');
+    } finally {
+      setIsSavingStyle(false);
+    }
+  };
 
   const handleToggleCharacter = (charId: string) => {
     setLinkedCharacterIds((prev) =>
@@ -313,6 +378,13 @@ export const StoryDetailsModal: React.FC<StoryDetailsModalProps> = ({
                 Connected
               </span>
             )}
+          </button>
+          <button
+            type="button"
+            className={`ed-details-tab ${activeTab === 'style' ? 'active' : ''}`}
+            onClick={() => setActiveTab('style')}
+          >
+            🎨 Visual Style & Art Direction
           </button>
         </div>
 
@@ -700,6 +772,193 @@ export const StoryDetailsModal: React.FC<StoryDetailsModalProps> = ({
                   </div>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* TAB 4: PROJECT VISUAL STYLE */}
+          {activeTab === 'style' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '16px' }}>
+              <div>
+                <h4 style={{ fontSize: '13px', fontWeight: 700, margin: '0 0 4px 0', color: 'var(--ed-text)' }}>
+                  Project Visual Style & Aesthetic Defaults
+                </h4>
+                <p style={{ fontSize: '11px', color: 'var(--ed-text-muted)', margin: 0, lineHeight: 1.4 }}>
+                  Configure the master art direction for this story. All scenes automatically inherit these settings unless overridden on a specific scene.
+                </p>
+              </div>
+
+              {styleSuccessMsg && (
+                <div style={{ padding: '8px 12px', background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', borderRadius: '6px', fontSize: '11.5px', border: '1px solid rgba(16, 185, 129, 0.3)' }}>
+                  ✓ {styleSuccessMsg}
+                </div>
+              )}
+
+              {/* 1. Canonical Visual Style */}
+              <div className="ed-details-form-group">
+                <label className="ed-details-label">Canonical Visual Style</label>
+                <select
+                  className="ed-details-input"
+                  style={{ width: '100%' }}
+                  value={projectStyle}
+                  onChange={(e) => setProjectStyle(e.target.value)}
+                >
+                  <option value="storybook_illustration">Storybook Illustration (Classic Hand-Drawn)</option>
+                  <option value="cinematic">Cinematic (Filmic Lighting & Widescreen Depth)</option>
+                  <option value="cartoon">Cartoon (2D Animated Colorful Vector)</option>
+                  <option value="anime">Anime (Studio Ghibli Inspired Nature)</option>
+                  <option value="3d_animation">3D Animation (Modern Pixar/Disney Style)</option>
+                  <option value="stylized_realism">Stylized Realism (Naturalistic with Artistic Touch)</option>
+                  <option value="fantasy_illustration">Fantasy Illustration (Magical & Painterly)</option>
+                  <option value="watercolor">Watercolor (Dreamy Textured Washes)</option>
+                  <option value="pixel_art">Pixel Art (Charming Retro Gameworld)</option>
+                  <option value="custom">Custom (User-Defined Aesthetic)</option>
+                </select>
+              </div>
+
+              {/* 2. Style Intensity & Complexity */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div className="ed-details-form-group">
+                  <label className="ed-details-label">Style Intensity</label>
+                  <select
+                    className="ed-details-input"
+                    style={{ width: '100%' }}
+                    value={projectIntensity}
+                    onChange={(e) => setProjectIntensity(e.target.value as any)}
+                  >
+                    <option value="subtle">Subtle (Understated & Gentle)</option>
+                    <option value="balanced">Balanced (Recommended Default)</option>
+                    <option value="strong">Strong (Expressive & Distinctive)</option>
+                  </select>
+                </div>
+
+                <div className="ed-details-form-group">
+                  <label className="ed-details-label">Background Complexity</label>
+                  <select
+                    className="ed-details-input"
+                    style={{ width: '100%' }}
+                    value={projectComplexity}
+                    onChange={(e) => setProjectComplexity(e.target.value as any)}
+                  >
+                    <option value="simple">Simple (Clean & Uncluttered)</option>
+                    <option value="balanced">Balanced (Rich Depth & Staging)</option>
+                    <option value="detailed">Detailed (Intricate & Layered)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* 3. Color Palette & Default Lighting */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div className="ed-details-form-group">
+                  <label className="ed-details-label">Color Palette</label>
+                  <select
+                    className="ed-details-input"
+                    style={{ width: '100%' }}
+                    value={projectPalette}
+                    onChange={(e) => setProjectPalette(e.target.value)}
+                  >
+                    <option value="vibrant">Vibrant (Joyful Saturated Primaries)</option>
+                    <option value="warm">Warm (Golden, Amber, Sunlit)</option>
+                    <option value="cool">Cool (Teals, Blues, Fresh Morning)</option>
+                    <option value="pastel">Pastel (Soft Candy & Gentle Hues)</option>
+                    <option value="natural">Natural (Earth Tones & Forest Greens)</option>
+                    <option value="muted">Muted (Sophisticated & Desaturated)</option>
+                    <option value="dark_dramatic">Dark / Dramatic (Moody & High Contrast)</option>
+                    <option value="custom">Custom Color Palette...</option>
+                  </select>
+                  {projectPalette === 'custom' && (
+                    <input
+                      type="text"
+                      className="ed-details-input"
+                      style={{ width: '100%', marginTop: '6px' }}
+                      value={projectCustomPalette}
+                      onChange={(e) => setProjectCustomPalette(e.target.value)}
+                      placeholder="e.g., Emerald green, lavender purple, brushed gold"
+                    />
+                  )}
+                </div>
+
+                <div className="ed-details-form-group">
+                  <label className="ed-details-label">Default Lighting</label>
+                  <select
+                    className="ed-details-input"
+                    style={{ width: '100%' }}
+                    value={projectLighting}
+                    onChange={(e) => setProjectLighting(e.target.value)}
+                  >
+                    <option value="soft_daylight">Soft Daylight (Gentle Fill & Ambient Rim)</option>
+                    <option value="bright_daytime">Bright Daytime (Clear Sunny High-Key)</option>
+                    <option value="golden_hour">Golden Hour (Warm Volumetric Rays)</option>
+                    <option value="sunset">Sunset (Rich Warm Gradients)</option>
+                    <option value="night">Night (Deep Indigo with Cozy Lanterns)</option>
+                    <option value="moonlight">Moonlight (Silvery Luminous Highlights)</option>
+                    <option value="dramatic_cinematic">Dramatic Cinematic (Atmospheric Depth)</option>
+                    <option value="diffused">Diffused (Soft Gentle Cloud Cover)</option>
+                    <option value="custom">Custom Lighting...</option>
+                  </select>
+                  {projectLighting === 'custom' && (
+                    <input
+                      type="text"
+                      className="ed-details-input"
+                      style={{ width: '100%', marginTop: '6px' }}
+                      value={projectCustomLighting}
+                      onChange={(e) => setProjectCustomLighting(e.target.value)}
+                      placeholder="e.g., Bioluminescent blue mushrooms lighting up cavern"
+                    />
+                  )}
+                </div>
+              </div>
+
+              {/* 4. Default Aspect Ratio */}
+              <div className="ed-details-form-group">
+                <label className="ed-details-label">Default Aspect Ratio</label>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px' }}>
+                  {(['16:9', '9:16', '1:1', '4:5'] as const).map((fmt) => (
+                    <button
+                      key={fmt}
+                      type="button"
+                      className={`ed-tool-btn ${projectAspectRatio === fmt ? 'active' : ''}`}
+                      style={{
+                        padding: '6px 8px',
+                        fontSize: '11px',
+                        textAlign: 'center',
+                        background: projectAspectRatio === fmt ? '#8b5cf6' : undefined,
+                        color: projectAspectRatio === fmt ? '#fff' : undefined,
+                        borderColor: projectAspectRatio === fmt ? '#8b5cf6' : undefined,
+                      }}
+                      onClick={() => setProjectAspectRatio(fmt)}
+                    >
+                      {fmt} {fmt === '16:9' ? '(Landscape)' : fmt === '9:16' ? '(Portrait)' : fmt === '1:1' ? '(Square)' : '(Social)'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 5. Custom Project-Wide Style Instructions */}
+              <div className="ed-details-form-group">
+                <label className="ed-details-label">Custom Project Style Instructions (Optional)</label>
+                <textarea
+                  className="ed-details-textarea"
+                  rows={2}
+                  style={{ width: '100%', fontSize: '11px', resize: 'vertical' }}
+                  value={projectCustomInstructions}
+                  onChange={(e) => setProjectCustomInstructions(e.target.value)}
+                  placeholder="e.g., Use hand-carved wooden motifs, round friendly edges, gentle glowing flora..."
+                />
+              </div>
+
+              {/* Save Project Visual Style Button */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '8px' }}>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={handleSaveVisualSettings}
+                  disabled={isSavingStyle}
+                  style={{ background: '#7c3aed', borderColor: '#7c3aed', fontSize: '12px', padding: '8px 16px' }}
+                >
+                  <SparklesIcon size={13} />
+                  <span>{isSavingStyle ? 'Saving Defaults...' : 'Save Project Visual Style'}</span>
+                </button>
+              </div>
             </div>
           )}
         </div>
