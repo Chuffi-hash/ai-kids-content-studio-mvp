@@ -902,7 +902,8 @@ export class FlowBrowserWorker {
     };
   }
 
-  async detectInterfaceMode() {
+  async detectInterfaceMode(options = {}) {
+    const timeoutMs = options.timeoutMs ?? 0;
     if (
       !this.page ||
       (typeof this.page.isClosed === "function" && this.page.isClosed())
@@ -926,60 +927,79 @@ export class FlowBrowserWorker {
         return "unknown";
       }
 
-      // 2. Detect Agent mode using the Agent-specific textbox.
-      const agentPrompt = this.page.locator(
-        '[role="textbox"][aria-label="What do you want to create?"], ' +
-        'flow-creative-agent-prompt-box [role="textbox"], ' +
-        'flow-creative-agent-prompt-box [contenteditable="true"]'
-      );
+      const checkModes = async () => {
+        // 2. Detect Agent mode using the Agent-specific textbox.
+        const agentPrompt = this.page.locator(
+          '[role="textbox"][aria-label="What do you want to create?"], ' +
+          'flow-creative-agent-prompt-box [role="textbox"], ' +
+          'flow-creative-agent-prompt-box [contenteditable="true"]'
+        );
 
-      const agentCount = typeof agentPrompt.count === "function" ? await agentPrompt.count().catch(() => 0) : 0;
+        const agentCount = typeof agentPrompt.count === "function" ? await agentPrompt.count().catch(() => 0) : 0;
 
-      for (let i = 0; i < agentCount; i++) {
-        const candidate = typeof agentPrompt.nth === "function" ? agentPrompt.nth(i) : (typeof agentPrompt.first === "function" ? agentPrompt.first() : agentPrompt);
+        for (let i = 0; i < agentCount; i++) {
+          const candidate = typeof agentPrompt.nth === "function" ? agentPrompt.nth(i) : (typeof agentPrompt.first === "function" ? agentPrompt.first() : agentPrompt);
 
-        if (
-          (await candidate.isVisible().catch(() => false)) &&
-          (typeof candidate.isEnabled !== "function" || (await candidate.isEnabled().catch(() => true)))
-        ) {
-          return "agent";
+          if (
+            (await candidate.isVisible().catch(() => false)) &&
+            (typeof candidate.isEnabled !== "function" || (await candidate.isEnabled().catch(() => true)))
+          ) {
+            return "agent";
+          }
         }
+
+        // 3. Detect the image editor using its dedicated prompt component.
+        const imageEditorPrompt = this.page.locator(
+          '[role="textbox"][aria-label="What do you want to change?"], ' +
+          'flow-edit-image-prompt-box [role="textbox"], ' +
+          'flow-edit-image-prompt-box [contenteditable="true"]'
+        );
+
+        const imagePromptCount = typeof imageEditorPrompt.count === "function" ? await imageEditorPrompt.count().catch(() => 0) : 0;
+
+        for (let i = 0; i < imagePromptCount; i++) {
+          const candidate = typeof imageEditorPrompt.nth === "function" ? imageEditorPrompt.nth(i) : (typeof imageEditorPrompt.first === "function" ? imageEditorPrompt.first() : imageEditorPrompt);
+
+          if (
+            (await candidate.isVisible().catch(() => false)) &&
+            (typeof candidate.isEnabled !== "function" || (await candidate.isEnabled().catch(() => true)))
+          ) {
+            return "image-editor";
+          }
+        }
+
+        // 4. Detect standard mode.
+        const standardButton = this.page.locator(
+          'button:has-text("Generate Image"), ' +
+          'button[aria-label="Generate Image"]'
+        );
+
+        const standardCount = typeof standardButton.count === "function" ? await standardButton.count().catch(() => 0) : 0;
+
+        if (standardCount > 0) {
+          const btnFirst = typeof standardButton.first === "function" ? standardButton.first() : standardButton;
+          const visible = await btnFirst.isVisible().catch(() => false);
+
+          if (visible) {
+            return "standard";
+          }
+        }
+
+        return "unknown";
+      };
+
+      const initial = await checkModes();
+      if (initial !== "unknown" || timeoutMs <= 0) {
+        return initial;
       }
 
-      // 3. Detect the image editor using its dedicated prompt component.
-      const imageEditorPrompt = this.page.locator(
-        '[role="textbox"][aria-label="What do you want to change?"], ' +
-        'flow-edit-image-prompt-box [role="textbox"], ' +
-        'flow-edit-image-prompt-box [contenteditable="true"]'
-      );
-
-      const imagePromptCount = typeof imageEditorPrompt.count === "function" ? await imageEditorPrompt.count().catch(() => 0) : 0;
-
-      for (let i = 0; i < imagePromptCount; i++) {
-        const candidate = typeof imageEditorPrompt.nth === "function" ? imageEditorPrompt.nth(i) : (typeof imageEditorPrompt.first === "function" ? imageEditorPrompt.first() : imageEditorPrompt);
-
-        if (
-          (await candidate.isVisible().catch(() => false)) &&
-          (typeof candidate.isEnabled !== "function" || (await candidate.isEnabled().catch(() => true)))
-        ) {
-          return "image-editor";
-        }
-      }
-
-      // 4. Detect standard mode.
-      const standardButton = this.page.locator(
-        'button:has-text("Generate Image"), ' +
-        'button[aria-label="Generate Image"]'
-      );
-
-      const standardCount = typeof standardButton.count === "function" ? await standardButton.count().catch(() => 0) : 0;
-
-      if (standardCount > 0) {
-        const btnFirst = typeof standardButton.first === "function" ? standardButton.first() : standardButton;
-        const visible = await btnFirst.isVisible().catch(() => false);
-
-        if (visible) {
-          return "standard";
+      // If unknown and timeoutMs > 0, wait for Angular/SPA component to render
+      const start = Date.now();
+      while (Date.now() - start < timeoutMs) {
+        await new Promise((r) => setTimeout(r, 250));
+        const mode = await checkModes();
+        if (mode !== "unknown") {
+          return mode;
         }
       }
 
@@ -1512,11 +1532,11 @@ export class FlowBrowserWorker {
     this.emitLifecycleLog("ACTIVE_LOCK_ACQUIRED", job);
 
     try {
-      const mode = await this.detectInterfaceMode();
+      const mode = await this.detectInterfaceMode({ timeoutMs: 15000 });
 
       let promptEditor;
       if (mode === "agent") {
-        promptEditor = await this.findAgentPromptEditor();
+        promptEditor = await this.findAgentPromptEditor({ timeoutMs: 15000 });
       } else if (mode === "standard") {
         promptEditor = await this.findPromptEditor();
       } else if (mode === "image-editor") {
@@ -1653,60 +1673,135 @@ export class FlowBrowserWorker {
     return true;
   }
 
-  async findAgentPromptEditor() {
+  async findAgentPromptEditor(options = {}) {
+    const timeoutMs = options.timeoutMs ?? 15000;
     if (!this.page || (typeof this.page.isClosed === "function" && this.page.isClosed())) {
       throw new Error("Flow page is not available.");
     }
 
-    const mode = await this.detectInterfaceMode();
-
-    if (mode !== "agent") {
+    const currentUrl = typeof this.page.url === "function" ? this.page.url() : "";
+    if (isGoogleFlowEditorRoute(currentUrl)) {
       throw new Error(
-        `FLOW_WRONG_INTERFACE: Expected Agent mode, received ${mode}.`
+        `FLOW_WRONG_INTERFACE: Expected Agent mode, received image-editor.`
       );
     }
 
     const selectors = [
       'flow-creative-agent-prompt-box [role="textbox"][aria-label="What do you want to create?"]',
+      'flow-creative-agent-prompt-box [role="textbox"]',
       'flow-creative-agent-prompt-box [contenteditable="true"]',
       '[role="textbox"][aria-label="What do you want to create?"]',
     ];
 
-    for (const selector of selectors) {
-      const locator = this.page.locator(selector);
+    const waitStart = Date.now();
+    let chosen = null;
 
-      const count = await locator.count().catch(() => 0);
+    while (Date.now() - waitStart <= timeoutMs) {
+      for (const selector of selectors) {
+        const locator = this.page.locator(selector);
+        const count = typeof locator.count === "function" ? await locator.count().catch(() => 0) : 0;
+        const visible = [];
 
-      const visible = [];
+        for (let i = 0; i < count; i++) {
+          const candidate = typeof locator.nth === "function" ? locator.nth(i) : (typeof locator.first === "function" ? locator.first() : locator);
 
-      for (let i = 0; i < count; i++) {
-        const candidate = typeof locator.nth === "function" ? locator.nth(i) : (typeof locator.first === "function" ? locator.first() : locator);
+          if (
+            (await candidate.isVisible().catch(() => false)) &&
+            (typeof candidate.isEnabled !== "function" || (await candidate.isEnabled().catch(() => true)))
+          ) {
+            visible.push(candidate);
+          }
+        }
 
-        if (
-          (await candidate.isVisible().catch(() => false)) &&
-          (typeof candidate.isEnabled !== "function" || (await candidate.isEnabled().catch(() => true)))
-        ) {
-          visible.push(candidate);
+        if (visible.length > 1) {
+          throw new Error("FLOW_AGENT_PROMPT_AMBIGUOUS");
+        }
+
+        if (visible.length === 1) {
+          chosen = {
+            locator: visible[0],
+            selector,
+          };
+          break;
         }
       }
 
-      if (visible.length > 1) {
-        throw new Error(
-          "FLOW_AGENT_PROMPT_AMBIGUOUS"
-        );
-      }
-
-      if (visible.length === 1) {
-        return {
-          locator: visible[0],
-          selector,
-        };
-      }
+      if (chosen) break;
+      if (timeoutMs <= 0 || Date.now() - waitStart >= timeoutMs) break;
+      await new Promise((r) => setTimeout(r, 250));
     }
 
-    throw new Error(
+    if (chosen) {
+      return chosen;
+    }
+
+    // Diagnostics collection on failure:
+    let candidates = [];
+    if (typeof this.page.locator === "function") {
+      try {
+        const editables = this.page.locator(
+          'textarea, input, [role="textbox"], [contenteditable="true"]'
+        );
+        if (typeof editables.evaluateAll === "function") {
+          candidates = await editables.evaluateAll((elements) =>
+            elements.map((element, index) => {
+              const rect = element.getBoundingClientRect();
+              const style = window.getComputedStyle(element);
+
+              return {
+                index,
+                tagName: element.tagName,
+                role: element.getAttribute("role"),
+                ariaLabel: element.getAttribute("aria-label"),
+                placeholder: element.getAttribute("placeholder"),
+                dataPlaceholder: element.getAttribute("data-placeholder"),
+                contenteditable: element.getAttribute("contenteditable"),
+                className: element.className,
+                parentTag: element.parentElement?.tagName,
+                parentClass: element.parentElement?.className,
+                grandParentTag: element.parentElement?.parentElement?.tagName,
+                grandParentClass: element.parentElement?.parentElement?.className,
+                visible:
+                  rect.width > 0 &&
+                  rect.height > 0 &&
+                  style.visibility !== "hidden" &&
+                  style.display !== "none",
+                text: element.innerText || element.value || "",
+              };
+            })
+          ).catch(() => []);
+        }
+      } catch {}
+    }
+
+    let pageTitle = "";
+    try {
+      pageTitle = typeof this.page.title === "function" ? await this.page.title().catch(() => "") : "";
+    } catch {}
+
+    let diagnosticScreenshotPath = null;
+    try {
+      if (typeof this.saveDiagnosticScreenshot === "function") {
+        diagnosticScreenshotPath = await this.saveDiagnosticScreenshot("prompt-discovery-failed").catch(() => null);
+      }
+    } catch {}
+
+    console.warn(
+      `[FlowBrowser] Agent prompt discovery failed. URL: ${currentUrl}, Candidates found: ${candidates.length}`
+    );
+
+    const err = new Error(
       "FLOW_AGENT_PROMPT_NOT_FOUND: Could not find the visible 'What do you want to create?' prompt."
     );
+    err.code = "FLOW_AGENT_PROMPT_NOT_FOUND";
+    err.diagnostics = {
+      url: currentUrl,
+      currentUrl,
+      title: pageTitle,
+      screenshotPath: diagnosticScreenshotPath,
+      candidates,
+    };
+    throw err;
   }
 
   async findImageEditPromptEditor() {
@@ -1985,7 +2080,7 @@ export class FlowBrowserWorker {
     }
 
     this.emitLifecycleLog("FLOW_AGENT_PROMPT_DISCOVERY_STARTED", job);
-    const promptEditor = await this.findAgentPromptEditor();
+    const promptEditor = await this.findAgentPromptEditor({ timeoutMs: 15000 });
     this.emitLifecycleLog("FLOW_AGENT_PROMPT_DISCOVERY_COMPLETED", job, {
       selector: promptEditor.selector,
     });
@@ -2597,7 +2692,7 @@ export class FlowBrowserWorker {
       return await this.submitRegenerationPrompt(job, confirmation);
     }
 
-    const mode = await this.detectInterfaceMode();
+    const mode = await this.detectInterfaceMode({ timeoutMs: 15000 });
 
     if (mode === "image-editor") {
       const error = new Error(

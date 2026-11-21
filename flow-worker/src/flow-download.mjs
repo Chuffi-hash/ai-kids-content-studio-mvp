@@ -639,7 +639,11 @@ export async function collectFlowEditorDiagnostics(page) {
     try {
       if (typeof page.evaluate !== "function") return {};
       return await page.evaluate(() => {
-        const header = document.querySelector("flow-editor-header");
+        const header = document.querySelector("header.header-base") || document.querySelector("flow-editor-header");
+
+        const doneButtonElements = header
+          ? Array.from(header.querySelectorAll("button[aria-label='Done editing']"))
+          : Array.from(document.querySelectorAll("button[aria-label='Done editing']"));
 
         return {
           href: location.href,
@@ -651,27 +655,23 @@ export async function collectFlowEditorDiagnostics(page) {
             header.getBoundingClientRect().height > 0
           ),
 
-          doneButtons: Array.from(
-            document.querySelectorAll(
-              "flow-editor-header button[aria-label='Done editing']"
-            )
-          ).map((button) => ({
+          doneButtons: doneButtonElements.map((button) => ({
             ariaLabel: button.getAttribute("aria-label"),
-            text: button.innerText,
+            text: button.innerText?.trim() || "",
             visible:
               button.getBoundingClientRect().width > 0 &&
               button.getBoundingClientRect().height > 0,
-            disabled: button.disabled,
+            disabled: button.disabled || button.getAttribute("aria-disabled") === "true",
           })),
 
           headerButtons: header
             ? Array.from(header.querySelectorAll("button")).map((button) => ({
                 ariaLabel: button.getAttribute("aria-label"),
-                text: button.innerText,
+                text: button.innerText?.trim() || "",
                 visible:
                   button.getBoundingClientRect().width > 0 &&
                   button.getBoundingClientRect().height > 0,
-                disabled: button.disabled,
+                disabled: button.disabled || button.getAttribute("aria-disabled") === "true",
               }))
             : [],
         };
@@ -703,7 +703,7 @@ export async function collectFlowEditorDiagnostics(page) {
 }
 
 /**
- * Closes the Google Flow image preview/editor by clicking the scoped "Done editing" button in flow-editor-header.
+ * Closes the Google Flow image preview/editor by clicking the scoped "Done editing" button in header.header-base.
  * Verifies that the editor closes and returns to the expected project workspace.
  */
 export async function closeFlowImageEditor(page, logger = console, options = {}) {
@@ -767,43 +767,56 @@ export async function closeFlowImageEditor(page, logger = console, options = {})
     );
   }
 
-  // Locate Done button: check flow-editor-header first, then accessible getByRole, then button[aria-label="Done editing"]
-  let buttons = null;
-
+  // Locate Done button: check actual Google Flow DOM selector: header.header-base first
+  let header = null;
   if (typeof page.locator === "function") {
-    const header = page.locator("flow-editor-header");
-    if (header) {
-      if (typeof header.waitFor === "function") {
-        try {
-          await header.waitFor({
-            state: "visible",
-            timeout: timeoutMs,
-          });
-        } catch {
-          const diagnostics = await collectFlowEditorDiagnostics(page);
-          return fail(
-            "FLOW_EDITOR_HEADER_NOT_FOUND",
-            "The image editor header is not visible.",
-            diagnostics
-          );
-        }
-      }
-
-      if (typeof header.locator === "function") {
-        const headerButtons = header.locator('button[aria-label="Done editing"]');
-        if (headerButtons && typeof headerButtons.count === "function") {
-          const c = await headerButtons.count().catch(() => 0);
-          if (c > 0) {
-            buttons = headerButtons;
-          }
-        } else if (headerButtons) {
-          buttons = headerButtons;
-        }
+    const realHeader = page.locator("header.header-base");
+    if (typeof realHeader.count === "function" && (await realHeader.count().catch(() => 0)) > 0) {
+      header = realHeader;
+    } else {
+      const legacyHeader = page.locator("flow-editor-header");
+      if (typeof legacyHeader.count === "function" && (await legacyHeader.count().catch(() => 0)) > 0) {
+        header = legacyHeader;
+      } else {
+        header = realHeader;
       }
     }
   }
 
-  if (!buttons && typeof page.getByRole === "function") {
+  let doneButtons = null;
+
+  if (header) {
+    if (typeof header.waitFor === "function") {
+      try {
+        await header.waitFor({
+          state: "visible",
+          timeout: timeoutMs,
+        });
+      } catch {
+        const diagnostics = await collectFlowEditorDiagnostics(page);
+        return fail(
+          "FLOW_EDITOR_HEADER_NOT_FOUND",
+          "The image editor header (header.header-base) is not visible.",
+          diagnostics
+        );
+      }
+    }
+
+    if (typeof header.locator === "function") {
+      const scopedButtons = header.locator('button[aria-label="Done editing"]');
+      if (scopedButtons && typeof scopedButtons.count === "function") {
+        const c = await scopedButtons.count().catch(() => 0);
+        if (c > 0) {
+          doneButtons = scopedButtons;
+        }
+      } else if (scopedButtons) {
+        doneButtons = scopedButtons;
+      }
+    }
+  }
+
+  // Controlled fallback: page.getByRole("button", { name: "Done editing", exact: true })
+  if (!doneButtons && typeof page.getByRole === "function") {
     const roleButtons = page.getByRole("button", {
       name: "Done editing",
       exact: true,
@@ -811,37 +824,40 @@ export async function closeFlowImageEditor(page, logger = console, options = {})
     if (roleButtons && typeof roleButtons.count === "function") {
       const c = await roleButtons.count().catch(() => 0);
       if (c > 0) {
-        buttons = roleButtons;
+        doneButtons = roleButtons;
       }
     } else if (roleButtons) {
-      buttons = roleButtons;
+      doneButtons = roleButtons;
     }
   }
 
-  if (!buttons && typeof page.locator === "function") {
+  // Fallback: page.locator('button[aria-label="Done editing"]')
+  if (!doneButtons && typeof page.locator === "function") {
     const anyDone = page.locator('button[aria-label="Done editing"]');
     if (anyDone && typeof anyDone.count === "function") {
       const c = await anyDone.count().catch(() => 0);
       if (c > 0) {
-        buttons = anyDone;
+        doneButtons = anyDone;
       }
     } else if (anyDone) {
-      buttons = anyDone;
+      doneButtons = anyDone;
     }
   }
 
-  const count = buttons && typeof buttons.count === "function" ? await buttons.count().catch(() => 0) : 0;
+  const count = doneButtons && typeof doneButtons.count === "function"
+    ? await doneButtons.count().catch(() => 0)
+    : 0;
 
   if (count === 0) {
     const diagnostics = await collectFlowEditorDiagnostics(page);
     return fail(
       "FLOW_EDITOR_DONE_BUTTON_NOT_FOUND",
-      "Could not find a visible Done editing button inside flow-editor-header.",
+      "Could not find a visible Done editing button inside header.header-base.",
       diagnostics
     );
   }
 
-  if (count > 1) {
+  if (count !== 1) {
     const diagnostics = await collectFlowEditorDiagnostics(page);
     return fail(
       "FLOW_EDITOR_DONE_BUTTON_AMBIGUOUS",
@@ -850,35 +866,34 @@ export async function closeFlowImageEditor(page, logger = console, options = {})
     );
   }
 
-  const doneButton = typeof buttons.first === "function" ? buttons.first() : buttons;
+  const doneButton = typeof doneButtons.first === "function" ? doneButtons.first() : doneButtons;
 
-  try {
-    if (typeof doneButton.waitFor === "function") {
+  if (typeof doneButton.waitFor === "function") {
+    try {
       await doneButton.waitFor({
         state: "visible",
         timeout: timeoutMs,
       });
+    } catch {
+      const diagnostics = await collectFlowEditorDiagnostics(page);
+      return fail(
+        "FLOW_EDITOR_DONE_BUTTON_NOT_VISIBLE",
+        "Done editing button is not visible.",
+        diagnostics
+      );
     }
-  } catch {
+  }
+
+  if (typeof doneButton.isVisible === "function" && !(await doneButton.isVisible().catch(() => false))) {
     const diagnostics = await collectFlowEditorDiagnostics(page);
     return fail(
-      "FLOW_EDITOR_DONE_BUTTON_NOT_FOUND",
-      "Could not find a visible Done editing button inside flow-editor-header.",
+      "FLOW_EDITOR_DONE_BUTTON_NOT_VISIBLE",
+      "Done editing button is not visible.",
       diagnostics
     );
   }
 
-  if (typeof doneButton.isVisible === "function" && !(await doneButton.isVisible())) {
-    return fail(
-      "FLOW_EDITOR_DONE_BUTTON_NOT_VISIBLE",
-      "Done editing button is not visible."
-    );
-  }
-
-  if (
-    typeof doneButton.isEnabled === "function" &&
-    !(await doneButton.isEnabled().catch(() => false))
-  ) {
+  if (typeof doneButton.isEnabled === "function" && !(await doneButton.isEnabled().catch(() => false))) {
     const diagnostics = await collectFlowEditorDiagnostics(page);
     return fail(
       "FLOW_EDITOR_DONE_BUTTON_DISABLED",
@@ -887,8 +902,15 @@ export async function closeFlowImageEditor(page, logger = console, options = {})
     );
   }
 
+  logger?.info?.(
+    `[FlowDownload] FLOW_EDITOR_DONE_CLICK_STARTED ${JSON.stringify({
+      projectId: editorRef.projectId,
+      editId: editorRef.editId,
+      currentUrl,
+    })}`
+  );
+
   emit("FLOW_EDITOR_DONE_CLICK_STARTED", {
-    success: true,
     projectId: editorRef.projectId,
     editId: editorRef.editId,
     currentUrl,
@@ -929,14 +951,17 @@ export async function closeFlowImageEditor(page, logger = console, options = {})
   }
 
   const finalUrl = typeof page.url === "function" ? page.url() : "";
-  const finalProjectId = extractProjectIdFromFlowUrl(finalUrl);
 
   if (typeof page.waitForURL === "function" && isGoogleFlowEditorRoute(finalUrl)) {
+    const diagnostics = await collectFlowEditorDiagnostics(page);
     return fail(
       "FLOW_EDITOR_CLOSE_TIMEOUT",
-      `Editor is still open: ${finalUrl}`
+      `Editor is still open: ${finalUrl}`,
+      diagnostics
     );
   }
+
+  const finalProjectId = extractProjectIdFromFlowUrl(finalUrl);
 
   if (
     finalProjectId &&
@@ -949,8 +974,16 @@ export async function closeFlowImageEditor(page, logger = console, options = {})
     );
   }
 
+  logger?.info?.(
+    `[FlowDownload] FLOW_IMAGE_EDITOR_CLOSED ${JSON.stringify({
+      previousUrl: currentUrl,
+      currentUrl: finalUrl,
+      projectId: editorRef.projectId,
+      editId: editorRef.editId,
+    })}`
+  );
+
   emit("FLOW_IMAGE_EDITOR_CLOSED", {
-    success: true,
     previousUrl: currentUrl,
     currentUrl: finalUrl,
     projectId: editorRef.projectId,

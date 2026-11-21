@@ -119,9 +119,10 @@ describe("Google Flow Image Viewer Done Editing Workflow Suite", () => {
     };
 
     const mockHeader = {
+      count: async () => (options.missingHeader ? 0 : 1),
       waitFor: async ({ state } = {}) => {
         if (options.missingHeader) {
-          throw new Error("Timeout waiting for flow-editor-header");
+          throw new Error("Timeout waiting for header.header-base");
         }
       },
       locator: (sel) => {
@@ -178,7 +179,7 @@ describe("Google Flow Image Viewer Done Editing Workflow Suite", () => {
         return { count: async () => 0 };
       },
       locator: (selector) => {
-        if (selector === "flow-editor-header") {
+        if (selector === "header.header-base" || selector === "flow-editor-header") {
           return mockHeader;
         }
         if (selector === "flow-chat-scroller .scroll-viewport") {

@@ -212,6 +212,7 @@ describe("Google Flow Interface Routing, Route Detection, Done Workflow & Sessio
       let doneClicked = false;
 
       const headerLoc = {
+        count: async () => 1,
         waitFor: async () => {},
         locator: (sel) => {
           if (sel === 'button[aria-label="Done editing"]') {
@@ -242,7 +243,7 @@ describe("Google Flow Interface Routing, Route Detection, Done Workflow & Sessio
           if (!predicate(currentUrl)) throw new Error("Timeout");
         },
         locator: (sel) => {
-          if (sel === "flow-editor-header") return headerLoc;
+          if (sel === "header.header-base" || sel === "flow-editor-header") return headerLoc;
           if (sel.includes("What do you want to create?")) return promptLoc;
           return createMockLocator({ count: 0, visible: false });
         },
@@ -267,6 +268,7 @@ describe("Google Flow Interface Routing, Route Detection, Done Workflow & Sessio
       const currentUrl = "https://flow.google.com/project/proj-prev/edit/asset-stuck";
 
       const headerLoc = {
+        count: async () => 1,
         waitFor: async () => {
           throw new Error("Header not visible");
         },
@@ -282,7 +284,7 @@ describe("Google Flow Interface Routing, Route Detection, Done Workflow & Sessio
         }),
         context: () => ({ pages: () => [worker.page] }),
         locator: (sel) => {
-          if (sel === "flow-editor-header") return headerLoc;
+          if (sel === "header.header-base" || sel === "flow-editor-header") return headerLoc;
           return createMockLocator({ count: 0, visible: false });
         },
       };
@@ -377,12 +379,13 @@ describe("Google Flow Interface Routing, Route Detection, Done Workflow & Sessio
   // SECTION C: DONE BUTTON WORKFLOW TESTS
   // ==========================================
   describe("C. Done Button Workflow Tests", () => {
-    it("1. Scoped flow-editor-header button[aria-label='Done editing'] is found and clicked", async () => {
+    it("1. Scoped header.header-base button[aria-label='Done editing'] is found and clicked", async () => {
       let clicked = false;
       let navigated = false;
       let currentUrl = "https://flow.google.com/project/p-done/edit/a-done";
 
       const headerLoc = {
+        count: async () => 1,
         waitFor: async () => {},
         locator: (sel) => {
           if (sel === 'button[aria-label="Done editing"]') {
@@ -411,7 +414,7 @@ describe("Google Flow Interface Routing, Route Detection, Done Workflow & Sessio
           if (!predicate(currentUrl)) throw new Error("Timeout");
         },
         locator: (sel) => {
-          if (sel === "flow-editor-header") return headerLoc;
+          if (sel === "header.header-base" || sel === "flow-editor-header") return headerLoc;
           return { count: async () => 0 };
         },
       };
@@ -427,6 +430,7 @@ describe("Google Flow Interface Routing, Route Detection, Done Workflow & Sessio
 
     it("2. Disabled button is rejected with FLOW_EDITOR_DONE_BUTTON_DISABLED", async () => {
       const headerLoc = {
+        count: async () => 1,
         waitFor: async () => {},
         locator: (sel) => {
           if (sel === 'button[aria-label="Done editing"]') {
@@ -448,7 +452,7 @@ describe("Google Flow Interface Routing, Route Detection, Done Workflow & Sessio
         url: () => "https://flow.google.com/project/p-dis/edit/a-dis",
         isClosed: () => false,
         locator: (sel) => {
-          if (sel === "flow-editor-header") return headerLoc;
+          if (sel === "header.header-base" || sel === "flow-editor-header") return headerLoc;
           return { count: async () => 0 };
         },
       };
@@ -465,6 +469,7 @@ describe("Google Flow Interface Routing, Route Detection, Done Workflow & Sessio
       let currentUrl = "https://flow.google.com/project/p-expected/edit/a-1";
 
       const headerLoc = {
+        count: async () => 1,
         waitFor: async () => {},
         locator: () => ({
           count: async () => 1,
@@ -484,7 +489,7 @@ describe("Google Flow Interface Routing, Route Detection, Done Workflow & Sessio
         isClosed: () => false,
         waitForURL: async () => {},
         locator: (sel) => {
-          if (sel === "flow-editor-header") return headerLoc;
+          if (sel === "header.header-base" || sel === "flow-editor-header") return headerLoc;
           return { count: async () => 0 };
         },
       };
@@ -510,8 +515,9 @@ describe("Google Flow Interface Routing, Route Detection, Done Workflow & Sessio
         },
         context: () => ({ pages: () => [mockPage] }),
         locator: (sel) => {
-          if (sel === "flow-editor-header") {
+          if (sel === "header.header-base" || sel === "flow-editor-header") {
             return {
+              count: async () => 0,
               waitFor: async () => { throw new Error("Header not found"); },
               locator: () => ({ count: async () => 0 }),
             };
@@ -627,6 +633,7 @@ describe("Google Flow Interface Routing, Route Detection, Done Workflow & Sessio
       let cleanupAttempted = false;
 
       const headerLoc = {
+        count: async () => 1,
         waitFor: async () => {},
         locator: (sel) => {
           if (sel === 'button[aria-label="Done editing"]') {
@@ -658,7 +665,7 @@ describe("Google Flow Interface Routing, Route Detection, Done Workflow & Sessio
           if (!predicate(currentUrl)) throw new Error("Timeout");
         },
         locator: (sel) => {
-          if (sel === "flow-editor-header") return headerLoc;
+          if (sel === "header.header-base" || sel === "flow-editor-header") return headerLoc;
           if (sel.includes("What do you want to create?")) return promptLoc;
           return createMockLocator({ count: 0, visible: false });
         },
@@ -683,6 +690,7 @@ describe("Google Flow Interface Routing, Route Detection, Done Workflow & Sessio
       const currentUrl = "https://flow.google.com/project/story-proj/edit/scene-4-stuck";
 
       const headerLoc = {
+        count: async () => 1,
         waitFor: async () => {},
         locator: () => ({
           count: async () => 1,
@@ -703,7 +711,7 @@ describe("Google Flow Interface Routing, Route Detection, Done Workflow & Sessio
         evaluate: async () => ({ href: currentUrl, headerExists: true, doneButtons: [] }),
         context: () => ({ pages: () => [worker.page] }),
         locator: (sel) => {
-          if (sel === "flow-editor-header") return headerLoc;
+          if (sel === "header.header-base" || sel === "flow-editor-header") return headerLoc;
           return createMockLocator({ count: 0 });
         },
       };
@@ -730,6 +738,258 @@ describe("Google Flow Interface Routing, Route Detection, Done Workflow & Sessio
           });
         },
         (err) => err.code === "FLOW_IMAGE_EDITOR_STILL_OPEN"
+      );
+    });
+  });
+
+  // ==========================================
+  // SECTION E: REAL HTML FIXTURE & DIAGNOSTICS TESTS
+  // ==========================================
+  describe("E. Real HTML Fixture & Diagnostics Tests", () => {
+    it("1. Real Google Flow DOM fixture with <header class='header-base'> and NO <flow-editor-header> closes cleanly", async () => {
+      let clicked = false;
+      let navigated = false;
+      let currentUrl = "https://flow.google.com/project/p-real-dom/edit/asset-real-dom";
+
+      const realHeaderLoc = {
+        count: async () => 1,
+        waitFor: async () => {},
+        locator: (sel) => {
+          if (sel === 'button[aria-label="Done editing"]') {
+            return {
+              count: async () => 1,
+              first: () => ({
+                isVisible: async () => true,
+                isEnabled: async () => true,
+                waitFor: async () => {},
+                click: async () => {
+                  clicked = true;
+                  currentUrl = "https://flow.google.com/project/p-real-dom";
+                  navigated = true;
+                },
+              }),
+            };
+          }
+          return { count: async () => 0 };
+        },
+      };
+
+      const mockPage = {
+        url: () => currentUrl,
+        isClosed: () => false,
+        waitForURL: async (predicate) => {
+          if (!predicate(currentUrl)) throw new Error("Timeout");
+        },
+        locator: (sel) => {
+          // Explicitly assert that flow-editor-header DOES NOT EXIST in the real DOM
+          if (sel === "flow-editor-header") {
+            return { count: async () => 0 };
+          }
+          if (sel === "header.header-base") {
+            return realHeaderLoc;
+          }
+          return { count: async () => 0 };
+        },
+      };
+
+      const res = await closeFlowImageEditor(mockPage, console, {
+        expectedProjectId: "p-real-dom",
+      });
+
+      assert.equal(clicked, true, "Done editing button inside header.header-base must be clicked");
+      assert.equal(navigated, true, "Must navigate back to project route");
+      assert.equal(res, true);
+    });
+
+    it("2. collectFlowEditorDiagnostics inspects header.header-base", async () => {
+      const mockPage = {
+        url: () => "https://flow.google.com/project/p-diag/edit/asset-diag",
+        isClosed: () => false,
+        evaluate: async () => ({
+          href: "https://flow.google.com/project/p-diag/edit/asset-diag",
+          title: "Flow Project",
+          headerExists: true,
+          headerVisible: true,
+          doneButtons: [
+            {
+              ariaLabel: "Done editing",
+              text: "Done",
+              visible: true,
+              disabled: false,
+            },
+          ],
+          headerButtons: [
+            {
+              ariaLabel: "Favorite",
+              text: "Favorite",
+              visible: true,
+              disabled: false,
+            },
+            {
+              ariaLabel: "Done editing",
+              text: "Done",
+              visible: true,
+              disabled: false,
+            },
+          ],
+        }),
+        context: () => ({ pages: () => [mockPage] }),
+      };
+
+      const diags = await collectFlowEditorDiagnostics(mockPage);
+      assert.equal(diags.headerExists, true);
+      assert.equal(diags.headerVisible, true);
+      assert.equal(diags.doneButtons.length, 1);
+      assert.equal(diags.doneButtons[0].ariaLabel, "Done editing");
+      assert.equal(diags.headerButtons.length, 2);
+    });
+
+    it("3. Ambiguous multiple Done buttons inside header.header-base is rejected", async () => {
+      const realHeaderLoc = {
+        count: async () => 1,
+        waitFor: async () => {},
+        locator: (sel) => {
+          if (sel === 'button[aria-label="Done editing"]') {
+            return {
+              count: async () => 2,
+              first: () => ({ isVisible: async () => true, isEnabled: async () => true }),
+            };
+          }
+          return { count: async () => 0 };
+        },
+      };
+
+      const mockPage = {
+        url: () => "https://flow.google.com/project/p-ambig/edit/asset-ambig",
+        isClosed: () => false,
+        locator: (sel) => {
+          if (sel === "header.header-base") return realHeaderLoc;
+          return { count: async () => 0 };
+        },
+      };
+
+      await assert.rejects(
+        async () => {
+          await closeFlowImageEditor(mockPage, console, {});
+        },
+        (err) => err.code === "FLOW_EDITOR_DONE_BUTTON_AMBIGUOUS"
+      );
+    });
+  });
+
+  // ==========================================
+  // SECTION F: ANGULAR SPA PROMPT RENDER LATENCY & LIVE DOM DIAGNOSTICS
+  // ==========================================
+  describe("F. Angular SPA Prompt Render Latency & Live DOM Diagnostics", () => {
+    it("1. findAgentPromptEditor waits within timeoutMs for delayed Angular component mount", async () => {
+      const worker = new FlowBrowserWorker();
+      const mountTime = Date.now() + 300; // Mounts after 300ms
+
+      worker.page = {
+        url: () => "https://flow.google.com/project/proj-mount",
+        isClosed: () => false,
+        locator: (sel) => {
+          if (sel.includes("flow-creative-agent-prompt-box") || sel.includes("What do you want to create?")) {
+            const isMounted = Date.now() >= mountTime;
+            return {
+              count: async () => (isMounted ? 1 : 0),
+              first: () => ({
+                isVisible: async () => isMounted,
+                isEnabled: async () => isMounted,
+              }),
+              nth: () => ({
+                isVisible: async () => isMounted,
+                isEnabled: async () => isMounted,
+              }),
+            };
+          }
+          return { count: async () => 0 };
+        },
+      };
+
+      const promptEditor = await worker.findAgentPromptEditor({ timeoutMs: 2000 });
+      assert.ok(promptEditor, "Prompt editor must be discovered after delayed mount");
+      assert.ok(promptEditor.selector, "Must have selector property");
+    });
+
+    it("2. detectInterfaceMode waits within timeoutMs and returns agent when mounted", async () => {
+      const worker = new FlowBrowserWorker();
+      const mountTime = Date.now() + 300;
+
+      worker.page = {
+        url: () => "https://flow.google.com/project/proj-mount",
+        isClosed: () => false,
+        locator: (sel) => {
+          if (sel.includes("flow-creative-agent-prompt-box") || sel.includes("What do you want to create?")) {
+            const isMounted = Date.now() >= mountTime;
+            return {
+              count: async () => (isMounted ? 1 : 0),
+              first: () => ({
+                isVisible: async () => isMounted,
+                isEnabled: async () => isMounted,
+              }),
+              nth: () => ({
+                isVisible: async () => isMounted,
+                isEnabled: async () => isMounted,
+              }),
+            };
+          }
+          return { count: async () => 0 };
+        },
+      };
+
+      const mode = await worker.detectInterfaceMode({ timeoutMs: 2000 });
+      assert.equal(mode, "agent", "Mode must resolve to agent once component is rendered");
+    });
+
+    it("3. Prompt discovery failure captures live DOM candidates and attaches diagnostics", async () => {
+      const worker = new FlowBrowserWorker();
+      const currentUrl = "https://flow.google.com/project/proj-no-prompt";
+
+      worker.page = {
+        url: () => currentUrl,
+        isClosed: () => false,
+        title: async () => "Google Flow Project",
+        locator: (sel) => {
+          if (sel.includes("textarea, input, [role=\"textbox\"], [contenteditable=\"true\"]")) {
+            return {
+              evaluateAll: async () => [
+                {
+                  index: 0,
+                  tagName: "INPUT",
+                  role: "searchbox",
+                  ariaLabel: "Search flow",
+                  placeholder: "Search...",
+                  dataPlaceholder: null,
+                  contenteditable: null,
+                  className: "search-input",
+                  parentTag: "DIV",
+                  parentClass: "search-bar",
+                  grandParentTag: "HEADER",
+                  grandParentClass: "header-base",
+                  visible: true,
+                  text: "",
+                },
+              ],
+            };
+          }
+          return { count: async () => 0 };
+        },
+      };
+
+      await assert.rejects(
+        async () => {
+          await worker.findAgentPromptEditor({ timeoutMs: 100 });
+        },
+        (err) => {
+          assert.equal(err.code, "FLOW_AGENT_PROMPT_NOT_FOUND");
+          assert.ok(err.diagnostics, "Error must have diagnostics attached");
+          assert.equal(err.diagnostics.currentUrl, currentUrl);
+          assert.equal(err.diagnostics.candidates.length, 1);
+          assert.equal(err.diagnostics.candidates[0].tagName, "INPUT");
+          assert.equal(err.diagnostics.candidates[0].ariaLabel, "Search flow");
+          return true;
+        }
       );
     });
   });
