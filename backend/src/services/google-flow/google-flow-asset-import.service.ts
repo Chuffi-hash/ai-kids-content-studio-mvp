@@ -74,6 +74,59 @@ export interface ImportAssetResult {
   characterId?: string;
 }
 
+/**
+ * Resolve stable Google Flow identifiers from the editor URL.
+ *
+ * Flow exposes the generated media identifier in /project/{projectId}/edit/{editId}.
+ * When no explicit image ID is available in the DOM, editId is the canonical
+ * image/edit identifier to persist (rather than leaving googleFlowImageId null).
+ */
+export function resolveGoogleFlowReferences(
+  input: Partial<ImportAssetOptions>,
+) {
+  let urlProjectId: string | null = null;
+  let urlEditId: string | null = null;
+
+  const candidateUrl = input.googleFlowEditUrl || "";
+  try {
+    const parsed = new URL(candidateUrl);
+    if (parsed.hostname === "flow.google.com") {
+      const match = parsed.pathname.match(
+        /^\/project\/([^/]+)\/edit\/([^/]+)\/?$/,
+      );
+      if (match) {
+        urlProjectId = decodeURIComponent(match[1]);
+        urlEditId = decodeURIComponent(match[2]);
+      }
+    }
+  } catch {
+    // A malformed or absent URL is not fatal when explicit IDs were supplied.
+  }
+
+  const projectId =
+    input.googleFlowProjectId ||
+    input.flowProjectId ||
+    urlProjectId ||
+    null;
+  const editId = input.googleFlowEditId || urlEditId || null;
+  const editUrl =
+    input.googleFlowEditUrl ||
+    (projectId && editId
+      ? `https://flow.google.com/project/${encodeURIComponent(projectId)}/edit/${encodeURIComponent(editId)}`
+      : null);
+
+  return {
+    googleFlowProjectId: projectId,
+    googleFlowEditId: editId,
+    googleFlowEditUrl: editUrl,
+    googleFlowImageId: input.googleFlowImageId || editId || null,
+    googleFlowImageRef: input.googleFlowImageRef || input.googleFlowImageSourceUrl || null,
+    googleFlowImageSourceUrl: input.googleFlowImageSourceUrl || input.googleFlowImageRef || null,
+    googleFlowParentAssetId: input.googleFlowParentAssetId || null,
+    googleFlowPrompt: input.googleFlowPrompt || null,
+  };
+}
+
 export {
   detectImageMime,
   parseImageDimensions,
@@ -244,26 +297,28 @@ export class GoogleFlowAssetImportService {
             ? "gemini-imagen"
             : "manual_upload");
 
-      // Calculate image lineage version
-      let version = options.googleFlowVersion;
-      if (!version) {
-        if (options.googleFlowParentAssetId) {
-          try {
-            const parentImage = await prisma.image.findUnique({
-              where: { id: options.googleFlowParentAssetId },
-            });
-            version = (parentImage?.googleFlowVersion || 1) + 1;
-          } catch {
-            version = 2;
-          }
-        } else {
-          version = 1;
-        }
-      }
+      // The version number belongs to this scene's shared background history,
+      // not to the optional Flow parent asset. This keeps versions sequential
+      // across Google Flow, Gemini, Pollinations and manual uploads.
+      const latestBackgroundVersion = await prisma.backgroundImageVersion.findFirst({
+        where: { sceneId: scene.sceneId },
+        orderBy: { version: "desc" },
+        select: { id: true, version: true },
+      });
+      const nextBackgroundVersion = (latestBackgroundVersion?.version ?? 0) + 1;
+      const requestedVersion = Number(options.googleFlowVersion);
+      const version =
+        Number.isInteger(requestedVersion) && requestedVersion >= nextBackgroundVersion
+          ? requestedVersion
+          : nextBackgroundVersion;
 
-      // Track in Image table with authentic provider & Flow lineage references
+      const flowRefs = resolveGoogleFlowReferences(options);
+      const imageId = randomUUID();
+
+      // Track the canonical Flow identifiers on the local Image record.
+      // googleFlowImageId intentionally falls back to the UUID in /edit/{id}.
       const imageRecord = await createImage({
-        id: randomUUID(),
+        id: imageId,
         sceneId: scene.sceneId,
         provider,
         model,
@@ -273,23 +328,28 @@ export class GoogleFlowAssetImportService {
         width,
         height,
         status: "completed",
-        googleFlowProjectId: options.googleFlowProjectId || options.flowProjectId,
-        googleFlowEditId: options.googleFlowEditId,
-        googleFlowEditUrl: options.googleFlowEditUrl,
-        googleFlowPrompt: options.googleFlowPrompt || prompt,
-        googleFlowParentAssetId: options.googleFlowParentAssetId,
+        googleFlowProjectId: flowRefs.googleFlowProjectId,
+        googleFlowEditId: flowRefs.googleFlowEditId,
+        googleFlowEditUrl: flowRefs.googleFlowEditUrl,
+        googleFlowPrompt: flowRefs.googleFlowPrompt || prompt,
+        googleFlowParentAssetId: flowRefs.googleFlowParentAssetId,
         googleFlowVersion: version,
-        googleFlowImageId: options.googleFlowImageId || null,
-        googleFlowImageRef: options.googleFlowImageRef || null,
+        googleFlowImageId: flowRefs.googleFlowImageId,
+        googleFlowImageRef: flowRefs.googleFlowImageRef,
       });
 
-      // Maintain persistent sequential version history across providers
+      // Persist a structured version row. providerMetadata stays flexible for
+      // provider-specific fields, while StoryContextService flattens these
+      // fields onto each backgroundVersions[] item for consumers.
       const bgVersion = await createBackgroundImageVersion({
         sceneId: scene.sceneId,
+        version,
         provider,
         model,
         prompt,
-        parentVersionId: options.googleFlowParentAssetId || null,
+        // parentVersionId is an internal BackgroundImageVersion ID. The
+        // external Google Flow parent asset ID remains in providerMetadata.
+        parentVersionId: latestBackgroundVersion?.id || null,
         localImageId: imageRecord.id,
         storageKey: storageFilename,
         imageUrl: url,
@@ -297,14 +357,10 @@ export class GoogleFlowAssetImportService {
         height,
         aspectRatio,
         providerMetadata: {
-          googleFlowProjectId: options.googleFlowProjectId || options.flowProjectId,
-          googleFlowEditId: options.googleFlowEditId,
-          googleFlowEditUrl: options.googleFlowEditUrl,
-          googleFlowImageId: options.googleFlowImageId || null,
-          googleFlowImageRef: options.googleFlowImageRef || null,
-          googleFlowImageSourceUrl: options.googleFlowImageSourceUrl || null,
-          googleFlowParentAssetId: options.googleFlowParentAssetId,
-          sourceJobId: options.sourceJobId,
+          ...flowRefs,
+          googleFlowPrompt: flowRefs.googleFlowPrompt || prompt,
+          googleFlowVersion: version,
+          sourceJobId: options.sourceJobId || null,
         },
         status: "completed",
         makeActive: true,
@@ -327,12 +383,14 @@ export class GoogleFlowAssetImportService {
           sizeBytes: buffer.length,
           sourceJobId: options.sourceJobId,
           flowProjectId: options.flowProjectId || options.googleFlowProjectId,
-          googleFlowProjectId: options.googleFlowProjectId || options.flowProjectId,
-          googleFlowEditId: options.googleFlowEditId,
-          googleFlowEditUrl: options.googleFlowEditUrl,
-          googleFlowImageId: options.googleFlowImageId || null,
-          googleFlowImageRef: options.googleFlowImageRef || null,
-          googleFlowParentAssetId: options.googleFlowParentAssetId,
+          googleFlowProjectId: flowRefs.googleFlowProjectId,
+          googleFlowEditId: flowRefs.googleFlowEditId,
+          googleFlowEditUrl: flowRefs.googleFlowEditUrl,
+          googleFlowPrompt: flowRefs.googleFlowPrompt || prompt,
+          googleFlowImageId: flowRefs.googleFlowImageId,
+          googleFlowImageRef: flowRefs.googleFlowImageRef,
+          googleFlowImageSourceUrl: flowRefs.googleFlowImageSourceUrl,
+          googleFlowParentAssetId: flowRefs.googleFlowParentAssetId,
           googleFlowVersion: version,
           activeVersion: bgVersion.version,
           versionId: bgVersion.id,
@@ -366,8 +424,8 @@ export class GoogleFlowAssetImportService {
           googleFlowProjectId: imageRecord.googleFlowProjectId,
           googleFlowEditId: imageRecord.googleFlowEditId,
           googleFlowEditUrl: imageRecord.googleFlowEditUrl,
-          googleFlowImageId: options.googleFlowImageId || null,
-          googleFlowImageRef: options.googleFlowImageRef || null,
+          googleFlowImageId: imageRecord.googleFlowImageId || imageRecord.googleFlowEditId || null,
+          googleFlowImageRef: imageRecord.googleFlowImageRef || null,
           googleFlowVersion: imageRecord.googleFlowVersion,
           googleFlowParentAssetId: imageRecord.googleFlowParentAssetId,
           fit,
