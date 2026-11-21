@@ -1,6 +1,79 @@
 import { prisma } from '../database/database.service.js';
 import { isReservedMetadataKey, cleanSpeakerName } from '../story-generation/story-importer.service.js';
 
+export interface BackgroundVersionContext {
+  id: string;
+  sceneId: string;
+  version: number;
+  provider: string;
+  model?: string | null;
+  prompt?: string | null;
+  parentVersionId?: string | null;
+  localImageId?: string | null;
+  storageKey?: string | null;
+  imageUrl?: string | null;
+  width?: number | null;
+  height?: number | null;
+  aspectRatio?: string | null;
+  status: string;
+  createdAt: string | Date;
+  googleFlowProjectId: string | null;
+  googleFlowEditId: string | null;
+  googleFlowEditUrl: string | null;
+  googleFlowImageId: string | null;
+  googleFlowImageRef: string | null;
+  googleFlowImageSourceUrl: string | null;
+  googleFlowParentAssetId: string | null;
+  googleFlowPrompt: string | null;
+  googleFlowVersion: number | null;
+  providerMetadata: Record<string, any>;
+  [key: string]: any;
+}
+
+export type GoogleFlowBackgroundVersionContext = BackgroundVersionContext;
+
+export function serializeBackgroundVersion(version: any): BackgroundVersionContext {
+  const providerMetadata =
+    version?.providerMetadata && typeof version.providerMetadata === "object"
+      ? version.providerMetadata as Record<string, any>
+      : {};
+  const isGoogleFlow = String(version?.provider || "").toLowerCase() === "google_flow";
+  const googleFlowEditId = isGoogleFlow
+    ? providerMetadata.googleFlowEditId || null
+    : null;
+  const googleFlowImageId = isGoogleFlow
+    ? providerMetadata.googleFlowImageId || googleFlowEditId || null
+    : null;
+
+  return {
+    ...version,
+    googleFlowProjectId: isGoogleFlow ? providerMetadata.googleFlowProjectId || null : null,
+    googleFlowEditId,
+    googleFlowEditUrl: isGoogleFlow ? providerMetadata.googleFlowEditUrl || null : null,
+    googleFlowImageId,
+    googleFlowImageRef: isGoogleFlow ? providerMetadata.googleFlowImageRef || null : null,
+    googleFlowImageSourceUrl: isGoogleFlow
+      ? providerMetadata.googleFlowImageSourceUrl || providerMetadata.googleFlowImageRef || null
+      : null,
+    googleFlowParentAssetId: isGoogleFlow
+      ? providerMetadata.googleFlowParentAssetId || null
+      : null,
+    googleFlowPrompt: isGoogleFlow
+      ? providerMetadata.googleFlowPrompt || version?.prompt || null
+      : null,
+    googleFlowVersion: isGoogleFlow
+      ? Number(providerMetadata.googleFlowVersion || version?.version || 0) || null
+      : null,
+    // Keep the original flexible JSON metadata while normalizing imageId.
+    providerMetadata: isGoogleFlow
+      ? {
+          ...providerMetadata,
+          googleFlowImageId,
+        }
+      : providerMetadata,
+  };
+}
+
 export interface SceneContextItem {
   sceneId: string;
   id: string;
@@ -22,9 +95,10 @@ export interface SceneContextItem {
   googleFlowParentAssetId?: string | null;
   googleFlowImageId?: string | null;
   googleFlowImageRef?: string | null;
+  googleFlowVersions?: GoogleFlowBackgroundVersionContext[];
   activeBackgroundVersion?: number | null;
   totalBackgroundVersions?: number;
-  backgroundVersions?: any[];
+  backgroundVersions?: BackgroundVersionContext[];
   provider?: string | null;
   model?: string | null;
   location: string;
@@ -120,7 +194,6 @@ export class StoryContextService {
             images: {
               where: { status: 'completed' },
               orderBy: { createdAt: 'desc' },
-              take: 1,
             },
             backgroundVersions: {
               orderBy: { version: 'asc' },
@@ -190,14 +263,44 @@ export class StoryContextService {
       const bgData = animData.background || {};
       const isBgExplicitlyRemoved = Boolean(bgData.removed);
 
-      // Determine active background URL and verified asset readiness
+      // Build a normalized, provider-independent version array. Flow's
+      // providerMetadata is flattened onto each item so the editor and image
+      // generators can select a version without knowing the JSON nesting.
+      const backgroundVersions = (scene.backgroundVersions || []).map(
+        (version: any) => serializeBackgroundVersion(version),
+      );
+      const requestedActiveVersion =
+        scene.activeBackgroundVersion ?? bgData.activeVersion ?? null;
+      const activeVersionRecord =
+        backgroundVersions.find((version) => version.version === requestedActiveVersion) ||
+        backgroundVersions[backgroundVersions.length - 1] ||
+        null;
+
+      // Prefer the local Image row linked to the active version. This is
+      // important after the user restores an older background version.
+      const completedImage =
+        (activeVersionRecord?.localImageId
+          ? (scene.images || []).find((image: any) => image.id === activeVersionRecord.localImageId)
+          : null) ||
+        (scene.images && scene.images.length > 0 ? scene.images[0] : null);
+
+      const activeVersionFlow = activeVersionRecord || {};
+      const activeProviderMetadata =
+        activeVersionFlow.providerMetadata && typeof activeVersionFlow.providerMetadata === "object"
+          ? activeVersionFlow.providerMetadata
+          : {};
+
+      // Determine the selected background URL and verified asset readiness.
       let backgroundUrl: string | null = null;
       let backgroundImageId: string | null = null;
       let hasBackground = false;
-      const completedImage = scene.images && scene.images.length > 0 ? scene.images[0] : null;
 
       if (!isBgExplicitlyRemoved && scene.generationStatus !== 'failed' && bgData.status !== 'failed') {
-        if (completedImage && completedImage.status === 'completed' && completedImage.imageUrl) {
+        if (activeVersionRecord?.status === "completed" && activeVersionRecord.imageUrl) {
+          backgroundUrl = activeVersionRecord.imageUrl;
+          backgroundImageId = activeVersionRecord.localImageId || null;
+          hasBackground = true;
+        } else if (completedImage && completedImage.status === 'completed' && completedImage.imageUrl) {
           backgroundUrl = completedImage.imageUrl;
           backgroundImageId = completedImage.id;
           hasBackground = true;
@@ -206,6 +309,7 @@ export class StoryContextService {
           hasBackground = true;
         } else if (bgData.imageUrl && bgData.imageUrl.trim().length > 0) {
           backgroundUrl = bgData.imageUrl.trim();
+          backgroundImageId = bgData.imageId || null;
           hasBackground = true;
         }
       }
@@ -314,19 +418,64 @@ export class StoryContextService {
         hasBackground,
         backgroundUrl,
         backgroundImageId,
-        googleFlowProjectId: (completedImage as any)?.googleFlowProjectId || bgData.googleFlowProjectId || null,
-        googleFlowEditId: (completedImage as any)?.googleFlowEditId || bgData.googleFlowEditId || null,
-        googleFlowEditUrl: (completedImage as any)?.googleFlowEditUrl || bgData.googleFlowEditUrl || null,
-        googleFlowPrompt: (completedImage as any)?.googleFlowPrompt || bgData.googleFlowPrompt || null,
-        googleFlowVersion: (completedImage as any)?.googleFlowVersion ?? bgData.googleFlowVersion ?? null,
-        googleFlowParentAssetId: (completedImage as any)?.googleFlowParentAssetId || bgData.googleFlowParentAssetId || null,
-        googleFlowImageId: (completedImage as any)?.googleFlowImageId || bgData.googleFlowImageId || null,
-        googleFlowImageRef: (completedImage as any)?.googleFlowImageRef || bgData.googleFlowImageRef || null,
-        activeBackgroundVersion: (scene as any).activeBackgroundVersion ?? bgData.activeVersion ?? (completedImage as any)?.googleFlowVersion ?? 1,
-        totalBackgroundVersions: (scene as any).backgroundVersions?.length || (scene.images?.length || 0),
-        backgroundVersions: (scene as any).backgroundVersions || [],
-        provider: bgData.provider || (completedImage as any)?.provider || null,
-        model: bgData.model || (completedImage as any)?.model || null,
+        googleFlowProjectId:
+          activeVersionFlow.googleFlowProjectId ||
+          (completedImage as any)?.googleFlowProjectId ||
+          bgData.googleFlowProjectId ||
+          null,
+        googleFlowEditId:
+          activeVersionFlow.googleFlowEditId ||
+          (completedImage as any)?.googleFlowEditId ||
+          bgData.googleFlowEditId ||
+          null,
+        googleFlowEditUrl:
+          activeVersionFlow.googleFlowEditUrl ||
+          (completedImage as any)?.googleFlowEditUrl ||
+          bgData.googleFlowEditUrl ||
+          null,
+        googleFlowPrompt:
+          activeVersionFlow.googleFlowPrompt ||
+          (completedImage as any)?.googleFlowPrompt ||
+          bgData.googleFlowPrompt ||
+          null,
+        googleFlowVersion:
+          activeVersionFlow.googleFlowVersion ??
+          (completedImage as any)?.googleFlowVersion ??
+          bgData.googleFlowVersion ??
+          activeVersionRecord?.version ??
+          null,
+        googleFlowParentAssetId:
+          activeVersionFlow.googleFlowParentAssetId ||
+          (completedImage as any)?.googleFlowParentAssetId ||
+          bgData.googleFlowParentAssetId ||
+          null,
+        // Flow edit URL /edit/{id} is the fallback stable media identifier
+        // when Google Flow does not expose a separate DOM data-image-id.
+        googleFlowImageId:
+          activeVersionFlow.googleFlowImageId ||
+          activeVersionFlow.googleFlowEditId ||
+          (completedImage as any)?.googleFlowImageId ||
+          (completedImage as any)?.googleFlowEditId ||
+          bgData.googleFlowImageId ||
+          bgData.googleFlowEditId ||
+          null,
+        googleFlowImageRef:
+          activeVersionFlow.googleFlowImageRef ||
+          (completedImage as any)?.googleFlowImageRef ||
+          bgData.googleFlowImageRef ||
+          null,
+        googleFlowVersions: backgroundVersions.filter(
+          (version) => version.provider === "google_flow",
+        ),
+        activeBackgroundVersion:
+          requestedActiveVersion ??
+          activeVersionRecord?.version ??
+          (completedImage as any)?.googleFlowVersion ??
+          1,
+        totalBackgroundVersions: backgroundVersions.length || (scene.images?.length || 0),
+        backgroundVersions,
+        provider: activeVersionRecord?.provider || bgData.provider || (completedImage as any)?.provider || null,
+        model: activeVersionRecord?.model || bgData.model || (completedImage as any)?.model || null,
         location,
         timeOfDay,
         lighting,
