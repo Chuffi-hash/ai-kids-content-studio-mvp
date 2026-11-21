@@ -94,7 +94,7 @@ describe("Google Flow Image Viewer Done Editing Workflow Suite", () => {
         fn({
           currentSrc: "https://flow.google.com/asb/test=s1600-rw",
           src: "https://flow.google.com/asb/test=s1600-rw",
-          complete: true,
+          complete: options.viewerComplete !== false,
           naturalWidth: 1024,
           naturalHeight: 576,
           tagName: "IMG",
@@ -248,6 +248,25 @@ describe("Google Flow Image Viewer Done Editing Workflow Suite", () => {
     assert.ok(loggedPhases.includes("BACKGROUND_IMAGE_VALIDATED"), "Must log BACKGROUND_IMAGE_VALIDATED");
     assert.ok(loggedPhases.includes("FLOW_EDITOR_DONE_CLICK_STARTED"), "Must log FLOW_EDITOR_DONE_CLICK_STARTED");
     assert.ok(loggedPhases.includes("FLOW_IMAGE_EDITOR_CLOSED"), "Must log FLOW_IMAGE_EDITOR_CLOSED");
+
+    await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+  });
+
+  it("1b. Visible image with valid intrinsic dimensions is accepted while complete is temporarily false", async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "flow-test-image-loading-"));
+    const { page, mockOption } = createBaseMockPage({ viewerComplete: false });
+
+    const res = await downloadFlowImage({
+      page,
+      job: { id: "job-image-loading" },
+      output: { optionLocator: mockOption },
+      downloadDir: tempDir,
+      automationRunner: createMockAutomationRunner(),
+    });
+
+    assert.equal(res.success, true);
+    assert.equal(res.editorClosed, true);
+    assert.equal(page.isDoneClicked(), true);
 
     await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
   });
