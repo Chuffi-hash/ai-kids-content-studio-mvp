@@ -375,6 +375,12 @@ export async function saveImageUsingNativeContextMenu({
     // Wait for native Chrome Save image as and Windows Save As.
     const saved = await nativeController.result;
 
+    onPhase?.("NATIVE_SAVE_IMAGE_AS_COMPLETED", {
+      success: true,
+      downloadMethod: "native_context_menu_save_as",
+      path: saved.path,
+    });
+
     const stat = await fs.stat(saved.path);
     if (!stat.isFile() || stat.size <= 0) {
       throw new Error("NATIVE_SAVE_AS_FILE_INVALID");
@@ -397,6 +403,14 @@ export async function saveImageUsingNativeContextMenu({
         `NATIVE_SAVE_AS_INVALID_DIMENSIONS: ${dimensions.width}x${dimensions.height}`,
       );
     }
+
+    onPhase?.("BACKGROUND_IMAGE_VALIDATED", {
+      success: true,
+      mimeType: detected.mimeType,
+      width: dimensions.width,
+      height: dimensions.height,
+      downloadMethod: "native_context_menu_save_as",
+    });
 
     onPhase?.("IMAGE_CONTENT_VALIDATED", {
       success: true,
@@ -465,6 +479,168 @@ export async function saveImageUsingNativeContextMenu({
 
     throw error;
   }
+}
+
+/**
+ * Closes the Google Flow image preview/editor by clicking the "Done editing" button.
+ * Prefers the accessible locator getByRole("button", { name: "Done editing", exact: true }),
+ * with fallback to locator('button[aria-label="Done editing"]').
+ * Verifies that the editor closes and returns to expected chat state.
+ */
+export async function closeFlowImageEditor(page, logger = console, options = {}) {
+  const timeoutMs = typeof options.timeoutMs === "number" ? options.timeoutMs : 10000;
+  const emit = (phase, details = {}) => {
+    if (typeof options.logTransition === "function") {
+      options.logTransition(phase, details);
+    } else if (typeof options.onPhase === "function") {
+      options.onPhase(phase, details);
+    } else if (logger && typeof logger.info === "function") {
+      logger.info(`[FlowDownload] ${phase} ${JSON.stringify(details)}`);
+    } else if (typeof logger === "function") {
+      logger(phase, details);
+    }
+  };
+
+  if (!page || (typeof page.isClosed === "function" && page.isClosed())) {
+    const err = new Error("FLOW_PAGE_CLOSED");
+    emit("FLOW_EDITOR_CLOSE_FAILED", {
+      success: false,
+      errorCode: "FLOW_PAGE_CLOSED",
+      error: err.message,
+    });
+    throw err;
+  }
+
+  // 1. Locate Done editing button: prefer accessible getByRole, fallback to aria-label locator
+  let doneLocator = null;
+  if (typeof page.getByRole === "function") {
+    doneLocator = page.getByRole("button", {
+      name: "Done editing",
+      exact: true,
+    });
+  }
+
+  let count = 0;
+  try {
+    count = doneLocator ? await doneLocator.count() : 0;
+  } catch {}
+
+  if (count === 0 && typeof page.locator === "function") {
+    doneLocator = page.locator('button[aria-label="Done editing"]');
+    try {
+      count = await doneLocator.count();
+    } catch {}
+  }
+
+  // Wait for at least one button to be visible if initially 0
+  if (
+    count === 0 &&
+    doneLocator &&
+    typeof doneLocator.first === "function" &&
+    typeof doneLocator.first().waitFor === "function"
+  ) {
+    try {
+      await doneLocator.first().waitFor({ state: "visible", timeout: timeoutMs });
+      count = await doneLocator.count();
+    } catch {}
+  }
+
+  if (count === 0) {
+    const err = new Error("FLOW_EDITOR_DONE_BUTTON_NOT_FOUND");
+    emit("FLOW_EDITOR_DONE_BUTTON_NOT_FOUND", {
+      success: false,
+      errorCode: "FLOW_EDITOR_DONE_BUTTON_NOT_FOUND",
+      error: "Done editing button could not be located in image editor header.",
+    });
+    throw err;
+  }
+
+  // Check visible buttons to prevent clicking an ambiguous button
+  const visibleButtons = [];
+  for (let i = 0; i < count; i++) {
+    const btn =
+      typeof doneLocator.nth === "function"
+        ? doneLocator.nth(i)
+        : i === 0
+          ? doneLocator
+          : null;
+    if (!btn) continue;
+    let isVis = false;
+    try {
+      isVis = typeof btn.isVisible === "function" ? await btn.isVisible() : true;
+    } catch {}
+    if (isVis) {
+      visibleButtons.push(btn);
+    }
+  }
+
+  if (visibleButtons.length === 0) {
+    const firstBtn =
+      typeof doneLocator.first === "function" ? doneLocator.first() : doneLocator;
+    try {
+      if (typeof firstBtn.waitFor === "function") {
+        await firstBtn.waitFor({ state: "visible", timeout: timeoutMs });
+      }
+      visibleButtons.push(firstBtn);
+    } catch {
+      const err = new Error("FLOW_EDITOR_DONE_BUTTON_NOT_FOUND");
+      emit("FLOW_EDITOR_DONE_BUTTON_NOT_FOUND", {
+        success: false,
+        errorCode: "FLOW_EDITOR_DONE_BUTTON_NOT_FOUND",
+        error: "Done editing button did not become visible within timeout.",
+      });
+      throw err;
+    }
+  }
+
+  if (visibleButtons.length > 1) {
+    const err = new Error(
+      `FLOW_EDITOR_DONE_BUTTON_AMBIGUOUS: Expected exactly one visible Done editing button, found ${visibleButtons.length}.`,
+    );
+    emit("FLOW_EDITOR_DONE_BUTTON_AMBIGUOUS", {
+      success: false,
+      errorCode: "FLOW_EDITOR_DONE_BUTTON_AMBIGUOUS",
+      count: visibleButtons.length,
+      error: err.message,
+    });
+    throw err;
+  }
+
+  const targetButton = visibleButtons[0];
+
+  emit("FLOW_EDITOR_DONE_CLICK_STARTED", { success: true });
+
+  try {
+    await targetButton.click({ timeout: timeoutMs });
+  } catch (clickErr) {
+    const err = new Error(`FLOW_EDITOR_CLOSE_FAILED: ${clickErr.message}`);
+    emit("FLOW_EDITOR_CLOSE_FAILED", {
+      success: false,
+      errorCode: "FLOW_EDITOR_CLOSE_FAILED",
+      error: clickErr.message,
+    });
+    throw err;
+  }
+
+  // Confirm editor/preview closes by waiting for Done button to become hidden
+  try {
+    if (typeof targetButton.waitFor === "function") {
+      await targetButton.waitFor({ state: "hidden", timeout: timeoutMs });
+    }
+  } catch (waitErr) {
+    const err = new Error(
+      `FLOW_EDITOR_CLOSE_TIMEOUT: Done editing button remained visible after ${timeoutMs}ms.`,
+    );
+    emit("FLOW_EDITOR_CLOSE_TIMEOUT", {
+      success: false,
+      errorCode: "FLOW_EDITOR_CLOSE_TIMEOUT",
+      error: err.message,
+    });
+    throw err;
+  }
+
+  emit("FLOW_IMAGE_EDITOR_CLOSED", { success: true });
+  return true;
 }
 
 /**
@@ -719,10 +895,16 @@ export async function downloadFlowImage({
 
   logTransition("IMAGE_VIEWER_VERIFIED", { success: true });
   logTransition("ACTIVE_IMAGE_VERIFIED", { success: true });
+  logTransition("FLOW_IMAGE_EDITOR_OPENED", { success: true });
 
   // 6. Right-click and invoke Chrome native "Save image as"
   const targetDir = downloadDir || path.join(os.tmpdir(), "flow-downloads");
   try {
+    logTransition("NATIVE_SAVE_IMAGE_AS_STARTED", {
+      success: true,
+      downloadMethod: "native_context_menu_save_as",
+    });
+
     const nativeResult = await saveImageUsingNativeContextMenu({
       page,
       imageLocator: activeViewerImage,
@@ -735,23 +917,21 @@ export async function downloadFlowImage({
       onPhase: (ph, details) => logTransition(ph, details),
     });
 
-    // Close viewer cleanly
+    // 7. Click Google Flow Done button to close image editor cleanly and return to chat state
+    let editorClosed = false;
+    let editorCloseError = null;
     try {
-      const closeBtn = getFirstLocator(
-        page.locator(
-          'button[aria-label="Close"], button[aria-label="Back"], button:has-text("Close"), button:has-text("Back")',
-        ),
+      await closeFlowImageEditor(page, logger, {
+        timeoutMs: 10000,
+        logTransition,
+      });
+      editorClosed = true;
+    } catch (closeErr) {
+      editorCloseError = closeErr.message;
+      logger?.warn?.(
+        `[FlowDownload] Editor close cleanup failed, but download succeeded: ${closeErr.message}`,
       );
-      if (
-        closeBtn &&
-        (await closeBtn.count().catch(() => 0)) > 0 &&
-        (await closeBtn.isVisible().catch(() => false))
-      ) {
-        await closeBtn.click().catch(() => {});
-      } else if (page.keyboard) {
-        await page.keyboard.press("Escape").catch(() => {});
-      }
-    } catch {}
+    }
 
     return {
       success: true,
@@ -763,6 +943,8 @@ export async function downloadFlowImage({
       width: nativeResult.width,
       height: nativeResult.height,
       buffer: nativeResult.buffer,
+      editorClosed,
+      editorCloseError,
       jobId: job?.id,
       backendJobId: job?.backendJobId || job?.id,
       storyId: job?.storyId,

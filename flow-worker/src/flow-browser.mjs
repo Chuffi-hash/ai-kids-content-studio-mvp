@@ -14,9 +14,9 @@ import {
   parseImageDimensions,
   safeFilename,
 } from "./image-validation.mjs";
-import { downloadFlowImage } from "./flow-download.mjs";
+import { downloadFlowImage, closeFlowImageEditor } from "./flow-download.mjs";
 
-export { downloadFlowImage };
+export { downloadFlowImage, closeFlowImageEditor };
 
 const VALID_ASSET_TYPES = new Set([
   "main",

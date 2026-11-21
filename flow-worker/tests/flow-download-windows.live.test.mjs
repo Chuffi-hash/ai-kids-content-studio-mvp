@@ -94,12 +94,19 @@ describe("Google Flow Live Windows Context Menu Download Integration", () => {
       assert.ok(loggedPhases.includes("IMAGE_OPTION_CLICKED"), "Must click image option");
       assert.ok(loggedPhases.includes("IMAGE_VIEWER_VERIFIED"), "Must verify image viewer");
       assert.ok(loggedPhases.includes("ACTIVE_IMAGE_VERIFIED"), "Must verify active viewer image");
+      assert.ok(loggedPhases.includes("FLOW_IMAGE_EDITOR_OPENED"), "Must log FLOW_IMAGE_EDITOR_OPENED");
+      assert.ok(loggedPhases.includes("NATIVE_SAVE_IMAGE_AS_STARTED"), "Must log NATIVE_SAVE_IMAGE_AS_STARTED");
       assert.ok(loggedPhases.includes("IMAGE_RIGHT_CLICK_DISPATCHED"), "Must right-click image");
       assert.ok(loggedPhases.includes("NATIVE_CONTEXT_MENU_SAVE_IMAGE_FOUND"), "Must find native context menu item");
       assert.ok(loggedPhases.includes("NATIVE_SAVE_AS_DIALOG_FOUND"), "Must find native Save As dialog");
       assert.ok(loggedPhases.includes("NATIVE_SAVE_AS_CONFIRMED"), "Must invoke Save button");
       assert.ok(loggedPhases.includes("FILE_EXISTS_VERIFIED"), "Must verify saved file exists");
+      assert.ok(loggedPhases.includes("NATIVE_SAVE_IMAGE_AS_COMPLETED"), "Must log NATIVE_SAVE_IMAGE_AS_COMPLETED");
+      assert.ok(loggedPhases.includes("BACKGROUND_IMAGE_VALIDATED"), "Must log BACKGROUND_IMAGE_VALIDATED");
       assert.ok(loggedPhases.includes("IMAGE_CONTENT_VALIDATED"), "Must validate image bytes");
+      assert.ok(loggedPhases.includes("FLOW_EDITOR_DONE_CLICK_STARTED"), "Must log FLOW_EDITOR_DONE_CLICK_STARTED");
+      assert.ok(loggedPhases.includes("FLOW_IMAGE_EDITOR_CLOSED"), "Must log FLOW_IMAGE_EDITOR_CLOSED");
+      assert.equal(dlResult.editorClosed, true, "Image editor must be closed via Done button");
 
       console.log(
         `[LiveTest] Native Save As successfully verified: ${dlResult.path} (${fileStat.size} bytes, ${dimensions.width}x${dimensions.height} ${detected.mimeType})`,
