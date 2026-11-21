@@ -506,7 +506,7 @@ describe("Background Version History & Google Flow References Suite (25 Conditio
             nth: () => mockViewerImg,
           };
         }
-        if (selector === 'button[aria-label="Done editing"]') {
+        if (selector.includes('button[aria-label="Done editing"]')) {
           return {
             count: async () => 1,
             first: () => mockDoneBtn,

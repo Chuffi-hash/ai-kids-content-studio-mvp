@@ -42,11 +42,13 @@ describe("Google Flow Image Viewer Done Editing Workflow Suite", () => {
   function createBaseMockPage(options = {}) {
     let doneClicked = false;
     let doneHidden = false;
+    let currentUrl = options.initialUrl || "https://flow.google.com/project/p1/edit/e1";
 
     const mockDoneBtn = {
       isVisible: async () => !doneHidden && options.doneVisible !== false,
-      waitFor: async ({ state }) => {
-        if (state === "visible" && options.doneVisible === false) {
+      isEnabled: async () => options.doneDisabled !== true,
+      waitFor: async ({ state } = {}) => {
+        if (state === "visible" && (options.doneVisible === false || options.missingDoneButton)) {
           throw new Error("Timeout waiting for visible");
         }
         if (state === "hidden" && options.failDoneHide) {
@@ -63,6 +65,7 @@ describe("Google Flow Image Viewer Done Editing Workflow Suite", () => {
         doneClicked = true;
         if (!options.failDoneHide) {
           doneHidden = true;
+          currentUrl = options.afterClickUrl || "https://flow.google.com/project/p1";
         }
       },
     };
@@ -100,35 +103,84 @@ describe("Google Flow Image Viewer Done Editing Workflow Suite", () => {
       click: async () => {},
     };
 
+    const mockButtons = {
+      count: async () => {
+        if (options.missingDoneButton) return 0;
+        if (options.multipleDoneButtons) return 2;
+        return 1;
+      },
+      first: () => mockDoneBtn,
+      nth: (n) => mockDoneBtn,
+      waitFor: async ({ state } = {}) => {
+        if (state === "visible" && options.missingDoneButton) {
+          throw new Error("Timeout waiting for visible");
+        }
+      },
+    };
+
+    const mockHeader = {
+      waitFor: async ({ state } = {}) => {
+        if (options.missingHeader) {
+          throw new Error("Timeout waiting for flow-editor-header");
+        }
+      },
+      locator: (sel) => {
+        if (sel === 'button[aria-label="Done editing"]') {
+          return mockButtons;
+        }
+        return {
+          count: async () => 0,
+        };
+      },
+    };
+
     const page = {
+      url: () => currentUrl,
       isClosed: () => false,
       mouse: { click: async () => {} },
+      evaluate: async (fn) => {
+        return {
+          href: currentUrl,
+          title: "Flow Editor",
+          headerExists: !options.missingHeader,
+          headerVisible: !options.missingHeader,
+          doneButtons: options.missingDoneButton
+            ? []
+            : [
+                {
+                  ariaLabel: "Done editing",
+                  text: "Done",
+                  visible: true,
+                  disabled: options.doneDisabled === true,
+                },
+              ],
+          headerButtons: [],
+        };
+      },
+      context: () => ({
+        pages: () => [page],
+      }),
+      waitForURL: async (predicate, { timeout } = {}) => {
+        if (options.failDoneHide) {
+          throw new Error("Timeout waiting for URL change");
+        }
+        if (typeof predicate === "function") {
+          currentUrl = options.afterClickUrl || "https://flow.google.com/project/p1";
+          if (!predicate(currentUrl)) {
+            throw new Error("Timeout waiting for URL condition");
+          }
+        }
+      },
       getByRole: (role, opts) => {
         if (role === "button" && opts?.name === "Done editing") {
-          if (options.multipleDoneButtons) {
-            return {
-              count: async () => 2,
-              nth: (n) => mockDoneBtn,
-              first: () => mockDoneBtn,
-              waitFor: async () => {},
-            };
-          }
-          if (options.missingDoneButton) {
-            return {
-              count: async () => 0,
-              first: () => ({ waitFor: async () => { throw new Error("Timeout"); } }),
-            };
-          }
-          return {
-            count: async () => 1,
-            first: () => mockDoneBtn,
-            nth: () => mockDoneBtn,
-            waitFor: async () => {},
-          };
+          return mockButtons;
         }
         return { count: async () => 0 };
       },
       locator: (selector) => {
+        if (selector === "flow-editor-header") {
+          return mockHeader;
+        }
         if (selector === "flow-chat-scroller .scroll-viewport") {
           return {
             waitFor: async () => {},
@@ -143,14 +195,7 @@ describe("Google Flow Image Viewer Done Editing Workflow Suite", () => {
           };
         }
         if (selector === 'button[aria-label="Done editing"]') {
-          if (options.missingDoneButton) {
-            return { count: async () => 0 };
-          }
-          return {
-            count: async () => 1,
-            first: () => mockDoneBtn,
-            nth: () => mockDoneBtn,
-          };
+          return mockButtons;
         }
         return {
           count: async () => 1,

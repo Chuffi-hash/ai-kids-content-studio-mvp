@@ -19,6 +19,8 @@ import {
   closeFlowImageEditor,
   extractGoogleFlowEditorReference,
   isGoogleFlowEditorRoute,
+  extractProjectIdFromFlowUrl,
+  collectFlowEditorDiagnostics,
   saveImageUsingNativeContextMenu,
   inspectGoogleFlowActiveImage,
 } from "./flow-download.mjs";
@@ -28,6 +30,8 @@ export {
   closeFlowImageEditor,
   extractGoogleFlowEditorReference,
   isGoogleFlowEditorRoute,
+  extractProjectIdFromFlowUrl,
+  collectFlowEditorDiagnostics,
   saveImageUsingNativeContextMenu,
   inspectGoogleFlowActiveImage,
 };
@@ -907,29 +911,85 @@ export class FlowBrowserWorker {
     }
 
     try {
-      if (typeof this.page.locator === "function") {
-        // 1. Check for Agent mode elements
-        const agentBox = this.page.locator("flow-creative-agent-prompt-box");
-        if ((await agentBox.count().catch(() => 0)) > 0) return "agent";
+      const currentUrl =
+        typeof this.page.url === "function"
+          ? this.page.url()
+          : "";
 
-        const agentTextbox = this.page.locator(
-          '[role="textbox"][aria-label="What do you want to create?"]',
-        );
-        if ((await agentTextbox.count().catch(() => 0)) > 0) return "agent";
-
-        const agentSubmit = this.page.locator(
-          'button[aria-label="Start generation"]',
-        );
-        if ((await agentSubmit.count().catch(() => 0)) > 0) return "agent";
-
-        // 2. Check for Standard mode elements
-        const standardBtn = this.page.locator(
-          'button:has-text("Generate Image"), button[aria-label="Generate Image"]',
-        );
-        if ((await standardBtn.count().catch(() => 0)) > 0) return "standard";
+      // 1. The editor route is authoritative.
+      // Do not classify its Start generation button as Agent mode.
+      if (isGoogleFlowEditorRoute(currentUrl)) {
+        return "image-editor";
       }
+
+      if (typeof this.page.locator !== "function") {
+        return "unknown";
+      }
+
+      // 2. Detect Agent mode using the Agent-specific textbox.
+      const agentPrompt = this.page.locator(
+        '[role="textbox"][aria-label="What do you want to create?"], ' +
+        'flow-creative-agent-prompt-box [role="textbox"], ' +
+        'flow-creative-agent-prompt-box [contenteditable="true"]'
+      );
+
+      const agentCount = typeof agentPrompt.count === "function" ? await agentPrompt.count().catch(() => 0) : 0;
+
+      for (let i = 0; i < agentCount; i++) {
+        const candidate = typeof agentPrompt.nth === "function" ? agentPrompt.nth(i) : (typeof agentPrompt.first === "function" ? agentPrompt.first() : agentPrompt);
+
+        if (
+          (await candidate.isVisible().catch(() => false)) &&
+          (typeof candidate.isEnabled !== "function" || (await candidate.isEnabled().catch(() => true)))
+        ) {
+          return "agent";
+        }
+      }
+
+      // 3. Detect the image editor using its dedicated prompt component.
+      const imageEditorPrompt = this.page.locator(
+        '[role="textbox"][aria-label="What do you want to change?"], ' +
+        'flow-edit-image-prompt-box [role="textbox"], ' +
+        'flow-edit-image-prompt-box [contenteditable="true"]'
+      );
+
+      const imagePromptCount = typeof imageEditorPrompt.count === "function" ? await imageEditorPrompt.count().catch(() => 0) : 0;
+
+      for (let i = 0; i < imagePromptCount; i++) {
+        const candidate = typeof imageEditorPrompt.nth === "function" ? imageEditorPrompt.nth(i) : (typeof imageEditorPrompt.first === "function" ? imageEditorPrompt.first() : imageEditorPrompt);
+
+        if (
+          (await candidate.isVisible().catch(() => false)) &&
+          (typeof candidate.isEnabled !== "function" || (await candidate.isEnabled().catch(() => true)))
+        ) {
+          return "image-editor";
+        }
+      }
+
+      // 4. Detect standard mode.
+      const standardButton = this.page.locator(
+        'button:has-text("Generate Image"), ' +
+        'button[aria-label="Generate Image"]'
+      );
+
+      const standardCount = typeof standardButton.count === "function" ? await standardButton.count().catch(() => 0) : 0;
+
+      if (standardCount > 0) {
+        const btnFirst = typeof standardButton.first === "function" ? standardButton.first() : standardButton;
+        const visible = await btnFirst.isVisible().catch(() => false);
+
+        if (visible) {
+          return "standard";
+        }
+      }
+
       return "unknown";
-    } catch {
+    } catch (error) {
+      console.error(
+        "[FlowBrowser] Interface detection failed:",
+        error.message
+      );
+
       return "unknown";
     }
   }
@@ -1377,28 +1437,7 @@ export class FlowBrowserWorker {
 
       try {
         const promptEditor = await this.findImageEditPromptEditor();
-        if (typeof promptEditor.locator.click === "function") {
-          await promptEditor.locator.click().catch(() => {});
-        }
-        if (this.page.keyboard) {
-          await this.page.keyboard.press("ControlOrMeta+A").catch(() => {});
-          await this.page.keyboard.press("Backspace").catch(() => {});
-        }
-        try {
-          if (typeof promptEditor.locator.fill === "function") {
-            await promptEditor.locator.fill(job.prompt);
-          }
-        } catch {
-          if (typeof promptEditor.locator.evaluate === "function") {
-            await promptEditor.locator
-              .evaluate((node, text) => {
-                node.innerText = text;
-                node.dispatchEvent(new Event("input", { bubbles: true }));
-                node.dispatchEvent(new Event("change", { bubbles: true }));
-              }, job.prompt)
-              .catch(() => {});
-          }
-        }
+        await this.fillFlowPrompt(promptEditor.locator, job.prompt);
 
         this.emitLifecycleLog("FLOW_PROMPT_ENTERED", job, {
           prompt: job.prompt,
@@ -1421,6 +1460,13 @@ export class FlowBrowserWorker {
           error.message,
           "The Flow image editor prompt box could not be identified safely.",
         );
+        return job;
+      }
+    }
+
+    if (!job.isRegeneration) {
+      const ready = await this.ensureProjectWorkspaceReady(job);
+      if (!ready) {
         return job;
       }
     }
@@ -1466,24 +1512,23 @@ export class FlowBrowserWorker {
     this.emitLifecycleLog("ACTIVE_LOCK_ACQUIRED", job);
 
     try {
-      const promptEditor = await this.findPromptEditor();
-      if (typeof promptEditor.locator.click === "function") {
-        await promptEditor.locator.click().catch(() => {});
+      const mode = await this.detectInterfaceMode();
+
+      let promptEditor;
+      if (mode === "agent") {
+        promptEditor = await this.findAgentPromptEditor();
+      } else if (mode === "standard") {
+        promptEditor = await this.findPromptEditor();
+      } else if (mode === "image-editor") {
+        throw new Error("FLOW_IMAGE_EDITOR_STILL_OPEN");
+      } else {
+        throw new Error(
+          `FLOW_INTERFACE_UNKNOWN: Cannot prepare a background job on ${this.page.url()}`
+        );
       }
-      try {
-        if (typeof promptEditor.locator.fill === "function") {
-          await promptEditor.locator.fill(job.prompt);
-        }
-      } catch {
-        if (typeof promptEditor.locator.evaluate === "function") {
-          await promptEditor.locator
-            .evaluate((node, text) => {
-              node.innerText = text;
-              node.dispatchEvent(new Event("input", { bubbles: true }));
-            }, job.prompt)
-            .catch(() => {});
-        }
-      }
+
+      await this.fillFlowPrompt(promptEditor.locator, job.prompt);
+
       job.promptSelectorUsed = promptEditor.selector;
       job.status = "prompt_ready";
       job.message =
@@ -1505,30 +1550,297 @@ export class FlowBrowserWorker {
     }
   }
 
-  async findImageEditPromptEditor() {
-    if (!this.page || this.page.isClosed()) {
+  async ensureProjectWorkspaceReady(job) {
+    if (!this.page || (typeof this.page.isClosed === "function" && this.page.isClosed())) {
+      throw new Error("FLOW_PAGE_NOT_AVAILABLE");
+    }
+
+    const currentUrl = typeof this.page.url === "function" ? this.page.url() : "";
+    const editorRef = extractGoogleFlowEditorReference(currentUrl);
+
+    if (editorRef) {
+      if (job.isRegeneration) {
+        return true;
+      }
+
+      this.emitLifecycleLog(
+        "FLOW_EDITOR_CLEANUP_RETRY_STARTED",
+        job,
+        {
+          currentUrl,
+          projectId: editorRef.projectId,
+          editId: editorRef.editId,
+        }
+      );
+
+      try {
+        await closeFlowImageEditor(
+          this.page,
+          console,
+          {
+            timeoutMs: 15000,
+            requireEditorRoute: true,
+            expectedProjectId: editorRef.projectId,
+            logTransition: (phase, details) => {
+              this.emitLifecycleLog(phase, job, details);
+            },
+          }
+        );
+      } catch (error) {
+        job.flowSessionReady = false;
+        job.editorCloseStatus = "failed";
+        job.editorCloseError = error.message;
+        job.status = "awaiting_editor_cleanup";
+        job.errorCode = "FLOW_IMAGE_EDITOR_STILL_OPEN";
+        job.message =
+          "The previous Google Flow image editor is still open. No new generation was submitted. Close the editor successfully and retry.";
+
+        this.emitLifecycleLog(
+          "FLOW_IMAGE_EDITOR_STILL_OPEN",
+          job,
+          {
+            currentUrl: typeof this.page.url === "function" ? this.page.url() : "",
+            error: error.message,
+          }
+        );
+
+        this.touch(job);
+
+        return false;
+      }
+
+      const afterUrl = typeof this.page.url === "function" ? this.page.url() : "";
+
+      if (isGoogleFlowEditorRoute(afterUrl)) {
+        job.flowSessionReady = false;
+        job.status = "awaiting_editor_cleanup";
+        job.errorCode = "FLOW_IMAGE_EDITOR_STILL_OPEN";
+
+        this.touch(job);
+
+        return false;
+      }
+
+      const afterProjectId = this.extractProjectId(afterUrl);
+
+      if (
+        afterProjectId &&
+        afterProjectId !== editorRef.projectId
+      ) {
+        throw new Error(
+          `FLOW_EDITOR_RETURNED_WRONG_PROJECT: Expected ${editorRef.projectId}, received ${afterProjectId}.`
+        );
+      }
+
+      this.emitLifecycleLog(
+        "FLOW_EDITOR_CLEANUP_RECOVERED",
+        job,
+        {
+          previousUrl: currentUrl,
+          currentUrl: afterUrl,
+        }
+      );
+    }
+
+    const finalUrl = typeof this.page.url === "function" ? this.page.url() : "";
+
+    if (isGoogleFlowEditorRoute(finalUrl)) {
+      return false;
+    }
+
+    job.flowSessionReady = true;
+
+    return true;
+  }
+
+  async findAgentPromptEditor() {
+    if (!this.page || (typeof this.page.isClosed === "function" && this.page.isClosed())) {
       throw new Error("Flow page is not available.");
     }
-    const candidates = [
-      'flow-edit-image-prompt-box [role="textbox"]',
-      'flow-edit-image-prompt-box div.ProseMirror',
-      'flow-edit-image-prompt-box [contenteditable="true"]',
-      '[role="textbox"][aria-label*="What do you want to change"]',
-      'flow-edit-image-prompt-box textarea',
+
+    const mode = await this.detectInterfaceMode();
+
+    if (mode !== "agent") {
+      throw new Error(
+        `FLOW_WRONG_INTERFACE: Expected Agent mode, received ${mode}.`
+      );
+    }
+
+    const selectors = [
+      'flow-creative-agent-prompt-box [role="textbox"][aria-label="What do you want to create?"]',
+      'flow-creative-agent-prompt-box [contenteditable="true"]',
+      '[role="textbox"][aria-label="What do you want to create?"]',
     ];
 
-    for (const sel of candidates) {
-      const loc = this.page.locator(sel);
-      const count = await loc.count().catch(() => 0);
-      if (count > 0) {
-        const first = getFirstLocator(loc);
-        if (await first.isVisible().catch(() => false)) {
-          return { locator: first, selector: sel };
+    for (const selector of selectors) {
+      const locator = this.page.locator(selector);
+
+      const count = await locator.count().catch(() => 0);
+
+      const visible = [];
+
+      for (let i = 0; i < count; i++) {
+        const candidate = typeof locator.nth === "function" ? locator.nth(i) : (typeof locator.first === "function" ? locator.first() : locator);
+
+        if (
+          (await candidate.isVisible().catch(() => false)) &&
+          (typeof candidate.isEnabled !== "function" || (await candidate.isEnabled().catch(() => true)))
+        ) {
+          visible.push(candidate);
         }
+      }
+
+      if (visible.length > 1) {
+        throw new Error(
+          "FLOW_AGENT_PROMPT_AMBIGUOUS"
+        );
+      }
+
+      if (visible.length === 1) {
+        return {
+          locator: visible[0],
+          selector,
+        };
       }
     }
 
-    return await this.findPromptEditor();
+    throw new Error(
+      "FLOW_AGENT_PROMPT_NOT_FOUND: Could not find the visible 'What do you want to create?' prompt."
+    );
+  }
+
+  async findImageEditPromptEditor() {
+    if (!this.page || (typeof this.page.isClosed === "function" && this.page.isClosed())) {
+      throw new Error("Flow page is not available.");
+    }
+
+    const currentUrl = typeof this.page.url === "function" ? this.page.url() : "";
+
+    if (!isGoogleFlowEditorRoute(currentUrl)) {
+      throw new Error(
+        `FLOW_WRONG_INTERFACE: Expected image editor route. Current URL: ${currentUrl}`
+      );
+    }
+
+    const selectors = [
+      'flow-edit-image-prompt-box [role="textbox"][aria-label="What do you want to change?"]',
+      'flow-edit-image-prompt-box [contenteditable="true"]',
+      '[role="textbox"][aria-label="What do you want to change?"]',
+    ];
+
+    for (const selector of selectors) {
+      const locator = this.page.locator(selector);
+
+      const count = await locator.count().catch(() => 0);
+
+      const visible = [];
+
+      for (let i = 0; i < count; i++) {
+        const candidate = typeof locator.nth === "function" ? locator.nth(i) : (typeof locator.first === "function" ? locator.first() : locator);
+
+        if (
+          (await candidate.isVisible().catch(() => false)) &&
+          (typeof candidate.isEnabled !== "function" || (await candidate.isEnabled().catch(() => true)))
+        ) {
+          visible.push(candidate);
+        }
+      }
+
+      if (visible.length > 1) {
+        throw new Error(
+          "FLOW_IMAGE_EDIT_PROMPT_AMBIGUOUS"
+        );
+      }
+
+      if (visible.length === 1) {
+        return {
+          locator: visible[0],
+          selector,
+        };
+      }
+    }
+
+    throw new Error(
+      "FLOW_IMAGE_EDIT_PROMPT_NOT_FOUND: Could not find 'What do you want to change?' inside flow-edit-image-prompt-box."
+    );
+  }
+
+  async fillFlowPrompt(locator, prompt) {
+    if (!locator) {
+      throw new Error("FLOW_PROMPT_LOCATOR_MISSING");
+    }
+
+    if (!prompt || !String(prompt).trim()) {
+      throw new Error("FLOW_PROMPT_EMPTY");
+    }
+
+    if (typeof locator.waitFor === "function") {
+      await locator.waitFor({
+        state: "visible",
+        timeout: 10000,
+      });
+    }
+
+    if (typeof locator.isEnabled === "function" && !(await locator.isEnabled())) {
+      throw new Error("FLOW_PROMPT_NOT_ENABLED");
+    }
+
+    if (typeof locator.click === "function") {
+      await locator.click().catch(() => {});
+    }
+
+    let filled = false;
+    try {
+      if (typeof locator.fill === "function") {
+        await locator.fill(prompt);
+        filled = true;
+      }
+    } catch (fillError) {
+      // ProseMirror contenteditable fallback.
+    }
+
+    if (!filled) {
+      if (typeof locator.click === "function") {
+        await locator.click().catch(() => {});
+      }
+      if (this.page.keyboard) {
+        await this.page.keyboard.press("ControlOrMeta+A").catch(() => {});
+        await this.page.keyboard.press("Backspace").catch(() => {});
+        if (typeof this.page.keyboard.insertText === "function") {
+          await this.page.keyboard.insertText(prompt).catch(() => {});
+        }
+      }
+      if (typeof locator.evaluate === "function") {
+        await locator
+          .evaluate((node, text) => {
+            if (node.innerText.trim() !== text.trim()) {
+              node.innerText = text;
+              node.dispatchEvent(new Event("input", { bubbles: true }));
+              node.dispatchEvent(new Event("change", { bubbles: true }));
+            }
+          }, prompt)
+          .catch(() => {});
+      }
+    }
+
+    const actualText = (
+      typeof locator.innerText === "function"
+        ? await locator.innerText().catch(() => "")
+        : typeof locator.textContent === "function"
+          ? await locator.textContent().catch(() => "")
+          : String(prompt)
+    ).trim();
+
+    if (
+      actualText.replace(/\s+/g, " ") !==
+      String(prompt).trim().replace(/\s+/g, " ")
+    ) {
+      throw new Error(
+        `FLOW_PROMPT_VERIFICATION_FAILED: Expected prompt was not entered correctly.`
+      );
+    }
+
+    return actualText;
   }
 
   async findPromptEditor() {
@@ -1659,84 +1971,34 @@ export class FlowBrowserWorker {
       throw new Error("Flow page is not available.");
     }
 
-    // 1. Verify correct Flow page
-    if (typeof this.page.url === "function" && !isFlowUrl(this.page.url())) {
+    const currentUrl = typeof this.page.url === "function" ? this.page.url() : "";
+    if (isGoogleFlowEditorRoute(currentUrl)) {
       throw new Error(
-        `Current page is not a valid Google Flow URL: ${this.page.url()}`,
+        "FLOW_IMAGE_EDITOR_STILL_OPEN: Agent generation cannot run while the image editor is active."
       );
     }
 
-    // 2. Locate unique prompt textbox
-    const promptLocator = this.page.locator(
-      'flow-creative-agent-prompt-box [role="textbox"], flow-creative-agent-prompt-box div.ProseMirror, [role="textbox"][aria-label="What do you want to create?"]',
-    );
-    const count = await promptLocator.count().catch(() => 0);
-    const promptEditor = getFirstLocator(promptLocator);
-
-    if (
-      count === 0 ||
-      !promptEditor ||
-      !(await promptEditor.isVisible().catch(() => false))
-    ) {
+    if (!isFlowUrl(currentUrl)) {
       throw new Error(
-        "Could not find visible 'What do you want to create?' prompt textbox in Google Flow Agent mode.",
+        `Current page is not a valid Google Flow URL: ${currentUrl}`,
       );
     }
 
-    // 3. Fill the prompt into ProseMirror
-    if (typeof promptEditor.click === "function") {
-      await promptEditor.click().catch(() => {});
-    }
+    this.emitLifecycleLog("FLOW_AGENT_PROMPT_DISCOVERY_STARTED", job);
+    const promptEditor = await this.findAgentPromptEditor();
+    this.emitLifecycleLog("FLOW_AGENT_PROMPT_DISCOVERY_COMPLETED", job, {
+      selector: promptEditor.selector,
+    });
 
-    if (this.page.keyboard) {
-      await this.page.keyboard.press("ControlOrMeta+A").catch(() => {});
-      await this.page.keyboard.press("Backspace").catch(() => {});
-    }
-
-    try {
-      if (typeof promptEditor.fill === "function") {
-        await promptEditor.fill(job.prompt);
-      }
-    } catch {
-      if (typeof promptEditor.evaluate === "function") {
-        await promptEditor
-          .evaluate((node, text) => {
-            node.innerText = text;
-            node.dispatchEvent(new Event("input", { bubbles: true }));
-            node.dispatchEvent(new Event("change", { bubbles: true }));
-          }, job.prompt)
-          .catch(() => {});
-      }
-    }
-
-    // 4. Verify text was entered
-    let enteredText = "";
-    if (typeof promptEditor.innerText === "function") {
-      enteredText = await promptEditor.innerText().catch(() => "");
-    }
-    if (!enteredText.trim() && typeof promptEditor.textContent === "function") {
-      enteredText = await promptEditor.textContent().catch(() => "");
-    }
-    if (
-      !enteredText.trim() &&
-      this.page.keyboard &&
-      typeof this.page.keyboard.insertText === "function"
-    ) {
-      if (typeof promptEditor.click === "function")
-        await promptEditor.click().catch(() => {});
-      await this.page.keyboard.insertText(job.prompt).catch(() => {});
-      if (typeof promptEditor.innerText === "function") {
-        enteredText = await promptEditor.innerText().catch(() => "");
-      }
-    }
+    await this.fillFlowPrompt(promptEditor.locator, job.prompt);
 
     job.status = "prompt_filled";
     job.message = "Prompt populated into Google Flow Agent box.";
     this.touch(job);
 
-    // 5. Wait for Start generation button to become enabled
     const submitLocator = this.page.locator(
-      'flow-creative-agent-prompt-box button[aria-label="Start generation"], flow-creative-agent-prompt-box button[type="submit"], button[aria-label="Start generation"]',
+      'flow-creative-agent-prompt-box button[aria-label="Start generation"], ' +
+      'flow-creative-agent-prompt-box button[type="submit"]'
     );
     const btnCount = await submitLocator.count().catch(() => 0);
     const submitBtn = getFirstLocator(submitLocator);
@@ -2273,16 +2535,26 @@ export class FlowBrowserWorker {
       });
 
       // Close editor using Done editing button
+      let editorClosed = false;
+      let editorCloseError = null;
       try {
-        await closeFlowImageEditor(this.page, console, {
-          timeoutMs: 10000,
+        const closeRes = await closeFlowImageEditor(this.page, console, {
+          timeoutMs: 15000,
+          requireEditorRoute: true,
+          expectedProjectId: job.googleFlowProjectId,
           logTransition: (ph, details) => this.emitLifecycleLog(ph, job, details),
         });
+        editorClosed = closeRes?.closed ?? Boolean(closeRes);
       } catch (closeErr) {
+        editorCloseError = closeErr.message;
         console.warn(`[FlowBrowser] Editor close cleanup notice for job ${job.id}:`, closeErr.message);
       }
 
       job.status = "importing";
+      job.downloadStatus = "completed";
+      job.editorCloseStatus = editorClosed ? "closed" : "failed";
+      job.flowSessionReady = editorClosed;
+      job.editorCloseError = editorCloseError || null;
       job.downloadPath = nativeResult.path;
       job.downloadMethod = nativeResult.downloadMethod || "native_context_menu_save_as";
       if (nativeResult.googleFlowImageId !== undefined) job.googleFlowImageId = nativeResult.googleFlowImageId;
@@ -2294,6 +2566,7 @@ export class FlowBrowserWorker {
         mimeType: nativeResult.mimeType,
         extension: nativeResult.fileName.split(".").pop(),
       });
+      job.flowSessionReady = editorClosed;
     } catch (error) {
       this.emitLifecycleLog("FLOW_REGENERATION_FAILED", job, { error: error.message });
       this.setJobTerminal(job, "failed", error.message, "Google Flow background regeneration failed.");
@@ -2325,6 +2598,22 @@ export class FlowBrowserWorker {
     }
 
     const mode = await this.detectInterfaceMode();
+
+    if (mode === "image-editor") {
+      const error = new Error(
+        "FLOW_IMAGE_EDITOR_STILL_OPEN: Close the existing image editor before starting a new background generation."
+      );
+      error.code = "FLOW_IMAGE_EDITOR_STILL_OPEN";
+      error.statusCode = 409;
+
+      job.flowSessionReady = false;
+      job.errorCode = error.code;
+      job.message = error.message;
+
+      this.touch(job);
+
+      throw error;
+    }
 
     if (mode === "agent") {
       return await this.submitAgentPrompt(job, confirmation);
@@ -2476,6 +2765,10 @@ export class FlowBrowserWorker {
             path: dlResult.path,
           });
           job.status = "importing";
+          job.downloadStatus = "completed";
+          job.editorCloseStatus = dlResult.editorClosed === true ? "closed" : "failed";
+          job.flowSessionReady = dlResult.editorClosed === true;
+          job.editorCloseError = dlResult.editorCloseError || null;
           job.downloadPath = dlResult.path;
           job.downloadMethod = dlResult.downloadMethod || "native_context_menu_save_as";
           if (dlResult.googleFlowProjectId) job.googleFlowProjectId = dlResult.googleFlowProjectId;
@@ -2490,6 +2783,7 @@ export class FlowBrowserWorker {
             mimeType: dlResult.mimeType,
             extension: dlResult.fileName.split(".").pop(),
           });
+          job.flowSessionReady = dlResult.editorClosed === true;
           return;
         }
 
