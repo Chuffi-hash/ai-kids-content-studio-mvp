@@ -6,6 +6,78 @@ import {
   GoogleFlowAssetImportService,
 } from '../src/services/google-flow/google-flow-asset-import.service.js';
 
+import { resolveGoogleFlowReferences } from '../src/services/google-flow/google-flow-asset-import.service.js';
+import { serializeBackgroundVersion } from '../src/services/google-flow/story-context.service.js';
+
+describe('Google Flow version metadata normalization', () => {
+  it('derives project, edit and image IDs from the Google Flow edit URL', () => {
+    const refs = resolveGoogleFlowReferences({
+      googleFlowEditUrl:
+        'https://flow.google.com/project/2ea32335-0e57-4d1a-9e1e-98fa3cd491e8/edit/07e0e7fb-74f2-4e20-b797-d123238c8352',
+      googleFlowImageId: null,
+    });
+
+    assert.equal(refs.googleFlowProjectId, '2ea32335-0e57-4d1a-9e1e-98fa3cd491e8');
+    assert.equal(refs.googleFlowEditId, '07e0e7fb-74f2-4e20-b797-d123238c8352');
+    assert.equal(refs.googleFlowImageId, '07e0e7fb-74f2-4e20-b797-d123238c8352');
+    assert.equal(
+      refs.googleFlowEditUrl,
+      'https://flow.google.com/project/2ea32335-0e57-4d1a-9e1e-98fa3cd491e8/edit/07e0e7fb-74f2-4e20-b797-d123238c8352',
+    );
+  });
+
+  it('preserves an explicit Google Flow image ID when one is available', () => {
+    const refs = resolveGoogleFlowReferences({
+      googleFlowEditUrl:
+        'https://flow.google.com/project/project-1/edit/edit-1',
+      googleFlowImageId: 'provider-image-id',
+    });
+
+    assert.equal(refs.googleFlowImageId, 'provider-image-id');
+    assert.equal(refs.googleFlowEditId, 'edit-1');
+  });
+
+  it('flattens Flow metadata onto every Google Flow background version object', () => {
+    const version = serializeBackgroundVersion({
+      id: 'version-row-1',
+      sceneId: 'scene-1',
+      version: 2,
+      provider: 'google_flow',
+      prompt: 'A meadow environment',
+      providerMetadata: {
+        googleFlowProjectId: 'project-1',
+        googleFlowEditId: 'edit-2',
+        googleFlowEditUrl: 'https://flow.google.com/project/project-1/edit/edit-2',
+        googleFlowImageId: null,
+        googleFlowImageRef: 'https://flow.google.com/asb/image-ref',
+        googleFlowPrompt: 'A meadow environment',
+      },
+    });
+
+    assert.equal(version.googleFlowProjectId, 'project-1');
+    assert.equal(version.googleFlowEditId, 'edit-2');
+    assert.equal(version.googleFlowImageId, 'edit-2');
+    assert.equal(version.googleFlowVersion, 2);
+    assert.equal(version.googleFlowPrompt, 'A meadow environment');
+    assert.equal(version.providerMetadata.googleFlowImageId, 'edit-2');
+  });
+
+  it('does not invent Google Flow IDs for non-Flow providers', () => {
+    const version = serializeBackgroundVersion({
+      id: 'version-row-2',
+      sceneId: 'scene-1',
+      version: 3,
+      provider: 'gemini',
+      prompt: 'A meadow',
+      providerMetadata: {},
+    });
+
+    assert.equal(version.googleFlowEditId, null);
+    assert.equal(version.googleFlowImageId, null);
+    assert.equal(version.googleFlowVersion, null);
+  });
+});
+
 describe('GoogleFlowAssetImportService & Validation', () => {
   // 1x1 valid PNG buffer
   const validPngBuffer = Buffer.from([
