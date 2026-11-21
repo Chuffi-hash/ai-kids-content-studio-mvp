@@ -80,14 +80,21 @@ describe("Flow Download Lifecycle & Stale Recovery Test Suite", () => {
     assert.ok(await fs.stat(result.path));
 
     // Verify complete phase progression
-    assert.ok(loggedPhases.includes("output_detected"));
-    assert.ok(loggedPhases.includes("opening_editor"));
-    assert.ok(loggedPhases.includes("editor_opened"));
-    assert.ok(loggedPhases.includes("download_button_found"));
-    assert.ok(loggedPhases.includes("download_started"));
-    assert.ok(loggedPhases.includes("download_event_received"));
-    assert.ok(loggedPhases.includes("download_saved"));
-    assert.ok(loggedPhases.includes("image_validated"));
+    assert.ok(loggedPhases.includes("CHAT_SCROLL_STARTED"));
+    assert.ok(loggedPhases.includes("CHAT_SCROLL_BOTTOM_REACHED"));
+    assert.ok(loggedPhases.includes("LATEST_ASSISTANT_MESSAGE_FOUND"));
+    assert.ok(loggedPhases.includes("NEW_IMAGE_GALLERY_FOUND"));
+    assert.ok(loggedPhases.includes("IMAGE_OPTION_COUNT_VERIFIED"));
+    assert.ok(loggedPhases.includes("IMAGE_THUMBNAIL_LOADED"));
+    assert.ok(loggedPhases.includes("IMAGE_OPTION_CLICKED"));
+    assert.ok(loggedPhases.includes("IMAGE_VIEWER_OPENED"));
+    assert.ok(loggedPhases.includes("ACTIVE_IMAGE_IDENTIFIED"));
+    assert.ok(loggedPhases.includes("IMAGE_RIGHT_CLICKED"));
+    assert.ok(loggedPhases.includes("CONTEXT_MENU_DETECTED"));
+    assert.ok(loggedPhases.includes("SAVE_IMAGE_ACTION_SELECTED"));
+    assert.ok(loggedPhases.includes("DOWNLOAD_EVENT_RECEIVED"));
+    assert.ok(loggedPhases.includes("IMAGE_SAVED_TO_DISK"));
+    assert.ok(loggedPhases.includes("IMAGE_VALIDATION_COMPLETED"));
 
     await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
   });
@@ -118,7 +125,7 @@ describe("Flow Download Lifecycle & Stale Recovery Test Suite", () => {
 
     assert.equal(result.success, false);
     assert.equal(result.code, "FLOW_DOWNLOAD_TIMEOUT");
-    assert.equal(result.phase, "download_event_received");
+    assert.equal(result.phase, "DOWNLOAD_EVENT_RECEIVED");
     assert.equal(result.jobId, "job-dl-timeout");
   });
 
@@ -217,5 +224,57 @@ describe("Flow Download Lifecycle & Stale Recovery Test Suite", () => {
     assert.equal(staleJob.status, "failed");
     assert.equal(staleJob.errorCode, "STALE_DOWNLOAD_JOB");
     assert.ok(staleJob.error.includes("STALE_DOWNLOAD_JOB"));
+  });
+
+  it("6. downloadFlowImage: Captures image using in-tab authenticated fetch fallback when native context menu is outside DOM", async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "flow-dl-eval-"));
+    const samplePngBase64 =
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAALUlEQVRYR+3QQREAAAzCQPr39g4fXgYk0L2Sqm8cAAAAAAAAAAAAAAAAAAB+1gO4/AH4rE2gOAAAAABJRU5ErkJggg==";
+
+    const mockPage = {
+      isClosed: () => false,
+      url: () => "https://flow.google.com/project/test-1",
+      locator: () => ({
+        count: async () => 0,
+        nth: () => ({
+          isVisible: async () => false,
+          isEnabled: async () => false,
+        }),
+        first: () => ({
+          isVisible: async () => false,
+        }),
+      }),
+      evaluate: async (fn, arg) => {
+        // Simulates in-tab fetch of the full resolution image
+        return samplePngBase64;
+      },
+    };
+
+    const job = {
+      id: "job-dl-eval-1",
+      backendJobId: "bjob-eval",
+      sceneId: "scene-eval",
+    };
+
+    const output = {
+      sourceUrl: "https://flow.google.com/asb/test-eval-image=s1600-rw",
+    };
+
+    const result = await downloadFlowImage({
+      page: mockPage,
+      job,
+      output,
+      downloadDir: tempDir,
+    });
+
+    assert.equal(result.success, true);
+    assert.equal(result.mimeType, "image/png");
+    assert.equal(result.width, 32);
+    assert.equal(result.height, 32);
+    assert.ok(result.fileSize > 0);
+    assert.equal(job.outputIndex, 0);
+    assert.equal(job.sourceImageUrl, "https://flow.google.com/asb/test-eval-image=s1600-rw");
+
+    await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
   });
 });

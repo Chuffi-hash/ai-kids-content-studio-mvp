@@ -12,15 +12,22 @@ export function getFirstLocator(loc) {
       : loc;
 }
 
+export function getNthLocator(loc, n = 0) {
+  if (!loc) return null;
+  if (typeof loc.nth === "function") return loc.nth(n);
+  if (n === 0 && typeof loc.first === "function") return loc.first();
+  return loc;
+}
+
 /**
  * Downloads a generated image asset from Google Flow with explicit stage transitions,
- * discrete timeouts, and validation.
+ * discrete timeouts, chat scrolling, right-click context menu handling, and validation.
  *
  * @param {Object} options
  * @param {import("playwright").Page} options.page
  * @param {Object} options.job
- * @param {Object} options.output
- * @param {number} [options.timeoutMs=20000]
+ * @param {Object} [options.output]
+ * @param {number} [options.timeoutMs=25000]
  * @param {string} [options.downloadDir]
  * @param {Object} [options.logger=console]
  * @returns {Promise<Object>}
@@ -29,24 +36,24 @@ export async function downloadFlowImage({
   page,
   job,
   output,
-  timeoutMs = 20000,
+  timeoutMs = 25000,
   downloadDir,
   logger = console,
 }) {
   const startedAt = Date.now();
-  let currentPhase = "output_detected";
+  let currentPhase = "CHAT_SCROLL_STARTED";
 
-  const logPhase = (phase, details = {}) => {
+  const logTransition = (phase, details = {}) => {
     currentPhase = phase;
     if (job) {
       job.downloadPhase = phase;
       job.lastProgressAt = new Date().toISOString();
     }
     const entry = {
-      jobId: job?.id,
-      backendJobId: job?.backendJobId,
+      backendJobId: job?.backendJobId || job?.id,
       workerJobId: job?.id,
       sceneId: job?.sceneId,
+      storyId: job?.storyId,
       phase,
       timestamp: new Date().toISOString(),
       durationMs: Date.now() - startedAt,
@@ -55,11 +62,9 @@ export async function downloadFlowImage({
     if (logger && typeof logger.info === "function") {
       logger.info(`[FlowDownload] ${JSON.stringify(entry)}`);
     } else {
-      console.log(`[FlowDownload] Phase: ${phase}`, JSON.stringify(entry));
+      console.log(`[FlowDownload] ${phase}`, JSON.stringify(entry));
     }
   };
-
-  logPhase("output_detected");
 
   if (!page || (typeof page.isClosed === "function" && page.isClosed())) {
     return {
@@ -71,113 +76,243 @@ export async function downloadFlowImage({
     };
   }
 
-  // 1. opening_editor
-  logPhase("opening_editor");
+  // 1. CHAT_SCROLL_STARTED & CHAT_SCROLL_BOTTOM_REACHED
+  logTransition("CHAT_SCROLL_STARTED");
+  const chatViewport = page.locator("flow-chat-scroller .scroll-viewport");
+  try {
+    const isViewportVisible = await chatViewport
+      .first()
+      .isVisible()
+      .catch(() => false);
+    if (isViewportVisible) {
+      await chatViewport.first().evaluate((el) => {
+        el.scrollTop = el.scrollHeight;
+      });
+    }
+  } catch (scrollErr) {
+    // Non-fatal if viewport not present
+  }
+  logTransition("CHAT_SCROLL_BOTTOM_REACHED");
+
+  // 2. LATEST_ASSISTANT_MESSAGE_FOUND & NEW_IMAGE_GALLERY_FOUND
+  const messagesList = page.locator("flow-chat-scroller .messages-list");
+  const assistantMessages = page.locator(
+    "flow-chat-scroller .messages-list > .agent-row.message-row, flow-chat-scroller .messages-list > .agent-row, flow-chat-scroller .messages-list > .message-row.agent-row, .agent-row.message-row, .agent-row",
+  );
+
+  let assistantCount = 0;
+  try {
+    assistantCount = await assistantMessages.count().catch(() => 0);
+  } catch {}
+
+  const sourceMessageIndex = assistantCount > 0 ? assistantCount - 1 : 0;
+  logTransition("LATEST_ASSISTANT_MESSAGE_FOUND", { sourceMessageIndex });
+
+  // Locate media gallery
+  let latestAssistant = page;
+  if (assistantCount > 0) {
+    if (typeof assistantMessages.last === "function") {
+      latestAssistant = assistantMessages.last();
+    } else if (typeof assistantMessages.nth === "function") {
+      latestAssistant = assistantMessages.nth(assistantCount - 1);
+    }
+  }
+
+  const imageGallery =
+    latestAssistant && typeof latestAssistant.locator === "function"
+      ? latestAssistant.locator(
+          'flow-a2ui-multiple-choice [role="group"][aria-label="Media options gallery"], flow-a2ui-multiple-choice .gallery-container, flow-a2ui-multiple-choice',
+        )
+      : typeof page.locator === "function"
+        ? page.locator("flow-a2ui-multiple-choice")
+        : null;
+
+  logTransition("NEW_IMAGE_GALLERY_FOUND");
+
+  // 3. IMAGE_OPTION_COUNT_VERIFIED
+  let imageOptions =
+    imageGallery && typeof imageGallery.locator === "function"
+      ? imageGallery.locator("flow-a2ui-image-option")
+      : null;
+  let optionCount = imageOptions
+    ? await imageOptions.count().catch(() => 0)
+    : 0;
+
+  if (optionCount === 0 && output?.optionLocator) {
+    imageOptions = output.optionLocator;
+    optionCount = 1;
+  }
+
+  // Enforce single output constraint if not explicitly configured
+  const selectedIndex = Number.isInteger(job?.outputIndex)
+    ? job.outputIndex
+    : 0;
+  if (optionCount > 1 && job?.outputIndex === undefined) {
+    const mismatchErr = new Error(
+      `OUTPUT_COUNT_MISMATCH: Expected exactly 1 generated image, received ${optionCount}.`,
+    );
+    return {
+      success: false,
+      code: "OUTPUT_COUNT_MISMATCH",
+      phase: "IMAGE_OPTION_COUNT_VERIFIED",
+      message: mismatchErr.message,
+      jobId: job?.id,
+    };
+  }
+
+  logTransition("IMAGE_OPTION_COUNT_VERIFIED", {
+    optionCount,
+    selectedIndex,
+  });
+
+  const selectedOption =
+    optionCount > 0 ? getNthLocator(imageOptions, selectedIndex) : null;
+
+  // 4. IMAGE_THUMBNAIL_LOADED
+  let sourceImageUrl = output?.sourceUrl || output?.rawSrc || null;
+  let thumbnailEl = null;
+
+  if (selectedOption && typeof selectedOption.locator === "function") {
+    thumbnailEl = getFirstLocator(
+      selectedOption.locator("img.image-thumbnail, img"),
+    );
+    if (
+      thumbnailEl &&
+      typeof thumbnailEl.evaluate === "function" &&
+      (await thumbnailEl.count().catch(() => 0)) > 0
+    ) {
+      const evalRes = await thumbnailEl
+        .evaluate((img) => ({
+          naturalWidth: img.naturalWidth || 0,
+          naturalHeight: img.naturalHeight || 0,
+          src: img.src || null,
+        }))
+        .catch(() => null);
+
+      if (evalRes?.src) {
+        sourceImageUrl = evalRes.src;
+      }
+    }
+  }
+
+  logTransition("IMAGE_THUMBNAIL_LOADED", { sourceImageUrl });
+
+  // 5. IMAGE_OPTION_CLICKED
   let editorOpened = false;
+  if (selectedOption) {
+    const imageButton = getFirstLocator(
+      selectedOption.locator(
+        'div.image-container[role="button"][aria-label="Open image in editor"], div.image-container.clickable, div.image-container',
+      ),
+    );
+
+    if (imageButton && (await imageButton.count().catch(() => 0)) > 0) {
+      if (typeof imageButton.scrollIntoViewIfNeeded === "function") {
+        await imageButton.scrollIntoViewIfNeeded().catch(() => {});
+      }
+      await imageButton.click({ timeout: 5000 }).catch(() => {});
+      editorOpened = true;
+    } else if (typeof selectedOption.click === "function") {
+      if (typeof selectedOption.scrollIntoViewIfNeeded === "function") {
+        await selectedOption.scrollIntoViewIfNeeded().catch(() => {});
+      }
+      await selectedOption.click({ timeout: 5000 }).catch(() => {});
+      editorOpened = true;
+    }
+  } else if (output?.optionLocator) {
+    await output.optionLocator.click({ timeout: 5000 }).catch(() => {});
+    editorOpened = true;
+  }
+
+  logTransition("IMAGE_OPTION_CLICKED", { editorOpened });
+
+  // 6. IMAGE_VIEWER_OPENED & ACTIVE_IMAGE_IDENTIFIED
+  await new Promise((r) => setTimeout(r, 600));
+  logTransition("IMAGE_VIEWER_OPENED");
+
+  let activeImage = null;
+  const viewerCandidates = page.locator(
+    'flow-image-editor img, .editor-container img, div[role="dialog"] img, img.editor-image, img.full-image, .image-viewer img',
+  );
+
+  if ((await viewerCandidates.count().catch(() => 0)) > 0) {
+    activeImage = getFirstLocator(viewerCandidates);
+  } else if (thumbnailEl) {
+    activeImage = thumbnailEl;
+  } else if (output?.imageLocator) {
+    activeImage = output.imageLocator;
+  }
+
+  let activeImageUrl = sourceImageUrl;
+  if (activeImage && typeof activeImage.getAttribute === "function") {
+    const candidateSrc = await activeImage
+      .getAttribute("src")
+      .catch(() => null);
+    if (candidateSrc) {
+      try {
+        activeImageUrl = new URL(candidateSrc, page.url()).href;
+      } catch {
+        activeImageUrl = candidateSrc;
+      }
+    }
+  }
+
+  logTransition("ACTIVE_IMAGE_IDENTIFIED", { activeImageUrl });
+
+  // 7. IMAGE_RIGHT_CLICKED
+  if (activeImage && typeof activeImage.click === "function") {
+    try {
+      if (typeof activeImage.scrollIntoViewIfNeeded === "function") {
+        await activeImage.scrollIntoViewIfNeeded().catch(() => {});
+      }
+      await activeImage.click({ button: "right", timeout: 4000 });
+    } catch (rcErr) {
+      // Non-fatal if right click dispatched via dom
+    }
+  }
+  logTransition("IMAGE_RIGHT_CLICKED");
+
+  // 8. CONTEXT_MENU_DETECTED & SAVE_IMAGE_ACTION_SELECTED
+  let contextMenuFound = false;
+  let saveMenuBtn = null;
+
   try {
-    const tileEl = output?.optionLocator;
-    if (tileEl) {
-      const openEditorBtn = getFirstLocator(
-        tileEl.locator(
-          'div.image-container[aria-label="Open image in editor"], div[role="button"][aria-label*="editor" i], div.image-container, flow-a2ui-image-option',
-        ),
+    const contextMenu = page.locator(
+      '.cdk-overlay-container [role="menu"], [role="menu"], .context-menu, mat-menu',
+    );
+    if ((await contextMenu.count().catch(() => 0)) > 0) {
+      contextMenuFound = true;
+      const saveItem = contextMenu.locator(
+        'button[role="menuitem"]:has-text("Save"), button[role="menuitem"]:has-text("Download"), [role="menuitem"]',
       );
-      if (openEditorBtn && (await openEditorBtn.count().catch(() => 0)) > 0) {
-        await openEditorBtn.click({ timeout: 5000 }).catch(() => {});
-        editorOpened = true;
-      } else if (typeof tileEl.click === "function") {
-        await tileEl.click({ timeout: 5000 }).catch(() => {});
-        editorOpened = true;
+      if ((await saveItem.count().catch(() => 0)) > 0) {
+        saveMenuBtn = getFirstLocator(saveItem);
       }
     }
-  } catch (openErr) {
-    // Non-fatal if direct interaction works
-  }
+  } catch {}
 
-  // 2. editor_opened
-  logPhase("editor_opened", { editorOpened });
+  logTransition("CONTEXT_MENU_DETECTED", { contextMenuFound });
 
-  // 3. download_button_found
-  let downloadBtn = null;
-  const buttonTimeoutMs = 5000;
-  const findButtonStart = Date.now();
-
-  while (Date.now() - findButtonStart < buttonTimeoutMs) {
-    if (typeof page.locator === "function") {
-      const candidates = page.locator(
-        'button[aria-label*="download" i], button[title*="download" i], button:has-text("Download"), [data-testid*="download" i]',
-      );
-      const count = await candidates.count().catch(() => 0);
-      for (let i = 0; i < count; i++) {
-        const btn = candidates.nth(i);
-        const visible = await btn.isVisible().catch(() => false);
-        const enabled = await btn.isEnabled().catch(() => false);
-        if (visible && enabled) {
-          downloadBtn = btn;
-          break;
-        }
-      }
-    } else if (typeof page.getByRole === "function") {
-      const roleBtn = page.getByRole("button", { name: /download/i });
-      if (
-        (await roleBtn.count().catch(() => 0)) > 0 &&
-        (await roleBtn.first().isVisible().catch(() => false))
-      ) {
-        downloadBtn = roleBtn.first();
-      }
+  // Check for toolbar download button if no context menu button
+  if (!saveMenuBtn) {
+    const toolbarBtn = page.locator(
+      'button[aria-label*="download" i], button[title*="download" i], button:has-text("Download"), [data-testid*="download" i]',
+    );
+    const firstToolbar = getFirstLocator(toolbarBtn);
+    if (
+      (await toolbarBtn.count().catch(() => 0)) > 0 &&
+      (await firstToolbar.isVisible().catch(() => false))
+    ) {
+      saveMenuBtn = firstToolbar;
     }
-    if (downloadBtn) break;
-    await new Promise((r) => setTimeout(r, 300));
   }
 
-  if (!downloadBtn) {
-    return {
-      success: false,
-      code: "FLOW_BUTTON_NOT_FOUND",
-      phase: "download_button_found",
-      message: "Download button was not found or was not visible/enabled in editor view",
-      jobId: job?.id,
-    };
-  }
+  logTransition("SAVE_IMAGE_ACTION_SELECTED", {
+    hasButton: Boolean(saveMenuBtn),
+  });
 
-  logPhase("download_button_found");
-
-  // 4. download_started & 5. download_event_received
-  logPhase("download_started");
-  let downloadEvent = null;
-  const downloadWaitTimeout = Math.min(timeoutMs, 20000);
-
-  try {
-    if (typeof page.waitForEvent !== "function") {
-      throw new Error("page.waitForEvent is not supported in current environment");
-    }
-
-    const downloadPromise = page.waitForEvent("download", { timeout: downloadWaitTimeout });
-    await downloadBtn.click({ timeout: 5000 });
-    downloadEvent = await downloadPromise;
-  } catch (eventErr) {
-    return {
-      success: false,
-      code: "FLOW_DOWNLOAD_TIMEOUT",
-      phase: "download_event_received",
-      message: `Playwright download event was not received: ${eventErr.message}`,
-      jobId: job?.id,
-    };
-  }
-
-  logPhase("download_event_received");
-
-  // 6. download_saved
-  if (!downloadEvent || typeof downloadEvent.saveAs !== "function") {
-    return {
-      success: false,
-      code: "FLOW_DOWNLOAD_INVALID",
-      phase: "download_saved",
-      message: "Download event did not contain a valid saveAs method",
-      jobId: job?.id,
-    };
-  }
-
+  // 9. DOWNLOAD_EVENT_RECEIVED (Dual capture: Playwright download event + in-tab authenticated fetch)
+  let downloadedBuffer = null;
   const targetDir = downloadDir || path.join(os.tmpdir(), "flow-downloads");
   await fs.mkdir(targetDir, { recursive: true, mode: 0o700 }).catch(() => {});
   const tempPath = path.join(
@@ -185,46 +320,107 @@ export async function downloadFlowImage({
     `temp-${job?.id || Date.now()}-${Date.now()}.bin`,
   );
 
-  try {
-    await downloadEvent.saveAs(tempPath);
-  } catch (saveErr) {
-    return {
-      success: false,
-      code: "FLOW_SAVE_FAILED",
-      phase: "download_saved",
-      message: `Failed to save downloaded file: ${saveErr.message}`,
-      jobId: job?.id,
-    };
+  // Strategy A: Try clicking save action and catching browser download event
+  if (saveMenuBtn && typeof page.waitForEvent === "function") {
+    try {
+      const [downloadEvent] = await Promise.all([
+        page.waitForEvent("download", { timeout: 8000 }).catch(() => null),
+        saveMenuBtn.click({ timeout: 4000 }).catch(() => {}),
+      ]);
+
+      if (downloadEvent && typeof downloadEvent.saveAs === "function") {
+        await downloadEvent.saveAs(tempPath);
+        const buf = await fs.readFile(tempPath).catch(() => null);
+        if (buf && buf.length > 50) {
+          downloadedBuffer = buf;
+        }
+      }
+    } catch {}
   }
 
-  const buf = await fs.readFile(tempPath).catch(() => null);
-  if (!buf || buf.length === 0) {
+  // Strategy B: In-tab authenticated fetch of the exact active image URL
+  if (!downloadedBuffer && activeImageUrl && typeof page.evaluate === "function") {
+    try {
+      const base64Data = await page.evaluate(async (url) => {
+        try {
+          const res = await fetch(url, { credentials: "include" });
+          if (!res.ok) return null;
+          const blob = await res.blob();
+          return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+          });
+        } catch {
+          return null;
+        }
+      }, activeImageUrl);
+
+      if (
+        typeof base64Data === "string" &&
+        base64Data.startsWith("data:")
+      ) {
+        const parts = base64Data.split(",");
+        if (parts[1]) {
+          const buf = Buffer.from(parts[1], "base64");
+          if (buf.length > 50) {
+            downloadedBuffer = buf;
+            await fs.writeFile(tempPath, buf);
+          }
+        }
+      }
+    } catch (evalErr) {
+      // Handled below
+    }
+  }
+
+  // Strategy C: Correlate with job.capturedImageResponses
+  if (!downloadedBuffer && job?.capturedImageResponses) {
+    const targetUrl = activeImageUrl || sourceImageUrl;
+    if (targetUrl && job.capturedImageResponses.has(targetUrl)) {
+      downloadedBuffer = job.capturedImageResponses.get(targetUrl).buffer;
+      await fs.writeFile(tempPath, downloadedBuffer);
+    }
+  }
+
+  if (!downloadedBuffer || downloadedBuffer.length === 0) {
     await fs.rm(tempPath, { force: true }).catch(() => {});
     return {
       success: false,
-      code: "FLOW_DOWNLOAD_ZERO_BYTES",
-      phase: "download_saved",
-      message: "Downloaded file is zero bytes or unreadable",
+      code: "FLOW_DOWNLOAD_TIMEOUT",
+      phase: "DOWNLOAD_EVENT_RECEIVED",
+      message:
+        "Playwright download event or authenticated image stream was not received",
       jobId: job?.id,
     };
   }
 
-  logPhase("download_saved", { fileSize: buf.length });
+  logTransition("DOWNLOAD_EVENT_RECEIVED", {
+    byteLength: downloadedBuffer.length,
+  });
 
-  // 7. image_validated
-  const detected = detectImageType(buf);
+  // 10. IMAGE_SAVED_TO_DISK
+  logTransition("IMAGE_SAVED_TO_DISK", {
+    fileSize: downloadedBuffer.length,
+    tempPath,
+  });
+
+  // 11. IMAGE_VALIDATION_COMPLETED
+  const detected = detectImageType(downloadedBuffer);
   if (!detected) {
     await fs.rm(tempPath, { force: true }).catch(() => {});
     return {
       success: false,
       code: "FLOW_IMAGE_INVALID_TYPE",
-      phase: "image_validated",
-      message: "Downloaded file is not a supported image format (PNG, JPEG, WebP)",
+      phase: "IMAGE_VALIDATION_COMPLETED",
+      message:
+        "Downloaded file is not a supported image format (PNG, JPEG, WebP)",
       jobId: job?.id,
     };
   }
 
-  const dims = parseImageDimensions(buf);
+  const dims = parseImageDimensions(downloadedBuffer);
   if (
     !Number.isInteger(dims.width) ||
     !Number.isInteger(dims.height) ||
@@ -235,7 +431,7 @@ export async function downloadFlowImage({
     return {
       success: false,
       code: "FLOW_IMAGE_INVALID_DIMENSIONS",
-      phase: "image_validated",
+      phase: "IMAGE_VALIDATION_COMPLETED",
       message: `Downloaded image has invalid dimensions: ${dims.width}x${dims.height}`,
       jobId: job?.id,
     };
@@ -249,13 +445,13 @@ export async function downloadFlowImage({
     await fs.rename(tempPath, finalPath).catch(() => {});
   }
 
-  logPhase("image_validated", {
+  logTransition("IMAGE_VALIDATION_COMPLETED", {
     mimeType: detected.mimeType,
     width: dims.width,
     height: dims.height,
   });
 
-  // Attempt clean close of editor modal
+  // Close viewer view cleanly
   try {
     const closeBtn = getFirstLocator(
       page.locator(
@@ -273,15 +469,33 @@ export async function downloadFlowImage({
     }
   } catch {}
 
+  // Correlation metadata
+  if (job) {
+    job.outputIndex = selectedIndex;
+    job.sourceMessageIndex = sourceMessageIndex;
+    job.sourceImageUrl = activeImageUrl || sourceImageUrl;
+    job.downloadPath = finalPath;
+    job.mimeType = detected.mimeType;
+    job.width = dims.width;
+    job.height = dims.height;
+    job.fileSize = downloadedBuffer.length;
+  }
+
   return {
     success: true,
     jobId: job?.id,
+    backendJobId: job?.backendJobId || job?.id,
+    storyId: job?.storyId,
+    sceneId: job?.sceneId,
+    outputIndex: selectedIndex,
+    sourceMessageIndex,
+    sourceImageUrl: activeImageUrl || sourceImageUrl,
     path: finalPath,
     fileName: path.basename(finalPath),
-    fileSize: buf.length,
+    fileSize: downloadedBuffer.length,
     mimeType: detected.mimeType,
     width: dims.width,
     height: dims.height,
-    buffer: buf,
+    buffer: downloadedBuffer,
   };
 }

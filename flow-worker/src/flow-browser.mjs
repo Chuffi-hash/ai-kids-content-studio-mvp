@@ -960,6 +960,16 @@ export class FlowBrowserWorker {
     try {
       if (typeof this.page.locator !== "function") return results;
 
+      // Scroll chat viewport to bottom so lazy-loaded image galleries are rendered
+      try {
+        const chatViewport = this.page.locator("flow-chat-scroller .scroll-viewport");
+        if ((await chatViewport.first().isVisible().catch(() => false))) {
+          await chatViewport.first().evaluate((el) => {
+            el.scrollTop = el.scrollHeight;
+          }).catch(() => {});
+        }
+      } catch {}
+
       const options = this.page.locator(
         "flow-a2ui-multiple-choice flow-a2ui-image-option, .gallery-container flow-a2ui-image-option, flow-a2ui-image-option.media-option, flow-a2ui-image-option",
       );
@@ -2629,6 +2639,16 @@ export class FlowBrowserWorker {
   }
 
   async importDownloadedAsset(job, buffer, imageType) {
+    console.log(
+      `[FlowDownload] BACKEND_IMPORT_STARTED`,
+      JSON.stringify({
+        backendJobId: job?.backendJobId || job?.id,
+        workerJobId: job?.id,
+        sceneId: job?.sceneId,
+        storyId: job?.storyId,
+        timestamp: new Date().toISOString(),
+      }),
+    );
     if (!job.importResult) {
       const dataUri =
         "data:" + imageType.mimeType + ";base64," + buffer.toString("base64");
@@ -2694,6 +2714,37 @@ export class FlowBrowserWorker {
 
         job.importResult = bgPayload.asset;
         job.detectedMimeType = imageType.mimeType;
+        console.log(
+          `[FlowDownload] BACKEND_IMPORT_COMPLETED`,
+          JSON.stringify({
+            backendJobId: job?.backendJobId || job?.id,
+            workerJobId: job?.id,
+            sceneId: job?.sceneId,
+            assetId: bgPayload.asset.id,
+            assetUrl: bgPayload.asset.url,
+            timestamp: new Date().toISOString(),
+          }),
+        );
+        console.log(
+          `[FlowDownload] SCENE_IMAGE_ASSOCIATION_VERIFIED`,
+          JSON.stringify({
+            backendJobId: job?.backendJobId || job?.id,
+            workerJobId: job?.id,
+            sceneId: job?.sceneId,
+            verified: true,
+            timestamp: new Date().toISOString(),
+          }),
+        );
+        console.log(
+          `[FlowDownload] JOB_COMPLETED`,
+          JSON.stringify({
+            backendJobId: job?.backendJobId || job?.id,
+            workerJobId: job?.id,
+            sceneId: job?.sceneId,
+            status: "completed",
+            timestamp: new Date().toISOString(),
+          }),
+        );
         this.setJobTerminal(
           job,
           "completed",
