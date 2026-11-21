@@ -536,66 +536,265 @@ export class FlowBrowserWorker {
   }
 
   async navigateToCharacterTab(projectId = null) {
-    const charPage = await this.ensureFlowPage(FLOW_TAB_ROLES.CHARACTER, projectId);
+    const charPage = await this.ensureFlowPage(
+      FLOW_TAB_ROLES.CHARACTER,
+      projectId,
+    );
+
+    if (this.getFlowPage(FLOW_TAB_ROLES.CHARACTER) !== charPage) {
+      throw new Error(
+        "FLOW_CHARACTER_PAGE_ROLE_MISMATCH: Character navigation resolved to a page that is not registered as the character tab.",
+      );
+    }
+
     if (typeof charPage.bringToFront === "function") {
       await charPage.bringToFront().catch(() => {});
     }
 
-    const currentUrl = typeof charPage.url === "function" ? charPage.url() : "";
-    const charRef = extractGoogleFlowCharacterReference(currentUrl);
-    if (charRef && (!projectId || charRef.projectId === projectId)) {
+    const initialUrl =
+      typeof charPage.url === "function" ? charPage.url() : "";
+    const initialCharacterRef =
+      extractGoogleFlowCharacterReference(initialUrl);
+    const expectedProjectId =
+      projectId ||
+      initialCharacterRef?.projectId ||
+      extractProjectIdFromFlowUrl(initialUrl);
+
+    if (!expectedProjectId) {
+      throw new Error(
+        `FLOW_CHARACTER_PROJECT_ID_MISSING: Cannot navigate the character tab without a project ID. Current URL: ${initialUrl}`,
+      );
+    }
+
+    const currentProjectId = extractProjectIdFromFlowUrl(initialUrl);
+    if (currentProjectId && currentProjectId !== expectedProjectId) {
+      const projectUrl =
+        `https://flow.google.com/project/${encodeURIComponent(expectedProjectId)}`;
+      await charPage.goto(projectUrl, {
+        waitUntil: "domcontentloaded",
+        timeout: 60000,
+      });
+    }
+
+    // Reuse an existing character-create/editor route for the requested project.
+    let currentUrl =
+      typeof charPage.url === "function" ? charPage.url() : "";
+    let characterRef = extractGoogleFlowCharacterReference(currentUrl);
+    if (characterRef && characterRef.projectId === expectedProjectId) {
+      this.registerFlowPage(charPage, {
+        role: FLOW_TAB_ROLES.CHARACTER,
+        projectId: expectedProjectId,
+        purpose: "character-generation",
+      });
       this.updateFlowPageRouteMetadata(charPage);
       return {
         success: true,
         page: charPage,
         url: currentUrl,
-        routeType: charRef.routeType,
+        routeType: characterRef.routeType,
         diagnostics: await this.inspectFlowCharacterWorkspace(charPage),
+        navigationMethod: "already-on-character-route",
       };
     }
 
-    let clicked = false;
+    const expectedCharacterUrl =
+      `https://flow.google.com/project/${encodeURIComponent(expectedProjectId)}/character`;
+    const navigationDiagnostics = {
+      initialUrl,
+      expectedProjectId,
+      navigationElementFound: false,
+      charactersButtonFound: false,
+      clickAttempted: false,
+      clickError: null,
+      directNavigationFallback: false,
+    };
+
+    // Use the exact navigation structure supplied from the live Google Flow DOM.
+    // Accessible-role lookup is primary; the DOM-structure selector is a fallback.
     try {
       if (typeof charPage.getByRole === "function") {
-        const nav = charPage.getByRole("navigation", { name: /Project navigation/i });
-        let btn = nav.getByRole("button", { name: "Characters", exact: true });
-        if ((await btn.count()) === 0) {
-          btn = charPage.getByRole("button", { name: "Characters", exact: true });
-        }
-        if ((await btn.count()) > 0) {
-          await btn.first().click({ timeout: 10000 });
-          clicked = true;
+        const nav = charPage.getByRole("navigation", {
+          name: "Project navigation",
+          exact: true,
+        });
+        const navCount = await nav.count().catch(() => 0);
+        if (navCount === 1) {
+          const visible = await nav.first().isVisible().catch(() => true);
+          if (visible) {
+            navigationDiagnostics.navigationElementFound = true;
+            const button = nav.getByRole("button", {
+              name: "Characters",
+              exact: true,
+            });
+            const buttonCount = await button.count().catch(() => 0);
+            if (buttonCount === 1) {
+              const visibleButton = await button.isVisible().catch(() => false);
+              const enabledButton = await button.isEnabled().catch(() => false);
+              if (visibleButton && enabledButton) {
+                navigationDiagnostics.charactersButtonFound = true;
+                navigationDiagnostics.clickAttempted = true;
+                await button.click({ timeout: 15000 });
+              }
+            }
+          }
         }
       }
-    } catch {}
+    } catch (error) {
+      navigationDiagnostics.clickError = error?.message || String(error);
+    }
 
-    if (!clicked && typeof charPage.locator === "function") {
-      const fallbackBtn = charPage.locator('button:has-text("Characters"), [aria-label="Characters"]').first();
-      if ((await fallbackBtn.count()) > 0) {
-        await fallbackBtn.click({ timeout: 10000 });
-        clicked = true;
+    // Exact fallback matching the provided Angular Material DOM:
+    // mat-nav-list[role=navigation][aria-label="Project navigation"]
+    //   button[mat-list-item]
+    //     span.mat-mdc-list-item-title = "Characters"
+    currentUrl =
+      typeof charPage.url === "function" ? charPage.url() : "";
+    characterRef = extractGoogleFlowCharacterReference(currentUrl);
+
+    if (
+      !characterRef &&
+      typeof charPage.locator === "function" &&
+      !navigationDiagnostics.clickAttempted
+    ) {
+      try {
+        const nav = charPage.locator(
+          'mat-nav-list[role="navigation"][aria-label="Project navigation"]',
+        );
+        await nav.waitFor({ state: "visible", timeout: 20000 });
+        navigationDiagnostics.navigationElementFound = true;
+
+        const items = nav.locator("button[mat-list-item]");
+        const matchingIndexes = await items.evaluateAll((buttons) =>
+          buttons
+            .map((button, index) => ({
+              index,
+              title:
+                button
+                  .querySelector("span.mat-mdc-list-item-title")
+                  ?.textContent?.trim() || "",
+              disabled:
+                button.getAttribute("aria-disabled") === "true" ||
+                button.disabled === true,
+              visible: (() => {
+                const rect = button.getBoundingClientRect();
+                const style = window.getComputedStyle(button);
+                return (
+                  rect.width > 0 &&
+                  rect.height > 0 &&
+                  style.display !== "none" &&
+                  style.visibility !== "hidden"
+                );
+              })(),
+            }))
+            .filter(
+              (item) =>
+                item.title === "Characters" &&
+                item.visible &&
+                !item.disabled,
+            )
+            .map((item) => item.index),
+        );
+
+        if (matchingIndexes.length === 1) {
+          navigationDiagnostics.charactersButtonFound = true;
+          navigationDiagnostics.clickAttempted = true;
+          await items.nth(matchingIndexes[0]).click({ timeout: 15000 });
+        } else if (matchingIndexes.length > 1) {
+          throw new Error(
+            `FLOW_CHARACTERS_NAV_AMBIGUOUS: Found ${matchingIndexes.length} visible Characters buttons.`,
+          );
+        }
+      } catch (error) {
+        navigationDiagnostics.clickError =
+          error?.message || String(error);
       }
     }
 
-    if (!clicked && projectId) {
-      const directUrl = `https://flow.google.com/project/${projectId}/character`;
-      await charPage.goto(directUrl, { waitUntil: "domcontentloaded", timeout: 60000 });
-    }
+    const isExpectedCharacterRoute = (rawUrl) => {
+      const parsed = extractGoogleFlowCharacterReference(
+        typeof rawUrl === "string" ? rawUrl : rawUrl.toString(),
+      );
+      return Boolean(
+        parsed && parsed.projectId === expectedProjectId,
+      );
+    };
 
+    // Wait for the SPA navigation to complete. A click resolving is not success.
     try {
       if (typeof charPage.waitForURL === "function") {
-        await charPage.waitForURL(/\/character/i, { timeout: 15000 });
+        await charPage.waitForURL(
+          (url) => isExpectedCharacterRoute(url.toString()),
+          { timeout: 20000 },
+        );
       }
-    } catch {}
+    } catch {
+      // A direct route navigation below is the controlled recovery path.
+    }
 
+    currentUrl =
+      typeof charPage.url === "function" ? charPage.url() : "";
+    characterRef = extractGoogleFlowCharacterReference(currentUrl);
+
+    // Google Flow's left-nav click can be swallowed during a slow Angular
+    // render. Navigate the character tab directly only if the verified click
+    // did not reach the expected character route.
+    if (
+      !characterRef ||
+      characterRef.projectId !== expectedProjectId
+    ) {
+      navigationDiagnostics.directNavigationFallback = true;
+      await charPage.goto(expectedCharacterUrl, {
+        waitUntil: "domcontentloaded",
+        timeout: 60000,
+      });
+
+      if (typeof charPage.waitForURL === "function") {
+        await charPage.waitForURL(
+          (url) => isExpectedCharacterRoute(url.toString()),
+          { timeout: 30000 },
+        );
+      }
+    }
+
+    currentUrl =
+      typeof charPage.url === "function" ? charPage.url() : "";
+    characterRef = extractGoogleFlowCharacterReference(currentUrl);
+
+    if (!characterRef || characterRef.projectId !== expectedProjectId) {
+      const diagnostics = {
+        ...navigationDiagnostics,
+        finalUrl: currentUrl,
+        actualProjectId: characterRef?.projectId || null,
+        actualRouteType: detectFlowRouteType(currentUrl),
+      };
+
+      const error = new Error(
+        `FLOW_CHARACTER_NAVIGATION_FAILED: Expected /project/${expectedProjectId}/character, but the character tab remained at ${currentUrl || "(empty URL)"}. Diagnostics: ${JSON.stringify(diagnostics)}`,
+      );
+      error.code = "FLOW_CHARACTER_NAVIGATION_FAILED";
+      error.diagnostics = diagnostics;
+      throw error;
+    }
+
+    this.registerFlowPage(charPage, {
+      role: FLOW_TAB_ROLES.CHARACTER,
+      projectId: expectedProjectId,
+      purpose: "character-generation",
+    });
     this.updateFlowPageRouteMetadata(charPage);
-    const diagnostics = await this.inspectFlowCharacterWorkspace(charPage);
 
+    const diagnostics = await this.inspectFlowCharacterWorkspace(charPage);
     return {
       success: true,
       page: charPage,
-      url: charPage.url ? charPage.url() : "",
-      routeType: detectFlowRouteType(charPage.url ? charPage.url() : ""),
+      url: currentUrl,
+      projectId: expectedProjectId,
+      characterId: characterRef.characterId,
+      routeType: characterRef.routeType,
+      navigationMethod: navigationDiagnostics.directNavigationFallback
+        ? "direct-route-fallback"
+        : "project-sidebar",
+      navigationDiagnostics,
       diagnostics,
     };
   }
@@ -894,16 +1093,36 @@ export class FlowBrowserWorker {
       ? `https://flow.google.com/project/${projectId}`
       : target;
     const charUrl = typeof charPage.url === "function" ? charPage.url() : "";
+    const charProjectId = extractProjectIdFromFlowUrl(charUrl);
+
+    // Keep the character page on the requested project's workspace. A route
+    // containing "/character" is not sufficient if it belongs to another project.
     if (
       !isFlowUrl(charUrl) ||
-      (projectId && !charUrl.includes(projectId) && !charUrl.includes("/character"))
+      (projectId && charProjectId !== projectId)
     ) {
       await charPage.goto(charTarget, {
         waitUntil: "domcontentloaded",
         timeout: 60000,
       });
     }
+
+    this.registerFlowPage(charPage, {
+      role: FLOW_TAB_ROLES.CHARACTER,
+      projectId,
+      purpose: "character-generation",
+    });
     this.updateFlowPageRouteMetadata(charPage);
+
+    // IMPORTANT: opening the character tab at /project/{id} does not navigate
+    // to the Characters section. Explicitly click the supplied left navigation
+    // item (with a verified direct-route fallback) before reporting launch ready.
+    const characterNavigation = await this.navigateToCharacterTab(projectId);
+    if (!characterNavigation.success) {
+      throw new Error(
+        "FLOW_CHARACTER_TAB_NOT_READY: Character tab did not reach the Characters workspace.",
+      );
+    }
 
     return this.getSessionStatus();
   }
