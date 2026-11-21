@@ -97,6 +97,8 @@ export interface EditorScene {
   animationData?: VectorSceneData | null;
   dialogue?: Array<{ speaker: string; text: string }>;
   characterActions?: Array<{ characterName: string; action: string; pose?: string }>;
+  activeBackgroundVersion?: number | null;
+  backgroundVersions?: any[];
   versions?: SceneVersionItem[];
   image?: {
     id: string;

@@ -43,6 +43,11 @@ export type Shot = Prisma.ShotModel
  */
 export type Image = Prisma.ImageModel
 /**
+ * Model BackgroundImageVersion
+ * 
+ */
+export type BackgroundImageVersion = Prisma.BackgroundImageVersionModel
+/**
  * Model Character
  * 
  */

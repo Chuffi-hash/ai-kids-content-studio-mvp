@@ -56,6 +56,7 @@ export const ModelName = {
   SceneVersion: 'SceneVersion',
   Shot: 'Shot',
   Image: 'Image',
+  BackgroundImageVersion: 'BackgroundImageVersion',
   Character: 'Character',
   IntegrationCredential: 'IntegrationCredential',
   StoryCharacter: 'StoryCharacter',
@@ -123,6 +124,7 @@ export const SceneScalarFieldEnum = {
   actualAudioDurationMs: 'actualAudioDurationMs',
   generationError: 'generationError',
   animationData: 'animationData',
+  activeBackgroundVersion: 'activeBackgroundVersion',
   deletedAt: 'deletedAt',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
@@ -199,11 +201,35 @@ export const ImageScalarFieldEnum = {
   googleFlowPrompt: 'googleFlowPrompt',
   googleFlowParentAssetId: 'googleFlowParentAssetId',
   googleFlowVersion: 'googleFlowVersion',
+  googleFlowImageId: 'googleFlowImageId',
+  googleFlowImageRef: 'googleFlowImageRef',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 } as const
 
 export type ImageScalarFieldEnum = (typeof ImageScalarFieldEnum)[keyof typeof ImageScalarFieldEnum]
+
+
+export const BackgroundImageVersionScalarFieldEnum = {
+  id: 'id',
+  sceneId: 'sceneId',
+  version: 'version',
+  provider: 'provider',
+  model: 'model',
+  prompt: 'prompt',
+  parentVersionId: 'parentVersionId',
+  localImageId: 'localImageId',
+  storageKey: 'storageKey',
+  imageUrl: 'imageUrl',
+  width: 'width',
+  height: 'height',
+  aspectRatio: 'aspectRatio',
+  providerMetadata: 'providerMetadata',
+  status: 'status',
+  createdAt: 'createdAt'
+} as const
+
+export type BackgroundImageVersionScalarFieldEnum = (typeof BackgroundImageVersionScalarFieldEnum)[keyof typeof BackgroundImageVersionScalarFieldEnum]
 
 
 export const CharacterScalarFieldEnum = {

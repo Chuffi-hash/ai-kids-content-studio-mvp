@@ -638,6 +638,56 @@ export interface SceneBackgroundResult {
   message?: string;
 }
 
+export interface BackgroundImageVersionItem {
+  id: string;
+  sceneId: string;
+  version: number;
+  provider: string;
+  model?: string | null;
+  prompt?: string | null;
+  parentVersionId?: string | null;
+  localImageId?: string | null;
+  storageKey?: string | null;
+  imageUrl?: string | null;
+  width?: number | null;
+  height?: number | null;
+  aspectRatio?: string | null;
+  providerMetadata?: any;
+  status: string;
+  createdAt: string;
+}
+
+export interface BackgroundImageVersionsResult {
+  success: boolean;
+  activeVersion: number | null;
+  totalVersions: number;
+  versions: BackgroundImageVersionItem[];
+}
+
+export async function fetchSceneBackgroundVersions(sceneId: string): Promise<BackgroundImageVersionsResult> {
+  const res = await fetch(`${API_URL}/api/content/scenes/${sceneId}/background-versions`);
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.message || 'Failed to fetch background versions');
+  }
+  return res.json();
+}
+
+export async function restoreSceneBackgroundVersion(
+  sceneId: string,
+  versionId: string
+): Promise<{ success: boolean; scene: any; restoredVersion: BackgroundImageVersionItem; message?: string }> {
+  const res = await fetch(`${API_URL}/api/content/scenes/${sceneId}/background-versions/${versionId}/restore`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.message || 'Failed to restore background version');
+  }
+  return res.json();
+}
+
 export interface StoryBackgroundImage {
   imageUrl: string;
   sceneId: string;

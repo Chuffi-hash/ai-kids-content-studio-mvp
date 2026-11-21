@@ -49,6 +49,9 @@ export function extractGoogleFlowEditorReference(rawUrl) {
       projectId: match[1],
       editId: match[2],
       editUrl: `https://flow.google.com/project/${match[1]}/edit/${match[2]}`,
+      googleFlowProjectId: match[1],
+      googleFlowEditId: match[2],
+      googleFlowEditUrl: `https://flow.google.com/project/${match[1]}/edit/${match[2]}`,
     };
   } catch {
     return null;
@@ -60,6 +63,84 @@ export function extractGoogleFlowEditorReference(rawUrl) {
  */
 export function isGoogleFlowEditorRoute(rawUrl) {
   return extractGoogleFlowEditorReference(rawUrl) !== null;
+}
+
+/**
+ * Inspects active Google Flow thumbnail and editor image DOM elements.
+ * Extracts image source URLs, dimensions, and any confirmed asset IDs without fabricating IDs.
+ * If no explicit DOM asset ID attribute exists, googleFlowImageId remains null.
+ */
+export async function inspectGoogleFlowActiveImage(page) {
+  if (!page || (typeof page.isClosed === "function" && page.isClosed())) {
+    return null;
+  }
+
+  try {
+    const rawUrl = typeof page.url === "function" ? page.url() : "";
+    const editorRef = extractGoogleFlowEditorReference(rawUrl);
+
+    let evaluated = null;
+    if (typeof page.evaluate === "function") {
+      evaluated = await page.evaluate(() => {
+        // 1. Look for thumbnail in active navigation rail
+        const activeThumbnailImg = document.querySelector(
+          "flow-navigation-rail-thumbnail .thumbnail-button.active img, flow-navigation-rail-thumbnail .active img, .thumbnail-button.active img"
+        );
+
+        // 2. Look for main active image in editor/viewer
+        const mainEditorImg = document.querySelector(
+          "flow-image-editor img, flow-editor img, flow-creative-agent-image-viewer img, .editor-container img, flow-editor-header img, .image-viewer img"
+        );
+
+        const inspectEl = (img) => {
+          if (!img) return null;
+          const rect = img.getBoundingClientRect ? img.getBoundingClientRect() : { width: 0, height: 0 };
+          const assetIdAttr =
+            img.getAttribute("data-asset-id") ||
+            img.getAttribute("data-image-id") ||
+            img.getAttribute("data-id") ||
+            img.closest?.("[data-asset-id]")?.getAttribute("data-asset-id") ||
+            img.closest?.("[data-image-id]")?.getAttribute("data-image-id") ||
+            null;
+
+          return {
+            src: img.src || "",
+            currentSrc: img.currentSrc || img.src || "",
+            alt: img.alt || "",
+            naturalWidth: img.naturalWidth || 0,
+            naturalHeight: img.naturalHeight || 0,
+            visible: rect.width > 0 && rect.height > 0,
+            assetIdAttr,
+          };
+        };
+
+        const thumbInfo = inspectEl(activeThumbnailImg);
+        const editorInfo = inspectEl(mainEditorImg);
+
+        return {
+          thumbInfo,
+          editorInfo,
+        };
+      }).catch(() => null);
+    }
+
+    const primaryImg = evaluated?.editorInfo || evaluated?.thumbInfo;
+    const sourceUrl = primaryImg?.currentSrc || primaryImg?.src || null;
+    const assetId = primaryImg?.assetIdAttr || null;
+
+    return {
+      googleFlowProjectId: editorRef?.projectId || null,
+      googleFlowEditId: editorRef?.editId || null,
+      googleFlowEditUrl: editorRef?.editUrl || null,
+      googleFlowImageId: assetId,
+      googleFlowImageRef: sourceUrl,
+      googleFlowImageSourceUrl: sourceUrl,
+      thumbnail: evaluated?.thumbInfo || null,
+      editorImage: evaluated?.editorInfo || null,
+    };
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -703,6 +784,7 @@ export async function closeFlowImageEditor(page, logger = console, options = {})
   }
 
   emit("FLOW_IMAGE_EDITOR_CLOSED", { success: true });
+  emit("FLOW_BACKGROUND_EDITOR_CLOSED", { success: true });
   return true;
 }
 
@@ -969,6 +1051,9 @@ export async function downloadFlowImage({
   logTransition("ACTIVE_IMAGE_VERIFIED", { success: true });
   logTransition("FLOW_IMAGE_EDITOR_OPENED", { success: true });
 
+  // Inspect active image details (source url, dimensions, confirmed asset ID if any)
+  const activeImageDetails = await inspectGoogleFlowActiveImage(page).catch(() => null);
+
   // Capture Google Flow editor reference if page route is an editor URL
   let editorRef = null;
   try {
@@ -994,6 +1079,18 @@ export async function downloadFlowImage({
       job.googleFlowProjectId = editorRef.projectId;
       job.googleFlowEditId = editorRef.editId;
       job.googleFlowEditUrl = editorRef.editUrl;
+    }
+  }
+
+  if (activeImageDetails && job) {
+    if (activeImageDetails.googleFlowImageId !== undefined) {
+      job.googleFlowImageId = activeImageDetails.googleFlowImageId;
+    }
+    if (activeImageDetails.googleFlowImageRef) {
+      job.googleFlowImageRef = activeImageDetails.googleFlowImageRef;
+    }
+    if (activeImageDetails.googleFlowImageSourceUrl) {
+      job.googleFlowImageSourceUrl = activeImageDetails.googleFlowImageSourceUrl;
     }
   }
 
@@ -1045,9 +1142,12 @@ export async function downloadFlowImage({
       buffer: nativeResult.buffer,
       editorClosed,
       editorCloseError,
-      googleFlowProjectId: editorRef?.projectId || job?.googleFlowProjectId,
-      googleFlowEditId: editorRef?.editId || job?.googleFlowEditId,
-      googleFlowEditUrl: editorRef?.editUrl || job?.googleFlowEditUrl,
+      googleFlowProjectId: editorRef?.projectId || activeImageDetails?.googleFlowProjectId || job?.googleFlowProjectId,
+      googleFlowEditId: editorRef?.editId || activeImageDetails?.googleFlowEditId || job?.googleFlowEditId,
+      googleFlowEditUrl: editorRef?.editUrl || activeImageDetails?.googleFlowEditUrl || job?.googleFlowEditUrl,
+      googleFlowImageId: activeImageDetails?.googleFlowImageId ?? job?.googleFlowImageId ?? null,
+      googleFlowImageRef: activeImageDetails?.googleFlowImageRef || job?.googleFlowImageRef || nativeResult.path,
+      googleFlowImageSourceUrl: activeImageDetails?.googleFlowImageSourceUrl || job?.googleFlowImageSourceUrl || null,
       jobId: job?.id,
       backendJobId: job?.backendJobId || job?.id,
       storyId: job?.storyId,

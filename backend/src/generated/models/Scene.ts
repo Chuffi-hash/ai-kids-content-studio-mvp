@@ -33,6 +33,7 @@ export type SceneAvgAggregateOutputType = {
   endMs: number | null
   estimatedDurationMs: number | null
   actualAudioDurationMs: number | null
+  activeBackgroundVersion: number | null
 }
 
 export type SceneSumAggregateOutputType = {
@@ -42,6 +43,7 @@ export type SceneSumAggregateOutputType = {
   endMs: number | null
   estimatedDurationMs: number | null
   actualAudioDurationMs: number | null
+  activeBackgroundVersion: number | null
 }
 
 export type SceneMinAggregateOutputType = {
@@ -64,6 +66,7 @@ export type SceneMinAggregateOutputType = {
   estimatedDurationMs: number | null
   actualAudioDurationMs: number | null
   generationError: string | null
+  activeBackgroundVersion: number | null
   deletedAt: Date | null
   createdAt: Date | null
   updatedAt: Date | null
@@ -89,6 +92,7 @@ export type SceneMaxAggregateOutputType = {
   estimatedDurationMs: number | null
   actualAudioDurationMs: number | null
   generationError: string | null
+  activeBackgroundVersion: number | null
   deletedAt: Date | null
   createdAt: Date | null
   updatedAt: Date | null
@@ -115,6 +119,7 @@ export type SceneCountAggregateOutputType = {
   actualAudioDurationMs: number
   generationError: number
   animationData: number
+  activeBackgroundVersion: number
   deletedAt: number
   createdAt: number
   updatedAt: number
@@ -129,6 +134,7 @@ export type SceneAvgAggregateInputType = {
   endMs?: true
   estimatedDurationMs?: true
   actualAudioDurationMs?: true
+  activeBackgroundVersion?: true
 }
 
 export type SceneSumAggregateInputType = {
@@ -138,6 +144,7 @@ export type SceneSumAggregateInputType = {
   endMs?: true
   estimatedDurationMs?: true
   actualAudioDurationMs?: true
+  activeBackgroundVersion?: true
 }
 
 export type SceneMinAggregateInputType = {
@@ -160,6 +167,7 @@ export type SceneMinAggregateInputType = {
   estimatedDurationMs?: true
   actualAudioDurationMs?: true
   generationError?: true
+  activeBackgroundVersion?: true
   deletedAt?: true
   createdAt?: true
   updatedAt?: true
@@ -185,6 +193,7 @@ export type SceneMaxAggregateInputType = {
   estimatedDurationMs?: true
   actualAudioDurationMs?: true
   generationError?: true
+  activeBackgroundVersion?: true
   deletedAt?: true
   createdAt?: true
   updatedAt?: true
@@ -211,6 +220,7 @@ export type SceneCountAggregateInputType = {
   actualAudioDurationMs?: true
   generationError?: true
   animationData?: true
+  activeBackgroundVersion?: true
   deletedAt?: true
   createdAt?: true
   updatedAt?: true
@@ -324,6 +334,7 @@ export type SceneGroupByOutputType = {
   actualAudioDurationMs: number | null
   generationError: string | null
   animationData: runtime.JsonValue | null
+  activeBackgroundVersion: number | null
   deletedAt: Date | null
   createdAt: Date
   updatedAt: Date
@@ -373,11 +384,13 @@ export type SceneWhereInput = {
   actualAudioDurationMs?: Prisma.IntNullableFilter<"Scene"> | number | null
   generationError?: Prisma.StringNullableFilter<"Scene"> | string | null
   animationData?: Prisma.JsonNullableFilter<"Scene">
+  activeBackgroundVersion?: Prisma.IntNullableFilter<"Scene"> | number | null
   deletedAt?: Prisma.DateTimeNullableFilter<"Scene"> | Date | string | null
   createdAt?: Prisma.DateTimeFilter<"Scene"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"Scene"> | Date | string
   story?: Prisma.XOR<Prisma.StoryScalarRelationFilter, Prisma.StoryWhereInput>
   images?: Prisma.ImageListRelationFilter
+  backgroundVersions?: Prisma.BackgroundImageVersionListRelationFilter
   versions?: Prisma.SceneVersionListRelationFilter
   shots?: Prisma.ShotListRelationFilter
 }
@@ -403,11 +416,13 @@ export type SceneOrderByWithRelationInput = {
   actualAudioDurationMs?: Prisma.SortOrderInput | Prisma.SortOrder
   generationError?: Prisma.SortOrderInput | Prisma.SortOrder
   animationData?: Prisma.SortOrderInput | Prisma.SortOrder
+  activeBackgroundVersion?: Prisma.SortOrderInput | Prisma.SortOrder
   deletedAt?: Prisma.SortOrderInput | Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
   story?: Prisma.StoryOrderByWithRelationInput
   images?: Prisma.ImageOrderByRelationAggregateInput
+  backgroundVersions?: Prisma.BackgroundImageVersionOrderByRelationAggregateInput
   versions?: Prisma.SceneVersionOrderByRelationAggregateInput
   shots?: Prisma.ShotOrderByRelationAggregateInput
 }
@@ -436,11 +451,13 @@ export type SceneWhereUniqueInput = Prisma.AtLeast<{
   actualAudioDurationMs?: Prisma.IntNullableFilter<"Scene"> | number | null
   generationError?: Prisma.StringNullableFilter<"Scene"> | string | null
   animationData?: Prisma.JsonNullableFilter<"Scene">
+  activeBackgroundVersion?: Prisma.IntNullableFilter<"Scene"> | number | null
   deletedAt?: Prisma.DateTimeNullableFilter<"Scene"> | Date | string | null
   createdAt?: Prisma.DateTimeFilter<"Scene"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"Scene"> | Date | string
   story?: Prisma.XOR<Prisma.StoryScalarRelationFilter, Prisma.StoryWhereInput>
   images?: Prisma.ImageListRelationFilter
+  backgroundVersions?: Prisma.BackgroundImageVersionListRelationFilter
   versions?: Prisma.SceneVersionListRelationFilter
   shots?: Prisma.ShotListRelationFilter
 }, "id" | "sceneId">
@@ -466,6 +483,7 @@ export type SceneOrderByWithAggregationInput = {
   actualAudioDurationMs?: Prisma.SortOrderInput | Prisma.SortOrder
   generationError?: Prisma.SortOrderInput | Prisma.SortOrder
   animationData?: Prisma.SortOrderInput | Prisma.SortOrder
+  activeBackgroundVersion?: Prisma.SortOrderInput | Prisma.SortOrder
   deletedAt?: Prisma.SortOrderInput | Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
@@ -500,6 +518,7 @@ export type SceneScalarWhereWithAggregatesInput = {
   actualAudioDurationMs?: Prisma.IntNullableWithAggregatesFilter<"Scene"> | number | null
   generationError?: Prisma.StringNullableWithAggregatesFilter<"Scene"> | string | null
   animationData?: Prisma.JsonNullableWithAggregatesFilter<"Scene">
+  activeBackgroundVersion?: Prisma.IntNullableWithAggregatesFilter<"Scene"> | number | null
   deletedAt?: Prisma.DateTimeNullableWithAggregatesFilter<"Scene"> | Date | string | null
   createdAt?: Prisma.DateTimeWithAggregatesFilter<"Scene"> | Date | string
   updatedAt?: Prisma.DateTimeWithAggregatesFilter<"Scene"> | Date | string
@@ -525,11 +544,13 @@ export type SceneCreateInput = {
   actualAudioDurationMs?: number | null
   generationError?: string | null
   animationData?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  activeBackgroundVersion?: number | null
   deletedAt?: Date | string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   story: Prisma.StoryCreateNestedOneWithoutScenesInput
   images?: Prisma.ImageCreateNestedManyWithoutSceneInput
+  backgroundVersions?: Prisma.BackgroundImageVersionCreateNestedManyWithoutSceneInput
   versions?: Prisma.SceneVersionCreateNestedManyWithoutSceneInput
   shots?: Prisma.ShotCreateNestedManyWithoutSceneInput
 }
@@ -555,10 +576,12 @@ export type SceneUncheckedCreateInput = {
   actualAudioDurationMs?: number | null
   generationError?: string | null
   animationData?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  activeBackgroundVersion?: number | null
   deletedAt?: Date | string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   images?: Prisma.ImageUncheckedCreateNestedManyWithoutSceneInput
+  backgroundVersions?: Prisma.BackgroundImageVersionUncheckedCreateNestedManyWithoutSceneInput
   versions?: Prisma.SceneVersionUncheckedCreateNestedManyWithoutSceneInput
   shots?: Prisma.ShotUncheckedCreateNestedManyWithoutSceneInput
 }
@@ -583,11 +606,13 @@ export type SceneUpdateInput = {
   actualAudioDurationMs?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   generationError?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   animationData?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  activeBackgroundVersion?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   deletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   story?: Prisma.StoryUpdateOneRequiredWithoutScenesNestedInput
   images?: Prisma.ImageUpdateManyWithoutSceneNestedInput
+  backgroundVersions?: Prisma.BackgroundImageVersionUpdateManyWithoutSceneNestedInput
   versions?: Prisma.SceneVersionUpdateManyWithoutSceneNestedInput
   shots?: Prisma.ShotUpdateManyWithoutSceneNestedInput
 }
@@ -613,10 +638,12 @@ export type SceneUncheckedUpdateInput = {
   actualAudioDurationMs?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   generationError?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   animationData?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  activeBackgroundVersion?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   deletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   images?: Prisma.ImageUncheckedUpdateManyWithoutSceneNestedInput
+  backgroundVersions?: Prisma.BackgroundImageVersionUncheckedUpdateManyWithoutSceneNestedInput
   versions?: Prisma.SceneVersionUncheckedUpdateManyWithoutSceneNestedInput
   shots?: Prisma.ShotUncheckedUpdateManyWithoutSceneNestedInput
 }
@@ -642,6 +669,7 @@ export type SceneCreateManyInput = {
   actualAudioDurationMs?: number | null
   generationError?: string | null
   animationData?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  activeBackgroundVersion?: number | null
   deletedAt?: Date | string | null
   createdAt?: Date | string
   updatedAt?: Date | string
@@ -667,6 +695,7 @@ export type SceneUpdateManyMutationInput = {
   actualAudioDurationMs?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   generationError?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   animationData?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  activeBackgroundVersion?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   deletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -693,6 +722,7 @@ export type SceneUncheckedUpdateManyInput = {
   actualAudioDurationMs?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   generationError?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   animationData?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  activeBackgroundVersion?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   deletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -729,6 +759,7 @@ export type SceneCountOrderByAggregateInput = {
   actualAudioDurationMs?: Prisma.SortOrder
   generationError?: Prisma.SortOrder
   animationData?: Prisma.SortOrder
+  activeBackgroundVersion?: Prisma.SortOrder
   deletedAt?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
@@ -741,6 +772,7 @@ export type SceneAvgOrderByAggregateInput = {
   endMs?: Prisma.SortOrder
   estimatedDurationMs?: Prisma.SortOrder
   actualAudioDurationMs?: Prisma.SortOrder
+  activeBackgroundVersion?: Prisma.SortOrder
 }
 
 export type SceneMaxOrderByAggregateInput = {
@@ -763,6 +795,7 @@ export type SceneMaxOrderByAggregateInput = {
   estimatedDurationMs?: Prisma.SortOrder
   actualAudioDurationMs?: Prisma.SortOrder
   generationError?: Prisma.SortOrder
+  activeBackgroundVersion?: Prisma.SortOrder
   deletedAt?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
@@ -788,6 +821,7 @@ export type SceneMinOrderByAggregateInput = {
   estimatedDurationMs?: Prisma.SortOrder
   actualAudioDurationMs?: Prisma.SortOrder
   generationError?: Prisma.SortOrder
+  activeBackgroundVersion?: Prisma.SortOrder
   deletedAt?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
@@ -800,6 +834,7 @@ export type SceneSumOrderByAggregateInput = {
   endMs?: Prisma.SortOrder
   estimatedDurationMs?: Prisma.SortOrder
   actualAudioDurationMs?: Prisma.SortOrder
+  activeBackgroundVersion?: Prisma.SortOrder
 }
 
 export type SceneScalarRelationFilter = {
@@ -903,6 +938,20 @@ export type SceneUpdateOneRequiredWithoutImagesNestedInput = {
   update?: Prisma.XOR<Prisma.XOR<Prisma.SceneUpdateToOneWithWhereWithoutImagesInput, Prisma.SceneUpdateWithoutImagesInput>, Prisma.SceneUncheckedUpdateWithoutImagesInput>
 }
 
+export type SceneCreateNestedOneWithoutBackgroundVersionsInput = {
+  create?: Prisma.XOR<Prisma.SceneCreateWithoutBackgroundVersionsInput, Prisma.SceneUncheckedCreateWithoutBackgroundVersionsInput>
+  connectOrCreate?: Prisma.SceneCreateOrConnectWithoutBackgroundVersionsInput
+  connect?: Prisma.SceneWhereUniqueInput
+}
+
+export type SceneUpdateOneRequiredWithoutBackgroundVersionsNestedInput = {
+  create?: Prisma.XOR<Prisma.SceneCreateWithoutBackgroundVersionsInput, Prisma.SceneUncheckedCreateWithoutBackgroundVersionsInput>
+  connectOrCreate?: Prisma.SceneCreateOrConnectWithoutBackgroundVersionsInput
+  upsert?: Prisma.SceneUpsertWithoutBackgroundVersionsInput
+  connect?: Prisma.SceneWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.SceneUpdateToOneWithWhereWithoutBackgroundVersionsInput, Prisma.SceneUpdateWithoutBackgroundVersionsInput>, Prisma.SceneUncheckedUpdateWithoutBackgroundVersionsInput>
+}
+
 export type SceneCreateWithoutStoryInput = {
   id?: string
   sceneId: string
@@ -923,10 +972,12 @@ export type SceneCreateWithoutStoryInput = {
   actualAudioDurationMs?: number | null
   generationError?: string | null
   animationData?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  activeBackgroundVersion?: number | null
   deletedAt?: Date | string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   images?: Prisma.ImageCreateNestedManyWithoutSceneInput
+  backgroundVersions?: Prisma.BackgroundImageVersionCreateNestedManyWithoutSceneInput
   versions?: Prisma.SceneVersionCreateNestedManyWithoutSceneInput
   shots?: Prisma.ShotCreateNestedManyWithoutSceneInput
 }
@@ -951,10 +1002,12 @@ export type SceneUncheckedCreateWithoutStoryInput = {
   actualAudioDurationMs?: number | null
   generationError?: string | null
   animationData?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  activeBackgroundVersion?: number | null
   deletedAt?: Date | string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   images?: Prisma.ImageUncheckedCreateNestedManyWithoutSceneInput
+  backgroundVersions?: Prisma.BackgroundImageVersionUncheckedCreateNestedManyWithoutSceneInput
   versions?: Prisma.SceneVersionUncheckedCreateNestedManyWithoutSceneInput
   shots?: Prisma.ShotUncheckedCreateNestedManyWithoutSceneInput
 }
@@ -1009,6 +1062,7 @@ export type SceneScalarWhereInput = {
   actualAudioDurationMs?: Prisma.IntNullableFilter<"Scene"> | number | null
   generationError?: Prisma.StringNullableFilter<"Scene"> | string | null
   animationData?: Prisma.JsonNullableFilter<"Scene">
+  activeBackgroundVersion?: Prisma.IntNullableFilter<"Scene"> | number | null
   deletedAt?: Prisma.DateTimeNullableFilter<"Scene"> | Date | string | null
   createdAt?: Prisma.DateTimeFilter<"Scene"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"Scene"> | Date | string
@@ -1034,11 +1088,13 @@ export type SceneCreateWithoutVersionsInput = {
   actualAudioDurationMs?: number | null
   generationError?: string | null
   animationData?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  activeBackgroundVersion?: number | null
   deletedAt?: Date | string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   story: Prisma.StoryCreateNestedOneWithoutScenesInput
   images?: Prisma.ImageCreateNestedManyWithoutSceneInput
+  backgroundVersions?: Prisma.BackgroundImageVersionCreateNestedManyWithoutSceneInput
   shots?: Prisma.ShotCreateNestedManyWithoutSceneInput
 }
 
@@ -1063,10 +1119,12 @@ export type SceneUncheckedCreateWithoutVersionsInput = {
   actualAudioDurationMs?: number | null
   generationError?: string | null
   animationData?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  activeBackgroundVersion?: number | null
   deletedAt?: Date | string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   images?: Prisma.ImageUncheckedCreateNestedManyWithoutSceneInput
+  backgroundVersions?: Prisma.BackgroundImageVersionUncheckedCreateNestedManyWithoutSceneInput
   shots?: Prisma.ShotUncheckedCreateNestedManyWithoutSceneInput
 }
 
@@ -1106,11 +1164,13 @@ export type SceneUpdateWithoutVersionsInput = {
   actualAudioDurationMs?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   generationError?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   animationData?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  activeBackgroundVersion?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   deletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   story?: Prisma.StoryUpdateOneRequiredWithoutScenesNestedInput
   images?: Prisma.ImageUpdateManyWithoutSceneNestedInput
+  backgroundVersions?: Prisma.BackgroundImageVersionUpdateManyWithoutSceneNestedInput
   shots?: Prisma.ShotUpdateManyWithoutSceneNestedInput
 }
 
@@ -1135,10 +1195,12 @@ export type SceneUncheckedUpdateWithoutVersionsInput = {
   actualAudioDurationMs?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   generationError?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   animationData?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  activeBackgroundVersion?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   deletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   images?: Prisma.ImageUncheckedUpdateManyWithoutSceneNestedInput
+  backgroundVersions?: Prisma.BackgroundImageVersionUncheckedUpdateManyWithoutSceneNestedInput
   shots?: Prisma.ShotUncheckedUpdateManyWithoutSceneNestedInput
 }
 
@@ -1162,11 +1224,13 @@ export type SceneCreateWithoutShotsInput = {
   actualAudioDurationMs?: number | null
   generationError?: string | null
   animationData?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  activeBackgroundVersion?: number | null
   deletedAt?: Date | string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   story: Prisma.StoryCreateNestedOneWithoutScenesInput
   images?: Prisma.ImageCreateNestedManyWithoutSceneInput
+  backgroundVersions?: Prisma.BackgroundImageVersionCreateNestedManyWithoutSceneInput
   versions?: Prisma.SceneVersionCreateNestedManyWithoutSceneInput
 }
 
@@ -1191,10 +1255,12 @@ export type SceneUncheckedCreateWithoutShotsInput = {
   actualAudioDurationMs?: number | null
   generationError?: string | null
   animationData?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  activeBackgroundVersion?: number | null
   deletedAt?: Date | string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   images?: Prisma.ImageUncheckedCreateNestedManyWithoutSceneInput
+  backgroundVersions?: Prisma.BackgroundImageVersionUncheckedCreateNestedManyWithoutSceneInput
   versions?: Prisma.SceneVersionUncheckedCreateNestedManyWithoutSceneInput
 }
 
@@ -1234,11 +1300,13 @@ export type SceneUpdateWithoutShotsInput = {
   actualAudioDurationMs?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   generationError?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   animationData?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  activeBackgroundVersion?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   deletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   story?: Prisma.StoryUpdateOneRequiredWithoutScenesNestedInput
   images?: Prisma.ImageUpdateManyWithoutSceneNestedInput
+  backgroundVersions?: Prisma.BackgroundImageVersionUpdateManyWithoutSceneNestedInput
   versions?: Prisma.SceneVersionUpdateManyWithoutSceneNestedInput
 }
 
@@ -1263,10 +1331,12 @@ export type SceneUncheckedUpdateWithoutShotsInput = {
   actualAudioDurationMs?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   generationError?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   animationData?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  activeBackgroundVersion?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   deletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   images?: Prisma.ImageUncheckedUpdateManyWithoutSceneNestedInput
+  backgroundVersions?: Prisma.BackgroundImageVersionUncheckedUpdateManyWithoutSceneNestedInput
   versions?: Prisma.SceneVersionUncheckedUpdateManyWithoutSceneNestedInput
 }
 
@@ -1290,10 +1360,12 @@ export type SceneCreateWithoutImagesInput = {
   actualAudioDurationMs?: number | null
   generationError?: string | null
   animationData?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  activeBackgroundVersion?: number | null
   deletedAt?: Date | string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   story: Prisma.StoryCreateNestedOneWithoutScenesInput
+  backgroundVersions?: Prisma.BackgroundImageVersionCreateNestedManyWithoutSceneInput
   versions?: Prisma.SceneVersionCreateNestedManyWithoutSceneInput
   shots?: Prisma.ShotCreateNestedManyWithoutSceneInput
 }
@@ -1319,9 +1391,11 @@ export type SceneUncheckedCreateWithoutImagesInput = {
   actualAudioDurationMs?: number | null
   generationError?: string | null
   animationData?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  activeBackgroundVersion?: number | null
   deletedAt?: Date | string | null
   createdAt?: Date | string
   updatedAt?: Date | string
+  backgroundVersions?: Prisma.BackgroundImageVersionUncheckedCreateNestedManyWithoutSceneInput
   versions?: Prisma.SceneVersionUncheckedCreateNestedManyWithoutSceneInput
   shots?: Prisma.ShotUncheckedCreateNestedManyWithoutSceneInput
 }
@@ -1362,10 +1436,12 @@ export type SceneUpdateWithoutImagesInput = {
   actualAudioDurationMs?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   generationError?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   animationData?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  activeBackgroundVersion?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   deletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   story?: Prisma.StoryUpdateOneRequiredWithoutScenesNestedInput
+  backgroundVersions?: Prisma.BackgroundImageVersionUpdateManyWithoutSceneNestedInput
   versions?: Prisma.SceneVersionUpdateManyWithoutSceneNestedInput
   shots?: Prisma.ShotUpdateManyWithoutSceneNestedInput
 }
@@ -1391,9 +1467,147 @@ export type SceneUncheckedUpdateWithoutImagesInput = {
   actualAudioDurationMs?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   generationError?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   animationData?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  activeBackgroundVersion?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   deletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  backgroundVersions?: Prisma.BackgroundImageVersionUncheckedUpdateManyWithoutSceneNestedInput
+  versions?: Prisma.SceneVersionUncheckedUpdateManyWithoutSceneNestedInput
+  shots?: Prisma.ShotUncheckedUpdateManyWithoutSceneNestedInput
+}
+
+export type SceneCreateWithoutBackgroundVersionsInput = {
+  id?: string
+  sceneId: string
+  title: string
+  number: number
+  order?: number
+  startMs?: number
+  endMs?: number
+  narration: string
+  visualPrompt?: string | null
+  cameraDirection?: string | null
+  characterIds?: string | null
+  imageUrl?: string | null
+  videoUrl?: string | null
+  audioUrl?: string | null
+  generationStatus?: string
+  estimatedDurationMs?: number
+  actualAudioDurationMs?: number | null
+  generationError?: string | null
+  animationData?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  activeBackgroundVersion?: number | null
+  deletedAt?: Date | string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  story: Prisma.StoryCreateNestedOneWithoutScenesInput
+  images?: Prisma.ImageCreateNestedManyWithoutSceneInput
+  versions?: Prisma.SceneVersionCreateNestedManyWithoutSceneInput
+  shots?: Prisma.ShotCreateNestedManyWithoutSceneInput
+}
+
+export type SceneUncheckedCreateWithoutBackgroundVersionsInput = {
+  id?: string
+  sceneId: string
+  storyId: string
+  title: string
+  number: number
+  order?: number
+  startMs?: number
+  endMs?: number
+  narration: string
+  visualPrompt?: string | null
+  cameraDirection?: string | null
+  characterIds?: string | null
+  imageUrl?: string | null
+  videoUrl?: string | null
+  audioUrl?: string | null
+  generationStatus?: string
+  estimatedDurationMs?: number
+  actualAudioDurationMs?: number | null
+  generationError?: string | null
+  animationData?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  activeBackgroundVersion?: number | null
+  deletedAt?: Date | string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  images?: Prisma.ImageUncheckedCreateNestedManyWithoutSceneInput
+  versions?: Prisma.SceneVersionUncheckedCreateNestedManyWithoutSceneInput
+  shots?: Prisma.ShotUncheckedCreateNestedManyWithoutSceneInput
+}
+
+export type SceneCreateOrConnectWithoutBackgroundVersionsInput = {
+  where: Prisma.SceneWhereUniqueInput
+  create: Prisma.XOR<Prisma.SceneCreateWithoutBackgroundVersionsInput, Prisma.SceneUncheckedCreateWithoutBackgroundVersionsInput>
+}
+
+export type SceneUpsertWithoutBackgroundVersionsInput = {
+  update: Prisma.XOR<Prisma.SceneUpdateWithoutBackgroundVersionsInput, Prisma.SceneUncheckedUpdateWithoutBackgroundVersionsInput>
+  create: Prisma.XOR<Prisma.SceneCreateWithoutBackgroundVersionsInput, Prisma.SceneUncheckedCreateWithoutBackgroundVersionsInput>
+  where?: Prisma.SceneWhereInput
+}
+
+export type SceneUpdateToOneWithWhereWithoutBackgroundVersionsInput = {
+  where?: Prisma.SceneWhereInput
+  data: Prisma.XOR<Prisma.SceneUpdateWithoutBackgroundVersionsInput, Prisma.SceneUncheckedUpdateWithoutBackgroundVersionsInput>
+}
+
+export type SceneUpdateWithoutBackgroundVersionsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  sceneId?: Prisma.StringFieldUpdateOperationsInput | string
+  title?: Prisma.StringFieldUpdateOperationsInput | string
+  number?: Prisma.IntFieldUpdateOperationsInput | number
+  order?: Prisma.IntFieldUpdateOperationsInput | number
+  startMs?: Prisma.IntFieldUpdateOperationsInput | number
+  endMs?: Prisma.IntFieldUpdateOperationsInput | number
+  narration?: Prisma.StringFieldUpdateOperationsInput | string
+  visualPrompt?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  cameraDirection?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  characterIds?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  imageUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  videoUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  audioUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  generationStatus?: Prisma.StringFieldUpdateOperationsInput | string
+  estimatedDurationMs?: Prisma.IntFieldUpdateOperationsInput | number
+  actualAudioDurationMs?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  generationError?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  animationData?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  activeBackgroundVersion?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  deletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  story?: Prisma.StoryUpdateOneRequiredWithoutScenesNestedInput
+  images?: Prisma.ImageUpdateManyWithoutSceneNestedInput
+  versions?: Prisma.SceneVersionUpdateManyWithoutSceneNestedInput
+  shots?: Prisma.ShotUpdateManyWithoutSceneNestedInput
+}
+
+export type SceneUncheckedUpdateWithoutBackgroundVersionsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  sceneId?: Prisma.StringFieldUpdateOperationsInput | string
+  storyId?: Prisma.StringFieldUpdateOperationsInput | string
+  title?: Prisma.StringFieldUpdateOperationsInput | string
+  number?: Prisma.IntFieldUpdateOperationsInput | number
+  order?: Prisma.IntFieldUpdateOperationsInput | number
+  startMs?: Prisma.IntFieldUpdateOperationsInput | number
+  endMs?: Prisma.IntFieldUpdateOperationsInput | number
+  narration?: Prisma.StringFieldUpdateOperationsInput | string
+  visualPrompt?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  cameraDirection?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  characterIds?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  imageUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  videoUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  audioUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  generationStatus?: Prisma.StringFieldUpdateOperationsInput | string
+  estimatedDurationMs?: Prisma.IntFieldUpdateOperationsInput | number
+  actualAudioDurationMs?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  generationError?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  animationData?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  activeBackgroundVersion?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  deletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  images?: Prisma.ImageUncheckedUpdateManyWithoutSceneNestedInput
   versions?: Prisma.SceneVersionUncheckedUpdateManyWithoutSceneNestedInput
   shots?: Prisma.ShotUncheckedUpdateManyWithoutSceneNestedInput
 }
@@ -1418,6 +1632,7 @@ export type SceneCreateManyStoryInput = {
   actualAudioDurationMs?: number | null
   generationError?: string | null
   animationData?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  activeBackgroundVersion?: number | null
   deletedAt?: Date | string | null
   createdAt?: Date | string
   updatedAt?: Date | string
@@ -1443,10 +1658,12 @@ export type SceneUpdateWithoutStoryInput = {
   actualAudioDurationMs?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   generationError?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   animationData?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  activeBackgroundVersion?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   deletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   images?: Prisma.ImageUpdateManyWithoutSceneNestedInput
+  backgroundVersions?: Prisma.BackgroundImageVersionUpdateManyWithoutSceneNestedInput
   versions?: Prisma.SceneVersionUpdateManyWithoutSceneNestedInput
   shots?: Prisma.ShotUpdateManyWithoutSceneNestedInput
 }
@@ -1471,10 +1688,12 @@ export type SceneUncheckedUpdateWithoutStoryInput = {
   actualAudioDurationMs?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   generationError?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   animationData?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  activeBackgroundVersion?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   deletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   images?: Prisma.ImageUncheckedUpdateManyWithoutSceneNestedInput
+  backgroundVersions?: Prisma.BackgroundImageVersionUncheckedUpdateManyWithoutSceneNestedInput
   versions?: Prisma.SceneVersionUncheckedUpdateManyWithoutSceneNestedInput
   shots?: Prisma.ShotUncheckedUpdateManyWithoutSceneNestedInput
 }
@@ -1499,6 +1718,7 @@ export type SceneUncheckedUpdateManyWithoutStoryInput = {
   actualAudioDurationMs?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   generationError?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   animationData?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  activeBackgroundVersion?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   deletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -1511,12 +1731,14 @@ export type SceneUncheckedUpdateManyWithoutStoryInput = {
 
 export type SceneCountOutputType = {
   images: number
+  backgroundVersions: number
   versions: number
   shots: number
 }
 
 export type SceneCountOutputTypeSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   images?: boolean | SceneCountOutputTypeCountImagesArgs
+  backgroundVersions?: boolean | SceneCountOutputTypeCountBackgroundVersionsArgs
   versions?: boolean | SceneCountOutputTypeCountVersionsArgs
   shots?: boolean | SceneCountOutputTypeCountShotsArgs
 }
@@ -1536,6 +1758,13 @@ export type SceneCountOutputTypeDefaultArgs<ExtArgs extends runtime.Types.Extens
  */
 export type SceneCountOutputTypeCountImagesArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   where?: Prisma.ImageWhereInput
+}
+
+/**
+ * SceneCountOutputType without action
+ */
+export type SceneCountOutputTypeCountBackgroundVersionsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.BackgroundImageVersionWhereInput
 }
 
 /**
@@ -1574,11 +1803,13 @@ export type SceneSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = 
   actualAudioDurationMs?: boolean
   generationError?: boolean
   animationData?: boolean
+  activeBackgroundVersion?: boolean
   deletedAt?: boolean
   createdAt?: boolean
   updatedAt?: boolean
   story?: boolean | Prisma.StoryDefaultArgs<ExtArgs>
   images?: boolean | Prisma.Scene$imagesArgs<ExtArgs>
+  backgroundVersions?: boolean | Prisma.Scene$backgroundVersionsArgs<ExtArgs>
   versions?: boolean | Prisma.Scene$versionsArgs<ExtArgs>
   shots?: boolean | Prisma.Scene$shotsArgs<ExtArgs>
   _count?: boolean | Prisma.SceneCountOutputTypeDefaultArgs<ExtArgs>
@@ -1605,6 +1836,7 @@ export type SceneSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Extensi
   actualAudioDurationMs?: boolean
   generationError?: boolean
   animationData?: boolean
+  activeBackgroundVersion?: boolean
   deletedAt?: boolean
   createdAt?: boolean
   updatedAt?: boolean
@@ -1632,6 +1864,7 @@ export type SceneSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensi
   actualAudioDurationMs?: boolean
   generationError?: boolean
   animationData?: boolean
+  activeBackgroundVersion?: boolean
   deletedAt?: boolean
   createdAt?: boolean
   updatedAt?: boolean
@@ -1659,15 +1892,17 @@ export type SceneSelectScalar = {
   actualAudioDurationMs?: boolean
   generationError?: boolean
   animationData?: boolean
+  activeBackgroundVersion?: boolean
   deletedAt?: boolean
   createdAt?: boolean
   updatedAt?: boolean
 }
 
-export type SceneOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "sceneId" | "storyId" | "title" | "number" | "order" | "startMs" | "endMs" | "narration" | "visualPrompt" | "cameraDirection" | "characterIds" | "imageUrl" | "videoUrl" | "audioUrl" | "generationStatus" | "estimatedDurationMs" | "actualAudioDurationMs" | "generationError" | "animationData" | "deletedAt" | "createdAt" | "updatedAt", ExtArgs["result"]["scene"]>
+export type SceneOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "sceneId" | "storyId" | "title" | "number" | "order" | "startMs" | "endMs" | "narration" | "visualPrompt" | "cameraDirection" | "characterIds" | "imageUrl" | "videoUrl" | "audioUrl" | "generationStatus" | "estimatedDurationMs" | "actualAudioDurationMs" | "generationError" | "animationData" | "activeBackgroundVersion" | "deletedAt" | "createdAt" | "updatedAt", ExtArgs["result"]["scene"]>
 export type SceneInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   story?: boolean | Prisma.StoryDefaultArgs<ExtArgs>
   images?: boolean | Prisma.Scene$imagesArgs<ExtArgs>
+  backgroundVersions?: boolean | Prisma.Scene$backgroundVersionsArgs<ExtArgs>
   versions?: boolean | Prisma.Scene$versionsArgs<ExtArgs>
   shots?: boolean | Prisma.Scene$shotsArgs<ExtArgs>
   _count?: boolean | Prisma.SceneCountOutputTypeDefaultArgs<ExtArgs>
@@ -1684,6 +1919,7 @@ export type $ScenePayload<ExtArgs extends runtime.Types.Extensions.InternalArgs 
   objects: {
     story: Prisma.$StoryPayload<ExtArgs>
     images: Prisma.$ImagePayload<ExtArgs>[]
+    backgroundVersions: Prisma.$BackgroundImageVersionPayload<ExtArgs>[]
     versions: Prisma.$SceneVersionPayload<ExtArgs>[]
     shots: Prisma.$ShotPayload<ExtArgs>[]
   }
@@ -1708,6 +1944,7 @@ export type $ScenePayload<ExtArgs extends runtime.Types.Extensions.InternalArgs 
     actualAudioDurationMs: number | null
     generationError: string | null
     animationData: runtime.JsonValue | null
+    activeBackgroundVersion: number | null
     deletedAt: Date | null
     createdAt: Date
     updatedAt: Date
@@ -2107,6 +2344,7 @@ export interface Prisma__SceneClient<T, Null = never, ExtArgs extends runtime.Ty
   readonly [Symbol.toStringTag]: "PrismaPromise"
   story<T extends Prisma.StoryDefaultArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.StoryDefaultArgs<ExtArgs>>): Prisma.Prisma__StoryClient<runtime.Types.Result.GetResult<Prisma.$StoryPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>
   images<T extends Prisma.Scene$imagesArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Scene$imagesArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$ImagePayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  backgroundVersions<T extends Prisma.Scene$backgroundVersionsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Scene$backgroundVersionsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$BackgroundImageVersionPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   versions<T extends Prisma.Scene$versionsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Scene$versionsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$SceneVersionPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   shots<T extends Prisma.Scene$shotsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Scene$shotsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$ShotPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   /**
@@ -2158,6 +2396,7 @@ export interface SceneFieldRefs {
   readonly actualAudioDurationMs: Prisma.FieldRef<"Scene", 'Int'>
   readonly generationError: Prisma.FieldRef<"Scene", 'String'>
   readonly animationData: Prisma.FieldRef<"Scene", 'Json'>
+  readonly activeBackgroundVersion: Prisma.FieldRef<"Scene", 'Int'>
   readonly deletedAt: Prisma.FieldRef<"Scene", 'DateTime'>
   readonly createdAt: Prisma.FieldRef<"Scene", 'DateTime'>
   readonly updatedAt: Prisma.FieldRef<"Scene", 'DateTime'>
@@ -2583,6 +2822,30 @@ export type Scene$imagesArgs<ExtArgs extends runtime.Types.Extensions.InternalAr
   take?: number
   skip?: number
   distinct?: Prisma.ImageScalarFieldEnum | Prisma.ImageScalarFieldEnum[]
+}
+
+/**
+ * Scene.backgroundVersions
+ */
+export type Scene$backgroundVersionsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the BackgroundImageVersion
+   */
+  select?: Prisma.BackgroundImageVersionSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the BackgroundImageVersion
+   */
+  omit?: Prisma.BackgroundImageVersionOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.BackgroundImageVersionInclude<ExtArgs> | null
+  where?: Prisma.BackgroundImageVersionWhereInput
+  orderBy?: Prisma.BackgroundImageVersionOrderByWithRelationInput | Prisma.BackgroundImageVersionOrderByWithRelationInput[]
+  cursor?: Prisma.BackgroundImageVersionWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.BackgroundImageVersionScalarFieldEnum | Prisma.BackgroundImageVersionScalarFieldEnum[]
 }
 
 /**

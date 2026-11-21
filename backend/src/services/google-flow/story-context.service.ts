@@ -20,6 +20,13 @@ export interface SceneContextItem {
   googleFlowPrompt?: string | null;
   googleFlowVersion?: number | null;
   googleFlowParentAssetId?: string | null;
+  googleFlowImageId?: string | null;
+  googleFlowImageRef?: string | null;
+  activeBackgroundVersion?: number | null;
+  totalBackgroundVersions?: number;
+  backgroundVersions?: any[];
+  provider?: string | null;
+  model?: string | null;
   location: string;
   timeOfDay: string;
   lighting: string;
@@ -114,6 +121,9 @@ export class StoryContextService {
               where: { status: 'completed' },
               orderBy: { createdAt: 'desc' },
               take: 1,
+            },
+            backgroundVersions: {
+              orderBy: { version: 'asc' },
             },
           },
         },
@@ -310,6 +320,13 @@ export class StoryContextService {
         googleFlowPrompt: (completedImage as any)?.googleFlowPrompt || bgData.googleFlowPrompt || null,
         googleFlowVersion: (completedImage as any)?.googleFlowVersion ?? bgData.googleFlowVersion ?? null,
         googleFlowParentAssetId: (completedImage as any)?.googleFlowParentAssetId || bgData.googleFlowParentAssetId || null,
+        googleFlowImageId: (completedImage as any)?.googleFlowImageId || bgData.googleFlowImageId || null,
+        googleFlowImageRef: (completedImage as any)?.googleFlowImageRef || bgData.googleFlowImageRef || null,
+        activeBackgroundVersion: (scene as any).activeBackgroundVersion ?? bgData.activeVersion ?? (completedImage as any)?.googleFlowVersion ?? 1,
+        totalBackgroundVersions: (scene as any).backgroundVersions?.length || (scene.images?.length || 0),
+        backgroundVersions: (scene as any).backgroundVersions || [],
+        provider: bgData.provider || (completedImage as any)?.provider || null,
+        model: bgData.model || (completedImage as any)?.model || null,
         location,
         timeOfDay,
         lighting,

@@ -571,6 +571,11 @@ export interface StoryFlowSceneItem {
   googleFlowPrompt?: string | null;
   googleFlowVersion?: number | null;
   googleFlowParentAssetId?: string | null;
+  googleFlowImageId?: string | null;
+  googleFlowImageRef?: string | null;
+  activeBackgroundVersion?: number | null;
+  totalBackgroundVersions?: number;
+  backgroundVersions?: any[];
   location: string;
   timeOfDay: string;
   lighting: string;

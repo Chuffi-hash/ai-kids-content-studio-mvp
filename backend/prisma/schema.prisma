@@ -58,7 +58,9 @@ model Scene {
   actualAudioDurationMs Int?
   generationError       String?
   animationData         Json?
+  activeBackgroundVersion Int?         @default(1)
   images                Image[]
+  backgroundVersions    BackgroundImageVersion[]
   versions              SceneVersion[]
   shots                 Shot[]
   deletedAt             DateTime?
@@ -142,6 +144,8 @@ model Image {
   googleFlowPrompt        String?
   googleFlowParentAssetId String?
   googleFlowVersion       Int?     @default(1)
+  googleFlowImageId       String?
+  googleFlowImageRef      String?
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
 
@@ -149,6 +153,30 @@ model Image {
   @@index([status])
   @@index([googleFlowEditId])
   @@index([googleFlowProjectId])
+  @@index([googleFlowImageId])
+}
+
+model BackgroundImageVersion {
+  id               String   @id @default(cuid())
+  sceneId          String
+  scene            Scene    @relation(fields: [sceneId], references: [sceneId], onDelete: Cascade)
+  version          Int
+  provider         String
+  model            String?
+  prompt           String?
+  parentVersionId  String?
+  localImageId     String?
+  storageKey       String?
+  imageUrl         String?
+  width            Int?
+  height           Int?
+  aspectRatio      String?
+  providerMetadata Json?
+  status           String   @default("completed")
+  createdAt        DateTime @default(now())
+
+  @@unique([sceneId, version])
+  @@index([sceneId])
 }
 
 model Character {

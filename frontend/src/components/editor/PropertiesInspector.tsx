@@ -32,6 +32,9 @@ import {
   restoreScenePrompt,
   PromptHistoryEntry,
   StoryVisualBible,
+  fetchSceneBackgroundVersions,
+  restoreSceneBackgroundVersion,
+  BackgroundImageVersionItem,
 } from '../../services/editor.service';
 import { EMOTION_OPTIONS } from '../../utils/emotionSuggester';
 import { FISH_VOICES_CATALOG } from '../characters/CharacterBuilderModal';
@@ -299,6 +302,35 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
   const [focalPoint, setFocalPoint] = useState<{ x: number; y: number }>({ x: 50, y: 50 });
   const [isAdaptingBg, setIsAdaptingBg] = useState<boolean>(false);
   const [originalSourceUrl, setOriginalSourceUrl] = useState<string | null>(null);
+
+  // Background Image Version History state
+  const [backgroundVersions, setBackgroundVersions] = useState<BackgroundImageVersionItem[]>([]);
+  const [isLoadingBgVersions, setIsLoadingBgVersions] = useState<boolean>(false);
+  const [isRestoringBgVersion, setIsRestoringBgVersion] = useState<boolean>(false);
+  const [bgVersionSuccessToast, setBgVersionSuccessToast] = useState<string | null>(null);
+  const [showBgVersionHistory, setShowBgVersionHistory] = useState<boolean>(false);
+
+  useEffect(() => {
+    let active = true;
+    const loadVersions = async () => {
+      if (!scene?.sceneId) return;
+      setIsLoadingBgVersions(true);
+      try {
+        const res = await fetchSceneBackgroundVersions(scene.sceneId);
+        if (active && res.success && Array.isArray(res.versions)) {
+          setBackgroundVersions(res.versions);
+        }
+      } catch {
+        // ignore
+      } finally {
+        if (active) setIsLoadingBgVersions(false);
+      }
+    };
+    loadVersions();
+    return () => {
+      active = false;
+    };
+  }, [scene?.sceneId, currentBgUrl]);
 
   // Dedicated audio player state for scene inspector
   const audioPlayerRef = React.useRef<HTMLAudioElement | null>(null);
@@ -890,12 +922,40 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
       });
       if (res?.scene) {
         onUpdateScene(scene.sceneId, res.scene);
+        fetchSceneBackgroundVersions(scene.sceneId).then((bgRes) => {
+          if (bgRes.success && Array.isArray(bgRes.versions)) setBackgroundVersions(bgRes.versions);
+        }).catch(() => {});
       }
     } catch (err: any) {
       console.error('Direct background generation failed:', err);
       setDirectGenError(err.message || 'Failed to generate background plate');
     } finally {
       setIsDirectGenerating(false);
+    }
+  };
+
+  const handleRestoreBgVersion = async (versionId: string) => {
+    if (!scene?.sceneId) return;
+    setIsRestoringBgVersion(true);
+    setBgError(null);
+    try {
+      const res = await restoreSceneBackgroundVersion(scene.sceneId, versionId);
+      if (res.success && res.scene) {
+        onUpdateScene(scene.sceneId, {
+          imageUrl: res.restoredVersion.imageUrl || res.scene.imageUrl,
+          activeBackgroundVersion: res.restoredVersion.version,
+          animationData: res.scene.animationData || scene.animationData,
+        });
+        setBgVersionSuccessToast(`Version ${res.restoredVersion.version} restored as active background!`);
+        setTimeout(() => setBgVersionSuccessToast(null), 3500);
+        const updated = await fetchSceneBackgroundVersions(scene.sceneId);
+        if (updated.success && Array.isArray(updated.versions)) setBackgroundVersions(updated.versions);
+      }
+    } catch (err: any) {
+      console.error('Failed to restore background version:', err);
+      setBgError(err.message || 'Failed to restore background version');
+    } finally {
+      setIsRestoringBgVersion(false);
     }
   };
 
@@ -2988,6 +3048,144 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                         <TrashIcon size={12} />
                         <span>Remove</span>
                       </button>
+                    </div>
+
+                    {/* Background Version History Panel */}
+                    <div style={{ marginTop: '10px', padding: '8px 10px', background: 'rgba(124, 58, 237, 0.05)', borderRadius: '6px', border: '1px solid rgba(124, 58, 237, 0.2)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--ed-text)' }}>
+                            Background Version
+                          </span>
+                          <span style={{ fontSize: '10px', fontWeight: 700, color: '#a78bfa' }}>
+                            v{(scene.animationData as any)?.background?.activeVersion || (scene as any).activeBackgroundVersion || 1} of {Math.max(backgroundVersions.length, 1)} (Active)
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          className="ed-tool-btn"
+                          style={{ fontSize: '10px', padding: '2px 6px', color: '#a78bfa' }}
+                          onClick={() => setShowBgVersionHistory(!showBgVersionHistory)}
+                        >
+                          {showBgVersionHistory ? 'Hide ▲' : `Versions (${backgroundVersions.length}) ▼`}
+                        </button>
+                      </div>
+
+                      {bgVersionSuccessToast && (
+                        <div style={{ fontSize: '10.5px', color: '#10b981', background: 'rgba(16, 185, 129, 0.1)', padding: '4px 8px', borderRadius: '4px', marginBottom: '6px' }}>
+                          ✓ {bgVersionSuccessToast}
+                        </div>
+                      )}
+
+                      {/* Navigation controls between versions */}
+                      {backgroundVersions.length > 1 && (
+                        <div style={{ display: 'flex', gap: '4px', marginBottom: '6px' }}>
+                          {(() => {
+                            const curVer = (scene.animationData as any)?.background?.activeVersion || (scene as any).activeBackgroundVersion || 1;
+                            const sortedVersions = [...backgroundVersions].sort((a, b) => a.version - b.version);
+                            const curIdx = sortedVersions.findIndex((v) => v.version === curVer);
+                            const prevVer = curIdx > 0 ? sortedVersions[curIdx - 1] : null;
+                            const nextVer = curIdx >= 0 && curIdx < sortedVersions.length - 1 ? sortedVersions[curIdx + 1] : null;
+
+                            return (
+                              <>
+                                <button
+                                  type="button"
+                                  className="ed-tool-btn"
+                                  style={{ flex: 1, fontSize: '10px', padding: '3px 6px' }}
+                                  disabled={!prevVer || isRestoringBgVersion}
+                                  onClick={() => prevVer && handleRestoreBgVersion(prevVer.id)}
+                                  title={prevVer ? `Restore previous version (v${prevVer.version})` : 'No earlier version'}
+                                >
+                                  ◀ Previous (v{prevVer?.version ?? '-'})
+                                </button>
+                                <button
+                                  type="button"
+                                  className="ed-tool-btn"
+                                  style={{ flex: 1, fontSize: '10px', padding: '3px 6px' }}
+                                  disabled={!nextVer || isRestoringBgVersion}
+                                  onClick={() => nextVer && handleRestoreBgVersion(nextVer.id)}
+                                  title={nextVer ? `Restore next version (v${nextVer.version})` : 'No later version'}
+                                >
+                                  Next (v{nextVer?.version ?? '-'}) ▶
+                                </button>
+                              </>
+                            );
+                          })()}
+                        </div>
+                      )}
+
+                      {/* Expanded Version List */}
+                      {showBgVersionHistory && (
+                        <div style={{ maxHeight: '160px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '4px' }}>
+                          {backgroundVersions.length === 0 ? (
+                            <span style={{ fontSize: '10px', color: '#94a3b8', textAlign: 'center', padding: '4px' }}>
+                              Initial background plate active. Future generations will appear here.
+                            </span>
+                          ) : (
+                            [...backgroundVersions]
+                              .sort((a, b) => b.version - a.version)
+                              .map((ver) => {
+                                const isActive = ver.version === ((scene.animationData as any)?.background?.activeVersion || (scene as any).activeBackgroundVersion || 1);
+                                return (
+                                  <div
+                                    key={ver.id}
+                                    style={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'space-between',
+                                      padding: '4px 6px',
+                                      borderRadius: '4px',
+                                      background: isActive ? 'rgba(124, 58, 237, 0.15)' : 'rgba(255, 255, 255, 0.03)',
+                                      border: isActive ? '1px solid rgba(124, 58, 237, 0.35)' : '1px solid var(--ed-border)',
+                                    }}
+                                  >
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0, flex: 1 }}>
+                                      {ver.imageUrl && (
+                                        <img
+                                          src={resolveAssetUrl(ver.imageUrl)}
+                                          alt={`v${ver.version}`}
+                                          style={{ width: '28px', height: '18px', objectFit: 'cover', borderRadius: '2px' }}
+                                        />
+                                      )}
+                                      <div style={{ minWidth: 0 }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                          <span style={{ fontSize: '10px', fontWeight: 700, color: isActive ? '#c084fc' : 'var(--ed-text)' }}>
+                                            v{ver.version}
+                                          </span>
+                                          <span style={{ fontSize: '8.5px', padding: '0 4px', borderRadius: '3px', background: 'rgba(255,255,255,0.08)', color: '#94a3b8' }}>
+                                            {ver.provider === 'google_flow' ? 'Flow' : ver.provider === 'gemini_api' ? 'Gemini' : ver.provider}
+                                          </span>
+                                        </div>
+                                        <span style={{ fontSize: '9px', color: '#64748b', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '140px' }}>
+                                          {ver.prompt || new Date(ver.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                        </span>
+                                      </div>
+                                    </div>
+                                    <div>
+                                      {isActive ? (
+                                        <span style={{ fontSize: '9px', fontWeight: 600, color: '#10b981', padding: '2px 6px' }}>
+                                          ● Active
+                                        </span>
+                                      ) : (
+                                        <button
+                                          type="button"
+                                          className="ed-tool-btn"
+                                          style={{ fontSize: '9.5px', padding: '2px 6px', color: '#c084fc', borderColor: 'rgba(124, 58, 237, 0.4)' }}
+                                          disabled={isRestoringBgVersion}
+                                          onClick={() => handleRestoreBgVersion(ver.id)}
+                                          title={`Restore Version ${ver.version} as active background`}
+                                        >
+                                          Restore
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     {showRemoveBgConfirm && (

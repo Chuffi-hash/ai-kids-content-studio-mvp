@@ -402,6 +402,7 @@ export const ModelName = {
   SceneVersion: 'SceneVersion',
   Shot: 'Shot',
   Image: 'Image',
+  BackgroundImageVersion: 'BackgroundImageVersion',
   Character: 'Character',
   IntegrationCredential: 'IntegrationCredential',
   StoryCharacter: 'StoryCharacter',
@@ -422,7 +423,7 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
     omit: GlobalOmitOptions
   }
   meta: {
-    modelProps: "story" | "scene" | "sceneVersion" | "shot" | "image" | "character" | "integrationCredential" | "storyCharacter" | "flowCharacterMapping" | "generationJob"
+    modelProps: "story" | "scene" | "sceneVersion" | "shot" | "image" | "backgroundImageVersion" | "character" | "integrationCredential" | "storyCharacter" | "flowCharacterMapping" | "generationJob"
     txIsolationLevel: TransactionIsolationLevel
   }
   model: {
@@ -793,6 +794,80 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         count: {
           args: Prisma.ImageCountArgs<ExtArgs>
           result: runtime.Types.Utils.Optional<Prisma.ImageCountAggregateOutputType> | number
+        }
+      }
+    }
+    BackgroundImageVersion: {
+      payload: Prisma.$BackgroundImageVersionPayload<ExtArgs>
+      fields: Prisma.BackgroundImageVersionFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.BackgroundImageVersionFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$BackgroundImageVersionPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.BackgroundImageVersionFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$BackgroundImageVersionPayload>
+        }
+        findFirst: {
+          args: Prisma.BackgroundImageVersionFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$BackgroundImageVersionPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.BackgroundImageVersionFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$BackgroundImageVersionPayload>
+        }
+        findMany: {
+          args: Prisma.BackgroundImageVersionFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$BackgroundImageVersionPayload>[]
+        }
+        create: {
+          args: Prisma.BackgroundImageVersionCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$BackgroundImageVersionPayload>
+        }
+        createMany: {
+          args: Prisma.BackgroundImageVersionCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.BackgroundImageVersionCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$BackgroundImageVersionPayload>[]
+        }
+        delete: {
+          args: Prisma.BackgroundImageVersionDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$BackgroundImageVersionPayload>
+        }
+        update: {
+          args: Prisma.BackgroundImageVersionUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$BackgroundImageVersionPayload>
+        }
+        deleteMany: {
+          args: Prisma.BackgroundImageVersionDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.BackgroundImageVersionUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.BackgroundImageVersionUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$BackgroundImageVersionPayload>[]
+        }
+        upsert: {
+          args: Prisma.BackgroundImageVersionUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$BackgroundImageVersionPayload>
+        }
+        aggregate: {
+          args: Prisma.BackgroundImageVersionAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateBackgroundImageVersion>
+        }
+        groupBy: {
+          args: Prisma.BackgroundImageVersionGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.BackgroundImageVersionGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.BackgroundImageVersionCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.BackgroundImageVersionCountAggregateOutputType> | number
         }
       }
     }
@@ -1249,6 +1324,7 @@ export const SceneScalarFieldEnum = {
   actualAudioDurationMs: 'actualAudioDurationMs',
   generationError: 'generationError',
   animationData: 'animationData',
+  activeBackgroundVersion: 'activeBackgroundVersion',
   deletedAt: 'deletedAt',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
@@ -1325,11 +1401,35 @@ export const ImageScalarFieldEnum = {
   googleFlowPrompt: 'googleFlowPrompt',
   googleFlowParentAssetId: 'googleFlowParentAssetId',
   googleFlowVersion: 'googleFlowVersion',
+  googleFlowImageId: 'googleFlowImageId',
+  googleFlowImageRef: 'googleFlowImageRef',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 } as const
 
 export type ImageScalarFieldEnum = (typeof ImageScalarFieldEnum)[keyof typeof ImageScalarFieldEnum]
+
+
+export const BackgroundImageVersionScalarFieldEnum = {
+  id: 'id',
+  sceneId: 'sceneId',
+  version: 'version',
+  provider: 'provider',
+  model: 'model',
+  prompt: 'prompt',
+  parentVersionId: 'parentVersionId',
+  localImageId: 'localImageId',
+  storageKey: 'storageKey',
+  imageUrl: 'imageUrl',
+  width: 'width',
+  height: 'height',
+  aspectRatio: 'aspectRatio',
+  providerMetadata: 'providerMetadata',
+  status: 'status',
+  createdAt: 'createdAt'
+} as const
+
+export type BackgroundImageVersionScalarFieldEnum = (typeof BackgroundImageVersionScalarFieldEnum)[keyof typeof BackgroundImageVersionScalarFieldEnum]
 
 
 export const CharacterScalarFieldEnum = {
@@ -1700,6 +1800,7 @@ export type GlobalOmitConfig = {
   sceneVersion?: Prisma.SceneVersionOmit
   shot?: Prisma.ShotOmit
   image?: Prisma.ImageOmit
+  backgroundImageVersion?: Prisma.BackgroundImageVersionOmit
   character?: Prisma.CharacterOmit
   integrationCredential?: Prisma.IntegrationCredentialOmit
   storyCharacter?: Prisma.StoryCharacterOmit

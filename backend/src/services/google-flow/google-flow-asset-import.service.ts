@@ -8,6 +8,7 @@ import {
   createImage,
   getCharacterById,
   updateCharacter,
+  createBackgroundImageVersion,
 } from "../database/database.service.js";
 import { CharacterReferenceService } from "../character-studio/character-reference.service.js";
 import { BackgroundStudioService } from "../background-studio/background-studio.service.js";
@@ -41,6 +42,9 @@ export interface ImportAssetOptions {
   googleFlowPrompt?: string;
   googleFlowParentAssetId?: string;
   googleFlowVersion?: number;
+  googleFlowImageId?: string | null;
+  googleFlowImageRef?: string | null;
+  googleFlowImageSourceUrl?: string | null;
 
   // Background library options
   name?: string;
@@ -275,6 +279,35 @@ export class GoogleFlowAssetImportService {
         googleFlowPrompt: options.googleFlowPrompt || prompt,
         googleFlowParentAssetId: options.googleFlowParentAssetId,
         googleFlowVersion: version,
+        googleFlowImageId: options.googleFlowImageId || null,
+        googleFlowImageRef: options.googleFlowImageRef || null,
+      });
+
+      // Maintain persistent sequential version history across providers
+      const bgVersion = await createBackgroundImageVersion({
+        sceneId: scene.sceneId,
+        provider,
+        model,
+        prompt,
+        parentVersionId: options.googleFlowParentAssetId || null,
+        localImageId: imageRecord.id,
+        storageKey: storageFilename,
+        imageUrl: url,
+        width,
+        height,
+        aspectRatio,
+        providerMetadata: {
+          googleFlowProjectId: options.googleFlowProjectId || options.flowProjectId,
+          googleFlowEditId: options.googleFlowEditId,
+          googleFlowEditUrl: options.googleFlowEditUrl,
+          googleFlowImageId: options.googleFlowImageId || null,
+          googleFlowImageRef: options.googleFlowImageRef || null,
+          googleFlowImageSourceUrl: options.googleFlowImageSourceUrl || null,
+          googleFlowParentAssetId: options.googleFlowParentAssetId,
+          sourceJobId: options.sourceJobId,
+        },
+        status: "completed",
+        makeActive: true,
       });
 
       const updatedAnimData = {
@@ -285,6 +318,7 @@ export class GoogleFlowAssetImportService {
           imageId: imageRecord.id,
           fit,
           source: provider,
+          provider,
           prompt,
           cameraDirection,
           aspectRatio,
@@ -296,14 +330,19 @@ export class GoogleFlowAssetImportService {
           googleFlowProjectId: options.googleFlowProjectId || options.flowProjectId,
           googleFlowEditId: options.googleFlowEditId,
           googleFlowEditUrl: options.googleFlowEditUrl,
+          googleFlowImageId: options.googleFlowImageId || null,
+          googleFlowImageRef: options.googleFlowImageRef || null,
           googleFlowParentAssetId: options.googleFlowParentAssetId,
           googleFlowVersion: version,
+          activeVersion: bgVersion.version,
+          versionId: bgVersion.id,
           removed: false,
         },
       };
 
       await updateScene(scene.sceneId, {
         imageUrl: url,
+        activeBackgroundVersion: bgVersion.version,
         animationData: updatedAnimData,
       });
 
@@ -319,14 +358,21 @@ export class GoogleFlowAssetImportService {
           sceneId: scene.sceneId,
           storyId: scene.storyId,
           imageId: imageRecord.id,
+          version: bgVersion.version,
+          versionId: bgVersion.id,
+          activeVersion: bgVersion.version,
+          provider,
+          model,
           googleFlowProjectId: imageRecord.googleFlowProjectId,
           googleFlowEditId: imageRecord.googleFlowEditId,
           googleFlowEditUrl: imageRecord.googleFlowEditUrl,
+          googleFlowImageId: options.googleFlowImageId || null,
+          googleFlowImageRef: options.googleFlowImageRef || null,
           googleFlowVersion: imageRecord.googleFlowVersion,
           googleFlowParentAssetId: imageRecord.googleFlowParentAssetId,
           fit,
         },
-        message: `Background imported and applied to scene ${scene.number || scene.sceneId}.`,
+        message: `Background imported and applied to scene ${scene.number || scene.sceneId} (Version ${bgVersion.version}).`,
       };
     }
 

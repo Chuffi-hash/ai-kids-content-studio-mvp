@@ -32,6 +32,10 @@ import {
   unlinkStoryCharacter,
   setStoryCharacters,
   updateStoryFlowProject,
+  createBackgroundImageVersion,
+  getBackgroundImageVersions,
+  getBackgroundImageVersion,
+  restoreBackgroundImageVersion,
 } from "../services/database/database.service.js";
 import { validateAndExtractFlowProjectId } from "../services/google-flow/google-flow.validator.js";
 import { ImageGenerationService } from "../services/image-generation/image-generation.service.js";
@@ -2002,30 +2006,89 @@ contentRouter.get("/scenes/:sceneId/image", async (req, res) => {
   }
 
   const images = await getImagesBySceneId(req.params.sceneId);
+  const versions = await getBackgroundImageVersions(req.params.sceneId);
   const latestImage = images[0];
 
-  if (!latestImage) {
+  if (!latestImage && !scene?.imageUrl && versions.length === 0) {
     return res
       .status(404)
       .json({ success: false, message: "No saved image for this scene" });
   }
 
+  const animBg = (scene?.animationData as any)?.background || {};
+  const activeVersionNumber = scene?.activeBackgroundVersion ?? animBg.activeVersion ?? latestImage?.googleFlowVersion ?? 1;
+
   return res.json({
     success: true,
+    activeVersion: activeVersionNumber,
+    totalVersions: versions.length || (latestImage ? 1 : 0),
+    versions,
     image: {
-      id: latestImage.id,
-      sceneId: latestImage.sceneId,
-      url: latestImage.imageUrl,
-      width: latestImage.width,
-      height: latestImage.height,
-      googleFlowProjectId: latestImage.googleFlowProjectId,
-      googleFlowEditId: latestImage.googleFlowEditId,
-      googleFlowEditUrl: latestImage.googleFlowEditUrl,
-      googleFlowPrompt: latestImage.googleFlowPrompt,
-      googleFlowVersion: latestImage.googleFlowVersion,
-      googleFlowParentAssetId: latestImage.googleFlowParentAssetId,
+      id: latestImage?.id || animBg.imageId || scene?.sceneId,
+      sceneId: scene?.sceneId || req.params.sceneId,
+      url: scene?.imageUrl || latestImage?.imageUrl || animBg.imageUrl,
+      width: latestImage?.width || 1280,
+      height: latestImage?.height || 720,
+      provider: animBg.provider || latestImage?.provider || "ai_generated",
+      activeVersion: activeVersionNumber,
+      googleFlowProjectId: latestImage?.googleFlowProjectId || animBg.googleFlowProjectId,
+      googleFlowEditId: latestImage?.googleFlowEditId || animBg.googleFlowEditId,
+      googleFlowEditUrl: latestImage?.googleFlowEditUrl || animBg.googleFlowEditUrl,
+      googleFlowPrompt: latestImage?.googleFlowPrompt || animBg.prompt,
+      googleFlowVersion: latestImage?.googleFlowVersion || activeVersionNumber,
+      googleFlowParentAssetId: latestImage?.googleFlowParentAssetId || animBg.googleFlowParentAssetId,
+      googleFlowImageId: latestImage?.googleFlowImageId || animBg.googleFlowImageId || null,
+      googleFlowImageRef: latestImage?.googleFlowImageRef || animBg.googleFlowImageRef || null,
     },
   });
+});
+
+// Background Image Version Endpoints
+contentRouter.get("/scenes/:sceneId/background-versions", async (req, res) => {
+  try {
+    const { sceneId } = req.params;
+    const scene = await getSceneBySceneId(sceneId);
+    if (!scene) {
+      return res.status(404).json({ success: false, message: "Scene not found" });
+    }
+    const versions = await getBackgroundImageVersions(sceneId);
+    return res.json({
+      success: true,
+      activeVersion: scene.activeBackgroundVersion ?? 1,
+      totalVersions: versions.length,
+      versions,
+    });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+contentRouter.get("/scenes/:sceneId/background-versions/:versionId", async (req, res) => {
+  try {
+    const { versionId } = req.params;
+    const version = await getBackgroundImageVersion(versionId);
+    if (!version) {
+      return res.status(404).json({ success: false, message: "Background image version not found" });
+    }
+    return res.json({ success: true, version });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+contentRouter.post("/scenes/:sceneId/background-versions/:versionId/restore", async (req, res) => {
+  try {
+    const { sceneId, versionId } = req.params;
+    const result = await restoreBackgroundImageVersion(sceneId, versionId);
+    return res.json({
+      success: true,
+      scene: result.scene,
+      restoredVersion: result.restoredVersion,
+      message: `Version ${result.restoredVersion.version} restored as active background.`,
+    });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
 });
 
 contentRouter.post("/scenes/:sceneId/image", async (req, res) => {

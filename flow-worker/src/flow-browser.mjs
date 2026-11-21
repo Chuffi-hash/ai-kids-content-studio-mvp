@@ -20,6 +20,7 @@ import {
   extractGoogleFlowEditorReference,
   isGoogleFlowEditorRoute,
   saveImageUsingNativeContextMenu,
+  inspectGoogleFlowActiveImage,
 } from "./flow-download.mjs";
 
 export {
@@ -28,6 +29,7 @@ export {
   extractGoogleFlowEditorReference,
   isGoogleFlowEditorRoute,
   saveImageUsingNativeContextMenu,
+  inspectGoogleFlowActiveImage,
 };
 
 const VALID_ASSET_TYPES = new Set([
@@ -2248,6 +2250,16 @@ export class FlowBrowserWorker {
         throw new Error("FLOW_IMAGE_VIEWER_NOT_FOUND: Could not find active image in Flow image editor.");
       }
 
+      const activeImageDetails = await inspectGoogleFlowActiveImage(this.page).catch(() => null);
+      if (activeImageDetails) {
+        if (activeImageDetails.googleFlowProjectId) job.googleFlowProjectId = activeImageDetails.googleFlowProjectId;
+        if (activeImageDetails.googleFlowEditId) job.googleFlowEditId = activeImageDetails.googleFlowEditId;
+        if (activeImageDetails.googleFlowEditUrl) job.googleFlowEditUrl = activeImageDetails.googleFlowEditUrl;
+        if (activeImageDetails.googleFlowImageId !== undefined) job.googleFlowImageId = activeImageDetails.googleFlowImageId;
+        if (activeImageDetails.googleFlowImageRef) job.googleFlowImageRef = activeImageDetails.googleFlowImageRef;
+        if (activeImageDetails.googleFlowImageSourceUrl) job.googleFlowImageSourceUrl = activeImageDetails.googleFlowImageSourceUrl;
+      }
+
       const targetDir = this.downloadDir || path.join(os.tmpdir(), "flow-downloads");
       const nativeResult = await saveImageUsingNativeContextMenu({
         page: this.page,
@@ -2273,6 +2285,9 @@ export class FlowBrowserWorker {
       job.status = "importing";
       job.downloadPath = nativeResult.path;
       job.downloadMethod = nativeResult.downloadMethod || "native_context_menu_save_as";
+      if (nativeResult.googleFlowImageId !== undefined) job.googleFlowImageId = nativeResult.googleFlowImageId;
+      if (nativeResult.googleFlowImageRef) job.googleFlowImageRef = nativeResult.googleFlowImageRef;
+      if (nativeResult.googleFlowImageSourceUrl) job.googleFlowImageSourceUrl = nativeResult.googleFlowImageSourceUrl;
       this.touch(job);
 
       await this.importDownloadedAsset(job, nativeResult.buffer, {
@@ -2463,6 +2478,12 @@ export class FlowBrowserWorker {
           job.status = "importing";
           job.downloadPath = dlResult.path;
           job.downloadMethod = dlResult.downloadMethod || "native_context_menu_save_as";
+          if (dlResult.googleFlowProjectId) job.googleFlowProjectId = dlResult.googleFlowProjectId;
+          if (dlResult.googleFlowEditId) job.googleFlowEditId = dlResult.googleFlowEditId;
+          if (dlResult.googleFlowEditUrl) job.googleFlowEditUrl = dlResult.googleFlowEditUrl;
+          if (dlResult.googleFlowImageId !== undefined) job.googleFlowImageId = dlResult.googleFlowImageId;
+          if (dlResult.googleFlowImageRef) job.googleFlowImageRef = dlResult.googleFlowImageRef;
+          if (dlResult.googleFlowImageSourceUrl) job.googleFlowImageSourceUrl = dlResult.googleFlowImageSourceUrl;
           this.touch(job);
 
           await this.importDownloadedAsset(job, dlResult.buffer, {
@@ -3071,6 +3092,9 @@ export class FlowBrowserWorker {
                 googleFlowPrompt: job.prompt || job.googleFlowPrompt,
                 googleFlowParentAssetId: job.googleFlowParentAssetId,
                 googleFlowVersion: job.googleFlowVersion,
+                googleFlowImageId: job.googleFlowImageId ?? null,
+                googleFlowImageRef: job.googleFlowImageRef || null,
+                googleFlowImageSourceUrl: job.googleFlowImageSourceUrl || null,
                 provider: "google_flow",
                 ...(job.model ? { model: job.model } : {}),
                 mimeType: imageType.mimeType,

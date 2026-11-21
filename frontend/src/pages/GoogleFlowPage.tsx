@@ -2863,7 +2863,7 @@ export default function GoogleFlowPage() {
                                     ? "✓ Plate Ready"
                                     : "● Missing Plate"}
                                 </span>
-                                {sc.googleFlowVersion ? (
+                                {(sc.activeBackgroundVersion || sc.googleFlowVersion) ? (
                                   <span
                                     className="flow-status-badge version"
                                     style={{
@@ -2874,9 +2874,10 @@ export default function GoogleFlowPage() {
                                       background: "rgba(99, 102, 241, 0.15)",
                                       color: "#818cf8",
                                     }}
-                                    title={`Lineage version: v${sc.googleFlowVersion}`}
+                                    title={`Background version: v${sc.activeBackgroundVersion || sc.googleFlowVersion}${sc.totalBackgroundVersions ? ` of ${sc.totalBackgroundVersions}` : ""}`}
                                   >
-                                    v{sc.googleFlowVersion}
+                                    v{sc.activeBackgroundVersion || sc.googleFlowVersion}
+                                    {sc.totalBackgroundVersions && sc.totalBackgroundVersions > 1 ? ` (${sc.totalBackgroundVersions})` : ""}
                                   </span>
                                 ) : null}
                                 {sc.googleFlowEditUrl ? (

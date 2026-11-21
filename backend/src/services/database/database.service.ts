@@ -345,6 +345,9 @@ export async function getSceneBySceneId(sceneId: string) {
       versions: {
         orderBy: { versionNumber: "desc" },
       },
+      backgroundVersions: {
+        orderBy: { version: "asc" },
+      },
       images: {
         orderBy: { createdAt: "desc" },
       },
@@ -367,6 +370,9 @@ export async function getScenesByStoryId(
     include: {
       versions: {
         orderBy: { versionNumber: "desc" },
+      },
+      backgroundVersions: {
+        orderBy: { version: "asc" },
       },
     },
   });
@@ -392,6 +398,7 @@ export async function updateScene(
     actualAudioDurationMs?: number | null;
     generationError?: string | null;
     animationData?: any;
+    activeBackgroundVersion?: number | null;
   },
 ) {
   const existing = await getSceneBySceneId(sceneId);
@@ -612,6 +619,8 @@ export async function createImage(data: {
   googleFlowPrompt?: string | null;
   googleFlowParentAssetId?: string | null;
   googleFlowVersion?: number | null;
+  googleFlowImageId?: string | null;
+  googleFlowImageRef?: string | null;
 }) {
   return await prisma.image.create({
     data: {
@@ -631,6 +640,8 @@ export async function createImage(data: {
       googleFlowPrompt: data.googleFlowPrompt,
       googleFlowParentAssetId: data.googleFlowParentAssetId,
       googleFlowVersion: data.googleFlowVersion ?? 1,
+      googleFlowImageId: data.googleFlowImageId,
+      googleFlowImageRef: data.googleFlowImageRef,
     },
   });
 }
@@ -652,6 +663,205 @@ export async function updateImageStatus(id: string, status: string) {
   return await prisma.image.update({
     where: { id },
     data: { status },
+  });
+}
+
+// Background Image Version operations
+export async function createBackgroundImageVersion(data: {
+  id?: string;
+  sceneId: string;
+  version?: number;
+  provider: string;
+  model?: string | null;
+  prompt?: string | null;
+  parentVersionId?: string | null;
+  localImageId?: string | null;
+  storageKey?: string | null;
+  imageUrl?: string | null;
+  width?: number | null;
+  height?: number | null;
+  aspectRatio?: string | null;
+  providerMetadata?: any;
+  status?: string;
+  makeActive?: boolean;
+}) {
+  return await prisma.$transaction(async (tx) => {
+    const targetScene = await tx.scene.findFirst({
+      where: {
+        OR: [{ sceneId: data.sceneId }, { id: data.sceneId }],
+      },
+    });
+
+    if (!targetScene) {
+      throw new Error(`Scene not found: ${data.sceneId}`);
+    }
+
+    const actualSceneId = targetScene.sceneId;
+
+    let targetVersion = data.version;
+    if (typeof targetVersion !== "number" || targetVersion <= 0) {
+      const highest = await tx.backgroundImageVersion.findFirst({
+        where: { sceneId: actualSceneId },
+        orderBy: { version: "desc" },
+      });
+      targetVersion = (highest?.version ?? 0) + 1;
+    }
+
+    const parsedMetadata =
+      typeof data.providerMetadata === "string"
+        ? JSON.parse(data.providerMetadata)
+        : data.providerMetadata ?? undefined;
+
+    const versionRecord = await tx.backgroundImageVersion.create({
+      data: {
+        id: data.id || randomUUID(),
+        sceneId: actualSceneId,
+        version: targetVersion,
+        provider: data.provider,
+        model: data.model || null,
+        prompt: data.prompt || null,
+        parentVersionId: data.parentVersionId || null,
+        localImageId: data.localImageId || null,
+        storageKey: data.storageKey || null,
+        imageUrl: data.imageUrl || null,
+        width: data.width || null,
+        height: data.height || null,
+        aspectRatio: data.aspectRatio || null,
+        providerMetadata: parsedMetadata,
+        status: data.status || "completed",
+      },
+    });
+
+    const shouldMakeActive = data.makeActive !== false;
+    if (shouldMakeActive) {
+      const currentAnim = (targetScene.animationData as any) || {};
+      const currentBg = currentAnim.background || {};
+      const updatedAnim = {
+        ...currentAnim,
+        background: {
+          ...currentBg,
+          imageUrl: data.imageUrl || targetScene.imageUrl,
+          activeVersion: targetVersion,
+          versionId: versionRecord.id,
+          provider: data.provider,
+          prompt: data.prompt ?? currentBg.prompt,
+          googleFlowProjectId: parsedMetadata?.googleFlowProjectId ?? currentBg.googleFlowProjectId,
+          googleFlowEditId: parsedMetadata?.googleFlowEditId ?? currentBg.googleFlowEditId,
+          googleFlowEditUrl: parsedMetadata?.googleFlowEditUrl ?? currentBg.googleFlowEditUrl,
+          googleFlowImageId: parsedMetadata?.googleFlowImageId ?? currentBg.googleFlowImageId ?? null,
+          googleFlowImageRef: parsedMetadata?.googleFlowImageRef ?? currentBg.googleFlowImageRef ?? null,
+        },
+      };
+
+      await tx.scene.update({
+        where: { sceneId: actualSceneId },
+        data: {
+          imageUrl: data.imageUrl || targetScene.imageUrl,
+          activeBackgroundVersion: targetVersion,
+          animationData: updatedAnim,
+        },
+      });
+    }
+
+    return versionRecord;
+  });
+}
+
+export async function getBackgroundImageVersions(sceneId: string) {
+  const targetScene = await getSceneBySceneId(sceneId);
+  const actualSceneId = targetScene ? targetScene.sceneId : sceneId;
+
+  return await prisma.backgroundImageVersion.findMany({
+    where: { sceneId: actualSceneId },
+    orderBy: { version: "asc" },
+  });
+}
+
+export async function getBackgroundImageVersion(id: string) {
+  return await prisma.backgroundImageVersion.findUnique({
+    where: { id },
+  });
+}
+
+export async function restoreBackgroundImageVersion(
+  sceneId: string,
+  versionIdOrNumber: string | number,
+) {
+  return await prisma.$transaction(async (tx) => {
+    const targetScene = await tx.scene.findFirst({
+      where: {
+        OR: [{ sceneId }, { id: sceneId }],
+      },
+    });
+
+    if (!targetScene) {
+      throw new Error(`Scene not found: ${sceneId}`);
+    }
+
+    const actualSceneId = targetScene.sceneId;
+
+    let targetVersion;
+    if (typeof versionIdOrNumber === "number") {
+      targetVersion = await tx.backgroundImageVersion.findUnique({
+        where: {
+          sceneId_version: {
+            sceneId: actualSceneId,
+            version: versionIdOrNumber,
+          },
+        },
+      });
+    } else {
+      targetVersion = await tx.backgroundImageVersion.findFirst({
+        where: {
+          id: versionIdOrNumber,
+          sceneId: actualSceneId,
+        },
+      });
+    }
+
+    if (!targetVersion) {
+      throw new Error(`Background image version not found: ${versionIdOrNumber}`);
+    }
+
+    const currentAnim = (targetScene.animationData as any) || {};
+    const currentBg = currentAnim.background || {};
+    const providerMeta = (targetVersion.providerMetadata as any) || {};
+
+    const updatedAnim = {
+      ...currentAnim,
+      background: {
+        ...currentBg,
+        imageUrl: targetVersion.imageUrl,
+        activeVersion: targetVersion.version,
+        versionId: targetVersion.id,
+        provider: targetVersion.provider,
+        prompt: targetVersion.prompt ?? currentBg.prompt,
+        googleFlowProjectId: providerMeta.googleFlowProjectId ?? currentBg.googleFlowProjectId,
+        googleFlowEditId: providerMeta.googleFlowEditId ?? currentBg.googleFlowEditId,
+        googleFlowEditUrl: providerMeta.googleFlowEditUrl ?? currentBg.googleFlowEditUrl,
+        googleFlowImageId: providerMeta.googleFlowImageId ?? null,
+        googleFlowImageRef: providerMeta.googleFlowImageRef ?? null,
+      },
+    };
+
+    const updatedScene = await tx.scene.update({
+      where: { sceneId: actualSceneId },
+      data: {
+        imageUrl: targetVersion.imageUrl || targetScene.imageUrl,
+        activeBackgroundVersion: targetVersion.version,
+        animationData: updatedAnim,
+      },
+      include: {
+        backgroundVersions: {
+          orderBy: { version: "asc" },
+        },
+      },
+    });
+
+    return {
+      scene: updatedScene,
+      restoredVersion: targetVersion,
+    };
   });
 }
 
