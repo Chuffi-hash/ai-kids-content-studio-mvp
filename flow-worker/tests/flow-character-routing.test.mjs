@@ -167,6 +167,145 @@ test("Google Flow Character Routing & Route Extraction Suite", async (t) => {
     assert.equal(result.diagnostics.generateButton.found, true);
   });
 
+  await t.test("6b. Browser launch moves the character-role tab into the Characters workspace", async () => {
+    const worker = new FlowBrowserWorker();
+    let bgUrl = "https://flow.google.com/project/proj-launch";
+    let charUrl = "https://flow.google.com/project/proj-launch";
+    let characterNavClicked = false;
+
+    const makePage = (role) => ({
+      url: () => role === "background" ? bgUrl : charUrl,
+      isClosed: () => false,
+      bringToFront: async () => {},
+      on: () => {},
+      evaluate: async () => null,
+      getByRole: (name, options) => {
+        if (name === "navigation") {
+          return {
+            count: async () => 1,
+            first() { return this; },
+            isVisible: async () => true,
+            getByRole: (childRole, childOptions) => ({
+              count: async () =>
+                childRole === "button" && childOptions?.name === "Characters" ? 1 : 0,
+              first: () => ({
+                isVisible: async () => true,
+                isEnabled: async () => true,
+                click: async () => {
+                  characterNavClicked = true;
+                  charUrl = "https://flow.google.com/project/proj-launch/character";
+                },
+              }),
+            }),
+          };
+        }
+        if (name === "button" && /Format/i.test(options?.name || "")) {
+          return { count: async () => 1 };
+        }
+        if (name === "button" && /Select model family/i.test(options?.name || "")) {
+          return { count: async () => 1 };
+        }
+        if (name === "button" && /Start generation/i.test(options?.name || "")) {
+          return { count: async () => 1 };
+        }
+        if (name === "textbox") return { count: async () => 1 };
+        return { count: async () => 0 };
+      },
+      getByPlaceholder: () => ({ count: async () => 1 }),
+      locator: () => ({
+        count: async () => 0,
+        first: () => ({ click: async () => {} }),
+      }),
+      waitForURL: async () => {},
+    });
+
+    const backgroundPage = makePage("background");
+    const characterPage = makePage("character");
+
+    worker.context = {
+      pages: () => [backgroundPage, characterPage],
+      on: () => {},
+      newPage: async () => {
+        throw new Error("Unexpected duplicate tab creation");
+      },
+    };
+    worker.getSessionStatus = async () => ({
+      connected: true,
+      tabs: {
+        background: { open: true, url: bgUrl },
+        character: { open: true, url: charUrl },
+      },
+    });
+
+    const session = await worker.launch(
+      "https://flow.google.com/project/proj-launch",
+    );
+
+    assert.equal(characterNavClicked, true);
+    assert.equal(bgUrl, "https://flow.google.com/project/proj-launch");
+    assert.equal(charUrl, "https://flow.google.com/project/proj-launch/character");
+    assert.equal(session.tabs.character.url, charUrl);
+    assert.equal(worker.getFlowPage(FLOW_TAB_ROLES.BACKGROUND), backgroundPage);
+    assert.equal(worker.getFlowPage(FLOW_TAB_ROLES.CHARACTER), characterPage);
+  });
+
+  await t.test("6c. Failed sidebar navigation falls back to the verified character route", async () => {
+    const worker = new FlowBrowserWorker();
+    let currentUrl = "https://flow.google.com/project/proj-fallback";
+    let gotoUrl = null;
+
+    const page = {
+      url: () => currentUrl,
+      isClosed: () => false,
+      bringToFront: async () => {},
+      goto: async (url) => {
+        gotoUrl = url;
+        currentUrl = url;
+      },
+      getByRole: (role, options) => {
+        if (role === "navigation") {
+          return {
+            count: async () => 1,
+            first() { return this; },
+            isVisible: async () => true,
+            getByRole: () => ({
+              count: async () => 1,
+              first: () => ({
+                isVisible: async () => true,
+                isEnabled: async () => true,
+                click: async () => {
+                  // Simulate Angular accepting the click without routing.
+                },
+              }),
+            }),
+          };
+        }
+        return { count: async () => 0 };
+      },
+      waitForURL: async () => {},
+      getByPlaceholder: () => ({ count: async () => 0 }),
+      locator: () => ({ count: async () => 0 }),
+      evaluate: async () => null,
+      on: () => {},
+    };
+
+    worker.registerFlowPage(page, {
+      role: FLOW_TAB_ROLES.CHARACTER,
+      projectId: "proj-fallback",
+    });
+
+    const result = await worker.navigateToCharacterTab("proj-fallback");
+
+    assert.equal(
+      gotoUrl,
+      "https://flow.google.com/project/proj-fallback/character",
+    );
+    assert.equal(result.success, true);
+    assert.equal(result.routeType, "character-create");
+    assert.equal(result.url, currentUrl);
+    assert.equal(result.navigationMethod, "direct-route-fallback");
+  });
+
   await t.test("7. openGoogleFlowCharacterEditor navigates directly to existing character URL", async () => {
     const worker = new FlowBrowserWorker();
     let navigatedTo = "";
