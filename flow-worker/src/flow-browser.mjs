@@ -617,23 +617,41 @@ export class FlowBrowserWorker {
           name: "Project navigation",
           exact: true,
         });
-        const navCount = await nav.count().catch(() => 0);
+        const navCount =
+          typeof nav.count === "function"
+            ? await nav.count().catch(() => 0)
+            : 1;
         if (navCount === 1) {
-          const visible = await nav.first().isVisible().catch(() => true);
+          const navFirst = nav.first();
+          const visible =
+            typeof navFirst.isVisible === "function"
+              ? await navFirst.isVisible().catch(() => false)
+              : true;
           if (visible) {
             navigationDiagnostics.navigationElementFound = true;
             const button = nav.getByRole("button", {
               name: "Characters",
               exact: true,
             });
-            const buttonCount = await button.count().catch(() => 0);
+            const buttonCount =
+              typeof button.count === "function"
+                ? await button.count().catch(() => 0)
+                : 0;
             if (buttonCount === 1) {
-              const visibleButton = await button.isVisible().catch(() => false);
-              const enabledButton = await button.isEnabled().catch(() => false);
+              const buttonFirst =
+                typeof button.first === "function" ? button.first() : button;
+              const visibleButton =
+                typeof buttonFirst.isVisible === "function"
+                  ? await buttonFirst.isVisible().catch(() => false)
+                  : true;
+              const enabledButton =
+                typeof buttonFirst.isEnabled === "function"
+                  ? await buttonFirst.isEnabled().catch(() => false)
+                  : true;
               if (visibleButton && enabledButton) {
                 navigationDiagnostics.charactersButtonFound = true;
                 navigationDiagnostics.clickAttempted = true;
-                await button.click({ timeout: 15000 });
+                await buttonFirst.click({ timeout: 15000 });
               }
             }
           }
