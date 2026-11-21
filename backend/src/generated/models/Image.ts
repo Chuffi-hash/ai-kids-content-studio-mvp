@@ -29,11 +29,13 @@ export type AggregateImage = {
 export type ImageAvgAggregateOutputType = {
   width: number | null
   height: number | null
+  googleFlowVersion: number | null
 }
 
 export type ImageSumAggregateOutputType = {
   width: number | null
   height: number | null
+  googleFlowVersion: number | null
 }
 
 export type ImageMinAggregateOutputType = {
@@ -47,6 +49,12 @@ export type ImageMinAggregateOutputType = {
   width: number | null
   height: number | null
   status: string | null
+  googleFlowProjectId: string | null
+  googleFlowEditId: string | null
+  googleFlowEditUrl: string | null
+  googleFlowPrompt: string | null
+  googleFlowParentAssetId: string | null
+  googleFlowVersion: number | null
   createdAt: Date | null
   updatedAt: Date | null
 }
@@ -62,6 +70,12 @@ export type ImageMaxAggregateOutputType = {
   width: number | null
   height: number | null
   status: string | null
+  googleFlowProjectId: string | null
+  googleFlowEditId: string | null
+  googleFlowEditUrl: string | null
+  googleFlowPrompt: string | null
+  googleFlowParentAssetId: string | null
+  googleFlowVersion: number | null
   createdAt: Date | null
   updatedAt: Date | null
 }
@@ -77,6 +91,12 @@ export type ImageCountAggregateOutputType = {
   width: number
   height: number
   status: number
+  googleFlowProjectId: number
+  googleFlowEditId: number
+  googleFlowEditUrl: number
+  googleFlowPrompt: number
+  googleFlowParentAssetId: number
+  googleFlowVersion: number
   createdAt: number
   updatedAt: number
   _all: number
@@ -86,11 +106,13 @@ export type ImageCountAggregateOutputType = {
 export type ImageAvgAggregateInputType = {
   width?: true
   height?: true
+  googleFlowVersion?: true
 }
 
 export type ImageSumAggregateInputType = {
   width?: true
   height?: true
+  googleFlowVersion?: true
 }
 
 export type ImageMinAggregateInputType = {
@@ -104,6 +126,12 @@ export type ImageMinAggregateInputType = {
   width?: true
   height?: true
   status?: true
+  googleFlowProjectId?: true
+  googleFlowEditId?: true
+  googleFlowEditUrl?: true
+  googleFlowPrompt?: true
+  googleFlowParentAssetId?: true
+  googleFlowVersion?: true
   createdAt?: true
   updatedAt?: true
 }
@@ -119,6 +147,12 @@ export type ImageMaxAggregateInputType = {
   width?: true
   height?: true
   status?: true
+  googleFlowProjectId?: true
+  googleFlowEditId?: true
+  googleFlowEditUrl?: true
+  googleFlowPrompt?: true
+  googleFlowParentAssetId?: true
+  googleFlowVersion?: true
   createdAt?: true
   updatedAt?: true
 }
@@ -134,6 +168,12 @@ export type ImageCountAggregateInputType = {
   width?: true
   height?: true
   status?: true
+  googleFlowProjectId?: true
+  googleFlowEditId?: true
+  googleFlowEditUrl?: true
+  googleFlowPrompt?: true
+  googleFlowParentAssetId?: true
+  googleFlowVersion?: true
   createdAt?: true
   updatedAt?: true
   _all?: true
@@ -236,6 +276,12 @@ export type ImageGroupByOutputType = {
   width: number
   height: number
   status: string
+  googleFlowProjectId: string | null
+  googleFlowEditId: string | null
+  googleFlowEditUrl: string | null
+  googleFlowPrompt: string | null
+  googleFlowParentAssetId: string | null
+  googleFlowVersion: number | null
   createdAt: Date
   updatedAt: Date
   _count: ImageCountAggregateOutputType | null
@@ -274,6 +320,12 @@ export type ImageWhereInput = {
   width?: Prisma.IntFilter<"Image"> | number
   height?: Prisma.IntFilter<"Image"> | number
   status?: Prisma.StringFilter<"Image"> | string
+  googleFlowProjectId?: Prisma.StringNullableFilter<"Image"> | string | null
+  googleFlowEditId?: Prisma.StringNullableFilter<"Image"> | string | null
+  googleFlowEditUrl?: Prisma.StringNullableFilter<"Image"> | string | null
+  googleFlowPrompt?: Prisma.StringNullableFilter<"Image"> | string | null
+  googleFlowParentAssetId?: Prisma.StringNullableFilter<"Image"> | string | null
+  googleFlowVersion?: Prisma.IntNullableFilter<"Image"> | number | null
   createdAt?: Prisma.DateTimeFilter<"Image"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"Image"> | Date | string
   scene?: Prisma.XOR<Prisma.SceneScalarRelationFilter, Prisma.SceneWhereInput>
@@ -290,6 +342,12 @@ export type ImageOrderByWithRelationInput = {
   width?: Prisma.SortOrder
   height?: Prisma.SortOrder
   status?: Prisma.SortOrder
+  googleFlowProjectId?: Prisma.SortOrderInput | Prisma.SortOrder
+  googleFlowEditId?: Prisma.SortOrderInput | Prisma.SortOrder
+  googleFlowEditUrl?: Prisma.SortOrderInput | Prisma.SortOrder
+  googleFlowPrompt?: Prisma.SortOrderInput | Prisma.SortOrder
+  googleFlowParentAssetId?: Prisma.SortOrderInput | Prisma.SortOrder
+  googleFlowVersion?: Prisma.SortOrderInput | Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
   scene?: Prisma.SceneOrderByWithRelationInput
@@ -309,6 +367,12 @@ export type ImageWhereUniqueInput = Prisma.AtLeast<{
   width?: Prisma.IntFilter<"Image"> | number
   height?: Prisma.IntFilter<"Image"> | number
   status?: Prisma.StringFilter<"Image"> | string
+  googleFlowProjectId?: Prisma.StringNullableFilter<"Image"> | string | null
+  googleFlowEditId?: Prisma.StringNullableFilter<"Image"> | string | null
+  googleFlowEditUrl?: Prisma.StringNullableFilter<"Image"> | string | null
+  googleFlowPrompt?: Prisma.StringNullableFilter<"Image"> | string | null
+  googleFlowParentAssetId?: Prisma.StringNullableFilter<"Image"> | string | null
+  googleFlowVersion?: Prisma.IntNullableFilter<"Image"> | number | null
   createdAt?: Prisma.DateTimeFilter<"Image"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"Image"> | Date | string
   scene?: Prisma.XOR<Prisma.SceneScalarRelationFilter, Prisma.SceneWhereInput>
@@ -325,6 +389,12 @@ export type ImageOrderByWithAggregationInput = {
   width?: Prisma.SortOrder
   height?: Prisma.SortOrder
   status?: Prisma.SortOrder
+  googleFlowProjectId?: Prisma.SortOrderInput | Prisma.SortOrder
+  googleFlowEditId?: Prisma.SortOrderInput | Prisma.SortOrder
+  googleFlowEditUrl?: Prisma.SortOrderInput | Prisma.SortOrder
+  googleFlowPrompt?: Prisma.SortOrderInput | Prisma.SortOrder
+  googleFlowParentAssetId?: Prisma.SortOrderInput | Prisma.SortOrder
+  googleFlowVersion?: Prisma.SortOrderInput | Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
   _count?: Prisma.ImageCountOrderByAggregateInput
@@ -348,6 +418,12 @@ export type ImageScalarWhereWithAggregatesInput = {
   width?: Prisma.IntWithAggregatesFilter<"Image"> | number
   height?: Prisma.IntWithAggregatesFilter<"Image"> | number
   status?: Prisma.StringWithAggregatesFilter<"Image"> | string
+  googleFlowProjectId?: Prisma.StringNullableWithAggregatesFilter<"Image"> | string | null
+  googleFlowEditId?: Prisma.StringNullableWithAggregatesFilter<"Image"> | string | null
+  googleFlowEditUrl?: Prisma.StringNullableWithAggregatesFilter<"Image"> | string | null
+  googleFlowPrompt?: Prisma.StringNullableWithAggregatesFilter<"Image"> | string | null
+  googleFlowParentAssetId?: Prisma.StringNullableWithAggregatesFilter<"Image"> | string | null
+  googleFlowVersion?: Prisma.IntNullableWithAggregatesFilter<"Image"> | number | null
   createdAt?: Prisma.DateTimeWithAggregatesFilter<"Image"> | Date | string
   updatedAt?: Prisma.DateTimeWithAggregatesFilter<"Image"> | Date | string
 }
@@ -362,6 +438,12 @@ export type ImageCreateInput = {
   width: number
   height: number
   status: string
+  googleFlowProjectId?: string | null
+  googleFlowEditId?: string | null
+  googleFlowEditUrl?: string | null
+  googleFlowPrompt?: string | null
+  googleFlowParentAssetId?: string | null
+  googleFlowVersion?: number | null
   createdAt?: Date | string
   updatedAt?: Date | string
   scene: Prisma.SceneCreateNestedOneWithoutImagesInput
@@ -378,6 +460,12 @@ export type ImageUncheckedCreateInput = {
   width: number
   height: number
   status: string
+  googleFlowProjectId?: string | null
+  googleFlowEditId?: string | null
+  googleFlowEditUrl?: string | null
+  googleFlowPrompt?: string | null
+  googleFlowParentAssetId?: string | null
+  googleFlowVersion?: number | null
   createdAt?: Date | string
   updatedAt?: Date | string
 }
@@ -392,6 +480,12 @@ export type ImageUpdateInput = {
   width?: Prisma.IntFieldUpdateOperationsInput | number
   height?: Prisma.IntFieldUpdateOperationsInput | number
   status?: Prisma.StringFieldUpdateOperationsInput | string
+  googleFlowProjectId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  googleFlowEditId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  googleFlowEditUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  googleFlowPrompt?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  googleFlowParentAssetId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  googleFlowVersion?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   scene?: Prisma.SceneUpdateOneRequiredWithoutImagesNestedInput
@@ -408,6 +502,12 @@ export type ImageUncheckedUpdateInput = {
   width?: Prisma.IntFieldUpdateOperationsInput | number
   height?: Prisma.IntFieldUpdateOperationsInput | number
   status?: Prisma.StringFieldUpdateOperationsInput | string
+  googleFlowProjectId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  googleFlowEditId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  googleFlowEditUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  googleFlowPrompt?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  googleFlowParentAssetId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  googleFlowVersion?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -423,6 +523,12 @@ export type ImageCreateManyInput = {
   width: number
   height: number
   status: string
+  googleFlowProjectId?: string | null
+  googleFlowEditId?: string | null
+  googleFlowEditUrl?: string | null
+  googleFlowPrompt?: string | null
+  googleFlowParentAssetId?: string | null
+  googleFlowVersion?: number | null
   createdAt?: Date | string
   updatedAt?: Date | string
 }
@@ -437,6 +543,12 @@ export type ImageUpdateManyMutationInput = {
   width?: Prisma.IntFieldUpdateOperationsInput | number
   height?: Prisma.IntFieldUpdateOperationsInput | number
   status?: Prisma.StringFieldUpdateOperationsInput | string
+  googleFlowProjectId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  googleFlowEditId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  googleFlowEditUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  googleFlowPrompt?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  googleFlowParentAssetId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  googleFlowVersion?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -452,6 +564,12 @@ export type ImageUncheckedUpdateManyInput = {
   width?: Prisma.IntFieldUpdateOperationsInput | number
   height?: Prisma.IntFieldUpdateOperationsInput | number
   status?: Prisma.StringFieldUpdateOperationsInput | string
+  googleFlowProjectId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  googleFlowEditId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  googleFlowEditUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  googleFlowPrompt?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  googleFlowParentAssetId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  googleFlowVersion?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -477,6 +595,12 @@ export type ImageCountOrderByAggregateInput = {
   width?: Prisma.SortOrder
   height?: Prisma.SortOrder
   status?: Prisma.SortOrder
+  googleFlowProjectId?: Prisma.SortOrder
+  googleFlowEditId?: Prisma.SortOrder
+  googleFlowEditUrl?: Prisma.SortOrder
+  googleFlowPrompt?: Prisma.SortOrder
+  googleFlowParentAssetId?: Prisma.SortOrder
+  googleFlowVersion?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
 }
@@ -484,6 +608,7 @@ export type ImageCountOrderByAggregateInput = {
 export type ImageAvgOrderByAggregateInput = {
   width?: Prisma.SortOrder
   height?: Prisma.SortOrder
+  googleFlowVersion?: Prisma.SortOrder
 }
 
 export type ImageMaxOrderByAggregateInput = {
@@ -497,6 +622,12 @@ export type ImageMaxOrderByAggregateInput = {
   width?: Prisma.SortOrder
   height?: Prisma.SortOrder
   status?: Prisma.SortOrder
+  googleFlowProjectId?: Prisma.SortOrder
+  googleFlowEditId?: Prisma.SortOrder
+  googleFlowEditUrl?: Prisma.SortOrder
+  googleFlowPrompt?: Prisma.SortOrder
+  googleFlowParentAssetId?: Prisma.SortOrder
+  googleFlowVersion?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
 }
@@ -512,6 +643,12 @@ export type ImageMinOrderByAggregateInput = {
   width?: Prisma.SortOrder
   height?: Prisma.SortOrder
   status?: Prisma.SortOrder
+  googleFlowProjectId?: Prisma.SortOrder
+  googleFlowEditId?: Prisma.SortOrder
+  googleFlowEditUrl?: Prisma.SortOrder
+  googleFlowPrompt?: Prisma.SortOrder
+  googleFlowParentAssetId?: Prisma.SortOrder
+  googleFlowVersion?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
 }
@@ -519,6 +656,7 @@ export type ImageMinOrderByAggregateInput = {
 export type ImageSumOrderByAggregateInput = {
   width?: Prisma.SortOrder
   height?: Prisma.SortOrder
+  googleFlowVersion?: Prisma.SortOrder
 }
 
 export type ImageCreateNestedManyWithoutSceneInput = {
@@ -573,6 +711,12 @@ export type ImageCreateWithoutSceneInput = {
   width: number
   height: number
   status: string
+  googleFlowProjectId?: string | null
+  googleFlowEditId?: string | null
+  googleFlowEditUrl?: string | null
+  googleFlowPrompt?: string | null
+  googleFlowParentAssetId?: string | null
+  googleFlowVersion?: number | null
   createdAt?: Date | string
   updatedAt?: Date | string
 }
@@ -587,6 +731,12 @@ export type ImageUncheckedCreateWithoutSceneInput = {
   width: number
   height: number
   status: string
+  googleFlowProjectId?: string | null
+  googleFlowEditId?: string | null
+  googleFlowEditUrl?: string | null
+  googleFlowPrompt?: string | null
+  googleFlowParentAssetId?: string | null
+  googleFlowVersion?: number | null
   createdAt?: Date | string
   updatedAt?: Date | string
 }
@@ -631,6 +781,12 @@ export type ImageScalarWhereInput = {
   width?: Prisma.IntFilter<"Image"> | number
   height?: Prisma.IntFilter<"Image"> | number
   status?: Prisma.StringFilter<"Image"> | string
+  googleFlowProjectId?: Prisma.StringNullableFilter<"Image"> | string | null
+  googleFlowEditId?: Prisma.StringNullableFilter<"Image"> | string | null
+  googleFlowEditUrl?: Prisma.StringNullableFilter<"Image"> | string | null
+  googleFlowPrompt?: Prisma.StringNullableFilter<"Image"> | string | null
+  googleFlowParentAssetId?: Prisma.StringNullableFilter<"Image"> | string | null
+  googleFlowVersion?: Prisma.IntNullableFilter<"Image"> | number | null
   createdAt?: Prisma.DateTimeFilter<"Image"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"Image"> | Date | string
 }
@@ -645,6 +801,12 @@ export type ImageCreateManySceneInput = {
   width: number
   height: number
   status: string
+  googleFlowProjectId?: string | null
+  googleFlowEditId?: string | null
+  googleFlowEditUrl?: string | null
+  googleFlowPrompt?: string | null
+  googleFlowParentAssetId?: string | null
+  googleFlowVersion?: number | null
   createdAt?: Date | string
   updatedAt?: Date | string
 }
@@ -659,6 +821,12 @@ export type ImageUpdateWithoutSceneInput = {
   width?: Prisma.IntFieldUpdateOperationsInput | number
   height?: Prisma.IntFieldUpdateOperationsInput | number
   status?: Prisma.StringFieldUpdateOperationsInput | string
+  googleFlowProjectId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  googleFlowEditId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  googleFlowEditUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  googleFlowPrompt?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  googleFlowParentAssetId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  googleFlowVersion?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -673,6 +841,12 @@ export type ImageUncheckedUpdateWithoutSceneInput = {
   width?: Prisma.IntFieldUpdateOperationsInput | number
   height?: Prisma.IntFieldUpdateOperationsInput | number
   status?: Prisma.StringFieldUpdateOperationsInput | string
+  googleFlowProjectId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  googleFlowEditId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  googleFlowEditUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  googleFlowPrompt?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  googleFlowParentAssetId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  googleFlowVersion?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -687,6 +861,12 @@ export type ImageUncheckedUpdateManyWithoutSceneInput = {
   width?: Prisma.IntFieldUpdateOperationsInput | number
   height?: Prisma.IntFieldUpdateOperationsInput | number
   status?: Prisma.StringFieldUpdateOperationsInput | string
+  googleFlowProjectId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  googleFlowEditId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  googleFlowEditUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  googleFlowPrompt?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  googleFlowParentAssetId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  googleFlowVersion?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -704,6 +884,12 @@ export type ImageSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = 
   width?: boolean
   height?: boolean
   status?: boolean
+  googleFlowProjectId?: boolean
+  googleFlowEditId?: boolean
+  googleFlowEditUrl?: boolean
+  googleFlowPrompt?: boolean
+  googleFlowParentAssetId?: boolean
+  googleFlowVersion?: boolean
   createdAt?: boolean
   updatedAt?: boolean
   scene?: boolean | Prisma.SceneDefaultArgs<ExtArgs>
@@ -720,6 +906,12 @@ export type ImageSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Extensi
   width?: boolean
   height?: boolean
   status?: boolean
+  googleFlowProjectId?: boolean
+  googleFlowEditId?: boolean
+  googleFlowEditUrl?: boolean
+  googleFlowPrompt?: boolean
+  googleFlowParentAssetId?: boolean
+  googleFlowVersion?: boolean
   createdAt?: boolean
   updatedAt?: boolean
   scene?: boolean | Prisma.SceneDefaultArgs<ExtArgs>
@@ -736,6 +928,12 @@ export type ImageSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensi
   width?: boolean
   height?: boolean
   status?: boolean
+  googleFlowProjectId?: boolean
+  googleFlowEditId?: boolean
+  googleFlowEditUrl?: boolean
+  googleFlowPrompt?: boolean
+  googleFlowParentAssetId?: boolean
+  googleFlowVersion?: boolean
   createdAt?: boolean
   updatedAt?: boolean
   scene?: boolean | Prisma.SceneDefaultArgs<ExtArgs>
@@ -752,11 +950,17 @@ export type ImageSelectScalar = {
   width?: boolean
   height?: boolean
   status?: boolean
+  googleFlowProjectId?: boolean
+  googleFlowEditId?: boolean
+  googleFlowEditUrl?: boolean
+  googleFlowPrompt?: boolean
+  googleFlowParentAssetId?: boolean
+  googleFlowVersion?: boolean
   createdAt?: boolean
   updatedAt?: boolean
 }
 
-export type ImageOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "sceneId" | "provider" | "model" | "prompt" | "storageKey" | "imageUrl" | "width" | "height" | "status" | "createdAt" | "updatedAt", ExtArgs["result"]["image"]>
+export type ImageOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "sceneId" | "provider" | "model" | "prompt" | "storageKey" | "imageUrl" | "width" | "height" | "status" | "googleFlowProjectId" | "googleFlowEditId" | "googleFlowEditUrl" | "googleFlowPrompt" | "googleFlowParentAssetId" | "googleFlowVersion" | "createdAt" | "updatedAt", ExtArgs["result"]["image"]>
 export type ImageInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   scene?: boolean | Prisma.SceneDefaultArgs<ExtArgs>
 }
@@ -783,6 +987,12 @@ export type $ImagePayload<ExtArgs extends runtime.Types.Extensions.InternalArgs 
     width: number
     height: number
     status: string
+    googleFlowProjectId: string | null
+    googleFlowEditId: string | null
+    googleFlowEditUrl: string | null
+    googleFlowPrompt: string | null
+    googleFlowParentAssetId: string | null
+    googleFlowVersion: number | null
     createdAt: Date
     updatedAt: Date
   }, ExtArgs["result"]["image"]>
@@ -1219,6 +1429,12 @@ export interface ImageFieldRefs {
   readonly width: Prisma.FieldRef<"Image", 'Int'>
   readonly height: Prisma.FieldRef<"Image", 'Int'>
   readonly status: Prisma.FieldRef<"Image", 'String'>
+  readonly googleFlowProjectId: Prisma.FieldRef<"Image", 'String'>
+  readonly googleFlowEditId: Prisma.FieldRef<"Image", 'String'>
+  readonly googleFlowEditUrl: Prisma.FieldRef<"Image", 'String'>
+  readonly googleFlowPrompt: Prisma.FieldRef<"Image", 'String'>
+  readonly googleFlowParentAssetId: Prisma.FieldRef<"Image", 'String'>
+  readonly googleFlowVersion: Prisma.FieldRef<"Image", 'Int'>
   readonly createdAt: Prisma.FieldRef<"Image", 'DateTime'>
   readonly updatedAt: Prisma.FieldRef<"Image", 'DateTime'>
 }

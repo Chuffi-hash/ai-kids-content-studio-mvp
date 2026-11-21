@@ -25,6 +25,7 @@ import {
   fetchStoryFlowContext,
   fetchGenerationProvidersStatus,
   generateBackgroundDirect,
+  regenerateBackgroundDirect,
   generateCharacterAssetDirect,
   generateAllMissingBackgroundsDirect,
   generateAllMissingCharacterReferencesDirect,
@@ -743,7 +744,7 @@ export default function GoogleFlowPage() {
   // ----------------------------------------------------
   // Direct Generation & Batch Production Studio Handlers
   // ----------------------------------------------------
-  const handleGenerateSceneBackground = async (sceneId: string) => {
+  const handleGenerateSceneBackground = async (sceneId: string, imageId?: string) => {
     if (!selectedStoryId) return;
     setGeneratingSceneIds((prev) => ({ ...prev, [sceneId]: true }));
     setSceneErrors((prev) => {
@@ -753,13 +754,32 @@ export default function GoogleFlowPage() {
     });
     try {
       const customPrompt = sceneCustomPrompts[sceneId];
-      const res = await generateBackgroundDirect({
-        storyId: selectedStoryId,
-        sceneId,
-        provider: generationProvider,
-        promptOverride: customPrompt?.trim() || undefined,
-        aspectRatio: storyContext?.story?.aspectRatio || "16:9",
-      });
+      const sceneItem = storyContext?.scenes?.find(
+        (s) => s.sceneId === sceneId || s.id === sceneId,
+      );
+      const targetImageId = imageId || sceneItem?.backgroundImageId;
+
+      let res: any;
+      if (
+        generationProvider === "google_flow" &&
+        targetImageId &&
+        (sceneItem?.googleFlowEditUrl || sceneItem?.googleFlowEditId)
+      ) {
+        res = await regenerateBackgroundDirect({
+          storyId: selectedStoryId,
+          sceneId,
+          imageId: targetImageId,
+          promptOverride: customPrompt?.trim() || undefined,
+        });
+      } else {
+        res = await generateBackgroundDirect({
+          storyId: selectedStoryId,
+          sceneId,
+          provider: generationProvider,
+          promptOverride: customPrompt?.trim() || undefined,
+          aspectRatio: storyContext?.story?.aspectRatio || "16:9",
+        });
+      }
 
       // Poll if job is processing asynchronously in Flow Worker
       if (res?.jobId && res?.status === "generating") {
@@ -2835,13 +2855,52 @@ export default function GoogleFlowPage() {
                                   {sc.title || "Untitled"}
                                 </span>
                               </div>
-                              <span
-                                className={`flow-status-badge ${sc.hasBackground ? "ready" : "missing"}`}
-                              >
-                                {sc.hasBackground
-                                  ? "✓ Plate Ready"
-                                  : "● Missing Plate"}
-                              </span>
+                              <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                                <span
+                                  className={`flow-status-badge ${sc.hasBackground ? "ready" : "missing"}`}
+                                >
+                                  {sc.hasBackground
+                                    ? "✓ Plate Ready"
+                                    : "● Missing Plate"}
+                                </span>
+                                {sc.googleFlowVersion ? (
+                                  <span
+                                    className="flow-status-badge version"
+                                    style={{
+                                      fontSize: "10px",
+                                      fontWeight: 600,
+                                      padding: "2px 6px",
+                                      borderRadius: "4px",
+                                      background: "rgba(99, 102, 241, 0.15)",
+                                      color: "#818cf8",
+                                    }}
+                                    title={`Lineage version: v${sc.googleFlowVersion}`}
+                                  >
+                                    v{sc.googleFlowVersion}
+                                  </span>
+                                ) : null}
+                                {sc.googleFlowEditUrl ? (
+                                  <span
+                                    className="flow-status-badge editor"
+                                    style={{
+                                      fontSize: "10px",
+                                      fontWeight: 600,
+                                      padding: "2px 6px",
+                                      borderRadius: "4px",
+                                      background: "rgba(16, 185, 129, 0.15)",
+                                      color: "#34d399",
+                                      cursor: "pointer",
+                                    }}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      window.open(sc.googleFlowEditUrl!, "_blank");
+                                    }}
+                                    title={`Open Google Flow Image Editor: ${sc.googleFlowEditUrl}`}
+                                  >
+                                    Flow Editor ↗
+                                  </span>
+                                ) : null}
+                              </div>
                             </div>
 
                             {/* Thumbnail Area */}
@@ -3107,7 +3166,10 @@ export default function GoogleFlowPage() {
                                 className="flow-btn primary sm"
                                 disabled={isGenerating || isBatchBgRunning}
                                 onClick={() =>
-                                  handleGenerateSceneBackground(sc.sceneId)
+                                  handleGenerateSceneBackground(
+                                    sc.sceneId,
+                                    sc.backgroundImageId || undefined,
+                                  )
                                 }
                                 title={`Generate character-free plate using ${
                                   generationProvider === "gemini_api"

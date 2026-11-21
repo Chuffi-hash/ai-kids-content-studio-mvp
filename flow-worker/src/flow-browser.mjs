@@ -14,9 +14,21 @@ import {
   parseImageDimensions,
   safeFilename,
 } from "./image-validation.mjs";
-import { downloadFlowImage, closeFlowImageEditor } from "./flow-download.mjs";
+import {
+  downloadFlowImage,
+  closeFlowImageEditor,
+  extractGoogleFlowEditorReference,
+  isGoogleFlowEditorRoute,
+  saveImageUsingNativeContextMenu,
+} from "./flow-download.mjs";
 
-export { downloadFlowImage, closeFlowImageEditor };
+export {
+  downloadFlowImage,
+  closeFlowImageEditor,
+  extractGoogleFlowEditorReference,
+  isGoogleFlowEditorRoute,
+  saveImageUsingNativeContextMenu,
+};
 
 const VALID_ASSET_TYPES = new Set([
   "main",
@@ -598,9 +610,14 @@ export class FlowBrowserWorker {
       const storyId = String(input.storyId || "").trim();
       if (!sceneId) throw new Error("sceneId is required for background jobs.");
 
+      const isRegeneration = Boolean(input.isRegeneration);
+      const rawEditUrl = input.editUrl || input.googleFlowEditUrl;
+      const googleFlowEditUrl = rawEditUrl ? assertAllowedFlowUrl(rawEditUrl) : undefined;
+      const editorRef = googleFlowEditUrl ? extractGoogleFlowEditorReference(googleFlowEditUrl) : null;
+
       const projectUrl = input.projectUrl
         ? assertAllowedFlowUrl(input.projectUrl)
-        : undefined;
+        : (editorRef ? `https://flow.google.com/project/${editorRef.projectId}` : undefined);
       const prompt = String(input.prompt || "").trim();
       if (!prompt)
         throw new Error("A non-empty prompt is required for background jobs.");
@@ -613,10 +630,19 @@ export class FlowBrowserWorker {
         aspectRatio: input.aspectRatio || "16:9",
         projectUrl,
         prompt,
+        isRegeneration,
+        editUrl: googleFlowEditUrl,
+        googleFlowEditUrl,
+        googleFlowProjectId: editorRef?.projectId || input.googleFlowProjectId || undefined,
+        googleFlowEditId: editorRef?.editId || input.googleFlowEditId || undefined,
+        googleFlowParentAssetId: input.googleFlowParentAssetId || undefined,
+        googleFlowVersion: typeof input.googleFlowVersion === "number" ? input.googleFlowVersion : undefined,
         status: "created",
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
-        message: "Background job created. Prepare it after opening Flow.",
+        message: isRegeneration
+          ? "Background regeneration job created. Prepare it to navigate to Flow image editor."
+          : "Background job created. Prepare it after opening Flow.",
       };
 
       this.jobs.set(job.id, job);
@@ -1304,6 +1330,99 @@ export class FlowBrowserWorker {
       }
     }
 
+    if (job.isRegeneration) {
+      if (!job.googleFlowEditUrl) {
+        throw new Error("googleFlowEditUrl is required for background regeneration jobs.");
+      }
+      this.emitLifecycleLog("FLOW_EDITOR_REOPEN_STARTED", job, {
+        editUrl: job.googleFlowEditUrl,
+      });
+
+      const currentUrl = typeof this.page.url === "function" ? this.page.url() : "";
+      if (currentUrl !== job.googleFlowEditUrl) {
+        await this.page.goto(job.googleFlowEditUrl, {
+          waitUntil: "domcontentloaded",
+          timeout: 60000,
+        });
+      }
+
+      const verifiedUrl = typeof this.page.url === "function" ? this.page.url() : "";
+      const editorRef = extractGoogleFlowEditorReference(verifiedUrl);
+      if (!editorRef) {
+        const err = new Error(
+          `FLOW_REGENERATION_FAILED: Expected Google Flow editor route (/project/{projectId}/edit/{assetId}), but current URL is '${verifiedUrl}'.`
+        );
+        this.emitLifecycleLog("FLOW_REGENERATION_FAILED", job, {
+          error: err.message,
+          currentUrl: verifiedUrl,
+        });
+        this.setJobTerminal(job, "failed", err.message, "Failed to navigate to Google Flow image editor route.");
+        throw err;
+      }
+
+      job.googleFlowProjectId = editorRef.projectId;
+      job.googleFlowEditId = editorRef.editId;
+      job.googleFlowEditUrl = editorRef.editUrl;
+
+      this.emitLifecycleLog("FLOW_EDITOR_REOPENED", job, {
+        projectId: editorRef.projectId,
+        editId: editorRef.editId,
+        editUrl: editorRef.editUrl,
+      });
+
+      this.activeJobId = job.id;
+      this.emitLifecycleLog("ACTIVE_LOCK_ACQUIRED", job);
+
+      try {
+        const promptEditor = await this.findImageEditPromptEditor();
+        if (typeof promptEditor.locator.click === "function") {
+          await promptEditor.locator.click().catch(() => {});
+        }
+        if (this.page.keyboard) {
+          await this.page.keyboard.press("ControlOrMeta+A").catch(() => {});
+          await this.page.keyboard.press("Backspace").catch(() => {});
+        }
+        try {
+          if (typeof promptEditor.locator.fill === "function") {
+            await promptEditor.locator.fill(job.prompt);
+          }
+        } catch {
+          if (typeof promptEditor.locator.evaluate === "function") {
+            await promptEditor.locator
+              .evaluate((node, text) => {
+                node.innerText = text;
+                node.dispatchEvent(new Event("input", { bubbles: true }));
+                node.dispatchEvent(new Event("change", { bubbles: true }));
+              }, job.prompt)
+              .catch(() => {});
+          }
+        }
+
+        this.emitLifecycleLog("FLOW_PROMPT_ENTERED", job, {
+          prompt: job.prompt,
+        });
+
+        job.promptSelectorUsed = promptEditor.selector;
+        job.status = "prompt_ready";
+        job.message = "Regeneration prompt populated into Google Flow image editor.";
+        job.error = undefined;
+        this.touch(job);
+        return job;
+      } catch (error) {
+        job.diagnosticScreenshotPath = await this.saveDiagnosticScreenshot(
+          job.id,
+        );
+        this.emitLifecycleLog("FLOW_REGENERATION_FAILED", job, { error: error.message });
+        this.setJobTerminal(
+          job,
+          "failed",
+          error.message,
+          "The Flow image editor prompt box could not be identified safely.",
+        );
+        return job;
+      }
+    }
+
     const currentUrl =
       typeof this.page.url === "function"
         ? this.page.url()
@@ -1382,6 +1501,32 @@ export class FlowBrowserWorker {
       );
       return job;
     }
+  }
+
+  async findImageEditPromptEditor() {
+    if (!this.page || this.page.isClosed()) {
+      throw new Error("Flow page is not available.");
+    }
+    const candidates = [
+      'flow-edit-image-prompt-box [role="textbox"]',
+      'flow-edit-image-prompt-box div.ProseMirror',
+      'flow-edit-image-prompt-box [contenteditable="true"]',
+      '[role="textbox"][aria-label*="What do you want to change"]',
+      'flow-edit-image-prompt-box textarea',
+    ];
+
+    for (const sel of candidates) {
+      const loc = this.page.locator(sel);
+      const count = await loc.count().catch(() => 0);
+      if (count > 0) {
+        const first = getFirstLocator(loc);
+        if (await first.isVisible().catch(() => false)) {
+          return { locator: first, selector: sel };
+        }
+      }
+    }
+
+    return await this.findPromptEditor();
   }
 
   async findPromptEditor() {
@@ -1935,6 +2080,211 @@ export class FlowBrowserWorker {
     ]);
   }
 
+  async submitRegenerationPrompt(job, confirmation) {
+    if (
+      !this.page ||
+      (typeof this.page.isClosed === "function" && this.page.isClosed())
+    ) {
+      throw new Error("Flow page is not available.");
+    }
+
+    const currentUrl = typeof this.page.url === "function" ? this.page.url() : "";
+    const editorRef = extractGoogleFlowEditorReference(currentUrl);
+    if (!editorRef) {
+      const err = new Error(
+        `FLOW_REGENERATION_FAILED: Expected Google Flow editor route (/project/{projectId}/edit/{assetId}), but current URL is '${currentUrl}'.`
+      );
+      this.emitLifecycleLog("FLOW_REGENERATION_FAILED", job, { error: err.message });
+      throw err;
+    }
+
+    let submitBtn = null;
+    if (typeof this.page.getByRole === "function") {
+      const byRoleBtn = this.page.getByRole("button", { name: "Start generation" });
+      if ((await byRoleBtn.count().catch(() => 0)) > 0 && (await byRoleBtn.first().isVisible().catch(() => false))) {
+        submitBtn = byRoleBtn.first();
+      }
+    }
+
+    if (!submitBtn && typeof this.page.locator === "function") {
+      const loc = this.page.locator(
+        'flow-edit-image-prompt-box button[aria-label="Start generation"], flow-edit-image-prompt-box button[type="submit"], button[aria-label="Start generation"]'
+      );
+      if ((await loc.count().catch(() => 0)) > 0) {
+        submitBtn = getFirstLocator(loc);
+      }
+    }
+
+    if (!submitBtn || !(await submitBtn.isVisible().catch(() => false))) {
+      const err = new Error("Could not find visible 'Start generation' submit button in Google Flow image editor.");
+      this.emitLifecycleLog("FLOW_REGENERATION_FAILED", job, { error: err.message });
+      throw err;
+    }
+
+    let isEnabled = false;
+    const waitStart = Date.now();
+    while (Date.now() - waitStart < 10000) {
+      const disabledAttr = typeof submitBtn.getAttribute === "function"
+        ? await submitBtn.getAttribute("disabled").catch(() => null)
+        : null;
+      const enabled = typeof submitBtn.isEnabled === "function"
+        ? await submitBtn.isEnabled().catch(() => false)
+        : true;
+      if ((disabledAttr === null || disabledAttr === false || disabledAttr === "false") && enabled) {
+        isEnabled = true;
+        break;
+      }
+      await new Promise((r) => setTimeout(r, 200));
+    }
+
+    if (!isEnabled) {
+      const err = new Error("'Start generation' button remained disabled in Google Flow image editor.");
+      this.emitLifecycleLog("FLOW_REGENERATION_FAILED", job, { error: err.message });
+      throw err;
+    }
+
+    const baseline = await this.getOutputAssetBaseline();
+    await this.startImageResponseCapture(job);
+
+    try {
+      if (typeof submitBtn.click === "function") {
+        await submitBtn.click({ timeout: 15000 });
+      }
+      job.status = "generation_submitted";
+      job.generationRequestedAt = new Date().toISOString();
+      job.message = "Regeneration submitted to Google Flow image editor.";
+      this.emitLifecycleLog("FLOW_REGENERATION_STARTED", job, {
+        prompt: job.prompt,
+        editUrl: currentUrl,
+      });
+      this.touch(job);
+    } catch (btnErr) {
+      this.emitLifecycleLog("FLOW_REGENERATION_FAILED", job, { error: btnErr.message });
+      this.setJobTerminal(
+        job,
+        "failed",
+        btnErr.message,
+        "Could not click 'Start generation' submit button in image editor."
+      );
+      throw btnErr;
+    }
+
+    this.monitorRegenerationAndDownload(job.id, baseline).catch((err) => {
+      console.warn(`[FlowBrowser] Regeneration monitor notice for job ${job.id}:`, err.message);
+    });
+
+    return job;
+  }
+
+  async monitorRegenerationAndDownload(jobId, baseline = { count: 0, identifiers: new Set() }) {
+    const job = this.jobs.get(jobId);
+    if (!job || !this.page || (typeof this.page.isClosed === "function" && this.page.isClosed())) {
+      return;
+    }
+
+    try {
+      job.status = "generating";
+      job.message = "Regeneration in progress in Google Flow. Waiting for updated output...";
+      this.touch(job);
+
+      const maxWaitMs = 90000;
+      const startTime = Date.now();
+      const pollIntervalMs = 1500;
+
+      while (Date.now() - startTime < maxWaitMs) {
+        if (!this.page || (typeof this.page.isClosed === "function" && this.page.isClosed()) || job.status === "completed" || job.status === "cancelled") {
+          return;
+        }
+
+        if (Date.now() - startTime > 3000) {
+          const submitBtn = getFirstLocator(
+            this.page.locator('flow-edit-image-prompt-box button[aria-label="Start generation"], button[aria-label="Start generation"]')
+          );
+          const isBtnEnabled = submitBtn && typeof submitBtn.isEnabled === "function" ? await submitBtn.isEnabled().catch(() => false) : false;
+          const disabledAttr = submitBtn && typeof submitBtn.getAttribute === "function" ? await submitBtn.getAttribute("disabled").catch(() => null) : null;
+          const isNotDisabled = disabledAttr === null || disabledAttr === false || disabledAttr === "false";
+
+          const newOutputs = await this.collectNewAgentOutputs(job, baseline).catch(() => []);
+          const hasCaptured = job.capturedImageResponses && job.capturedImageResponses.size > 0;
+
+          if ((isBtnEnabled && isNotDisabled) || newOutputs.length > 0 || hasCaptured) {
+            break;
+          }
+        }
+
+        await new Promise((r) => setTimeout(r, pollIntervalMs));
+      }
+
+      this.emitLifecycleLog("FLOW_REGENERATION_COMPLETED", job);
+
+      const currentUrl = typeof this.page.url === "function" ? this.page.url() : "";
+      const updatedEditorRef = extractGoogleFlowEditorReference(currentUrl);
+      if (updatedEditorRef) {
+        job.googleFlowProjectId = updatedEditorRef.projectId;
+        job.googleFlowEditId = updatedEditorRef.editId;
+        job.googleFlowEditUrl = updatedEditorRef.editUrl;
+        this.emitLifecycleLog("FLOW_NEW_ASSET_REFERENCE_CAPTURED", job, {
+          projectId: updatedEditorRef.projectId,
+          editId: updatedEditorRef.editId,
+          editUrl: updatedEditorRef.editUrl,
+        });
+      }
+
+      job.status = "downloading";
+      this.emitLifecycleLog("DOWNLOAD_STARTED", job);
+      job.message = "Downloading regenerated background from Google Flow...";
+      this.touch(job);
+
+      const viewerLocators = this.page.locator(
+        'flow-image-editor img, .editor-container img, flow-creative-agent-image-viewer img, flow-image-viewer img, div[role="dialog"] img.editor-image, div[role="dialog"] img, .image-viewer img'
+      );
+      let activeImage = null;
+      const vCount = await viewerLocators.count().catch(() => 0);
+      if (vCount > 0) {
+        activeImage = viewerLocators.first();
+      }
+
+      if (!activeImage) {
+        throw new Error("FLOW_IMAGE_VIEWER_NOT_FOUND: Could not find active image in Flow image editor.");
+      }
+
+      const targetDir = this.downloadDir || path.join(os.tmpdir(), "flow-downloads");
+      const nativeResult = await saveImageUsingNativeContextMenu({
+        page: this.page,
+        imageLocator: activeImage,
+        job,
+        downloadDir: targetDir,
+        timeoutMs: 30000,
+        logger: console,
+        automationRunner: this.automationRunner,
+        onPhase: (ph, details) => this.emitLifecycleLog(ph, job, details),
+      });
+
+      // Close editor using Done editing button
+      try {
+        await closeFlowImageEditor(this.page, console, {
+          timeoutMs: 10000,
+          logTransition: (ph, details) => this.emitLifecycleLog(ph, job, details),
+        });
+      } catch (closeErr) {
+        console.warn(`[FlowBrowser] Editor close cleanup notice for job ${job.id}:`, closeErr.message);
+      }
+
+      job.status = "importing";
+      job.downloadPath = nativeResult.path;
+      job.downloadMethod = nativeResult.downloadMethod || "native_context_menu_save_as";
+      this.touch(job);
+
+      await this.importDownloadedAsset(job, nativeResult.buffer, {
+        mimeType: nativeResult.mimeType,
+        extension: nativeResult.fileName.split(".").pop(),
+      });
+    } catch (error) {
+      this.emitLifecycleLog("FLOW_REGENERATION_FAILED", job, { error: error.message });
+      this.setJobTerminal(job, "failed", error.message, "Google Flow background regeneration failed.");
+    }
+  }
+
   async requestGeneration(jobId, confirmation) {
     const job = this.requireJob(jobId);
 
@@ -1954,6 +2304,10 @@ export class FlowBrowserWorker {
       (typeof this.page.isClosed === "function" && this.page.isClosed())
     )
       throw new Error("Flow page is not available.");
+
+    if (job.isRegeneration) {
+      return await this.submitRegenerationPrompt(job, confirmation);
+    }
 
     const mode = await this.detectInterfaceMode();
 
@@ -2710,7 +3064,13 @@ export class FlowBrowserWorker {
                   "Imported from Google Flow via Playwright loopback worker",
                 prompt: job.prompt,
                 generationJobId: job.id,
-                flowProjectId: job.flowProjectId,
+                flowProjectId: job.flowProjectId || job.googleFlowProjectId,
+                googleFlowProjectId: job.googleFlowProjectId || job.flowProjectId,
+                googleFlowEditId: job.googleFlowEditId,
+                googleFlowEditUrl: job.googleFlowEditUrl,
+                googleFlowPrompt: job.prompt || job.googleFlowPrompt,
+                googleFlowParentAssetId: job.googleFlowParentAssetId,
+                googleFlowVersion: job.googleFlowVersion,
                 provider: "google_flow",
                 ...(job.model ? { model: job.model } : {}),
                 mimeType: imageType.mimeType,
@@ -2739,6 +3099,13 @@ export class FlowBrowserWorker {
 
         job.importResult = bgPayload.asset;
         job.detectedMimeType = imageType.mimeType;
+        this.emitLifecycleLog("FLOW_EDITOR_REFERENCE_PERSISTED", job, {
+          assetId: bgPayload.asset?.id,
+          googleFlowProjectId: job.googleFlowProjectId,
+          googleFlowEditId: job.googleFlowEditId,
+          googleFlowEditUrl: job.googleFlowEditUrl,
+          googleFlowVersion: bgPayload.asset?.googleFlowVersion || job.googleFlowVersion,
+        });
         console.log(
           `[FlowDownload] BACKEND_IMPORT_COMPLETED`,
           JSON.stringify({

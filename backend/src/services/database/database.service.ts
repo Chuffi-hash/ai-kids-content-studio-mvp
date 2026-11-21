@@ -606,6 +606,12 @@ export async function createImage(data: {
   width: number;
   height: number;
   status: string;
+  googleFlowProjectId?: string | null;
+  googleFlowEditId?: string | null;
+  googleFlowEditUrl?: string | null;
+  googleFlowPrompt?: string | null;
+  googleFlowParentAssetId?: string | null;
+  googleFlowVersion?: number | null;
 }) {
   return await prisma.image.create({
     data: {
@@ -619,6 +625,12 @@ export async function createImage(data: {
       width: data.width,
       height: data.height,
       status: data.status,
+      googleFlowProjectId: data.googleFlowProjectId,
+      googleFlowEditId: data.googleFlowEditId,
+      googleFlowEditUrl: data.googleFlowEditUrl,
+      googleFlowPrompt: data.googleFlowPrompt,
+      googleFlowParentAssetId: data.googleFlowParentAssetId,
+      googleFlowVersion: data.googleFlowVersion ?? 1,
     },
   });
 }

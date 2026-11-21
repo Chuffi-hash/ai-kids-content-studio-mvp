@@ -26,6 +26,43 @@ export function getNthLocator(loc, n = 0) {
 }
 
 /**
+ * Extracts projectId, editId, and normalized editUrl from a Google Flow URL.
+ * URL structure: https://flow.google.com/project/{projectId}/edit/{assetId}
+ * Rejects non-Flow hosts and invalid routes without guessing IDs.
+ */
+export function extractGoogleFlowEditorReference(rawUrl) {
+  if (!rawUrl || typeof rawUrl !== "string") {
+    return null;
+  }
+  try {
+    const url = new URL(rawUrl);
+    if (url.hostname !== "flow.google.com") {
+      return null;
+    }
+    const match = url.pathname.match(
+      /^\/project\/([^/]+)\/edit\/([^/]+)\/?$/
+    );
+    if (!match) {
+      return null;
+    }
+    return {
+      projectId: match[1],
+      editId: match[2],
+      editUrl: `https://flow.google.com/project/${match[1]}/edit/${match[2]}`,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Returns true if rawUrl is a Google Flow image editor route (/project/{projectId}/edit/{assetId}).
+ */
+export function isGoogleFlowEditorRoute(rawUrl) {
+  return extractGoogleFlowEditorReference(rawUrl) !== null;
+}
+
+/**
  * Controller to manage Windows UIAutomation powershell script for native
  * Chrome context-menu "Save image as" and the Windows "Save As" file dialog.
  */
@@ -412,6 +449,14 @@ export async function saveImageUsingNativeContextMenu({
       downloadMethod: "native_context_menu_save_as",
     });
 
+    onPhase?.("FLOW_BACKGROUND_IMAGE_VALIDATED", {
+      success: true,
+      mimeType: detected.mimeType,
+      width: dimensions.width,
+      height: dimensions.height,
+      downloadMethod: "native_context_menu_save_as",
+    });
+
     onPhase?.("IMAGE_CONTENT_VALIDATED", {
       success: true,
       mimeType: detected.mimeType,
@@ -509,6 +554,24 @@ export async function closeFlowImageEditor(page, logger = console, options = {})
       error: err.message,
     });
     throw err;
+  }
+
+  // Distinguish initial creation (chat/project route) from image editing (/edit/ route)
+  // so non-editor pages never fail Done checks.
+  const currentUrl = typeof page.url === "function" ? page.url() : "";
+  if (
+    options.requireEditorRoute ||
+    (options.requireEditorRoute !== false &&
+      currentUrl &&
+      !isGoogleFlowEditorRoute(currentUrl) &&
+      !options.forceClose)
+  ) {
+    if (currentUrl && !isGoogleFlowEditorRoute(currentUrl)) {
+      logger?.info?.(
+        `[FlowDownload] Skipping closeFlowImageEditor: current URL is not an editor route (${currentUrl}).`
+      );
+      return { closed: false, skipped: true, reason: "NOT_ON_EDITOR_ROUTE" };
+    }
   }
 
   // 1. Locate Done editing button: prefer accessible getByRole, fallback to aria-label locator
@@ -657,6 +720,8 @@ export async function downloadFlowImage({
   browserProcessId = 0,
   logger = console,
   automationRunner,
+  onPhase,
+  logTransition: customLogTransition,
 }) {
   const startedAt = Date.now();
   let currentPhase = "CHAT_SCROLL_BOTTOM_REACHED";
@@ -683,6 +748,13 @@ export async function downloadFlowImage({
       downloadMethod: details.downloadMethod || job?.downloadMethod || undefined,
       ...details,
     };
+
+    if (typeof onPhase === "function") {
+      onPhase(phase, details);
+    }
+    if (typeof customLogTransition === "function") {
+      customLogTransition(phase, details);
+    }
 
     if (logger && typeof logger.info === "function") {
       logger.info(`[FlowDownload] ${JSON.stringify(entry)}`);
@@ -897,6 +969,34 @@ export async function downloadFlowImage({
   logTransition("ACTIVE_IMAGE_VERIFIED", { success: true });
   logTransition("FLOW_IMAGE_EDITOR_OPENED", { success: true });
 
+  // Capture Google Flow editor reference if page route is an editor URL
+  let editorRef = null;
+  try {
+    const rawUrl = typeof page.url === "function" ? page.url() : "";
+    editorRef = extractGoogleFlowEditorReference(rawUrl);
+    if (!editorRef && typeof page.waitForURL === "function") {
+      await page
+        .waitForURL((u) => isGoogleFlowEditorRoute(u.toString()), { timeout: 2000 })
+        .catch(() => {});
+      const updatedUrl = typeof page.url === "function" ? page.url() : "";
+      editorRef = extractGoogleFlowEditorReference(updatedUrl);
+    }
+  } catch {}
+
+  if (editorRef) {
+    logTransition("FLOW_EDITOR_REFERENCE_CAPTURED", {
+      success: true,
+      projectId: editorRef.projectId,
+      editId: editorRef.editId,
+      editUrl: editorRef.editUrl,
+    });
+    if (job) {
+      job.googleFlowProjectId = editorRef.projectId;
+      job.googleFlowEditId = editorRef.editId;
+      job.googleFlowEditUrl = editorRef.editUrl;
+    }
+  }
+
   // 6. Right-click and invoke Chrome native "Save image as"
   const targetDir = downloadDir || path.join(os.tmpdir(), "flow-downloads");
   try {
@@ -945,6 +1045,9 @@ export async function downloadFlowImage({
       buffer: nativeResult.buffer,
       editorClosed,
       editorCloseError,
+      googleFlowProjectId: editorRef?.projectId || job?.googleFlowProjectId,
+      googleFlowEditId: editorRef?.editId || job?.googleFlowEditId,
+      googleFlowEditUrl: editorRef?.editUrl || job?.googleFlowEditUrl,
       jobId: job?.id,
       backendJobId: job?.backendJobId || job?.id,
       storyId: job?.storyId,

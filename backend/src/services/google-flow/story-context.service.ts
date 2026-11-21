@@ -14,6 +14,12 @@ export interface SceneContextItem {
   hasBackground: boolean;
   backgroundUrl: string | null;
   backgroundImageId: string | null;
+  googleFlowProjectId?: string | null;
+  googleFlowEditId?: string | null;
+  googleFlowEditUrl?: string | null;
+  googleFlowPrompt?: string | null;
+  googleFlowVersion?: number | null;
+  googleFlowParentAssetId?: string | null;
   location: string;
   timeOfDay: string;
   lighting: string;
@@ -178,10 +184,9 @@ export class StoryContextService {
       let backgroundUrl: string | null = null;
       let backgroundImageId: string | null = null;
       let hasBackground = false;
+      const completedImage = scene.images && scene.images.length > 0 ? scene.images[0] : null;
 
       if (!isBgExplicitlyRemoved && scene.generationStatus !== 'failed' && bgData.status !== 'failed') {
-        const completedImage = scene.images && scene.images.length > 0 ? scene.images[0] : null;
-
         if (completedImage && completedImage.status === 'completed' && completedImage.imageUrl) {
           backgroundUrl = completedImage.imageUrl;
           backgroundImageId = completedImage.id;
@@ -299,6 +304,12 @@ export class StoryContextService {
         hasBackground,
         backgroundUrl,
         backgroundImageId,
+        googleFlowProjectId: (completedImage as any)?.googleFlowProjectId || bgData.googleFlowProjectId || null,
+        googleFlowEditId: (completedImage as any)?.googleFlowEditId || bgData.googleFlowEditId || null,
+        googleFlowEditUrl: (completedImage as any)?.googleFlowEditUrl || bgData.googleFlowEditUrl || null,
+        googleFlowPrompt: (completedImage as any)?.googleFlowPrompt || bgData.googleFlowPrompt || null,
+        googleFlowVersion: (completedImage as any)?.googleFlowVersion ?? bgData.googleFlowVersion ?? null,
+        googleFlowParentAssetId: (completedImage as any)?.googleFlowParentAssetId || bgData.googleFlowParentAssetId || null,
         location,
         timeOfDay,
         lighting,

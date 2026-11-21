@@ -7,6 +7,7 @@ import { GeminiImageProvider } from '../image-generation/providers/gemini-image.
 import { GoogleFlowAssetImportService, ImportAssetResult } from '../google-flow/google-flow-asset-import.service.js';
 import { GoogleFlowCredentialService } from '../google-flow/google-flow-credential.service.js';
 import {
+  prisma,
   getSceneBySceneId,
   updateScene,
   getCharacterById,
@@ -712,6 +713,249 @@ export class GenerationOrchestratorService {
         });
       } catch {}
 
+      throw err;
+    }
+  }
+
+  /**
+   * Regenerates a scene background plate using an existing image record's Flow editor URL and asset ID.
+   */
+  public static async regenerateSceneBackground(params: {
+    storyId?: string;
+    sceneId?: string;
+    imageId: string;
+    promptOverride?: string;
+  }): Promise<ImportAssetResult> {
+    const { imageId, promptOverride } = params;
+
+    // 1. Fetch Image record from database
+    const imageRecord = await prisma.image.findUnique({
+      where: { id: imageId },
+      include: { scene: true },
+    });
+
+    if (!imageRecord) {
+      throw new Error(`Image record not found: ${imageId}`);
+    }
+
+    const sceneId = params.sceneId || imageRecord.sceneId;
+    if (!sceneId) {
+      throw new Error(`Image ${imageId} is not associated with a scene.`);
+    }
+
+    const editUrl =
+      imageRecord.googleFlowEditUrl ||
+      (imageRecord.googleFlowProjectId && imageRecord.googleFlowEditId
+        ? `https://flow.google.com/project/${imageRecord.googleFlowProjectId}/edit/${imageRecord.googleFlowEditId}`
+        : null);
+
+    if (!editUrl) {
+      throw new Error(
+        `Image ${imageId} does not have a Google Flow editor URL or editor reference.`
+      );
+    }
+
+    const storyId = params.storyId || imageRecord.scene?.storyId;
+    if (!storyId) {
+      throw new Error(`Story context could not be resolved for image ${imageId}.`);
+    }
+
+    // 2. Resolve Story Context & Prompt
+    const context = await StoryContextService.resolveStoryContext(storyId, { sceneId });
+    const scene = context.scenes.find((s) => s.sceneId === sceneId || s.id === sceneId);
+    if (!scene) {
+      throw new Error(`Scene ${sceneId} not found in story ${storyId}`);
+    }
+
+    const promptData = GenerationPromptService.buildSceneBackgroundPrompt(
+      { visualStyle: context.story.visualStyle, aspectRatio: scene.aspectRatio },
+      scene,
+      promptOverride || imageRecord.googleFlowPrompt || imageRecord.prompt
+    );
+
+    const jobId = `job-bg-regen-${Date.now()}-${randomUUID().slice(0, 6)}`;
+    const jobRecord: GenerationJobRecord = {
+      id: jobId,
+      storyId,
+      sceneId: scene.sceneId,
+      targetType: 'background',
+      assetType: 'scene_background',
+      provider: 'google_flow',
+      prompt: promptData.prompt,
+      status: 'preparing',
+      progress: 10,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    this.jobs.set(jobId, jobRecord);
+
+    try {
+      await createGenerationJob({
+        id: jobId,
+        storyId,
+        sceneId: scene.sceneId,
+        provider: 'google_flow',
+        targetType: 'scene_background',
+        assetType: 'scene_background',
+        prompt: promptData.prompt,
+        flowProjectId: imageRecord.googleFlowProjectId || context.story.flowProjectId || undefined,
+        status: 'preparing',
+        progress: 10,
+        metadata: {
+          aspectRatio: promptData.aspectRatio,
+          width: promptData.width,
+          height: promptData.height,
+          isRegeneration: true,
+          parentImageId: imageRecord.id,
+          googleFlowEditUrl: editUrl,
+        },
+      });
+    } catch {}
+
+    try {
+      const { token, metadata } = await GoogleFlowCredentialService.getOrCreateWorkerCredential();
+      const workerUrl = (metadata?.workerUrl || process.env.FLOW_WORKER_URL || 'http://127.0.0.1:4177').replace(/\/+$/, '');
+      GoogleFlowCredentialService.syncLocalWorkerTokenFile(token);
+
+      jobRecord.status = 'generating';
+      jobRecord.progress = 30;
+      jobRecord.updatedAt = new Date().toISOString();
+
+      // Submit regeneration job to worker
+      let submitRes = await fetch(`${workerUrl}/jobs`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          targetType: 'background',
+          isRegeneration: true,
+          storyId,
+          sceneId: scene.sceneId,
+          prompt: promptData.prompt,
+          aspectRatio: promptData.aspectRatio,
+          editUrl,
+          googleFlowEditUrl: editUrl,
+          googleFlowProjectId: imageRecord.googleFlowProjectId,
+          googleFlowEditId: imageRecord.googleFlowEditId,
+          googleFlowParentAssetId: imageRecord.id,
+          googleFlowVersion: (imageRecord.googleFlowVersion || 1) + 1,
+        }),
+      });
+
+      if (!submitRes.ok) {
+        const errData = (await submitRes.json().catch(() => ({}))) as any;
+        throw new Error(errData.message || `Flow worker returned HTTP ${submitRes.status}`);
+      }
+
+      const submitPayload = (await submitRes.json()) as any;
+      const workerJobId = submitPayload.job?.id || jobId;
+
+      jobRecord.workerJobId = workerJobId;
+      jobRecord.progress = 50;
+      jobRecord.updatedAt = new Date().toISOString();
+
+      try {
+        await updateGenerationJob(jobId, {
+          workerJobId,
+          status: 'generating',
+          progress: 50,
+        });
+      } catch {}
+
+      // Trigger generation on worker
+      let genRes = await fetch(`${workerUrl}/jobs/${workerJobId}/generate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          confirmGenerate: true,
+          referenceConfirmed: true,
+        }),
+      });
+
+      if (!genRes.ok) {
+        const errData = (await genRes.json().catch(() => ({}))) as any;
+        throw new Error(errData.message || 'Flow worker regeneration trigger failed');
+      }
+
+      // Poll briefly for completion
+      let completedResult: any = null;
+      const pollStart = Date.now();
+      while (Date.now() - pollStart < 10000) {
+        const statusRes = await fetch(`${workerUrl}/jobs/${workerJobId}`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        }).catch(() => null);
+
+        if (statusRes && statusRes.ok) {
+          const workerStatus = (await statusRes.json().catch(() => ({}))) as any;
+          const wJob = workerStatus.job;
+          if (wJob?.status === 'completed' && wJob?.importResult) {
+            completedResult = wJob.importResult;
+            break;
+          }
+          if (wJob?.status === 'failed') {
+            throw new Error(wJob.error || 'Flow worker regeneration failed');
+          }
+        }
+        await new Promise((r) => setTimeout(r, 1000));
+      }
+
+      if (completedResult) {
+        jobRecord.status = 'completed';
+        jobRecord.progress = 100;
+        jobRecord.result = completedResult;
+        jobRecord.updatedAt = new Date().toISOString();
+
+        try {
+          await updateGenerationJob(jobId, {
+            status: 'completed',
+            progress: 100,
+            resultAssetId: completedResult.assetId,
+            resultUrl: completedResult.imageUrl || completedResult.url,
+            completedAt: new Date(),
+          });
+        } catch {}
+
+        return {
+          success: true,
+          jobId: jobRecord.id,
+          workerJobId,
+          status: 'completed',
+          target: 'scene_background',
+          assetId: completedResult.assetId || scene.sceneId,
+          sceneId: scene.sceneId,
+          imageUrl: completedResult.imageUrl || completedResult.url,
+          aspectRatio: promptData.aspectRatio,
+          message: 'Google Flow background regeneration completed and imported successfully.',
+        };
+      }
+
+      return {
+        success: true,
+        jobId: jobRecord.id,
+        workerJobId,
+        status: 'generating',
+        target: 'scene_background',
+        sceneId: scene.sceneId,
+        assetId: scene.sceneId,
+        imageUrl: null,
+        aspectRatio: promptData.aspectRatio,
+        message: 'Google Flow regeneration started.',
+      };
+    } catch (err: any) {
+      jobRecord.status = 'failed';
+      jobRecord.error = err.message || 'Regeneration failed';
+      jobRecord.updatedAt = new Date().toISOString();
+      try {
+        await updateGenerationJob(jobId, {
+          status: 'failed',
+          error: err.message || 'Regeneration failed',
+        });
+      } catch {}
       throw err;
     }
   }

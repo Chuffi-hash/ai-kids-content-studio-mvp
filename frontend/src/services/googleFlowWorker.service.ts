@@ -565,6 +565,12 @@ export interface StoryFlowSceneItem {
   hasBackground: boolean;
   backgroundUrl: string | null;
   backgroundImageId: string | null;
+  googleFlowProjectId?: string | null;
+  googleFlowEditId?: string | null;
+  googleFlowEditUrl?: string | null;
+  googleFlowPrompt?: string | null;
+  googleFlowVersion?: number | null;
+  googleFlowParentAssetId?: string | null;
   location: string;
   timeOfDay: string;
   lighting: string;
@@ -680,6 +686,37 @@ export async function generateBackgroundDirect(payload: {
   const data = await res.json().catch(() => ({}));
   if (!res.ok || !data.success) {
     const rawMsg = data.message || "Background generation failed.";
+    if (
+      rawMsg.toLowerCase().includes("bearer token") ||
+      rawMsg.includes("401")
+    ) {
+      throw new Error(
+        "Flow worker authentication out of sync. Click Retry to re-synchronize credentials.",
+      );
+    }
+    throw new Error(rawMsg);
+  }
+  return data.asset;
+}
+
+export async function regenerateBackgroundDirect(payload: {
+  storyId?: string;
+  sceneId?: string;
+  imageId: string;
+  promptOverride?: string;
+}): Promise<any> {
+  const apiUrl = getApiUrl();
+  const res = await fetch(
+    `${apiUrl}/api/integrations/google-flow/regenerate/background`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+  );
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.success) {
+    const rawMsg = data.message || "Background regeneration failed.";
     if (
       rawMsg.toLowerCase().includes("bearer token") ||
       rawMsg.includes("401")

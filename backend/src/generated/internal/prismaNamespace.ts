@@ -1319,6 +1319,12 @@ export const ImageScalarFieldEnum = {
   width: 'width',
   height: 'height',
   status: 'status',
+  googleFlowProjectId: 'googleFlowProjectId',
+  googleFlowEditId: 'googleFlowEditId',
+  googleFlowEditUrl: 'googleFlowEditUrl',
+  googleFlowPrompt: 'googleFlowPrompt',
+  googleFlowParentAssetId: 'googleFlowParentAssetId',
+  googleFlowVersion: 'googleFlowVersion',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 } as const

@@ -2018,6 +2018,12 @@ contentRouter.get("/scenes/:sceneId/image", async (req, res) => {
       url: latestImage.imageUrl,
       width: latestImage.width,
       height: latestImage.height,
+      googleFlowProjectId: latestImage.googleFlowProjectId,
+      googleFlowEditId: latestImage.googleFlowEditId,
+      googleFlowEditUrl: latestImage.googleFlowEditUrl,
+      googleFlowPrompt: latestImage.googleFlowPrompt,
+      googleFlowVersion: latestImage.googleFlowVersion,
+      googleFlowParentAssetId: latestImage.googleFlowParentAssetId,
     },
   });
 });

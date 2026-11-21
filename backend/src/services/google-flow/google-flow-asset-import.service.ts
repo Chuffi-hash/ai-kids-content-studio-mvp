@@ -35,6 +35,12 @@ export interface ImportAssetOptions {
   prompt?: string;
   cameraDirection?: string;
   aspectRatio?: "16:9" | "9:16" | "1:1" | "4:5" | string;
+  googleFlowProjectId?: string;
+  googleFlowEditId?: string;
+  googleFlowEditUrl?: string;
+  googleFlowPrompt?: string;
+  googleFlowParentAssetId?: string;
+  googleFlowVersion?: number;
 
   // Background library options
   name?: string;
@@ -234,32 +240,25 @@ export class GoogleFlowAssetImportService {
             ? "gemini-imagen"
             : "manual_upload");
 
-      const updatedAnimData = {
-        ...currentAnim,
-        background: {
-          ...currentAnim.background,
-          imageUrl: url,
-          fit,
-          source: provider,
-          prompt,
-          cameraDirection,
-          aspectRatio,
-          dimensions: { width, height },
-          filename: rawFilename || storageFilename,
-          sizeBytes: buffer.length,
-          sourceJobId: options.sourceJobId,
-          flowProjectId: options.flowProjectId,
-          removed: false,
-        },
-      };
+      // Calculate image lineage version
+      let version = options.googleFlowVersion;
+      if (!version) {
+        if (options.googleFlowParentAssetId) {
+          try {
+            const parentImage = await prisma.image.findUnique({
+              where: { id: options.googleFlowParentAssetId },
+            });
+            version = (parentImage?.googleFlowVersion || 1) + 1;
+          } catch {
+            version = 2;
+          }
+        } else {
+          version = 1;
+        }
+      }
 
-      await updateScene(scene.sceneId, {
-        imageUrl: url,
-        animationData: updatedAnimData,
-      });
-
-      // Track in Image table with authentic provider
-      await createImage({
+      // Track in Image table with authentic provider & Flow lineage references
+      const imageRecord = await createImage({
         id: randomUUID(),
         sceneId: scene.sceneId,
         provider,
@@ -270,12 +269,48 @@ export class GoogleFlowAssetImportService {
         width,
         height,
         status: "completed",
+        googleFlowProjectId: options.googleFlowProjectId || options.flowProjectId,
+        googleFlowEditId: options.googleFlowEditId,
+        googleFlowEditUrl: options.googleFlowEditUrl,
+        googleFlowPrompt: options.googleFlowPrompt || prompt,
+        googleFlowParentAssetId: options.googleFlowParentAssetId,
+        googleFlowVersion: version,
+      });
+
+      const updatedAnimData = {
+        ...currentAnim,
+        background: {
+          ...currentAnim.background,
+          imageUrl: url,
+          imageId: imageRecord.id,
+          fit,
+          source: provider,
+          prompt,
+          cameraDirection,
+          aspectRatio,
+          dimensions: { width, height },
+          filename: rawFilename || storageFilename,
+          sizeBytes: buffer.length,
+          sourceJobId: options.sourceJobId,
+          flowProjectId: options.flowProjectId || options.googleFlowProjectId,
+          googleFlowProjectId: options.googleFlowProjectId || options.flowProjectId,
+          googleFlowEditId: options.googleFlowEditId,
+          googleFlowEditUrl: options.googleFlowEditUrl,
+          googleFlowParentAssetId: options.googleFlowParentAssetId,
+          googleFlowVersion: version,
+          removed: false,
+        },
+      };
+
+      await updateScene(scene.sceneId, {
+        imageUrl: url,
+        animationData: updatedAnimData,
       });
 
       return {
         success: true,
         target: "scene_background",
-        assetId: scene.sceneId,
+        assetId: imageRecord.id,
         imageUrl: url,
         width,
         height,
@@ -283,6 +318,12 @@ export class GoogleFlowAssetImportService {
         metadata: {
           sceneId: scene.sceneId,
           storyId: scene.storyId,
+          imageId: imageRecord.id,
+          googleFlowProjectId: imageRecord.googleFlowProjectId,
+          googleFlowEditId: imageRecord.googleFlowEditId,
+          googleFlowEditUrl: imageRecord.googleFlowEditUrl,
+          googleFlowVersion: imageRecord.googleFlowVersion,
+          googleFlowParentAssetId: imageRecord.googleFlowParentAssetId,
           fit,
         },
         message: `Background imported and applied to scene ${scene.number || scene.sceneId}.`,

@@ -462,6 +462,25 @@ googleFlowRouter.post('/generate/background', async (req: Request, res: Response
   }
 });
 
+googleFlowRouter.post('/regenerate/background', async (req: Request, res: Response) => {
+  try {
+    const { storyId, sceneId, imageId, promptOverride } = req.body;
+    if (!imageId) {
+      return res.status(400).json({ success: false, message: 'imageId is required' });
+    }
+    const result = await GenerationOrchestratorService.regenerateSceneBackground({
+      storyId,
+      sceneId,
+      imageId,
+      promptOverride,
+    });
+    res.json({ success: true, asset: result });
+  } catch (err: any) {
+    console.error('[GoogleFlowRouter] Background regeneration failed:', err);
+    res.status(500).json({ success: false, message: err.message || 'Background regeneration failed' });
+  }
+});
+
 googleFlowRouter.post('/generate/character', async (req: Request, res: Response) => {
   try {
     const { storyId, characterId, provider, assetType, variation, promptOverride } = req.body;
