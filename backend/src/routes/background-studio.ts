@@ -199,6 +199,8 @@ backgroundStudioRouter.post('/import-flow', async (req, res) => {
           googleFlowEditUrl: result.metadata?.googleFlowEditUrl,
           googleFlowImageId: result.metadata?.googleFlowImageId,
           googleFlowImageRef: result.metadata?.googleFlowImageRef,
+          googleFlowImageSourceUrl: result.metadata?.googleFlowImageSourceUrl,
+          googleFlowPrompt: result.metadata?.googleFlowPrompt,
           googleFlowVersion: result.metadata?.googleFlowVersion,
           googleFlowParentAssetId: result.metadata?.googleFlowParentAssetId,
         },
