@@ -1557,14 +1557,26 @@ export class FlowBrowserWorker {
       this.touch(job);
       return job;
     } catch (error) {
-      job.diagnosticScreenshotPath = await this.saveDiagnosticScreenshot(
-        job.id,
-      );
+      job.diagnosticScreenshotPath =
+        error?.diagnostics?.screenshotPath ||
+        await this.saveDiagnosticScreenshot(job.id);
+
+      this.emitLifecycleLog("FLOW_PROMPT_DISCOVERY_FAILED", job, {
+        errorCode: error?.code || "FLOW_PROMPT_EDITOR_NOT_FOUND",
+        error: error?.message || String(error),
+        currentUrl:
+          this.page && typeof this.page.url === "function"
+            ? this.page.url()
+            : null,
+        diagnostics: error?.diagnostics || null,
+        diagnosticScreenshotPath: job.diagnosticScreenshotPath,
+      });
+
       this.setJobTerminal(
         job,
         "prompt_editor_not_found",
         error.message,
-        "The Flow prompt editor could not be identified safely. Inspect the visible browser and configure FLOW_PROMPT_SELECTOR if needed.",
+        "The Flow prompt editor could not be identified safely. Inspect FLOW_PROMPT_DISCOVERY_FAILED diagnostics and verify the live project-page DOM.",
       );
       return job;
     }
@@ -2903,10 +2915,84 @@ export class FlowBrowserWorker {
             const detected = detectImageType(match.buffer);
             const dims = parseImageDimensions(match.buffer);
             if (detected && dims.width >= 32 && dims.height >= 32) {
+              // A captured network response is a supported recovery path when
+              // native Save As fails. It must also close the Flow image editor;
+              // otherwise the next scene starts on /edit/{assetId}.
               job.status = "importing";
+              job.downloadStatus = "completed";
               job.downloadMethod = "network_response_capture";
-              this.touch(job);
+              job.downloadPath = null;
+
+              let editorClosed = false;
+              let editorCloseError = null;
+              const currentFlowUrl =
+                this.page && typeof this.page.url === "function"
+                  ? this.page.url()
+                  : "";
+
+              if (isGoogleFlowEditorRoute(currentFlowUrl)) {
+                try {
+                  const closeResult = await closeFlowImageEditor(
+                    this.page,
+                    console,
+                    {
+                      timeoutMs: 15000,
+                      expectedProjectId:
+                        job.googleFlowProjectId ||
+                        extractProjectIdFromFlowUrl(currentFlowUrl),
+                      logTransition: (phase, details) => {
+                        this.emitLifecycleLog(phase, job, details);
+                      },
+                    },
+                  );
+                  editorClosed =
+                    closeResult === true || closeResult?.closed === true;
+                } catch (closeError) {
+                  editorCloseError = closeError.message;
+                  this.emitLifecycleLog(
+                    "FLOW_EDITOR_CLOSE_FAILED_AFTER_FALLBACK",
+                    job,
+                    {
+                      error: closeError.message,
+                      currentUrl:
+                        this.page && typeof this.page.url === "function"
+                          ? this.page.url()
+                          : "",
+                    },
+                  );
+                }
+              } else {
+                editorClosed =
+                  Boolean(currentFlowUrl) &&
+                  isFlowUrl(currentFlowUrl);
+              }
+
+              job.editorCloseStatus = editorClosed ? "closed" : "failed";
+              job.flowSessionReady = editorClosed;
+              job.editorCloseError = editorCloseError;
+              this.emitLifecycleLog(
+                "DOWNLOAD_RECOVERED",
+                job,
+                {
+                  downloadMethod: "network_response_capture",
+                  editorClosed,
+                  editorCloseError,
+                  mimeType: detected.mimeType,
+                  width: dims.width,
+                  height: dims.height,
+                },
+              );
+
+              // Import even if editor cleanup failed: preserve the valid image.
+              // The next prepareJob() will retry Done and refuse to submit a
+              // new scene until the editor route is actually closed.
               await this.importDownloadedAsset(job, match.buffer, detected);
+
+              job.downloadStatus = "completed";
+              job.editorCloseStatus = editorClosed ? "closed" : "failed";
+              job.flowSessionReady = editorClosed;
+              job.editorCloseError = editorCloseError;
+              this.touch(job);
               return;
             }
           }
