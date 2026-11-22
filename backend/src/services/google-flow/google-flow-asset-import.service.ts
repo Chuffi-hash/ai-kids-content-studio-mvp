@@ -204,8 +204,11 @@ export function resolveGoogleFlowBackgroundVersionReferences(
     (!imageRefs.googleFlowEditId ||
       imageRefs.googleFlowEditId === versionRefs.googleFlowEditId);
   const projectId =
-    imageRefs.googleFlowProjectId || versionRefs.googleFlowProjectId;
-  const editId = imageRefs.googleFlowEditId || versionRefs.googleFlowEditId;
+    imageRefs.googleFlowProjectId ||
+    (versionUrlMatchesImage ? versionRefs.googleFlowProjectId : null);
+  const editId =
+    imageRefs.googleFlowEditId ||
+    (versionUrlMatchesImage ? versionRefs.googleFlowEditId : null);
   const editUrl =
     imageRefs.googleFlowEditUrl ||
     (versionUrlMatchesImage ? versionRefs.googleFlowEditUrl : null) ||
