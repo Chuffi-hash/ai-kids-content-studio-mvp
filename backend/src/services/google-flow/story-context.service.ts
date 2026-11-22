@@ -95,6 +95,20 @@ function getGoogleFlowVersionMetadata(version: any): GoogleFlowVersionMetadata |
   };
 }
 
+/**
+ * Serialize the single provider-independent history collection for a scene.
+ * Google Flow entries remain members of backgroundVersions and carry Flow
+ * details only under providerMetadata.googleFlow.
+ */
+export function serializeBackgroundVersions(
+  versions: unknown,
+): BackgroundVersionContext[] {
+  if (!Array.isArray(versions)) return [];
+  return versions
+    .map((version) => serializeBackgroundVersion(version))
+    .sort((a, b) => a.version - b.version);
+}
+
 export function serializeBackgroundVersion(version: any): BackgroundVersionContext {
   const sourceMetadata =
     version?.providerMetadata && typeof version.providerMetadata === "object"
@@ -149,7 +163,7 @@ export function serializeBackgroundVersion(version: any): BackgroundVersionConte
   };
 }
 
-function stripProviderMetadataFromAnimationBackground(
+export function stripProviderMetadataFromAnimationBackground(
   animationData: Record<string, any>,
 ): Record<string, any> {
   const background =
@@ -203,6 +217,11 @@ export interface SceneContextItem {
   hasBackground: boolean;
   backgroundUrl: string | null;
   backgroundImageId: string | null;
+  /**
+   * Backward-compatible snapshot of the ACTIVE background version only.
+   * Version-specific Google Flow metadata belongs exclusively in
+   * backgroundVersions[].providerMetadata.googleFlow.
+   */
   googleFlowProjectId?: string | null;
   googleFlowEditId?: string | null;
   googleFlowEditUrl?: string | null;
@@ -381,8 +400,12 @@ export class StoryContextService {
       // Build a normalized, provider-independent version array. Flow's
       // providerMetadata is flattened onto each item so the editor and image
       // generators can select a version without knowing the JSON nesting.
-      const backgroundVersions = (scene.backgroundVersions || []).map(
-        (version: any) => serializeBackgroundVersion(version),
+      // There is exactly one history collection for all providers.
+      // Google Flow-only metadata is normalized inside each version's
+      // providerMetadata.googleFlow object; do not create a parallel
+      // googleFlowVersions array.
+      const backgroundVersions = serializeBackgroundVersions(
+        scene.backgroundVersions,
       );
       const requestedActiveVersion =
         scene.activeBackgroundVersion ?? bgData.activeVersion ?? null;
