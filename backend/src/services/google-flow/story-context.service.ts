@@ -1,6 +1,29 @@
 import { prisma } from '../database/database.service.js';
 import { isReservedMetadataKey, cleanSpeakerName } from '../story-generation/story-importer.service.js';
 
+export interface GoogleFlowVersionMetadata {
+  projectId: string | null;
+  editId: string | null;
+  editUrl: string | null;
+  imageId: string | null;
+  imageRef: string | null;
+  imageSourceUrl: string | null;
+  parentAssetId: string | null;
+  prompt: string | null;
+}
+
+export interface BackgroundVersionProviderMetadata {
+  sourceJobId?: string | null;
+  googleFlow?: GoogleFlowVersionMetadata;
+  [key: string]: any;
+}
+
+/**
+ * Canonical background history item.
+ *
+ * Provider-specific values live only in providerMetadata.<provider>.
+ * Do not flatten Google Flow metadata onto this object as duplicate fields.
+ */
 export interface BackgroundVersionContext {
   id: string;
   sceneId: string;
@@ -17,61 +40,137 @@ export interface BackgroundVersionContext {
   aspectRatio?: string | null;
   status: string;
   createdAt: string | Date;
-  googleFlowProjectId: string | null;
-  googleFlowEditId: string | null;
-  googleFlowEditUrl: string | null;
-  googleFlowImageId: string | null;
-  googleFlowImageRef: string | null;
-  googleFlowImageSourceUrl: string | null;
-  googleFlowParentAssetId: string | null;
-  googleFlowPrompt: string | null;
-  googleFlowVersion: number | null;
-  providerMetadata: Record<string, any>;
-  [key: string]: any;
+  providerMetadata: BackgroundVersionProviderMetadata;
 }
 
-export type GoogleFlowBackgroundVersionContext = BackgroundVersionContext;
+function getGoogleFlowVersionMetadata(version: any): GoogleFlowVersionMetadata | null {
+  if (String(version?.provider || "").toLowerCase().replace(/-/g, "_") !== "google_flow") {
+    return null;
+  }
 
-export function serializeBackgroundVersion(version: any): BackgroundVersionContext {
-  const providerMetadata =
+  const metadata =
     version?.providerMetadata && typeof version.providerMetadata === "object"
       ? version.providerMetadata as Record<string, any>
       : {};
-  const isGoogleFlow = String(version?.provider || "").toLowerCase() === "google_flow";
-  const googleFlowEditId = isGoogleFlow
-    ? providerMetadata.googleFlowEditId || null
-    : null;
-  const googleFlowImageId = isGoogleFlow
-    ? providerMetadata.googleFlowImageId || googleFlowEditId || null
-    : null;
+  const flow = metadata.googleFlow && typeof metadata.googleFlow === "object"
+    ? metadata.googleFlow
+    : metadata;
+
+  const editId = flow.editId || flow.googleFlowEditId || null;
+  const projectId = flow.projectId || flow.googleFlowProjectId || null;
+  const imageId =
+    flow.imageId ||
+    flow.googleFlowImageId ||
+    editId ||
+    null;
+  const imageRef =
+    flow.imageRef ||
+    flow.googleFlowImageRef ||
+    null;
 
   return {
-    ...version,
-    googleFlowProjectId: isGoogleFlow ? providerMetadata.googleFlowProjectId || null : null,
-    googleFlowEditId,
-    googleFlowEditUrl: isGoogleFlow ? providerMetadata.googleFlowEditUrl || null : null,
-    googleFlowImageId,
-    googleFlowImageRef: isGoogleFlow ? providerMetadata.googleFlowImageRef || null : null,
-    googleFlowImageSourceUrl: isGoogleFlow
-      ? providerMetadata.googleFlowImageSourceUrl || providerMetadata.googleFlowImageRef || null
-      : null,
-    googleFlowParentAssetId: isGoogleFlow
-      ? providerMetadata.googleFlowParentAssetId || null
-      : null,
-    googleFlowPrompt: isGoogleFlow
-      ? providerMetadata.googleFlowPrompt || version?.prompt || null
-      : null,
-    googleFlowVersion: isGoogleFlow
-      ? Number(providerMetadata.googleFlowVersion || version?.version || 0) || null
-      : null,
-    // Keep the original flexible JSON metadata while normalizing imageId.
-    providerMetadata: isGoogleFlow
-      ? {
-          ...providerMetadata,
-          googleFlowImageId,
-        }
-      : providerMetadata,
+    projectId,
+    editId,
+    editUrl:
+      flow.editUrl ||
+      flow.googleFlowEditUrl ||
+      (projectId && editId
+        ? `https://flow.google.com/project/${encodeURIComponent(projectId)}/edit/${encodeURIComponent(editId)}`
+        : null),
+    imageId,
+    imageRef,
+    imageSourceUrl:
+      flow.imageSourceUrl ||
+      flow.googleFlowImageSourceUrl ||
+      imageRef,
+    parentAssetId:
+      flow.parentAssetId ||
+      flow.googleFlowParentAssetId ||
+      null,
+    prompt:
+      flow.prompt ||
+      flow.googleFlowPrompt ||
+      version?.prompt ||
+      null,
   };
+}
+
+export function serializeBackgroundVersion(version: any): BackgroundVersionContext {
+  const sourceMetadata =
+    version?.providerMetadata && typeof version.providerMetadata === "object"
+      ? version.providerMetadata as Record<string, any>
+      : {};
+  const googleFlow = getGoogleFlowVersionMetadata(version);
+
+  // Explicitly serialize the supported fields instead of spreading the Prisma
+  // row. This prevents legacy flattened Google Flow properties from leaking
+  // into each history item alongside providerMetadata.
+  const providerMetadata: BackgroundVersionProviderMetadata = googleFlow
+    ? {
+        ...(sourceMetadata.sourceJobId
+          ? { sourceJobId: sourceMetadata.sourceJobId }
+          : {}),
+        googleFlow,
+      }
+    : { ...sourceMetadata };
+
+  return {
+    id: String(version.id),
+    sceneId: String(version.sceneId),
+    version: Number(version.version),
+    provider: String(version.provider),
+    model: version.model ?? null,
+    prompt: version.prompt ?? null,
+    parentVersionId: version.parentVersionId ?? null,
+    localImageId: version.localImageId ?? null,
+    storageKey: version.storageKey ?? null,
+    imageUrl: version.imageUrl ?? null,
+    width: version.width ?? null,
+    height: version.height ?? null,
+    aspectRatio: version.aspectRatio ?? null,
+    status: String(version.status || "completed"),
+    createdAt: version.createdAt,
+    providerMetadata,
+  };
+}
+
+function stripProviderMetadataFromAnimationBackground(
+  animationData: Record<string, any>,
+): Record<string, any> {
+  const background =
+    animationData?.background && typeof animationData.background === "object"
+      ? animationData.background
+      : null;
+
+  if (!background) return animationData;
+
+  const providerKeys = new Set([
+    "googleFlowProjectId",
+    "googleFlowEditId",
+    "googleFlowEditUrl",
+    "googleFlowPrompt",
+    "googleFlowVersion",
+    "googleFlowParentAssetId",
+    "googleFlowImageId",
+    "googleFlowImageRef",
+    "googleFlowImageSourceUrl",
+  ]);
+
+  const renderBackground = Object.fromEntries(
+    Object.entries(background).filter(([key]) => !providerKeys.has(key)),
+  );
+
+  return {
+    ...animationData,
+    background: renderBackground,
+  };
+}
+
+function ratioFromDimensions(width?: number | null, height?: number | null): string | null {
+  if (!width || !height || width <= 0 || height <= 0) return null;
+  const divisor = (a: number, b: number): number => (b === 0 ? a : divisor(b, a % b));
+  const gcd = divisor(Math.round(width), Math.round(height));
+  return `${Math.round(width / gcd)}:${Math.round(height / gcd)}`;
 }
 
 export interface SceneContextItem {
@@ -91,12 +190,10 @@ export interface SceneContextItem {
   googleFlowEditId?: string | null;
   googleFlowEditUrl?: string | null;
   googleFlowPrompt?: string | null;
-  googleFlowVersion?: number | null;
   googleFlowParentAssetId?: string | null;
   googleFlowImageId?: string | null;
   googleFlowImageRef?: string | null;
   googleFlowImageSourceUrl?: string | null;
-  googleFlowVersions?: GoogleFlowBackgroundVersionContext[];
   activeBackgroundVersion?: number | null;
   totalBackgroundVersions?: number;
   backgroundVersions?: BackgroundVersionContext[];
@@ -274,6 +371,7 @@ export class StoryContextService {
         scene.activeBackgroundVersion ?? bgData.activeVersion ?? null;
       const activeVersionRecord =
         backgroundVersions.find((version) => version.version === requestedActiveVersion) ||
+        [...backgroundVersions].reverse().find((version) => version.status === "completed") ||
         backgroundVersions[backgroundVersions.length - 1] ||
         null;
 
@@ -287,9 +385,23 @@ export class StoryContextService {
 
       const activeVersionFlow = activeVersionRecord || {};
       const activeProviderMetadata =
-        activeVersionFlow.providerMetadata && typeof activeVersionFlow.providerMetadata === "object"
+        activeVersionFlow.providerMetadata &&
+        typeof activeVersionFlow.providerMetadata === "object"
           ? activeVersionFlow.providerMetadata
           : {};
+      const activeGoogleFlow =
+        activeProviderMetadata.googleFlow ||
+        getGoogleFlowVersionMetadata(activeVersionRecord) ||
+        {};
+
+      // Resolve aspect ratio from the selected generated asset first.
+      // Scene visual prompts may contain stale ratio wording; the saved image
+      // dimensions/version are the authoritative facts for the selected asset.
+      const effectiveAspectRatio =
+        activeVersionRecord?.aspectRatio ||
+        ratioFromDimensions(completedImage?.width, completedImage?.height) ||
+        bgData.aspectRatio ||
+        defaultAspectRatio;
 
       // Determine the selected background URL and verified asset readiness.
       let backgroundUrl: string | null = null;
@@ -415,71 +527,58 @@ export class StoryContextService {
         narration: cleanNarration,
         visualPrompt: cleanPrompt,
         cameraDirection: scene.cameraDirection || bgData.cameraDirection || 'Eye-level wide shot',
-        aspectRatio: bgData.aspectRatio || defaultAspectRatio,
+        aspectRatio: effectiveAspectRatio,
         hasBackground,
         backgroundUrl,
         backgroundImageId,
+        // Active Google Flow metadata is a single scene-level snapshot.
+        // Version-specific references live only in backgroundVersions[].providerMetadata.googleFlow.
         googleFlowProjectId:
-          activeVersionFlow.googleFlowProjectId ||
+          activeGoogleFlow.projectId ||
           (completedImage as any)?.googleFlowProjectId ||
           bgData.googleFlowProjectId ||
           null,
         googleFlowEditId:
-          activeVersionFlow.googleFlowEditId ||
+          activeGoogleFlow.editId ||
           (completedImage as any)?.googleFlowEditId ||
           bgData.googleFlowEditId ||
           null,
         googleFlowEditUrl:
-          activeVersionFlow.googleFlowEditUrl ||
+          activeGoogleFlow.editUrl ||
           (completedImage as any)?.googleFlowEditUrl ||
           bgData.googleFlowEditUrl ||
           null,
         googleFlowPrompt:
-          activeVersionFlow.googleFlowPrompt ||
+          activeGoogleFlow.prompt ||
           (completedImage as any)?.googleFlowPrompt ||
           bgData.googleFlowPrompt ||
           null,
-        googleFlowVersion:
-          activeVersionFlow.googleFlowVersion ??
-          (completedImage as any)?.googleFlowVersion ??
-          bgData.googleFlowVersion ??
-          activeVersionRecord?.version ??
-          null,
         googleFlowParentAssetId:
-          activeVersionFlow.googleFlowParentAssetId ||
+          activeGoogleFlow.parentAssetId ||
           (completedImage as any)?.googleFlowParentAssetId ||
           bgData.googleFlowParentAssetId ||
           null,
-        // Flow edit URL /edit/{id} is the fallback stable media identifier
-        // when Google Flow does not expose a separate DOM data-image-id.
         googleFlowImageId:
-          activeVersionFlow.googleFlowImageId ||
-          activeVersionFlow.googleFlowEditId ||
+          activeGoogleFlow.imageId ||
+          activeGoogleFlow.editId ||
           (completedImage as any)?.googleFlowImageId ||
           (completedImage as any)?.googleFlowEditId ||
           bgData.googleFlowImageId ||
           bgData.googleFlowEditId ||
           null,
         googleFlowImageRef:
-          activeVersionFlow.googleFlowImageRef ||
+          activeGoogleFlow.imageRef ||
           (completedImage as any)?.googleFlowImageRef ||
           bgData.googleFlowImageRef ||
           null,
         googleFlowImageSourceUrl:
-          activeVersionFlow.googleFlowImageSourceUrl ||
-          activeProviderMetadata.googleFlowImageSourceUrl ||
+          activeGoogleFlow.imageSourceUrl ||
+          activeGoogleFlow.imageRef ||
           (completedImage as any)?.googleFlowImageSourceUrl ||
           bgData.googleFlowImageSourceUrl ||
           null,
-        googleFlowVersions: backgroundVersions.filter(
-          (version) => version.provider === "google_flow",
-        ),
-        activeBackgroundVersion:
-          requestedActiveVersion ??
-          activeVersionRecord?.version ??
-          (completedImage as any)?.googleFlowVersion ??
-          1,
-        totalBackgroundVersions: backgroundVersions.length || (scene.images?.length || 0),
+        activeBackgroundVersion: activeVersionRecord?.version ?? null,
+        totalBackgroundVersions: backgroundVersions.length,
         backgroundVersions,
         provider: activeVersionRecord?.provider || bgData.provider || (completedImage as any)?.provider || null,
         model: activeVersionRecord?.model || bgData.model || (completedImage as any)?.model || null,
@@ -490,7 +589,7 @@ export class StoryContextService {
         environmentDescription: cleanPrompt || promptText,
         characterIds: sceneCharIds,
         charactersInScene,
-        animationData: animData,
+        animationData: stripProviderMetadataFromAnimationBackground(animData),
       });
     }
 
