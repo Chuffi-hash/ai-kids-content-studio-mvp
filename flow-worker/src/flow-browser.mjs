@@ -441,7 +441,35 @@ export class FlowBrowserWorker {
         })
       : null;
 
-    const next  async readTabMarkerFromSessionStorage(page) {
+    // Chain writes in call order. A slower earlier write cannot win over newer
+    // metadata, and a failed write does not poison later updates.
+    const nextWrite = previousWrite.catch(() => {}).then(async () => {
+      if (typeof page.isClosed === "function" && page.isClosed()) return;
+      await page.evaluate(
+        ({ key, val, remove }) => {
+          try {
+            if (remove) {
+              window.sessionStorage.removeItem(key);
+            } else {
+              window.sessionStorage.setItem(key, val);
+            }
+          } catch {}
+        },
+        { key: FLOW_TAB_METADATA_KEY, val: payload, remove: !roleIsValid },
+      );
+    });
+
+    this.tabMetadataWriteChains.set(page, nextWrite);
+    try {
+      await nextWrite;
+    } finally {
+      if (this.tabMetadataWriteChains.get(page) === nextWrite) {
+        this.tabMetadataWriteChains.delete(page);
+      }
+    }
+  }
+
+  async readTabMarkerFromSessionStorage(page) {
     if (!page || (typeof page.isClosed === "function" && page.isClosed())) return null;
     try {
       if (typeof page.evaluate !== "function") return null;
