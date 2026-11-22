@@ -654,4 +654,70 @@ describe("Google Flow Agent Live DOM & Prompt Submission Suite", () => {
     assert.equal(prepared.googleFlowEditUrl, editUrl);
   });
 
+
+  it("16. Live route repairs a stale tab role and duplicate tab identity", () => {
+    const worker = new FlowBrowserWorker();
+    worker.writeTabMarkerToSessionStorage = async () => {};
+    const projectId = "2ea32335-0e57-4d1a-9e1e-98fa3cd491e8";
+    const makePage = (url) => ({
+      currentUrl: url,
+      url() { return this.currentUrl; },
+      isClosed() { return false; },
+    });
+
+    const backgroundPage = makePage(`https://flow.google.com/project/${projectId}`);
+    const characterPage = makePage(`https://flow.google.com/project/${projectId}/character`);
+
+    worker.registerFlowPage(backgroundPage, {
+      role: "background",
+      tabId: "duplicated-tab-id",
+      projectId,
+    });
+    worker.registerFlowPage(characterPage, {
+      // Simulates a stale marker that incorrectly labels the character route.
+      role: "background",
+      tabId: "duplicated-tab-id",
+      projectId,
+    });
+
+    assert.equal(worker.getFlowPage("background"), backgroundPage);
+    assert.equal(worker.getFlowPage("character"), characterPage);
+    assert.equal(worker.getFlowPageMetadata(characterPage).role, "character");
+    assert.notEqual(
+      worker.getFlowPageMetadata(backgroundPage).tabId,
+      worker.getFlowPageMetadata(characterPage).tabId,
+      "Different live pages must never share a tab identity.",
+    );
+  });
+
+  it("17. Tab marker writes are serialized so the newest metadata wins", async () => {
+    const worker = new FlowBrowserWorker();
+    let storedMarker = null;
+    const page = {
+      isClosed: () => false,
+      evaluate: async (_callback, args) => {
+        if (args.val?.includes('"tabId":"older"')) {
+          await new Promise((resolve) => setTimeout(resolve, 25));
+        }
+        storedMarker = args.remove ? null : args.val;
+      },
+    };
+
+    const olderWrite = worker.writeTabMarkerToSessionStorage(page, {
+      tabId: "older",
+      role: "background",
+      projectId: "old-project",
+    });
+    const newerWrite = worker.writeTabMarkerToSessionStorage(page, {
+      tabId: "newer",
+      role: "character",
+      projectId: "new-project",
+    });
+
+    await Promise.all([olderWrite, newerWrite]);
+    assert.ok(storedMarker);
+    assert.equal(JSON.parse(storedMarker).tabId, "newer");
+    assert.equal(JSON.parse(storedMarker).role, "character");
+  });
+
 });
