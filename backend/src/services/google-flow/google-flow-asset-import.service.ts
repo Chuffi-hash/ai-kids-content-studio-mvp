@@ -209,12 +209,13 @@ export function resolveGoogleFlowBackgroundVersionReferences(
   const editId =
     imageRefs.googleFlowEditId ||
     (versionUrlMatchesImage ? versionRefs.googleFlowEditId : null);
+  // Rebuild the route from the resolved IDs whenever both are known. This
+  // prevents a stale URL column from pointing at a different Flow image.
   const editUrl =
-    imageRefs.googleFlowEditUrl ||
-    (versionUrlMatchesImage ? versionRefs.googleFlowEditUrl : null) ||
-    (projectId && editId
+    projectId && editId
       ? `https://flow.google.com/project/${encodeURIComponent(projectId)}/edit/${encodeURIComponent(editId)}`
-      : null);
+      : imageRefs.googleFlowEditUrl ||
+        (versionUrlMatchesImage ? versionRefs.googleFlowEditUrl : null);
 
   const refs = resolveGoogleFlowReferences({
     googleFlowProjectId: projectId || undefined,
