@@ -534,4 +534,124 @@ describe("Google Flow Agent Live DOM & Prompt Submission Suite", () => {
 
     await fs.rm(testDir, { recursive: true, force: true });
   });
+
+  it("13. Flow tab metadata remains one-to-one when pages or roles are replaced", () => {
+    const worker = new FlowBrowserWorker();
+    worker.writeTabMarkerToSessionStorage = async () => {};
+
+    const makePage = (url) => ({
+      currentUrl: url,
+      closed: false,
+      url() { return this.currentUrl; },
+      isClosed() { return this.closed; },
+    });
+
+    const firstBackground = makePage(projectUrl);
+    const secondBackground = makePage(projectUrl);
+    const characterPage = makePage(projectUrl);
+
+    worker.registerFlowPage(firstBackground, {
+      role: "background",
+      projectId: "2ea32335-0e57-4d1a-9e1e-98fa3cd491e8",
+    });
+    worker.registerFlowPage(secondBackground, {
+      role: "background",
+      projectId: "2ea32335-0e57-4d1a-9e1e-98fa3cd491e8",
+    });
+
+    assert.equal(worker.getFlowPage("background"), secondBackground);
+    assert.equal(worker.getFlowPageMetadata(firstBackground).role, null);
+
+    // Reassigning a page must remove its previous role mapping.
+    worker.registerFlowPage(secondBackground, {
+      role: "character",
+      projectId: "2ea32335-0e57-4d1a-9e1e-98fa3cd491e8",
+    });
+    assert.equal(worker.getFlowPage("background"), null);
+    assert.equal(worker.getFlowPage("character"), secondBackground);
+
+    // A second page claiming the character role replaces the old owner.
+    worker.registerFlowPage(characterPage, {
+      role: "character",
+      projectId: "2ea32335-0e57-4d1a-9e1e-98fa3cd491e8",
+    });
+    assert.equal(worker.getFlowPage("character"), characterPage);
+    assert.equal(worker.getFlowPageMetadata(secondBackground).role, null);
+
+    // Closed pages are removed from the registry instead of being returned as live tabs.
+    const closedPage = makePage(projectUrl);
+    worker.registerFlowPage(closedPage, { role: "background" });
+    closedPage.closed = true;
+    assert.equal(worker.getFlowPage("background"), null);
+    assert.deepEqual(
+      worker.getFlowPages().map((entry) => entry.role),
+      ["character"],
+    );
+  });
+
+  it("14. Existing Flow edit URL automatically selects background regeneration", () => {
+    const worker = new FlowBrowserWorker();
+    const editUrl =
+      "https://flow.google.com/project/2ea32335-0e57-4d1a-9e1e-98fa3cd491e8/edit/b55777af-ee1a-452c-96df-dfe4e6881cd7";
+
+    const job = worker.createJob({
+      targetType: "background",
+      sceneId: "scene-existing-background",
+      storyId: "story-existing-background",
+      prompt: "Improve the lighting while preserving the existing composition.",
+      editUrl,
+    });
+
+    assert.equal(job.isRegeneration, true);
+    assert.equal(job.googleFlowEditUrl, editUrl);
+    assert.equal(job.googleFlowProjectId, "2ea32335-0e57-4d1a-9e1e-98fa3cd491e8");
+    assert.equal(job.googleFlowEditId, "b55777af-ee1a-452c-96df-dfe4e6881cd7");
+  });
+
+  it("15. Background regeneration navigates to the saved image editor before locating its prompt", async () => {
+    const worker = new FlowBrowserWorker();
+    worker.context = {};
+
+    const editUrl =
+      "https://flow.google.com/project/2ea32335-0e57-4d1a-9e1e-98fa3cd491e8/edit/b55777af-ee1a-452c-96df-dfe4e6881cd7";
+    let currentUrl =
+      "https://flow.google.com/project/2ea32335-0e57-4d1a-9e1e-98fa3cd491e8";
+    const navigationHistory = [];
+    const page = {
+      isClosed: () => false,
+      url: () => currentUrl,
+      goto: async (url) => {
+        navigationHistory.push(url);
+        currentUrl = url;
+      },
+    };
+
+    worker.resolveJobPage = async () => page;
+    worker.findImageEditPromptEditor = async (targetPage) => {
+      assert.equal(
+        targetPage.url(),
+        editUrl,
+        "The editor route must be active before prompt discovery starts.",
+      );
+      return { locator: {}, selector: "mock-image-editor-prompt" };
+    };
+    worker.fillFlowPrompt = async (targetPage, locator, prompt) => {
+      assert.equal(targetPage.url(), editUrl);
+      assert.equal(prompt, "Improve the lighting while preserving the existing composition.");
+    };
+
+    const job = worker.createJob({
+      targetType: "background",
+      sceneId: "scene-existing-background",
+      storyId: "story-existing-background",
+      prompt: "Improve the lighting while preserving the existing composition.",
+      googleFlowEditUrl: editUrl,
+    });
+
+    const prepared = await worker.prepareJob(job.id);
+    assert.deepEqual(navigationHistory, [editUrl]);
+    assert.equal(prepared.status, "prompt_ready");
+    assert.equal(prepared.googleFlowEditUrl, editUrl);
+  });
+
 });
