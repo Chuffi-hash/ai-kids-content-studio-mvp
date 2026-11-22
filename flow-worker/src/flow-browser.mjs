@@ -373,7 +373,9 @@ export class FlowBrowserWorker {
     const currentRouteType = detectFlowRouteType(currentUrl);
     const routeProjectId = extractProjectIdFromFlowUrl(currentUrl);
     const tabId = metadata.tabId || existing?.tabId || randomUUID();
-    const projectId = metadata.projectId || routeProjectId || existing?.projectId || null;
+    // The page's live route is authoritative; a stale sessionStorage marker must not
+    // keep a previous project's id attached to a tab after navigation.
+    const projectId = routeProjectId || metadata.projectId || existing?.projectId || null;
     const purpose =
       metadata.purpose ||
       existing?.purpose ||
