@@ -109,6 +109,37 @@ export function serializeBackgroundVersions(
     .sort((a, b) => a.version - b.version);
 }
 
+/**
+ * The only public history shape returned for a scene.
+ * Keep this provider-independent: Google Flow data belongs inside each
+ * version's providerMetadata.googleFlow object, never in a second array.
+ */
+export function serializeBackgroundVersionHistory(
+  rows: unknown,
+  requestedActiveVersion?: number | null,
+): {
+  activeBackgroundVersion: number | null;
+  totalBackgroundVersions: number;
+  backgroundVersions: BackgroundVersionContext[];
+} {
+  const backgroundVersions = serializeBackgroundVersions(rows);
+  const activeVersionRecord =
+    backgroundVersions.find(
+      (version) => version.version === requestedActiveVersion,
+    ) ||
+    [...backgroundVersions]
+      .reverse()
+      .find((version) => version.status === "completed") ||
+    backgroundVersions[backgroundVersions.length - 1] ||
+    null;
+
+  return {
+    activeBackgroundVersion: activeVersionRecord?.version ?? null,
+    totalBackgroundVersions: backgroundVersions.length,
+    backgroundVersions,
+  };
+}
+
 export function serializeBackgroundVersion(version: any): BackgroundVersionContext {
   const sourceMetadata =
     version?.providerMetadata && typeof version.providerMetadata === "object"
@@ -404,16 +435,18 @@ export class StoryContextService {
       // Google Flow-only metadata is normalized inside each version's
       // providerMetadata.googleFlow object; do not create a parallel
       // googleFlowVersions array.
-      const backgroundVersions = serializeBackgroundVersions(
-        scene.backgroundVersions,
-      );
       const requestedActiveVersion =
         scene.activeBackgroundVersion ?? bgData.activeVersion ?? null;
+      const backgroundHistory = serializeBackgroundVersionHistory(
+        scene.backgroundVersions,
+        requestedActiveVersion,
+      );
+      const { backgroundVersions } = backgroundHistory;
       const activeVersionRecord =
-        backgroundVersions.find((version) => version.version === requestedActiveVersion) ||
-        [...backgroundVersions].reverse().find((version) => version.status === "completed") ||
-        backgroundVersions[backgroundVersions.length - 1] ||
-        null;
+        backgroundVersions.find(
+          (version) =>
+            version.version === backgroundHistory.activeBackgroundVersion,
+        ) || null;
 
       // Prefer the local Image row linked to the active version. This is
       // important after the user restores an older background version.
@@ -625,9 +658,9 @@ export class StoryContextService {
           (completedImage as any)?.googleFlowImageSourceUrl ||
           bgData.googleFlowImageSourceUrl ||
           null,
-        activeBackgroundVersion: activeVersionRecord?.version ?? null,
-        totalBackgroundVersions: backgroundVersions.length,
-        backgroundVersions,
+        activeBackgroundVersion: backgroundHistory.activeBackgroundVersion,
+        totalBackgroundVersions: backgroundHistory.totalBackgroundVersions,
+        backgroundVersions: backgroundHistory.backgroundVersions,
         provider: activeVersionRecord?.provider || bgData.provider || (completedImage as any)?.provider || null,
         model: activeVersionRecord?.model || bgData.model || (completedImage as any)?.model || null,
         location,
