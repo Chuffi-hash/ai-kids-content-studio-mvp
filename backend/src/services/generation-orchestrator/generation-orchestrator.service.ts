@@ -751,16 +751,24 @@ export class GenerationOrchestratorService {
 
     // The Image columns are the fast path. For older imports, resolve the same
     // editor reference from the canonical background version metadata instead.
-    const backgroundVersion =
-      imageRecord.scene?.backgroundVersions?.find(
-        (version) => version.localImageId === imageRecord.id,
-      ) ||
+    const matchingBackgroundVersion =
       imageRecord.scene?.backgroundVersions?.find(
         (version) =>
-          version.version === imageRecord.scene?.activeBackgroundVersion &&
+          version.localImageId === imageRecord.id &&
           version.provider === imageRecord.provider,
-      ) ||
-      null;
+      ) || null;
+    const activeBackgroundVersion =
+      imageRecord.scene?.backgroundVersions?.find(
+        (version) =>
+          version.version === imageRecord.scene?.activeBackgroundVersion,
+      ) || null;
+    const backgroundVersion =
+      matchingBackgroundVersion ||
+      (activeBackgroundVersion?.provider === imageRecord.provider &&
+      (!activeBackgroundVersion.localImageId ||
+        activeBackgroundVersion.localImageId === imageRecord.id)
+        ? activeBackgroundVersion
+        : null);
     const flowReferences = resolveGoogleFlowBackgroundVersionReferences(
       imageRecord,
       backgroundVersion,
