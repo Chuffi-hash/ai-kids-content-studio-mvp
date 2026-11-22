@@ -4,7 +4,7 @@ import path from 'path';
 import { StoryContextService, SceneContextItem, CharacterContextItem } from '../google-flow/story-context.service.js';
 import { GenerationPromptService } from '../google-flow/generation-prompt.service.js';
 import { GeminiImageProvider } from '../image-generation/providers/gemini-image.provider.js';
-import { GoogleFlowAssetImportService, ImportAssetResult } from '../google-flow/google-flow-asset-import.service.js';
+import { GoogleFlowAssetImportService, ImportAssetResult, resolveGoogleFlowBackgroundVersionReferences } from '../google-flow/google-flow-asset-import.service.js';
 import { GoogleFlowCredentialService } from '../google-flow/google-flow-credential.service.js';
 import {
   prisma,
@@ -731,7 +731,13 @@ export class GenerationOrchestratorService {
     // 1. Fetch Image record from database
     const imageRecord = await prisma.image.findUnique({
       where: { id: imageId },
-      include: { scene: true },
+      include: {
+        scene: {
+          include: {
+            backgroundVersions: true,
+          },
+        },
+      },
     });
 
     if (!imageRecord) {
@@ -743,11 +749,23 @@ export class GenerationOrchestratorService {
       throw new Error(`Image ${imageId} is not associated with a scene.`);
     }
 
-    const editUrl =
-      imageRecord.googleFlowEditUrl ||
-      (imageRecord.googleFlowProjectId && imageRecord.googleFlowEditId
-        ? `https://flow.google.com/project/${imageRecord.googleFlowProjectId}/edit/${imageRecord.googleFlowEditId}`
-        : null);
+    // The Image columns are the fast path. For older imports, resolve the same
+    // editor reference from the canonical background version metadata instead.
+    const backgroundVersion =
+      imageRecord.scene?.backgroundVersions?.find(
+        (version) => version.localImageId === imageRecord.id,
+      ) ||
+      imageRecord.scene?.backgroundVersions?.find(
+        (version) =>
+          version.version === imageRecord.scene?.activeBackgroundVersion &&
+          version.provider === imageRecord.provider,
+      ) ||
+      null;
+    const flowReferences = resolveGoogleFlowBackgroundVersionReferences(
+      imageRecord,
+      backgroundVersion,
+    );
+    const editUrl = flowReferences.googleFlowEditUrl;
 
     if (!editUrl) {
       throw new Error(
@@ -770,7 +788,7 @@ export class GenerationOrchestratorService {
     const promptData = GenerationPromptService.buildSceneBackgroundPrompt(
       { visualStyle: context.story.visualStyle, aspectRatio: scene.aspectRatio },
       scene,
-      promptOverride || imageRecord.googleFlowPrompt || imageRecord.prompt
+      promptOverride || flowReferences.googleFlowPrompt || imageRecord.prompt
     );
 
     const jobId = `job-bg-regen-${Date.now()}-${randomUUID().slice(0, 6)}`;
@@ -798,7 +816,7 @@ export class GenerationOrchestratorService {
         targetType: 'scene_background',
         assetType: 'scene_background',
         prompt: promptData.prompt,
-        flowProjectId: imageRecord.googleFlowProjectId || context.story.flowProjectId || undefined,
+        flowProjectId: flowReferences.googleFlowProjectId || context.story.flowProjectId || undefined,
         status: 'preparing',
         progress: 10,
         metadata: {
@@ -837,10 +855,10 @@ export class GenerationOrchestratorService {
           aspectRatio: promptData.aspectRatio,
           editUrl,
           googleFlowEditUrl: editUrl,
-          googleFlowProjectId: imageRecord.googleFlowProjectId,
-          googleFlowEditId: imageRecord.googleFlowEditId,
+          googleFlowProjectId: flowReferences.googleFlowProjectId || context.story.flowProjectId,
+          googleFlowEditId: flowReferences.googleFlowEditId,
           googleFlowParentAssetId: imageRecord.id,
-          googleFlowVersion: (imageRecord.googleFlowVersion || 1) + 1,
+          googleFlowVersion: (flowReferences.googleFlowVersion || 1) + 1,
         }),
       });
 
