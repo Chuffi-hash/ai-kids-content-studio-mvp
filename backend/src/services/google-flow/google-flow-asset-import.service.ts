@@ -127,6 +127,96 @@ export function resolveGoogleFlowReferences(
   };
 }
 
+
+/**
+ * Resolve a saved image's Flow editor reference using the direct Image columns
+ * first and the canonical BackgroundImageVersion.providerMetadata as a fallback.
+ * This keeps regeneration working for assets written before the Image columns
+ * were fully populated, while preserving the single version-history source.
+ */
+export function resolveGoogleFlowBackgroundVersionReferences(
+  image: Partial<
+    Pick<
+      ImportAssetOptions,
+      | "googleFlowProjectId"
+      | "googleFlowEditId"
+      | "googleFlowEditUrl"
+      | "googleFlowPrompt"
+      | "googleFlowParentAssetId"
+      | "googleFlowVersion"
+      | "googleFlowImageId"
+      | "googleFlowImageRef"
+      | "googleFlowImageSourceUrl"
+    >
+  >,
+  version?: {
+    providerMetadata?: unknown;
+    prompt?: string | null;
+    version?: number | null;
+  } | null,
+) {
+  const metadata =
+    version?.providerMetadata &&
+    typeof version.providerMetadata === "object" &&
+    !Array.isArray(version.providerMetadata)
+      ? (version.providerMetadata as Record<string, any>)
+      : {};
+  const flowMetadata =
+    metadata.googleFlow &&
+    typeof metadata.googleFlow === "object" &&
+    !Array.isArray(metadata.googleFlow)
+      ? (metadata.googleFlow as Record<string, any>)
+      : metadata;
+
+  const refs = resolveGoogleFlowReferences({
+    googleFlowProjectId:
+      image.googleFlowProjectId ||
+      flowMetadata.projectId ||
+      flowMetadata.googleFlowProjectId ||
+      undefined,
+    googleFlowEditId:
+      image.googleFlowEditId ||
+      flowMetadata.editId ||
+      flowMetadata.googleFlowEditId ||
+      undefined,
+    googleFlowEditUrl:
+      image.googleFlowEditUrl ||
+      flowMetadata.editUrl ||
+      flowMetadata.googleFlowEditUrl ||
+      undefined,
+    googleFlowPrompt:
+      image.googleFlowPrompt ||
+      flowMetadata.prompt ||
+      version?.prompt ||
+      undefined,
+    googleFlowParentAssetId:
+      image.googleFlowParentAssetId ||
+      flowMetadata.parentAssetId ||
+      flowMetadata.googleFlowParentAssetId ||
+      undefined,
+    googleFlowImageId:
+      image.googleFlowImageId ||
+      flowMetadata.imageId ||
+      flowMetadata.googleFlowImageId ||
+      undefined,
+    googleFlowImageRef:
+      image.googleFlowImageRef ||
+      flowMetadata.imageRef ||
+      flowMetadata.googleFlowImageRef ||
+      undefined,
+    googleFlowImageSourceUrl:
+      image.googleFlowImageSourceUrl ||
+      flowMetadata.imageSourceUrl ||
+      flowMetadata.googleFlowImageSourceUrl ||
+      undefined,
+  });
+
+  return {
+    ...refs,
+    googleFlowVersion: image.googleFlowVersion || version?.version || null,
+  };
+}
+
 export {
   detectImageMime,
   parseImageDimensions,
