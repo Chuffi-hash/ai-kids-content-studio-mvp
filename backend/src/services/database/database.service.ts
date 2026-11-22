@@ -711,6 +711,10 @@ export async function createBackgroundImageVersion(data: {
       typeof data.providerMetadata === "string"
         ? JSON.parse(data.providerMetadata)
         : data.providerMetadata ?? undefined;
+    const flowMetadata =
+      parsedMetadata?.googleFlow && typeof parsedMetadata.googleFlow === "object"
+        ? parsedMetadata.googleFlow
+        : parsedMetadata ?? {};
 
     const versionRecord = await tx.backgroundImageVersion.create({
       data: {
@@ -745,20 +749,22 @@ export async function createBackgroundImageVersion(data: {
           versionId: versionRecord.id,
           provider: data.provider,
           prompt: data.prompt ?? currentBg.prompt,
-          googleFlowProjectId: parsedMetadata?.googleFlowProjectId ?? currentBg.googleFlowProjectId,
-          googleFlowEditId: parsedMetadata?.googleFlowEditId ?? currentBg.googleFlowEditId,
-          googleFlowEditUrl: parsedMetadata?.googleFlowEditUrl ?? currentBg.googleFlowEditUrl,
-          googleFlowPrompt: parsedMetadata?.googleFlowPrompt ?? data.prompt ?? currentBg.googleFlowPrompt ?? null,
+          googleFlowProjectId: flowMetadata.projectId ?? flowMetadata.googleFlowProjectId ?? currentBg.googleFlowProjectId,
+          googleFlowEditId: flowMetadata.editId ?? flowMetadata.googleFlowEditId ?? currentBg.googleFlowEditId,
+          googleFlowEditUrl: flowMetadata.editUrl ?? flowMetadata.googleFlowEditUrl ?? currentBg.googleFlowEditUrl,
+          googleFlowPrompt: flowMetadata.prompt ?? data.prompt ?? currentBg.googleFlowPrompt ?? null,
           googleFlowImageId:
-            parsedMetadata?.googleFlowImageId ??
-            parsedMetadata?.googleFlowEditId ??
+            flowMetadata.imageId ??
+            flowMetadata.googleFlowImageId ??
+            flowMetadata.editId ??
+            flowMetadata.googleFlowEditId ??
             currentBg.googleFlowImageId ??
             currentBg.googleFlowEditId ??
             null,
-          googleFlowImageRef: parsedMetadata?.googleFlowImageRef ?? currentBg.googleFlowImageRef ?? null,
-          googleFlowImageSourceUrl: parsedMetadata?.googleFlowImageSourceUrl ?? currentBg.googleFlowImageSourceUrl ?? null,
-          googleFlowParentAssetId: parsedMetadata?.googleFlowParentAssetId ?? currentBg.googleFlowParentAssetId ?? null,
-          googleFlowVersion: parsedMetadata?.googleFlowVersion ?? targetVersion,
+          googleFlowImageRef: flowMetadata.imageRef ?? flowMetadata.googleFlowImageRef ?? currentBg.googleFlowImageRef ?? null,
+          googleFlowImageSourceUrl: flowMetadata.imageSourceUrl ?? flowMetadata.googleFlowImageSourceUrl ?? currentBg.googleFlowImageSourceUrl ?? null,
+          googleFlowParentAssetId: flowMetadata.parentAssetId ?? flowMetadata.googleFlowParentAssetId ?? currentBg.googleFlowParentAssetId ?? null,
+          googleFlowVersion: targetVersion,
         },
       };
 
@@ -835,6 +841,10 @@ export async function restoreBackgroundImageVersion(
     const currentAnim = (targetScene.animationData as any) || {};
     const currentBg = currentAnim.background || {};
     const providerMeta = (targetVersion.providerMetadata as any) || {};
+    const flowMetadata =
+      providerMeta.googleFlow && typeof providerMeta.googleFlow === "object"
+        ? providerMeta.googleFlow
+        : providerMeta;
 
     const updatedAnim = {
       ...currentAnim,
@@ -845,18 +855,20 @@ export async function restoreBackgroundImageVersion(
         versionId: targetVersion.id,
         provider: targetVersion.provider,
         prompt: targetVersion.prompt ?? currentBg.prompt,
-        googleFlowProjectId: providerMeta.googleFlowProjectId ?? currentBg.googleFlowProjectId,
-        googleFlowEditId: providerMeta.googleFlowEditId ?? currentBg.googleFlowEditId,
-        googleFlowEditUrl: providerMeta.googleFlowEditUrl ?? currentBg.googleFlowEditUrl,
-        googleFlowPrompt: providerMeta.googleFlowPrompt ?? targetVersion.prompt ?? currentBg.googleFlowPrompt ?? null,
+        googleFlowProjectId: flowMetadata.projectId ?? flowMetadata.googleFlowProjectId ?? currentBg.googleFlowProjectId,
+        googleFlowEditId: flowMetadata.editId ?? flowMetadata.googleFlowEditId ?? currentBg.googleFlowEditId,
+        googleFlowEditUrl: flowMetadata.editUrl ?? flowMetadata.googleFlowEditUrl ?? currentBg.googleFlowEditUrl,
+        googleFlowPrompt: flowMetadata.prompt ?? targetVersion.prompt ?? currentBg.googleFlowPrompt ?? null,
         googleFlowImageId:
-          providerMeta.googleFlowImageId ??
-          providerMeta.googleFlowEditId ??
+          flowMetadata.imageId ??
+          flowMetadata.googleFlowImageId ??
+          flowMetadata.editId ??
+          flowMetadata.googleFlowEditId ??
           null,
-        googleFlowImageRef: providerMeta.googleFlowImageRef ?? null,
-        googleFlowImageSourceUrl: providerMeta.googleFlowImageSourceUrl ?? null,
-        googleFlowParentAssetId: providerMeta.googleFlowParentAssetId ?? null,
-        googleFlowVersion: providerMeta.googleFlowVersion ?? targetVersion.version,
+        googleFlowImageRef: flowMetadata.imageRef ?? flowMetadata.googleFlowImageRef ?? null,
+        googleFlowImageSourceUrl: flowMetadata.imageSourceUrl ?? flowMetadata.googleFlowImageSourceUrl ?? null,
+        googleFlowParentAssetId: flowMetadata.parentAssetId ?? flowMetadata.googleFlowParentAssetId ?? null,
+        googleFlowVersion: targetVersion.version,
       },
     };
 
