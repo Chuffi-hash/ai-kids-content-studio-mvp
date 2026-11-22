@@ -49,6 +49,7 @@ describe('Canonical background history response contract', () => {
     assert.equal(history.totalBackgroundVersions, 2);
     assert.deepEqual(history.backgroundVersions.map((version) => version.version), [1, 2]);
     assert.equal(Object.hasOwn(history.backgroundVersions[1], 'googleFlowEditId'), false);
+    assert.equal(history.backgroundVersions[1].prompt, 'Updated Flow background');
     assert.deepEqual(history.backgroundVersions[1].providerMetadata.googleFlow, {
       projectId: 'flow-project',
       editId: 'flow-edit-2',
@@ -57,7 +58,6 @@ describe('Canonical background history response contract', () => {
       imageRef: 'https://flow.google.com/asb/image-2',
       imageSourceUrl: 'https://flow.google.com/asb/image-2',
       parentAssetId: null,
-      prompt: 'Updated Flow background',
     });
   });
 
@@ -147,6 +147,7 @@ describe('Google Flow version metadata normalization', () => {
     });
 
     assert.equal(version.version, 2);
+    assert.equal(version.prompt, 'A meadow environment');
     assert.equal(version.providerMetadata.sourceJobId, 'job-1');
     assert.deepEqual(version.providerMetadata.googleFlow, {
       projectId: 'project-1',
@@ -156,7 +157,6 @@ describe('Google Flow version metadata normalization', () => {
       imageRef: 'https://flow.google.com/asb/image-ref',
       imageSourceUrl: 'https://flow.google.com/asb/image-ref',
       parentAssetId: null,
-      prompt: 'A meadow environment',
     });
 
     // There must not be a second flattened copy on the version object.
