@@ -430,9 +430,9 @@ export class StoryContextService {
       const bgData = animData.background || {};
       const isBgExplicitlyRemoved = Boolean(bgData.removed);
 
-      // Build a normalized, provider-independent version array. Flow's
-      // providerMetadata is flattened onto each item so the editor and image
-      // generators can select a version without knowing the JSON nesting.
+      // Build one normalized, provider-independent history array.
+      // Google Flow-specific references remain nested under
+      // providerMetadata.googleFlow on the corresponding version.
       // There is exactly one history collection for all providers.
       // Google Flow-only metadata is normalized inside each version's
       // providerMetadata.googleFlow object; do not create a parallel
@@ -466,11 +466,10 @@ export class StoryContextService {
       const isActiveGoogleFlow =
         String(activeProvider || "").toLowerCase().replace(/-/g, "_") === "google_flow";
 
-      const activeVersionFlow = activeVersionRecord || {};
       const activeProviderMetadata =
-        activeVersionFlow.providerMetadata &&
-        typeof activeVersionFlow.providerMetadata === "object"
-          ? activeVersionFlow.providerMetadata
+        activeVersionRecord?.providerMetadata &&
+        typeof activeVersionRecord.providerMetadata === "object"
+          ? activeVersionRecord.providerMetadata
           : {};
       const activeGoogleFlow: GoogleFlowVersionMetadata =
         isActiveGoogleFlow
