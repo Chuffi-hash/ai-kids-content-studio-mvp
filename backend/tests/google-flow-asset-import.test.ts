@@ -166,6 +166,29 @@ describe('Google Flow version metadata normalization', () => {
     assert.equal(Object.hasOwn(version, 'googleFlowVersion'), false);
   });
 
+  it('keeps a provider-specific Flow prompt only when it differs from the canonical version prompt', () => {
+    const version = serializeBackgroundVersion({
+      id: 'version-row-3',
+      sceneId: 'scene-1',
+      version: 3,
+      provider: 'google_flow',
+      prompt: 'Normalized background prompt',
+      providerMetadata: {
+        googleFlow: {
+          projectId: 'project-1',
+          editId: 'edit-3',
+          prompt: 'Provider-specific prompt override',
+        },
+      },
+    });
+
+    assert.equal(version.prompt, 'Normalized background prompt');
+    assert.equal(
+      version.providerMetadata.googleFlow?.prompt,
+      'Provider-specific prompt override',
+    );
+  });
+
   it('preserves non-Google providers without manufacturing Flow metadata', () => {
     const version = serializeBackgroundVersion({
       id: 'version-row-2',
