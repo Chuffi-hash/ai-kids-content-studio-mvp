@@ -357,10 +357,24 @@ export class GoogleFlowAssetImportService {
         height,
         aspectRatio,
         providerMetadata: {
-          ...flowRefs,
-          googleFlowPrompt: flowRefs.googleFlowPrompt || prompt,
-          googleFlowVersion: version,
           sourceJobId: options.sourceJobId || null,
+          ...(provider === "google_flow"
+            ? {
+                googleFlow: {
+                  projectId: flowRefs.googleFlowProjectId,
+                  editId: flowRefs.googleFlowEditId,
+                  editUrl: flowRefs.googleFlowEditUrl,
+                  imageId: flowRefs.googleFlowImageId,
+                  imageRef: flowRefs.googleFlowImageRef,
+                  imageSourceUrl: flowRefs.googleFlowImageSourceUrl,
+                  parentAssetId: flowRefs.googleFlowParentAssetId,
+                  ...(flowRefs.googleFlowPrompt &&
+                  flowRefs.googleFlowPrompt !== prompt
+                    ? { prompt: flowRefs.googleFlowPrompt }
+                    : {}),
+                },
+              }
+            : {}),
         },
         status: "completed",
         makeActive: true,
