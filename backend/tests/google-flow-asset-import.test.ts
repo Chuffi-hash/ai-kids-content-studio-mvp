@@ -10,12 +10,13 @@ import { resolveGoogleFlowReferences } from '../src/services/google-flow/google-
 import {
   serializeBackgroundVersion,
   serializeBackgroundVersions,
+  serializeBackgroundVersionHistory,
   stripProviderMetadataFromAnimationBackground,
 } from '../src/services/google-flow/story-context.service.js';
 
 describe('Canonical background history response contract', () => {
   it('returns one backgroundVersions array for mixed providers, never a parallel googleFlowVersions array', () => {
-    const history = serializeBackgroundVersions([
+    const history = serializeBackgroundVersionHistory([
       {
         id: 'version-2',
         sceneId: 'scene-1',
@@ -36,13 +37,19 @@ describe('Canonical background history response contract', () => {
         prompt: 'Original Gemini background',
         providerMetadata: { requestId: 'gemini-request-1' },
       },
-    ]);
+    ], 2);
 
-    assert.deepEqual(history.map((version) => version.version), [1, 2]);
-    assert.equal(history.length, 2);
-    assert.equal(Object.hasOwn({ backgroundVersions: history }, 'googleFlowVersions'), false);
-    assert.equal(Object.hasOwn(history[1], 'googleFlowEditId'), false);
-    assert.deepEqual(history[1].providerMetadata.googleFlow, {
+    assert.deepEqual(Object.keys(history), [
+      'activeBackgroundVersion',
+      'totalBackgroundVersions',
+      'backgroundVersions',
+    ]);
+    assert.equal(Object.hasOwn(history, 'googleFlowVersions'), false);
+    assert.equal(history.activeBackgroundVersion, 2);
+    assert.equal(history.totalBackgroundVersions, 2);
+    assert.deepEqual(history.backgroundVersions.map((version) => version.version), [1, 2]);
+    assert.equal(Object.hasOwn(history.backgroundVersions[1], 'googleFlowEditId'), false);
+    assert.deepEqual(history.backgroundVersions[1].providerMetadata.googleFlow, {
       projectId: 'flow-project',
       editId: 'flow-edit-2',
       editUrl: 'https://flow.google.com/project/flow-project/edit/flow-edit-2',
@@ -57,6 +64,11 @@ describe('Canonical background history response contract', () => {
   it('returns an empty canonical history for missing or malformed input', () => {
     assert.deepEqual(serializeBackgroundVersions(null), []);
     assert.deepEqual(serializeBackgroundVersions({}), []);
+    assert.deepEqual(serializeBackgroundVersionHistory(null), {
+      activeBackgroundVersion: null,
+      totalBackgroundVersions: 0,
+      backgroundVersions: [],
+    });
   });
 
   it('removes provider-specific duplicate fields from animationData.background', () => {
