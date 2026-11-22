@@ -364,7 +364,8 @@ describe('Google Flow background regeneration references', () => {
       {
         googleFlowProjectId: 'image-project',
         googleFlowEditId: 'image-edit',
-        googleFlowEditUrl: null,
+        googleFlowEditUrl:
+          'https://flow.google.com/project/stale-project/edit/stale-edit',
       },
       {
         version: 2,
