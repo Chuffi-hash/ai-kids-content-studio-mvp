@@ -364,15 +364,27 @@ export class FlowBrowserWorker {
     if (!page || (typeof page.isClosed === "function" && page.isClosed())) return null;
 
     const existing = this.pageMetadata.get(page);
-    const role = metadata.role || existing?.role || FLOW_TAB_ROLES.BACKGROUND;
-    if (role !== FLOW_TAB_ROLES.BACKGROUND && role !== FLOW_TAB_ROLES.CHARACTER) {
-      throw new Error(`Invalid Flow page role: ${role}. Expected "background" or "character".`);
+    const requestedRole = metadata.role || existing?.role || FLOW_TAB_ROLES.BACKGROUND;
+    if (requestedRole !== FLOW_TAB_ROLES.BACKGROUND && requestedRole !== FLOW_TAB_ROLES.CHARACTER) {
+      throw new Error(`Invalid Flow page role: ${requestedRole}. Expected "background" or "character".`);
     }
 
     const currentUrl = typeof page.url === "function" ? page.url() : String(page.url || "");
     const currentRouteType = detectFlowRouteType(currentUrl);
     const routeProjectId = extractProjectIdFromFlowUrl(currentUrl);
-    const tabId = metadata.tabId || existing?.tabId || randomUUID();
+    // A page on the Characters route must not be restored as the background tab
+    // just because it carries an old or duplicated sessionStorage marker.
+    const routeRole =
+      currentRouteType === "character-create" || currentRouteType === "character-editor"
+        ? FLOW_TAB_ROLES.CHARACTER
+        : null;
+    const role = routeRole || requestedRole;
+    const requestedTabId = metadata.tabId || existing?.tabId || randomUUID();
+    const duplicateTabId = Array.from(this.pagesByRole.values()).some((mappedPage) => {
+      if (mappedPage === page) return false;
+      return this.pageMetadata.get(mappedPage)?.tabId === requestedTabId;
+    });
+    const tabId = duplicateTabId ? randomUUID() : requestedTabId;
     // The page's live route is authoritative; a stale sessionStorage marker must not
     // keep a previous project's id attached to a tab after navigation.
     const projectId = routeProjectId || metadata.projectId || existing?.projectId || null;
