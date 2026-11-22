@@ -720,4 +720,36 @@ describe("Google Flow Agent Live DOM & Prompt Submission Suite", () => {
     assert.equal(JSON.parse(storedMarker).role, "character");
   });
 
+
+  it("18. A deliberately disowned tab cannot restore its stale session marker", async () => {
+    const worker = new FlowBrowserWorker();
+    const listeners = new Map();
+    const mainFrame = {};
+    const makePage = () => ({
+      on(event, callback) { listeners.set(event, callback); },
+      mainFrame() { return mainFrame; },
+      url() { return projectUrl; },
+      isClosed() { return false; },
+    });
+
+    const oldPage = makePage();
+    const replacementPage = makePage();
+    worker.attachPage(oldPage);
+    worker.registerFlowPage(oldPage, { role: "background" });
+    worker.registerFlowPage(replacementPage, { role: "background" });
+
+    assert.equal(worker.getFlowPage("background"), replacementPage);
+    assert.equal(worker.getFlowPageMetadata(oldPage).role, null);
+
+    let markerReads = 0;
+    worker.readTabMarkerFromSessionStorage = async () => {
+      markerReads += 1;
+      return { role: "background", tabId: "stale-marker" };
+    };
+
+    await listeners.get("framenavigated")(mainFrame);
+    assert.equal(markerReads, 0);
+    assert.equal(worker.getFlowPage("background"), replacementPage);
+  });
+
 });
