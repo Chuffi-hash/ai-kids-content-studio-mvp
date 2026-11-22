@@ -296,6 +296,9 @@ export class FlowBrowserWorker {
     this._page = null;
     this.pagesByRole = new Map();
     this.pageMetadata = new WeakMap();
+    // Serialize sessionStorage marker writes per page so older async writes can never
+    // overwrite a newer role/project assignment.
+    this.tabMetadataWriteChains = new WeakMap();
     this.activeJobsByRole = new Map();
     this.jobs = new Map();
     this.activeJobId = null;
@@ -358,14 +361,41 @@ export class FlowBrowserWorker {
   }
 
   registerFlowPage(page, metadata = {}) {
-    if (!page) return null;
+    if (!page || (typeof page.isClosed === "function" && page.isClosed())) return null;
+
     const existing = this.pageMetadata.get(page);
     const role = metadata.role || existing?.role || FLOW_TAB_ROLES.BACKGROUND;
-    const tabId = metadata.tabId || existing?.tabId || randomUUID();
-    const projectId = metadata.projectId || existing?.projectId || null;
-    const purpose = metadata.purpose || existing?.purpose || (role === FLOW_TAB_ROLES.CHARACTER ? "character-generation" : "scene-background");
+    if (role !== FLOW_TAB_ROLES.BACKGROUND && role !== FLOW_TAB_ROLES.CHARACTER) {
+      throw new Error(`Invalid Flow page role: ${role}. Expected "background" or "character".`);
+    }
+
     const currentUrl = typeof page.url === "function" ? page.url() : String(page.url || "");
     const currentRouteType = detectFlowRouteType(currentUrl);
+    const routeProjectId = extractProjectIdFromFlowUrl(currentUrl);
+    const tabId = metadata.tabId || existing?.tabId || randomUUID();
+    const projectId = metadata.projectId || routeProjectId || existing?.projectId || null;
+    const purpose =
+      metadata.purpose ||
+      existing?.purpose ||
+      (role === FLOW_TAB_ROLES.CHARACTER ? "character-generation" : "scene-background");
+
+    // A page can own one role only, and a role can point to one page only.
+    // Clear all previous mappings before publishing the new assignment.
+    for (const [mappedRole, mappedPage] of Array.from(this.pagesByRole.entries())) {
+      if (mappedPage === page && mappedRole !== role) {
+        this.pagesByRole.delete(mappedRole);
+      }
+      if (mappedRole === role && mappedPage !== page) {
+        this.pagesByRole.delete(mappedRole);
+        const displacedMetadata = this.pageMetadata.get(mappedPage);
+        if (displacedMetadata && displacedMetadata.role === role) {
+          displacedMetadata.role = null;
+          displacedMetadata.purpose = null;
+          displacedMetadata.updatedAt = new Date().toISOString();
+          this.writeTabMarkerToSessionStorage(mappedPage, displacedMetadata).catch(() => {});
+        }
+      }
+    }
 
     const record = {
       tabId,
@@ -393,74 +423,96 @@ export class FlowBrowserWorker {
 
   async writeTabMarkerToSessionStorage(page, meta) {
     if (!page || (typeof page.isClosed === "function" && page.isClosed())) return;
-    try {
-      if (typeof page.evaluate === "function") {
-        const payload = JSON.stringify({
+    if (typeof page.evaluate !== "function") return;
+
+    const previousWrite = this.tabMetadataWriteChains.get(page) || Promise.resolve();
+    const roleIsValid =
+      meta?.role === FLOW_TAB_ROLES.BACKGROUND ||
+      meta?.role === FLOW_TAB_ROLES.CHARACTER;
+    const payload = roleIsValid
+      ? JSON.stringify({
           tabId: meta.tabId,
           role: meta.role,
-          projectId: meta.projectId,
-          purpose: meta.purpose,
-          updatedAt: meta.updatedAt,
-        });
-        await page.evaluate(
-          ({ key, val }) => {
-            try {
-              window.sessionStorage.setItem(key, val);
-            } catch {}
-          },
-          { key: FLOW_TAB_METADATA_KEY, val: payload },
-        );
-      }
-    } catch {
-      // Non-blocking
-    }
-  }
+          projectId: meta.projectId || null,
+          purpose: meta.purpose || null,
+          updatedAt: meta.updatedAt || new Date().toISOString(),
+        })
+      : null;
 
-  async readTabMarkerFromSessionStorage(page) {
+    const next  async readTabMarkerFromSessionStorage(page) {
     if (!page || (typeof page.isClosed === "function" && page.isClosed())) return null;
     try {
-      if (typeof page.evaluate === "function") {
-        const raw = await page.evaluate((key) => {
-          try {
-            return window.sessionStorage.getItem(key);
-          } catch {
-            return null;
-          }
-        }, FLOW_TAB_METADATA_KEY);
-        if (raw) {
-          return JSON.parse(raw);
+      if (typeof page.evaluate !== "function") return null;
+      const raw = await page.evaluate((key) => {
+        try {
+          return window.sessionStorage.getItem(key);
+        } catch {
+          return null;
         }
+      }, FLOW_TAB_METADATA_KEY);
+      if (!raw) return null;
+
+      const marker = typeof raw === "string" ? JSON.parse(raw) : raw;
+      if (
+        !marker ||
+        (marker.role !== FLOW_TAB_ROLES.BACKGROUND &&
+          marker.role !== FLOW_TAB_ROLES.CHARACTER)
+      ) {
+        return null;
       }
+
+      return {
+        tabId: typeof marker.tabId === "string" && marker.tabId ? marker.tabId : randomUUID(),
+        role: marker.role,
+        projectId: typeof marker.projectId === "string" ? marker.projectId : null,
+        purpose: typeof marker.purpose === "string" ? marker.purpose : null,
+        updatedAt: typeof marker.updatedAt === "string" ? marker.updatedAt : null,
+      };
     } catch {
       return null;
     }
-    return null;
   }
 
   getFlowPage(role = FLOW_TAB_ROLES.BACKGROUND) {
     const page = this.pagesByRole.get(role);
     if (!page) return null;
-    if (typeof page.isClosed === "function" && page.isClosed()) {
+
+    const isClosed = typeof page.isClosed === "function" && page.isClosed();
+    const metadata = this.pageMetadata.get(page);
+    if (isClosed || (metadata && metadata.role !== role)) {
       this.pagesByRole.delete(role);
+      if (metadata && metadata.role === role) {
+        metadata.role = null;
+        metadata.purpose = null;
+      }
+      if (isClosed) this.pageMetadata.delete(page);
       return null;
     }
+
     return page;
   }
 
   getFlowPageMetadata(page) {
-    if (!page) return null;
+    if (!page || (typeof page.isClosed === "function" && page.isClosed())) return null;
     return this.pageMetadata.get(page) || null;
   }
 
   getFlowPages() {
     const result = [];
-    for (const [role, page] of this.pagesByRole.entries()) {
-      const isClosed = typeof page.isClosed === "function" ? page.isClosed() : false;
+    const seenPages = new Set();
+    for (const [role, page] of Array.from(this.pagesByRole.entries())) {
+      const isClosed = typeof page.isClosed === "function" && page.isClosed();
       const metadata = this.pageMetadata.get(page) || null;
+      if (isClosed || seenPages.has(page) || (metadata && metadata.role !== role)) {
+        this.pagesByRole.delete(role);
+        if (isClosed) this.pageMetadata.delete(page);
+        continue;
+      }
+      seenPages.add(page);
       result.push({
         role,
         page,
-        isClosed,
+        isClosed: false,
         metadata,
       });
     }
@@ -478,26 +530,34 @@ export class FlowBrowserWorker {
   updateFlowPageRouteMetadata(page) {
     if (!page || (typeof page.isClosed === "function" && page.isClosed())) return null;
     const meta = this.pageMetadata.get(page);
+    if (!meta) return null;
+
     const currentUrl = typeof page.url === "function" ? page.url() : String(page.url || "");
     const currentRouteType = detectFlowRouteType(currentUrl);
+    const routeProjectId = extractProjectIdFromFlowUrl(currentUrl);
 
-    if (meta) {
-      meta.currentUrl = currentUrl;
-      meta.currentRouteType = currentRouteType;
-      meta.updatedAt = new Date().toISOString();
-      if (currentRouteType === "character-create" || currentRouteType === "character-editor") {
-        meta.characterReference = extractGoogleFlowCharacterReference(currentUrl);
-      } else {
-        delete meta.characterReference;
-      }
-      if (currentRouteType === "image-editor") {
-        meta.editorReference = extractGoogleFlowEditorReference(currentUrl);
-      } else {
-        delete meta.editorReference;
-      }
-      return meta;
+    meta.currentUrl = currentUrl;
+    meta.currentRouteType = currentRouteType;
+    meta.updatedAt = new Date().toISOString();
+    if (routeProjectId) {
+      meta.projectId = routeProjectId;
+    } else if (isFlowUrl(currentUrl)) {
+      meta.projectId = null;
     }
-    return null;
+
+    if (currentRouteType === "character-create" || currentRouteType === "character-editor") {
+      meta.characterReference = extractGoogleFlowCharacterReference(currentUrl);
+    } else {
+      delete meta.characterReference;
+    }
+    if (currentRouteType === "image-editor") {
+      meta.editorReference = extractGoogleFlowEditorReference(currentUrl);
+    } else {
+      delete meta.editorReference;
+    }
+
+    this.writeTabMarkerToSessionStorage(page, meta).catch(() => {});
+    return meta;
   }
 
   getPageForJob(job) {
@@ -530,10 +590,14 @@ export class FlowBrowserWorker {
         action: "ensure_flow_page",
         projectId: job.googleFlowProjectId || null,
       });
+      const editUrl =
+        targetRole === FLOW_TAB_ROLES.BACKGROUND && (job.isRegeneration || job.googleFlowEditUrl)
+          ? job.googleFlowEditUrl || job.editUrl || null
+          : null;
       page = await this.ensureFlowPage(
         targetRole,
-        job.googleFlowProjectId || null,
-        job.projectUrl || null,
+        job.googleFlowProjectId || this.extractProjectId(editUrl) || null,
+        editUrl || job.projectUrl || null,
       );
       this.emitLifecycleLog("FLOW_TAB_NAVIGATION_COMPLETED", job, {
         role: targetRole,
@@ -580,13 +644,16 @@ export class FlowBrowserWorker {
       });
       const targetUrl = targetRole === FLOW_TAB_ROLES.CHARACTER
         ? `https://flow.google.com/project/${encodeURIComponent(targetProjectId)}/character`
-        : `https://flow.google.com/project/${encodeURIComponent(targetProjectId)}`;
+        : (job.isRegeneration && job.googleFlowEditUrl
+          ? job.googleFlowEditUrl
+          : `https://flow.google.com/project/${encodeURIComponent(targetProjectId)}`);
       if (typeof page.goto === "function") {
         await page.goto(targetUrl, {
           waitUntil: "domcontentloaded",
           timeout: 60000,
         });
       }
+      this.updateFlowPageRouteMetadata(page);
       this.emitLifecycleLog("FLOW_TAB_NAVIGATION_COMPLETED", job, {
         role: targetRole,
         targetUrl,
@@ -677,6 +744,7 @@ export class FlowBrowserWorker {
     }
 
     this.updateFlowPageRouteMetadata(page);
+    await this.writeTabMarkerToSessionStorage(page, this.getFlowPageMetadata(page));
     return page;
   }
 
@@ -1299,13 +1367,12 @@ export class FlowBrowserWorker {
       page.on("framenavigated", async (frame) => {
         try {
           if (typeof page.mainFrame === "function" && frame === page.mainFrame()) {
-            this.updateFlowPageRouteMetadata(page);
-            const meta = this.pageMetadata.get(page);
-            if (!meta) {
+            const metadata = this.pageMetadata.get(page);
+            if (metadata?.role) {
+              this.updateFlowPageRouteMetadata(page);
+            } else {
               const marker = await this.readTabMarkerFromSessionStorage(page);
-              if (marker && marker.role) {
-                this.registerFlowPage(page, marker);
-              }
+              if (marker?.role) this.registerFlowPage(page, marker);
             }
           }
         } catch {}
@@ -1318,15 +1385,12 @@ export class FlowBrowserWorker {
       });
 
       page.on("close", () => {
-        for (const [role, mappedPage] of this.pagesByRole.entries()) {
-          if (mappedPage === page) {
-            this.pagesByRole.delete(role);
-            break;
-          }
+        for (const [role, mappedPage] of Array.from(this.pagesByRole.entries())) {
+          if (mappedPage === page) this.pagesByRole.delete(role);
         }
-        if (this._page === page) {
-          this._page = null;
-        }
+        this.pageMetadata.delete(page);
+        this.attachedPages.delete(page);
+        if (this._page === page) this._page = null;
       });
     }
   }
@@ -1667,10 +1731,13 @@ export class FlowBrowserWorker {
       const storyId = String(input.storyId || "").trim();
       if (!sceneId) throw new Error("sceneId is required for background jobs.");
 
-      const isRegeneration = Boolean(input.isRegeneration);
       const rawEditUrl = input.editUrl || input.googleFlowEditUrl;
       const googleFlowEditUrl = rawEditUrl ? assertAllowedFlowUrl(rawEditUrl) : undefined;
       const editorRef = googleFlowEditUrl ? extractGoogleFlowEditorReference(googleFlowEditUrl) : null;
+      if (googleFlowEditUrl && !editorRef) {
+        throw new Error("editUrl must be a Google Flow image editor URL (/project/{projectId}/edit/{assetId}).");
+      }
+      const isRegeneration = Boolean(input.isRegeneration || editorRef);
 
       const projectUrl = input.projectUrl
         ? assertAllowedFlowUrl(input.projectUrl)
@@ -2595,7 +2662,9 @@ export class FlowBrowserWorker {
     }
 
     // Otherwise BACKGROUND role:
-    if (job.isRegeneration) {
+    if (job.isRegeneration || job.googleFlowEditUrl || job.editUrl) {
+      job.googleFlowEditUrl = job.googleFlowEditUrl || job.editUrl;
+      job.isRegeneration = true;
       if (!job.googleFlowEditUrl) {
         throw new Error("googleFlowEditUrl is required for background regeneration jobs.");
       }
@@ -2613,7 +2682,9 @@ export class FlowBrowserWorker {
 
       const verifiedUrl = typeof page.url === "function" ? page.url() : "";
       const editorRef = extractGoogleFlowEditorReference(verifiedUrl);
-      if (!editorRef) {
+      if (!editorRef ||
+        (job.googleFlowProjectId && editorRef.projectId !== job.googleFlowProjectId) ||
+        (job.googleFlowEditId && editorRef.editId !== job.googleFlowEditId)) {
         const err = new Error(
           `FLOW_REGENERATION_FAILED: Expected Google Flow editor route (/project/{projectId}/edit/{assetId}), but current URL is '${verifiedUrl}'.`
         );
@@ -2628,6 +2699,8 @@ export class FlowBrowserWorker {
       job.googleFlowProjectId = editorRef.projectId;
       job.googleFlowEditId = editorRef.editId;
       job.googleFlowEditUrl = editorRef.editUrl;
+      this.updateFlowPageRouteMetadata(page);
+      await this.writeTabMarkerToSessionStorage(page, this.getFlowPageMetadata(page));
 
       this.emitLifecycleLog("FLOW_EDITOR_REOPENED", job, {
         projectId: editorRef.projectId,
