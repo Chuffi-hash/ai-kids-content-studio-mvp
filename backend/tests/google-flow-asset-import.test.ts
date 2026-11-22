@@ -7,7 +7,86 @@ import {
 } from '../src/services/google-flow/google-flow-asset-import.service.js';
 
 import { resolveGoogleFlowReferences } from '../src/services/google-flow/google-flow-asset-import.service.js';
-import { serializeBackgroundVersion } from '../src/services/google-flow/story-context.service.js';
+import {
+  serializeBackgroundVersion,
+  serializeBackgroundVersions,
+  stripProviderMetadataFromAnimationBackground,
+} from '../src/services/google-flow/story-context.service.js';
+
+describe('Canonical background history response contract', () => {
+  it('returns one backgroundVersions array for mixed providers, never a parallel googleFlowVersions array', () => {
+    const history = serializeBackgroundVersions([
+      {
+        id: 'version-2',
+        sceneId: 'scene-1',
+        version: 2,
+        provider: 'google_flow',
+        prompt: 'Updated Flow background',
+        providerMetadata: {
+          googleFlowEditId: 'flow-edit-2',
+          googleFlowProjectId: 'flow-project',
+          googleFlowImageRef: 'https://flow.google.com/asb/image-2',
+        },
+      },
+      {
+        id: 'version-1',
+        sceneId: 'scene-1',
+        version: 1,
+        provider: 'gemini',
+        prompt: 'Original Gemini background',
+        providerMetadata: { requestId: 'gemini-request-1' },
+      },
+    ]);
+
+    assert.deepEqual(history.map((version) => version.version), [1, 2]);
+    assert.equal(history.length, 2);
+    assert.equal(Object.hasOwn({ backgroundVersions: history }, 'googleFlowVersions'), false);
+    assert.equal(Object.hasOwn(history[1], 'googleFlowEditId'), false);
+    assert.deepEqual(history[1].providerMetadata.googleFlow, {
+      projectId: 'flow-project',
+      editId: 'flow-edit-2',
+      editUrl: 'https://flow.google.com/project/flow-project/edit/flow-edit-2',
+      imageId: 'flow-edit-2',
+      imageRef: 'https://flow.google.com/asb/image-2',
+      imageSourceUrl: 'https://flow.google.com/asb/image-2',
+      parentAssetId: null,
+      prompt: 'Updated Flow background',
+    });
+  });
+
+  it('returns an empty canonical history for missing or malformed input', () => {
+    assert.deepEqual(serializeBackgroundVersions(null), []);
+    assert.deepEqual(serializeBackgroundVersions({}), []);
+  });
+
+  it('removes provider-specific duplicate fields from animationData.background', () => {
+    const animationData = {
+      version: 1,
+      background: {
+        imageUrl: '/storage/images/bg.webp',
+        imageId: 'local-image-id',
+        fit: 'cover',
+        source: 'google_flow',
+        googleFlowProjectId: 'flow-project',
+        googleFlowEditId: 'flow-edit',
+        googleFlowEditUrl: 'https://flow.google.com/project/flow-project/edit/flow-edit',
+        googleFlowImageId: 'flow-edit',
+        googleFlowImageRef: 'https://flow.google.com/asb/image',
+        googleFlowVersion: 1,
+        providerMetadata: { googleFlow: { editId: 'flow-edit' } },
+      },
+    };
+
+    const cleaned = stripProviderMetadataFromAnimationBackground(animationData);
+
+    assert.equal(cleaned.background.imageUrl, '/storage/images/bg.webp');
+    assert.equal(cleaned.background.imageId, 'local-image-id');
+    assert.equal(cleaned.background.fit, 'cover');
+    assert.equal(Object.hasOwn(cleaned.background, 'googleFlowEditId'), false);
+    assert.equal(Object.hasOwn(cleaned.background, 'googleFlowImageId'), false);
+    assert.equal(Object.hasOwn(cleaned.background, 'providerMetadata'), false);
+  });
+});
 
 describe('Google Flow version metadata normalization', () => {
   it('derives project, edit and image IDs from the Google Flow edit URL', () => {
