@@ -406,10 +406,18 @@ export class StoryContextService {
         typeof activeVersionFlow.providerMetadata === "object"
           ? activeVersionFlow.providerMetadata
           : {};
-      const activeGoogleFlow =
-        activeProviderMetadata.googleFlow ||
-        getGoogleFlowVersionMetadata(activeVersionRecord) ||
-        {};
+      const activeGoogleFlow: GoogleFlowVersionMetadata =
+        (activeProviderMetadata.googleFlow as GoogleFlowVersionMetadata | undefined) ||
+        getGoogleFlowVersionMetadata(activeVersionRecord) || {
+          projectId: null,
+          editId: null,
+          editUrl: null,
+          imageId: null,
+          imageRef: null,
+          imageSourceUrl: null,
+          parentAssetId: null,
+          prompt: null,
+        };
 
       // Resolve aspect ratio from the selected generated asset first.
       // Scene visual prompts may contain stale ratio wording; the saved image
