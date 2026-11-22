@@ -738,6 +738,8 @@ export async function createBackgroundImageVersion(data: {
 
     const shouldMakeActive = data.makeActive !== false;
     if (shouldMakeActive) {
+      const isGoogleFlowProvider =
+        String(data.provider || "").toLowerCase().replace(/-/g, "_") === "google_flow";
       const currentAnim = (targetScene.animationData as any) || {};
       const currentBg = currentAnim.background || {};
       const updatedAnim = {
@@ -749,22 +751,15 @@ export async function createBackgroundImageVersion(data: {
           versionId: versionRecord.id,
           provider: data.provider,
           prompt: data.prompt ?? currentBg.prompt,
-          googleFlowProjectId: flowMetadata.projectId ?? flowMetadata.googleFlowProjectId ?? currentBg.googleFlowProjectId,
-          googleFlowEditId: flowMetadata.editId ?? flowMetadata.googleFlowEditId ?? currentBg.googleFlowEditId,
-          googleFlowEditUrl: flowMetadata.editUrl ?? flowMetadata.googleFlowEditUrl ?? currentBg.googleFlowEditUrl,
-          googleFlowPrompt: flowMetadata.prompt ?? data.prompt ?? currentBg.googleFlowPrompt ?? null,
-          googleFlowImageId:
-            flowMetadata.imageId ??
-            flowMetadata.googleFlowImageId ??
-            flowMetadata.editId ??
-            flowMetadata.googleFlowEditId ??
-            currentBg.googleFlowImageId ??
-            currentBg.googleFlowEditId ??
-            null,
-          googleFlowImageRef: flowMetadata.imageRef ?? flowMetadata.googleFlowImageRef ?? currentBg.googleFlowImageRef ?? null,
-          googleFlowImageSourceUrl: flowMetadata.imageSourceUrl ?? flowMetadata.googleFlowImageSourceUrl ?? currentBg.googleFlowImageSourceUrl ?? null,
-          googleFlowParentAssetId: flowMetadata.parentAssetId ?? flowMetadata.googleFlowParentAssetId ?? currentBg.googleFlowParentAssetId ?? null,
-          googleFlowVersion: targetVersion,
+          googleFlowProjectId: isGoogleFlowProvider ? (flowMetadata.projectId ?? flowMetadata.googleFlowProjectId ?? currentBg.googleFlowProjectId ?? null) : null,
+          googleFlowEditId: isGoogleFlowProvider ? (flowMetadata.editId ?? flowMetadata.googleFlowEditId ?? currentBg.googleFlowEditId ?? null) : null,
+          googleFlowEditUrl: isGoogleFlowProvider ? (flowMetadata.editUrl ?? flowMetadata.googleFlowEditUrl ?? currentBg.googleFlowEditUrl ?? null) : null,
+          googleFlowPrompt: isGoogleFlowProvider ? (flowMetadata.prompt ?? data.prompt ?? null) : null,
+          googleFlowImageId: isGoogleFlowProvider ? (flowMetadata.imageId ?? flowMetadata.googleFlowImageId ?? flowMetadata.editId ?? flowMetadata.googleFlowEditId ?? currentBg.googleFlowImageId ?? currentBg.googleFlowEditId ?? null) : null,
+          googleFlowImageRef: isGoogleFlowProvider ? (flowMetadata.imageRef ?? flowMetadata.googleFlowImageRef ?? currentBg.googleFlowImageRef ?? null) : null,
+          googleFlowImageSourceUrl: isGoogleFlowProvider ? (flowMetadata.imageSourceUrl ?? flowMetadata.googleFlowImageSourceUrl ?? currentBg.googleFlowImageSourceUrl ?? null) : null,
+          googleFlowParentAssetId: isGoogleFlowProvider ? (flowMetadata.parentAssetId ?? flowMetadata.googleFlowParentAssetId ?? currentBg.googleFlowParentAssetId ?? null) : null,
+          googleFlowVersion: isGoogleFlowProvider ? targetVersion : null,
         },
       };
 
@@ -845,6 +840,8 @@ export async function restoreBackgroundImageVersion(
       providerMeta.googleFlow && typeof providerMeta.googleFlow === "object"
         ? providerMeta.googleFlow
         : providerMeta;
+    const isGoogleFlowProvider =
+      String(targetVersion.provider || "").toLowerCase().replace(/-/g, "_") === "google_flow";
 
     const updatedAnim = {
       ...currentAnim,
@@ -855,20 +852,15 @@ export async function restoreBackgroundImageVersion(
         versionId: targetVersion.id,
         provider: targetVersion.provider,
         prompt: targetVersion.prompt ?? currentBg.prompt,
-        googleFlowProjectId: flowMetadata.projectId ?? flowMetadata.googleFlowProjectId ?? currentBg.googleFlowProjectId,
-        googleFlowEditId: flowMetadata.editId ?? flowMetadata.googleFlowEditId ?? currentBg.googleFlowEditId,
-        googleFlowEditUrl: flowMetadata.editUrl ?? flowMetadata.googleFlowEditUrl ?? currentBg.googleFlowEditUrl,
-        googleFlowPrompt: flowMetadata.prompt ?? targetVersion.prompt ?? currentBg.googleFlowPrompt ?? null,
-        googleFlowImageId:
-          flowMetadata.imageId ??
-          flowMetadata.googleFlowImageId ??
-          flowMetadata.editId ??
-          flowMetadata.googleFlowEditId ??
-          null,
-        googleFlowImageRef: flowMetadata.imageRef ?? flowMetadata.googleFlowImageRef ?? null,
-        googleFlowImageSourceUrl: flowMetadata.imageSourceUrl ?? flowMetadata.googleFlowImageSourceUrl ?? null,
-        googleFlowParentAssetId: flowMetadata.parentAssetId ?? flowMetadata.googleFlowParentAssetId ?? null,
-        googleFlowVersion: targetVersion.version,
+        googleFlowProjectId: isGoogleFlowProvider ? (flowMetadata.projectId ?? flowMetadata.googleFlowProjectId ?? null) : null,
+        googleFlowEditId: isGoogleFlowProvider ? (flowMetadata.editId ?? flowMetadata.googleFlowEditId ?? null) : null,
+        googleFlowEditUrl: isGoogleFlowProvider ? (flowMetadata.editUrl ?? flowMetadata.googleFlowEditUrl ?? null) : null,
+        googleFlowPrompt: isGoogleFlowProvider ? (flowMetadata.prompt ?? targetVersion.prompt ?? null) : null,
+        googleFlowImageId: isGoogleFlowProvider ? (flowMetadata.imageId ?? flowMetadata.googleFlowImageId ?? flowMetadata.editId ?? flowMetadata.googleFlowEditId ?? null) : null,
+        googleFlowImageRef: isGoogleFlowProvider ? (flowMetadata.imageRef ?? flowMetadata.googleFlowImageRef ?? null) : null,
+        googleFlowImageSourceUrl: isGoogleFlowProvider ? (flowMetadata.imageSourceUrl ?? flowMetadata.googleFlowImageSourceUrl ?? null) : null,
+        googleFlowParentAssetId: isGoogleFlowProvider ? (flowMetadata.parentAssetId ?? flowMetadata.googleFlowParentAssetId ?? null) : null,
+        googleFlowVersion: isGoogleFlowProvider ? targetVersion.version : null,
       },
     };
 
