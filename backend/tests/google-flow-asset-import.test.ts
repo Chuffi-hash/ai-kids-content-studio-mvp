@@ -37,7 +37,7 @@ describe('Google Flow version metadata normalization', () => {
     assert.equal(refs.googleFlowEditId, 'edit-1');
   });
 
-  it('flattens Flow metadata onto every Google Flow background version object', () => {
+  it('keeps Google Flow metadata in one nested providerMetadata.googleFlow object', () => {
     const version = serializeBackgroundVersion({
       id: 'version-row-1',
       sceneId: 'scene-1',
@@ -45,6 +45,7 @@ describe('Google Flow version metadata normalization', () => {
       provider: 'google_flow',
       prompt: 'A meadow environment',
       providerMetadata: {
+        sourceJobId: 'job-1',
         googleFlowProjectId: 'project-1',
         googleFlowEditId: 'edit-2',
         googleFlowEditUrl: 'https://flow.google.com/project/project-1/edit/edit-2',
@@ -54,27 +55,39 @@ describe('Google Flow version metadata normalization', () => {
       },
     });
 
-    assert.equal(version.googleFlowProjectId, 'project-1');
-    assert.equal(version.googleFlowEditId, 'edit-2');
-    assert.equal(version.googleFlowImageId, 'edit-2');
-    assert.equal(version.googleFlowVersion, 2);
-    assert.equal(version.googleFlowPrompt, 'A meadow environment');
-    assert.equal(version.providerMetadata.googleFlowImageId, 'edit-2');
+    assert.equal(version.version, 2);
+    assert.equal(version.providerMetadata.sourceJobId, 'job-1');
+    assert.deepEqual(version.providerMetadata.googleFlow, {
+      projectId: 'project-1',
+      editId: 'edit-2',
+      editUrl: 'https://flow.google.com/project/project-1/edit/edit-2',
+      imageId: 'edit-2',
+      imageRef: 'https://flow.google.com/asb/image-ref',
+      imageSourceUrl: 'https://flow.google.com/asb/image-ref',
+      parentAssetId: null,
+      prompt: 'A meadow environment',
+    });
+
+    // There must not be a second flattened copy on the version object.
+    assert.equal(Object.hasOwn(version, 'googleFlowProjectId'), false);
+    assert.equal(Object.hasOwn(version, 'googleFlowEditId'), false);
+    assert.equal(Object.hasOwn(version, 'googleFlowImageId'), false);
+    assert.equal(Object.hasOwn(version, 'googleFlowVersion'), false);
   });
 
-  it('does not invent Google Flow IDs for non-Flow providers', () => {
+  it('preserves non-Google providers without manufacturing Flow metadata', () => {
     const version = serializeBackgroundVersion({
       id: 'version-row-2',
       sceneId: 'scene-1',
       version: 3,
       provider: 'gemini',
       prompt: 'A meadow',
-      providerMetadata: {},
+      providerMetadata: { requestId: 'gemini-request-1' },
     });
 
-    assert.equal(version.googleFlowEditId, null);
-    assert.equal(version.googleFlowImageId, null);
-    assert.equal(version.googleFlowVersion, null);
+    assert.equal(version.providerMetadata.requestId, 'gemini-request-1');
+    assert.equal(Object.hasOwn(version.providerMetadata, 'googleFlow'), false);
+    assert.equal(Object.hasOwn(version, 'googleFlowImageId'), false);
   });
 });
 
