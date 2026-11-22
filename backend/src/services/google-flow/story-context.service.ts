@@ -458,6 +458,14 @@ export class StoryContextService {
           : null) ||
         (scene.images && scene.images.length > 0 ? scene.images[0] : null);
 
+      const activeProvider =
+        activeVersionRecord?.provider ||
+        (completedImage as any)?.provider ||
+        bgData.provider ||
+        null;
+      const isActiveGoogleFlow =
+        String(activeProvider || "").toLowerCase().replace(/-/g, "_") === "google_flow";
+
       const activeVersionFlow = activeVersionRecord || {};
       const activeProviderMetadata =
         activeVersionFlow.providerMetadata &&
@@ -465,17 +473,28 @@ export class StoryContextService {
           ? activeVersionFlow.providerMetadata
           : {};
       const activeGoogleFlow: GoogleFlowVersionMetadata =
-        (activeProviderMetadata.googleFlow as GoogleFlowVersionMetadata | undefined) ||
-        getGoogleFlowVersionMetadata(activeVersionRecord) || {
-          projectId: null,
-          editId: null,
-          editUrl: null,
-          imageId: null,
-          imageRef: null,
-          imageSourceUrl: null,
-          parentAssetId: null,
-          prompt: null,
-        };
+        isActiveGoogleFlow
+          ? (activeProviderMetadata.googleFlow as GoogleFlowVersionMetadata | undefined) ||
+            getGoogleFlowVersionMetadata(activeVersionRecord) || {
+              projectId: null,
+              editId: null,
+              editUrl: null,
+              imageId: null,
+              imageRef: null,
+              imageSourceUrl: null,
+              parentAssetId: null,
+              prompt: null,
+            }
+          : {
+              projectId: null,
+              editId: null,
+              editUrl: null,
+              imageId: null,
+              imageRef: null,
+              imageSourceUrl: null,
+              parentAssetId: null,
+              prompt: null,
+            };
 
       // Resolve aspect ratio from the selected generated asset first.
       // Scene visual prompts may contain stale ratio wording; the saved image
@@ -616,53 +635,61 @@ export class StoryContextService {
         backgroundImageId,
         // Active Google Flow metadata is a single scene-level snapshot.
         // Version-specific references live only in backgroundVersions[].providerMetadata.googleFlow.
-        googleFlowProjectId:
-          activeGoogleFlow.projectId ||
-          (completedImage as any)?.googleFlowProjectId ||
-          bgData.googleFlowProjectId ||
-          null,
-        googleFlowEditId:
-          activeGoogleFlow.editId ||
-          (completedImage as any)?.googleFlowEditId ||
-          bgData.googleFlowEditId ||
-          null,
-        googleFlowEditUrl:
-          activeGoogleFlow.editUrl ||
-          (completedImage as any)?.googleFlowEditUrl ||
-          bgData.googleFlowEditUrl ||
-          null,
+        googleFlowProjectId: isActiveGoogleFlow
+          ? activeGoogleFlow.projectId ||
+            (completedImage as any)?.googleFlowProjectId ||
+            bgData.googleFlowProjectId ||
+            null
+          : null,
+        googleFlowEditId: isActiveGoogleFlow
+          ? activeGoogleFlow.editId ||
+            (completedImage as any)?.googleFlowEditId ||
+            bgData.googleFlowEditId ||
+            null
+          : null,
+        googleFlowEditUrl: isActiveGoogleFlow
+          ? activeGoogleFlow.editUrl ||
+            (completedImage as any)?.googleFlowEditUrl ||
+            bgData.googleFlowEditUrl ||
+            null
+          : null,
         // The canonical active prompt is the BackgroundImageVersion.prompt
         // column. Keep the scene-level field only as a compatibility snapshot.
-        googleFlowPrompt:
-          activeGoogleFlow.prompt ||
-          activeVersionRecord?.prompt ||
-          (completedImage as any)?.googleFlowPrompt ||
-          bgData.googleFlowPrompt ||
-          null,
-        googleFlowParentAssetId:
-          activeGoogleFlow.parentAssetId ||
-          (completedImage as any)?.googleFlowParentAssetId ||
-          bgData.googleFlowParentAssetId ||
-          null,
-        googleFlowImageId:
-          activeGoogleFlow.imageId ||
-          activeGoogleFlow.editId ||
-          (completedImage as any)?.googleFlowImageId ||
-          (completedImage as any)?.googleFlowEditId ||
-          bgData.googleFlowImageId ||
-          bgData.googleFlowEditId ||
-          null,
-        googleFlowImageRef:
-          activeGoogleFlow.imageRef ||
-          (completedImage as any)?.googleFlowImageRef ||
-          bgData.googleFlowImageRef ||
-          null,
-        googleFlowImageSourceUrl:
-          activeGoogleFlow.imageSourceUrl ||
-          activeGoogleFlow.imageRef ||
-          (completedImage as any)?.googleFlowImageSourceUrl ||
-          bgData.googleFlowImageSourceUrl ||
-          null,
+        googleFlowPrompt: isActiveGoogleFlow
+          ? activeGoogleFlow.prompt ||
+            activeVersionRecord?.prompt ||
+            (completedImage as any)?.googleFlowPrompt ||
+            bgData.googleFlowPrompt ||
+            null
+          : null,
+        googleFlowParentAssetId: isActiveGoogleFlow
+          ? activeGoogleFlow.parentAssetId ||
+            (completedImage as any)?.googleFlowParentAssetId ||
+            bgData.googleFlowParentAssetId ||
+            null
+          : null,
+        googleFlowImageId: isActiveGoogleFlow
+          ? activeGoogleFlow.imageId ||
+            activeGoogleFlow.editId ||
+            (completedImage as any)?.googleFlowImageId ||
+            (completedImage as any)?.googleFlowEditId ||
+            bgData.googleFlowImageId ||
+            bgData.googleFlowEditId ||
+            null
+          : null,
+        googleFlowImageRef: isActiveGoogleFlow
+          ? activeGoogleFlow.imageRef ||
+            (completedImage as any)?.googleFlowImageRef ||
+            bgData.googleFlowImageRef ||
+            null
+          : null,
+        googleFlowImageSourceUrl: isActiveGoogleFlow
+          ? activeGoogleFlow.imageSourceUrl ||
+            activeGoogleFlow.imageRef ||
+            (completedImage as any)?.googleFlowImageSourceUrl ||
+            bgData.googleFlowImageSourceUrl ||
+            null
+          : null,
         activeBackgroundVersion: backgroundHistory.activeBackgroundVersion,
         totalBackgroundVersions: backgroundHistory.totalBackgroundVersions,
         backgroundVersions: backgroundHistory.backgroundVersions,
