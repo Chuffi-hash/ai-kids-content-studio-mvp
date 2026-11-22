@@ -20,8 +20,18 @@ export type FlowCharacterMappingModel = runtime.Types.Result.DefaultSelection<Pr
 
 export type AggregateFlowCharacterMapping = {
   _count: FlowCharacterMappingCountAggregateOutputType | null
+  _avg: FlowCharacterMappingAvgAggregateOutputType | null
+  _sum: FlowCharacterMappingSumAggregateOutputType | null
   _min: FlowCharacterMappingMinAggregateOutputType | null
   _max: FlowCharacterMappingMaxAggregateOutputType | null
+}
+
+export type FlowCharacterMappingAvgAggregateOutputType = {
+  activeVersion: number | null
+}
+
+export type FlowCharacterMappingSumAggregateOutputType = {
+  activeVersion: number | null
 }
 
 export type FlowCharacterMappingMinAggregateOutputType = {
@@ -30,6 +40,9 @@ export type FlowCharacterMappingMinAggregateOutputType = {
   characterId: string | null
   flowProjectId: string | null
   flowCharacterName: string | null
+  flowCharacterId: string | null
+  flowCharacterUrl: string | null
+  activeVersion: number | null
   syncStatus: string | null
   sourceReferenceUrl: string | null
   sourceFingerprint: string | null
@@ -45,6 +58,9 @@ export type FlowCharacterMappingMaxAggregateOutputType = {
   characterId: string | null
   flowProjectId: string | null
   flowCharacterName: string | null
+  flowCharacterId: string | null
+  flowCharacterUrl: string | null
+  activeVersion: number | null
   syncStatus: string | null
   sourceReferenceUrl: string | null
   sourceFingerprint: string | null
@@ -60,6 +76,9 @@ export type FlowCharacterMappingCountAggregateOutputType = {
   characterId: number
   flowProjectId: number
   flowCharacterName: number
+  flowCharacterId: number
+  flowCharacterUrl: number
+  activeVersion: number
   syncStatus: number
   sourceReferenceUrl: number
   sourceFingerprint: number
@@ -71,12 +90,23 @@ export type FlowCharacterMappingCountAggregateOutputType = {
 }
 
 
+export type FlowCharacterMappingAvgAggregateInputType = {
+  activeVersion?: true
+}
+
+export type FlowCharacterMappingSumAggregateInputType = {
+  activeVersion?: true
+}
+
 export type FlowCharacterMappingMinAggregateInputType = {
   id?: true
   storyId?: true
   characterId?: true
   flowProjectId?: true
   flowCharacterName?: true
+  flowCharacterId?: true
+  flowCharacterUrl?: true
+  activeVersion?: true
   syncStatus?: true
   sourceReferenceUrl?: true
   sourceFingerprint?: true
@@ -92,6 +122,9 @@ export type FlowCharacterMappingMaxAggregateInputType = {
   characterId?: true
   flowProjectId?: true
   flowCharacterName?: true
+  flowCharacterId?: true
+  flowCharacterUrl?: true
+  activeVersion?: true
   syncStatus?: true
   sourceReferenceUrl?: true
   sourceFingerprint?: true
@@ -107,6 +140,9 @@ export type FlowCharacterMappingCountAggregateInputType = {
   characterId?: true
   flowProjectId?: true
   flowCharacterName?: true
+  flowCharacterId?: true
+  flowCharacterUrl?: true
+  activeVersion?: true
   syncStatus?: true
   sourceReferenceUrl?: true
   sourceFingerprint?: true
@@ -155,6 +191,18 @@ export type FlowCharacterMappingAggregateArgs<ExtArgs extends runtime.Types.Exte
   /**
    * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
    * 
+   * Select which fields to average
+  **/
+  _avg?: FlowCharacterMappingAvgAggregateInputType
+  /**
+   * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+   * 
+   * Select which fields to sum
+  **/
+  _sum?: FlowCharacterMappingSumAggregateInputType
+  /**
+   * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+   * 
    * Select which fields to find the minimum value
   **/
   _min?: FlowCharacterMappingMinAggregateInputType
@@ -185,6 +233,8 @@ export type FlowCharacterMappingGroupByArgs<ExtArgs extends runtime.Types.Extens
   take?: number
   skip?: number
   _count?: FlowCharacterMappingCountAggregateInputType | true
+  _avg?: FlowCharacterMappingAvgAggregateInputType
+  _sum?: FlowCharacterMappingSumAggregateInputType
   _min?: FlowCharacterMappingMinAggregateInputType
   _max?: FlowCharacterMappingMaxAggregateInputType
 }
@@ -195,6 +245,9 @@ export type FlowCharacterMappingGroupByOutputType = {
   characterId: string
   flowProjectId: string
   flowCharacterName: string
+  flowCharacterId: string | null
+  flowCharacterUrl: string | null
+  activeVersion: number
   syncStatus: string
   sourceReferenceUrl: string | null
   sourceFingerprint: string | null
@@ -203,6 +256,8 @@ export type FlowCharacterMappingGroupByOutputType = {
   createdAt: Date
   updatedAt: Date
   _count: FlowCharacterMappingCountAggregateOutputType | null
+  _avg: FlowCharacterMappingAvgAggregateOutputType | null
+  _sum: FlowCharacterMappingSumAggregateOutputType | null
   _min: FlowCharacterMappingMinAggregateOutputType | null
   _max: FlowCharacterMappingMaxAggregateOutputType | null
 }
@@ -231,6 +286,9 @@ export type FlowCharacterMappingWhereInput = {
   characterId?: Prisma.StringFilter<"FlowCharacterMapping"> | string
   flowProjectId?: Prisma.StringFilter<"FlowCharacterMapping"> | string
   flowCharacterName?: Prisma.StringFilter<"FlowCharacterMapping"> | string
+  flowCharacterId?: Prisma.StringNullableFilter<"FlowCharacterMapping"> | string | null
+  flowCharacterUrl?: Prisma.StringNullableFilter<"FlowCharacterMapping"> | string | null
+  activeVersion?: Prisma.IntFilter<"FlowCharacterMapping"> | number
   syncStatus?: Prisma.StringFilter<"FlowCharacterMapping"> | string
   sourceReferenceUrl?: Prisma.StringNullableFilter<"FlowCharacterMapping"> | string | null
   sourceFingerprint?: Prisma.StringNullableFilter<"FlowCharacterMapping"> | string | null
@@ -240,6 +298,7 @@ export type FlowCharacterMappingWhereInput = {
   updatedAt?: Prisma.DateTimeFilter<"FlowCharacterMapping"> | Date | string
   story?: Prisma.XOR<Prisma.StoryScalarRelationFilter, Prisma.StoryWhereInput>
   character?: Prisma.XOR<Prisma.CharacterScalarRelationFilter, Prisma.CharacterWhereInput>
+  versions?: Prisma.FlowCharacterVersionListRelationFilter
 }
 
 export type FlowCharacterMappingOrderByWithRelationInput = {
@@ -248,6 +307,9 @@ export type FlowCharacterMappingOrderByWithRelationInput = {
   characterId?: Prisma.SortOrder
   flowProjectId?: Prisma.SortOrder
   flowCharacterName?: Prisma.SortOrder
+  flowCharacterId?: Prisma.SortOrderInput | Prisma.SortOrder
+  flowCharacterUrl?: Prisma.SortOrderInput | Prisma.SortOrder
+  activeVersion?: Prisma.SortOrder
   syncStatus?: Prisma.SortOrder
   sourceReferenceUrl?: Prisma.SortOrderInput | Prisma.SortOrder
   sourceFingerprint?: Prisma.SortOrderInput | Prisma.SortOrder
@@ -257,6 +319,7 @@ export type FlowCharacterMappingOrderByWithRelationInput = {
   updatedAt?: Prisma.SortOrder
   story?: Prisma.StoryOrderByWithRelationInput
   character?: Prisma.CharacterOrderByWithRelationInput
+  versions?: Prisma.FlowCharacterVersionOrderByRelationAggregateInput
 }
 
 export type FlowCharacterMappingWhereUniqueInput = Prisma.AtLeast<{
@@ -269,6 +332,9 @@ export type FlowCharacterMappingWhereUniqueInput = Prisma.AtLeast<{
   characterId?: Prisma.StringFilter<"FlowCharacterMapping"> | string
   flowProjectId?: Prisma.StringFilter<"FlowCharacterMapping"> | string
   flowCharacterName?: Prisma.StringFilter<"FlowCharacterMapping"> | string
+  flowCharacterId?: Prisma.StringNullableFilter<"FlowCharacterMapping"> | string | null
+  flowCharacterUrl?: Prisma.StringNullableFilter<"FlowCharacterMapping"> | string | null
+  activeVersion?: Prisma.IntFilter<"FlowCharacterMapping"> | number
   syncStatus?: Prisma.StringFilter<"FlowCharacterMapping"> | string
   sourceReferenceUrl?: Prisma.StringNullableFilter<"FlowCharacterMapping"> | string | null
   sourceFingerprint?: Prisma.StringNullableFilter<"FlowCharacterMapping"> | string | null
@@ -278,6 +344,7 @@ export type FlowCharacterMappingWhereUniqueInput = Prisma.AtLeast<{
   updatedAt?: Prisma.DateTimeFilter<"FlowCharacterMapping"> | Date | string
   story?: Prisma.XOR<Prisma.StoryScalarRelationFilter, Prisma.StoryWhereInput>
   character?: Prisma.XOR<Prisma.CharacterScalarRelationFilter, Prisma.CharacterWhereInput>
+  versions?: Prisma.FlowCharacterVersionListRelationFilter
 }, "id" | "storyId_characterId">
 
 export type FlowCharacterMappingOrderByWithAggregationInput = {
@@ -286,6 +353,9 @@ export type FlowCharacterMappingOrderByWithAggregationInput = {
   characterId?: Prisma.SortOrder
   flowProjectId?: Prisma.SortOrder
   flowCharacterName?: Prisma.SortOrder
+  flowCharacterId?: Prisma.SortOrderInput | Prisma.SortOrder
+  flowCharacterUrl?: Prisma.SortOrderInput | Prisma.SortOrder
+  activeVersion?: Prisma.SortOrder
   syncStatus?: Prisma.SortOrder
   sourceReferenceUrl?: Prisma.SortOrderInput | Prisma.SortOrder
   sourceFingerprint?: Prisma.SortOrderInput | Prisma.SortOrder
@@ -294,8 +364,10 @@ export type FlowCharacterMappingOrderByWithAggregationInput = {
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
   _count?: Prisma.FlowCharacterMappingCountOrderByAggregateInput
+  _avg?: Prisma.FlowCharacterMappingAvgOrderByAggregateInput
   _max?: Prisma.FlowCharacterMappingMaxOrderByAggregateInput
   _min?: Prisma.FlowCharacterMappingMinOrderByAggregateInput
+  _sum?: Prisma.FlowCharacterMappingSumOrderByAggregateInput
 }
 
 export type FlowCharacterMappingScalarWhereWithAggregatesInput = {
@@ -307,6 +379,9 @@ export type FlowCharacterMappingScalarWhereWithAggregatesInput = {
   characterId?: Prisma.StringWithAggregatesFilter<"FlowCharacterMapping"> | string
   flowProjectId?: Prisma.StringWithAggregatesFilter<"FlowCharacterMapping"> | string
   flowCharacterName?: Prisma.StringWithAggregatesFilter<"FlowCharacterMapping"> | string
+  flowCharacterId?: Prisma.StringNullableWithAggregatesFilter<"FlowCharacterMapping"> | string | null
+  flowCharacterUrl?: Prisma.StringNullableWithAggregatesFilter<"FlowCharacterMapping"> | string | null
+  activeVersion?: Prisma.IntWithAggregatesFilter<"FlowCharacterMapping"> | number
   syncStatus?: Prisma.StringWithAggregatesFilter<"FlowCharacterMapping"> | string
   sourceReferenceUrl?: Prisma.StringNullableWithAggregatesFilter<"FlowCharacterMapping"> | string | null
   sourceFingerprint?: Prisma.StringNullableWithAggregatesFilter<"FlowCharacterMapping"> | string | null
@@ -320,6 +395,9 @@ export type FlowCharacterMappingCreateInput = {
   id?: string
   flowProjectId: string
   flowCharacterName: string
+  flowCharacterId?: string | null
+  flowCharacterUrl?: string | null
+  activeVersion?: number
   syncStatus?: string
   sourceReferenceUrl?: string | null
   sourceFingerprint?: string | null
@@ -329,6 +407,7 @@ export type FlowCharacterMappingCreateInput = {
   updatedAt?: Date | string
   story: Prisma.StoryCreateNestedOneWithoutFlowCharacterMappingsInput
   character: Prisma.CharacterCreateNestedOneWithoutFlowCharacterMappingsInput
+  versions?: Prisma.FlowCharacterVersionCreateNestedManyWithoutMappingInput
 }
 
 export type FlowCharacterMappingUncheckedCreateInput = {
@@ -337,6 +416,9 @@ export type FlowCharacterMappingUncheckedCreateInput = {
   characterId: string
   flowProjectId: string
   flowCharacterName: string
+  flowCharacterId?: string | null
+  flowCharacterUrl?: string | null
+  activeVersion?: number
   syncStatus?: string
   sourceReferenceUrl?: string | null
   sourceFingerprint?: string | null
@@ -344,12 +426,16 @@ export type FlowCharacterMappingUncheckedCreateInput = {
   lastError?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
+  versions?: Prisma.FlowCharacterVersionUncheckedCreateNestedManyWithoutMappingInput
 }
 
 export type FlowCharacterMappingUpdateInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   flowProjectId?: Prisma.StringFieldUpdateOperationsInput | string
   flowCharacterName?: Prisma.StringFieldUpdateOperationsInput | string
+  flowCharacterId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  flowCharacterUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  activeVersion?: Prisma.IntFieldUpdateOperationsInput | number
   syncStatus?: Prisma.StringFieldUpdateOperationsInput | string
   sourceReferenceUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   sourceFingerprint?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -359,6 +445,7 @@ export type FlowCharacterMappingUpdateInput = {
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   story?: Prisma.StoryUpdateOneRequiredWithoutFlowCharacterMappingsNestedInput
   character?: Prisma.CharacterUpdateOneRequiredWithoutFlowCharacterMappingsNestedInput
+  versions?: Prisma.FlowCharacterVersionUpdateManyWithoutMappingNestedInput
 }
 
 export type FlowCharacterMappingUncheckedUpdateInput = {
@@ -367,6 +454,9 @@ export type FlowCharacterMappingUncheckedUpdateInput = {
   characterId?: Prisma.StringFieldUpdateOperationsInput | string
   flowProjectId?: Prisma.StringFieldUpdateOperationsInput | string
   flowCharacterName?: Prisma.StringFieldUpdateOperationsInput | string
+  flowCharacterId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  flowCharacterUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  activeVersion?: Prisma.IntFieldUpdateOperationsInput | number
   syncStatus?: Prisma.StringFieldUpdateOperationsInput | string
   sourceReferenceUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   sourceFingerprint?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -374,6 +464,7 @@ export type FlowCharacterMappingUncheckedUpdateInput = {
   lastError?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  versions?: Prisma.FlowCharacterVersionUncheckedUpdateManyWithoutMappingNestedInput
 }
 
 export type FlowCharacterMappingCreateManyInput = {
@@ -382,6 +473,9 @@ export type FlowCharacterMappingCreateManyInput = {
   characterId: string
   flowProjectId: string
   flowCharacterName: string
+  flowCharacterId?: string | null
+  flowCharacterUrl?: string | null
+  activeVersion?: number
   syncStatus?: string
   sourceReferenceUrl?: string | null
   sourceFingerprint?: string | null
@@ -395,6 +489,9 @@ export type FlowCharacterMappingUpdateManyMutationInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   flowProjectId?: Prisma.StringFieldUpdateOperationsInput | string
   flowCharacterName?: Prisma.StringFieldUpdateOperationsInput | string
+  flowCharacterId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  flowCharacterUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  activeVersion?: Prisma.IntFieldUpdateOperationsInput | number
   syncStatus?: Prisma.StringFieldUpdateOperationsInput | string
   sourceReferenceUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   sourceFingerprint?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -410,6 +507,9 @@ export type FlowCharacterMappingUncheckedUpdateManyInput = {
   characterId?: Prisma.StringFieldUpdateOperationsInput | string
   flowProjectId?: Prisma.StringFieldUpdateOperationsInput | string
   flowCharacterName?: Prisma.StringFieldUpdateOperationsInput | string
+  flowCharacterId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  flowCharacterUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  activeVersion?: Prisma.IntFieldUpdateOperationsInput | number
   syncStatus?: Prisma.StringFieldUpdateOperationsInput | string
   sourceReferenceUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   sourceFingerprint?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -440,6 +540,9 @@ export type FlowCharacterMappingCountOrderByAggregateInput = {
   characterId?: Prisma.SortOrder
   flowProjectId?: Prisma.SortOrder
   flowCharacterName?: Prisma.SortOrder
+  flowCharacterId?: Prisma.SortOrder
+  flowCharacterUrl?: Prisma.SortOrder
+  activeVersion?: Prisma.SortOrder
   syncStatus?: Prisma.SortOrder
   sourceReferenceUrl?: Prisma.SortOrder
   sourceFingerprint?: Prisma.SortOrder
@@ -449,12 +552,19 @@ export type FlowCharacterMappingCountOrderByAggregateInput = {
   updatedAt?: Prisma.SortOrder
 }
 
+export type FlowCharacterMappingAvgOrderByAggregateInput = {
+  activeVersion?: Prisma.SortOrder
+}
+
 export type FlowCharacterMappingMaxOrderByAggregateInput = {
   id?: Prisma.SortOrder
   storyId?: Prisma.SortOrder
   characterId?: Prisma.SortOrder
   flowProjectId?: Prisma.SortOrder
   flowCharacterName?: Prisma.SortOrder
+  flowCharacterId?: Prisma.SortOrder
+  flowCharacterUrl?: Prisma.SortOrder
+  activeVersion?: Prisma.SortOrder
   syncStatus?: Prisma.SortOrder
   sourceReferenceUrl?: Prisma.SortOrder
   sourceFingerprint?: Prisma.SortOrder
@@ -470,6 +580,9 @@ export type FlowCharacterMappingMinOrderByAggregateInput = {
   characterId?: Prisma.SortOrder
   flowProjectId?: Prisma.SortOrder
   flowCharacterName?: Prisma.SortOrder
+  flowCharacterId?: Prisma.SortOrder
+  flowCharacterUrl?: Prisma.SortOrder
+  activeVersion?: Prisma.SortOrder
   syncStatus?: Prisma.SortOrder
   sourceReferenceUrl?: Prisma.SortOrder
   sourceFingerprint?: Prisma.SortOrder
@@ -477,6 +590,15 @@ export type FlowCharacterMappingMinOrderByAggregateInput = {
   lastError?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
+}
+
+export type FlowCharacterMappingSumOrderByAggregateInput = {
+  activeVersion?: Prisma.SortOrder
+}
+
+export type FlowCharacterMappingScalarRelationFilter = {
+  is?: Prisma.FlowCharacterMappingWhereInput
+  isNot?: Prisma.FlowCharacterMappingWhereInput
 }
 
 export type FlowCharacterMappingCreateNestedManyWithoutStoryInput = {
@@ -563,10 +685,27 @@ export type FlowCharacterMappingUncheckedUpdateManyWithoutCharacterNestedInput =
   deleteMany?: Prisma.FlowCharacterMappingScalarWhereInput | Prisma.FlowCharacterMappingScalarWhereInput[]
 }
 
+export type FlowCharacterMappingCreateNestedOneWithoutVersionsInput = {
+  create?: Prisma.XOR<Prisma.FlowCharacterMappingCreateWithoutVersionsInput, Prisma.FlowCharacterMappingUncheckedCreateWithoutVersionsInput>
+  connectOrCreate?: Prisma.FlowCharacterMappingCreateOrConnectWithoutVersionsInput
+  connect?: Prisma.FlowCharacterMappingWhereUniqueInput
+}
+
+export type FlowCharacterMappingUpdateOneRequiredWithoutVersionsNestedInput = {
+  create?: Prisma.XOR<Prisma.FlowCharacterMappingCreateWithoutVersionsInput, Prisma.FlowCharacterMappingUncheckedCreateWithoutVersionsInput>
+  connectOrCreate?: Prisma.FlowCharacterMappingCreateOrConnectWithoutVersionsInput
+  upsert?: Prisma.FlowCharacterMappingUpsertWithoutVersionsInput
+  connect?: Prisma.FlowCharacterMappingWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.FlowCharacterMappingUpdateToOneWithWhereWithoutVersionsInput, Prisma.FlowCharacterMappingUpdateWithoutVersionsInput>, Prisma.FlowCharacterMappingUncheckedUpdateWithoutVersionsInput>
+}
+
 export type FlowCharacterMappingCreateWithoutStoryInput = {
   id?: string
   flowProjectId: string
   flowCharacterName: string
+  flowCharacterId?: string | null
+  flowCharacterUrl?: string | null
+  activeVersion?: number
   syncStatus?: string
   sourceReferenceUrl?: string | null
   sourceFingerprint?: string | null
@@ -575,6 +714,7 @@ export type FlowCharacterMappingCreateWithoutStoryInput = {
   createdAt?: Date | string
   updatedAt?: Date | string
   character: Prisma.CharacterCreateNestedOneWithoutFlowCharacterMappingsInput
+  versions?: Prisma.FlowCharacterVersionCreateNestedManyWithoutMappingInput
 }
 
 export type FlowCharacterMappingUncheckedCreateWithoutStoryInput = {
@@ -582,6 +722,9 @@ export type FlowCharacterMappingUncheckedCreateWithoutStoryInput = {
   characterId: string
   flowProjectId: string
   flowCharacterName: string
+  flowCharacterId?: string | null
+  flowCharacterUrl?: string | null
+  activeVersion?: number
   syncStatus?: string
   sourceReferenceUrl?: string | null
   sourceFingerprint?: string | null
@@ -589,6 +732,7 @@ export type FlowCharacterMappingUncheckedCreateWithoutStoryInput = {
   lastError?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
+  versions?: Prisma.FlowCharacterVersionUncheckedCreateNestedManyWithoutMappingInput
 }
 
 export type FlowCharacterMappingCreateOrConnectWithoutStoryInput = {
@@ -626,6 +770,9 @@ export type FlowCharacterMappingScalarWhereInput = {
   characterId?: Prisma.StringFilter<"FlowCharacterMapping"> | string
   flowProjectId?: Prisma.StringFilter<"FlowCharacterMapping"> | string
   flowCharacterName?: Prisma.StringFilter<"FlowCharacterMapping"> | string
+  flowCharacterId?: Prisma.StringNullableFilter<"FlowCharacterMapping"> | string | null
+  flowCharacterUrl?: Prisma.StringNullableFilter<"FlowCharacterMapping"> | string | null
+  activeVersion?: Prisma.IntFilter<"FlowCharacterMapping"> | number
   syncStatus?: Prisma.StringFilter<"FlowCharacterMapping"> | string
   sourceReferenceUrl?: Prisma.StringNullableFilter<"FlowCharacterMapping"> | string | null
   sourceFingerprint?: Prisma.StringNullableFilter<"FlowCharacterMapping"> | string | null
@@ -639,6 +786,9 @@ export type FlowCharacterMappingCreateWithoutCharacterInput = {
   id?: string
   flowProjectId: string
   flowCharacterName: string
+  flowCharacterId?: string | null
+  flowCharacterUrl?: string | null
+  activeVersion?: number
   syncStatus?: string
   sourceReferenceUrl?: string | null
   sourceFingerprint?: string | null
@@ -647,6 +797,7 @@ export type FlowCharacterMappingCreateWithoutCharacterInput = {
   createdAt?: Date | string
   updatedAt?: Date | string
   story: Prisma.StoryCreateNestedOneWithoutFlowCharacterMappingsInput
+  versions?: Prisma.FlowCharacterVersionCreateNestedManyWithoutMappingInput
 }
 
 export type FlowCharacterMappingUncheckedCreateWithoutCharacterInput = {
@@ -654,6 +805,9 @@ export type FlowCharacterMappingUncheckedCreateWithoutCharacterInput = {
   storyId: string
   flowProjectId: string
   flowCharacterName: string
+  flowCharacterId?: string | null
+  flowCharacterUrl?: string | null
+  activeVersion?: number
   syncStatus?: string
   sourceReferenceUrl?: string | null
   sourceFingerprint?: string | null
@@ -661,6 +815,7 @@ export type FlowCharacterMappingUncheckedCreateWithoutCharacterInput = {
   lastError?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
+  versions?: Prisma.FlowCharacterVersionUncheckedCreateNestedManyWithoutMappingInput
 }
 
 export type FlowCharacterMappingCreateOrConnectWithoutCharacterInput = {
@@ -689,11 +844,102 @@ export type FlowCharacterMappingUpdateManyWithWhereWithoutCharacterInput = {
   data: Prisma.XOR<Prisma.FlowCharacterMappingUpdateManyMutationInput, Prisma.FlowCharacterMappingUncheckedUpdateManyWithoutCharacterInput>
 }
 
+export type FlowCharacterMappingCreateWithoutVersionsInput = {
+  id?: string
+  flowProjectId: string
+  flowCharacterName: string
+  flowCharacterId?: string | null
+  flowCharacterUrl?: string | null
+  activeVersion?: number
+  syncStatus?: string
+  sourceReferenceUrl?: string | null
+  sourceFingerprint?: string | null
+  lastSyncedAt?: Date | string | null
+  lastError?: string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  story: Prisma.StoryCreateNestedOneWithoutFlowCharacterMappingsInput
+  character: Prisma.CharacterCreateNestedOneWithoutFlowCharacterMappingsInput
+}
+
+export type FlowCharacterMappingUncheckedCreateWithoutVersionsInput = {
+  id?: string
+  storyId: string
+  characterId: string
+  flowProjectId: string
+  flowCharacterName: string
+  flowCharacterId?: string | null
+  flowCharacterUrl?: string | null
+  activeVersion?: number
+  syncStatus?: string
+  sourceReferenceUrl?: string | null
+  sourceFingerprint?: string | null
+  lastSyncedAt?: Date | string | null
+  lastError?: string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+}
+
+export type FlowCharacterMappingCreateOrConnectWithoutVersionsInput = {
+  where: Prisma.FlowCharacterMappingWhereUniqueInput
+  create: Prisma.XOR<Prisma.FlowCharacterMappingCreateWithoutVersionsInput, Prisma.FlowCharacterMappingUncheckedCreateWithoutVersionsInput>
+}
+
+export type FlowCharacterMappingUpsertWithoutVersionsInput = {
+  update: Prisma.XOR<Prisma.FlowCharacterMappingUpdateWithoutVersionsInput, Prisma.FlowCharacterMappingUncheckedUpdateWithoutVersionsInput>
+  create: Prisma.XOR<Prisma.FlowCharacterMappingCreateWithoutVersionsInput, Prisma.FlowCharacterMappingUncheckedCreateWithoutVersionsInput>
+  where?: Prisma.FlowCharacterMappingWhereInput
+}
+
+export type FlowCharacterMappingUpdateToOneWithWhereWithoutVersionsInput = {
+  where?: Prisma.FlowCharacterMappingWhereInput
+  data: Prisma.XOR<Prisma.FlowCharacterMappingUpdateWithoutVersionsInput, Prisma.FlowCharacterMappingUncheckedUpdateWithoutVersionsInput>
+}
+
+export type FlowCharacterMappingUpdateWithoutVersionsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  flowProjectId?: Prisma.StringFieldUpdateOperationsInput | string
+  flowCharacterName?: Prisma.StringFieldUpdateOperationsInput | string
+  flowCharacterId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  flowCharacterUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  activeVersion?: Prisma.IntFieldUpdateOperationsInput | number
+  syncStatus?: Prisma.StringFieldUpdateOperationsInput | string
+  sourceReferenceUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  sourceFingerprint?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  lastSyncedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  lastError?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  story?: Prisma.StoryUpdateOneRequiredWithoutFlowCharacterMappingsNestedInput
+  character?: Prisma.CharacterUpdateOneRequiredWithoutFlowCharacterMappingsNestedInput
+}
+
+export type FlowCharacterMappingUncheckedUpdateWithoutVersionsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  storyId?: Prisma.StringFieldUpdateOperationsInput | string
+  characterId?: Prisma.StringFieldUpdateOperationsInput | string
+  flowProjectId?: Prisma.StringFieldUpdateOperationsInput | string
+  flowCharacterName?: Prisma.StringFieldUpdateOperationsInput | string
+  flowCharacterId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  flowCharacterUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  activeVersion?: Prisma.IntFieldUpdateOperationsInput | number
+  syncStatus?: Prisma.StringFieldUpdateOperationsInput | string
+  sourceReferenceUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  sourceFingerprint?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  lastSyncedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  lastError?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+}
+
 export type FlowCharacterMappingCreateManyStoryInput = {
   id?: string
   characterId: string
   flowProjectId: string
   flowCharacterName: string
+  flowCharacterId?: string | null
+  flowCharacterUrl?: string | null
+  activeVersion?: number
   syncStatus?: string
   sourceReferenceUrl?: string | null
   sourceFingerprint?: string | null
@@ -707,6 +953,9 @@ export type FlowCharacterMappingUpdateWithoutStoryInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   flowProjectId?: Prisma.StringFieldUpdateOperationsInput | string
   flowCharacterName?: Prisma.StringFieldUpdateOperationsInput | string
+  flowCharacterId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  flowCharacterUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  activeVersion?: Prisma.IntFieldUpdateOperationsInput | number
   syncStatus?: Prisma.StringFieldUpdateOperationsInput | string
   sourceReferenceUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   sourceFingerprint?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -715,6 +964,7 @@ export type FlowCharacterMappingUpdateWithoutStoryInput = {
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   character?: Prisma.CharacterUpdateOneRequiredWithoutFlowCharacterMappingsNestedInput
+  versions?: Prisma.FlowCharacterVersionUpdateManyWithoutMappingNestedInput
 }
 
 export type FlowCharacterMappingUncheckedUpdateWithoutStoryInput = {
@@ -722,6 +972,9 @@ export type FlowCharacterMappingUncheckedUpdateWithoutStoryInput = {
   characterId?: Prisma.StringFieldUpdateOperationsInput | string
   flowProjectId?: Prisma.StringFieldUpdateOperationsInput | string
   flowCharacterName?: Prisma.StringFieldUpdateOperationsInput | string
+  flowCharacterId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  flowCharacterUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  activeVersion?: Prisma.IntFieldUpdateOperationsInput | number
   syncStatus?: Prisma.StringFieldUpdateOperationsInput | string
   sourceReferenceUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   sourceFingerprint?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -729,6 +982,7 @@ export type FlowCharacterMappingUncheckedUpdateWithoutStoryInput = {
   lastError?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  versions?: Prisma.FlowCharacterVersionUncheckedUpdateManyWithoutMappingNestedInput
 }
 
 export type FlowCharacterMappingUncheckedUpdateManyWithoutStoryInput = {
@@ -736,6 +990,9 @@ export type FlowCharacterMappingUncheckedUpdateManyWithoutStoryInput = {
   characterId?: Prisma.StringFieldUpdateOperationsInput | string
   flowProjectId?: Prisma.StringFieldUpdateOperationsInput | string
   flowCharacterName?: Prisma.StringFieldUpdateOperationsInput | string
+  flowCharacterId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  flowCharacterUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  activeVersion?: Prisma.IntFieldUpdateOperationsInput | number
   syncStatus?: Prisma.StringFieldUpdateOperationsInput | string
   sourceReferenceUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   sourceFingerprint?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -750,6 +1007,9 @@ export type FlowCharacterMappingCreateManyCharacterInput = {
   storyId: string
   flowProjectId: string
   flowCharacterName: string
+  flowCharacterId?: string | null
+  flowCharacterUrl?: string | null
+  activeVersion?: number
   syncStatus?: string
   sourceReferenceUrl?: string | null
   sourceFingerprint?: string | null
@@ -763,6 +1023,9 @@ export type FlowCharacterMappingUpdateWithoutCharacterInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   flowProjectId?: Prisma.StringFieldUpdateOperationsInput | string
   flowCharacterName?: Prisma.StringFieldUpdateOperationsInput | string
+  flowCharacterId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  flowCharacterUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  activeVersion?: Prisma.IntFieldUpdateOperationsInput | number
   syncStatus?: Prisma.StringFieldUpdateOperationsInput | string
   sourceReferenceUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   sourceFingerprint?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -771,6 +1034,7 @@ export type FlowCharacterMappingUpdateWithoutCharacterInput = {
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   story?: Prisma.StoryUpdateOneRequiredWithoutFlowCharacterMappingsNestedInput
+  versions?: Prisma.FlowCharacterVersionUpdateManyWithoutMappingNestedInput
 }
 
 export type FlowCharacterMappingUncheckedUpdateWithoutCharacterInput = {
@@ -778,6 +1042,9 @@ export type FlowCharacterMappingUncheckedUpdateWithoutCharacterInput = {
   storyId?: Prisma.StringFieldUpdateOperationsInput | string
   flowProjectId?: Prisma.StringFieldUpdateOperationsInput | string
   flowCharacterName?: Prisma.StringFieldUpdateOperationsInput | string
+  flowCharacterId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  flowCharacterUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  activeVersion?: Prisma.IntFieldUpdateOperationsInput | number
   syncStatus?: Prisma.StringFieldUpdateOperationsInput | string
   sourceReferenceUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   sourceFingerprint?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -785,6 +1052,7 @@ export type FlowCharacterMappingUncheckedUpdateWithoutCharacterInput = {
   lastError?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  versions?: Prisma.FlowCharacterVersionUncheckedUpdateManyWithoutMappingNestedInput
 }
 
 export type FlowCharacterMappingUncheckedUpdateManyWithoutCharacterInput = {
@@ -792,6 +1060,9 @@ export type FlowCharacterMappingUncheckedUpdateManyWithoutCharacterInput = {
   storyId?: Prisma.StringFieldUpdateOperationsInput | string
   flowProjectId?: Prisma.StringFieldUpdateOperationsInput | string
   flowCharacterName?: Prisma.StringFieldUpdateOperationsInput | string
+  flowCharacterId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  flowCharacterUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  activeVersion?: Prisma.IntFieldUpdateOperationsInput | number
   syncStatus?: Prisma.StringFieldUpdateOperationsInput | string
   sourceReferenceUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   sourceFingerprint?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -801,6 +1072,35 @@ export type FlowCharacterMappingUncheckedUpdateManyWithoutCharacterInput = {
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
 
+
+/**
+ * Count Type FlowCharacterMappingCountOutputType
+ */
+
+export type FlowCharacterMappingCountOutputType = {
+  versions: number
+}
+
+export type FlowCharacterMappingCountOutputTypeSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  versions?: boolean | FlowCharacterMappingCountOutputTypeCountVersionsArgs
+}
+
+/**
+ * FlowCharacterMappingCountOutputType without action
+ */
+export type FlowCharacterMappingCountOutputTypeDefaultArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the FlowCharacterMappingCountOutputType
+   */
+  select?: Prisma.FlowCharacterMappingCountOutputTypeSelect<ExtArgs> | null
+}
+
+/**
+ * FlowCharacterMappingCountOutputType without action
+ */
+export type FlowCharacterMappingCountOutputTypeCountVersionsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.FlowCharacterVersionWhereInput
+}
 
 
 export type FlowCharacterMappingSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
@@ -809,6 +1109,9 @@ export type FlowCharacterMappingSelect<ExtArgs extends runtime.Types.Extensions.
   characterId?: boolean
   flowProjectId?: boolean
   flowCharacterName?: boolean
+  flowCharacterId?: boolean
+  flowCharacterUrl?: boolean
+  activeVersion?: boolean
   syncStatus?: boolean
   sourceReferenceUrl?: boolean
   sourceFingerprint?: boolean
@@ -818,6 +1121,8 @@ export type FlowCharacterMappingSelect<ExtArgs extends runtime.Types.Extensions.
   updatedAt?: boolean
   story?: boolean | Prisma.StoryDefaultArgs<ExtArgs>
   character?: boolean | Prisma.CharacterDefaultArgs<ExtArgs>
+  versions?: boolean | Prisma.FlowCharacterMapping$versionsArgs<ExtArgs>
+  _count?: boolean | Prisma.FlowCharacterMappingCountOutputTypeDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["flowCharacterMapping"]>
 
 export type FlowCharacterMappingSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
@@ -826,6 +1131,9 @@ export type FlowCharacterMappingSelectCreateManyAndReturn<ExtArgs extends runtim
   characterId?: boolean
   flowProjectId?: boolean
   flowCharacterName?: boolean
+  flowCharacterId?: boolean
+  flowCharacterUrl?: boolean
+  activeVersion?: boolean
   syncStatus?: boolean
   sourceReferenceUrl?: boolean
   sourceFingerprint?: boolean
@@ -843,6 +1151,9 @@ export type FlowCharacterMappingSelectUpdateManyAndReturn<ExtArgs extends runtim
   characterId?: boolean
   flowProjectId?: boolean
   flowCharacterName?: boolean
+  flowCharacterId?: boolean
+  flowCharacterUrl?: boolean
+  activeVersion?: boolean
   syncStatus?: boolean
   sourceReferenceUrl?: boolean
   sourceFingerprint?: boolean
@@ -860,6 +1171,9 @@ export type FlowCharacterMappingSelectScalar = {
   characterId?: boolean
   flowProjectId?: boolean
   flowCharacterName?: boolean
+  flowCharacterId?: boolean
+  flowCharacterUrl?: boolean
+  activeVersion?: boolean
   syncStatus?: boolean
   sourceReferenceUrl?: boolean
   sourceFingerprint?: boolean
@@ -869,10 +1183,12 @@ export type FlowCharacterMappingSelectScalar = {
   updatedAt?: boolean
 }
 
-export type FlowCharacterMappingOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "storyId" | "characterId" | "flowProjectId" | "flowCharacterName" | "syncStatus" | "sourceReferenceUrl" | "sourceFingerprint" | "lastSyncedAt" | "lastError" | "createdAt" | "updatedAt", ExtArgs["result"]["flowCharacterMapping"]>
+export type FlowCharacterMappingOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "storyId" | "characterId" | "flowProjectId" | "flowCharacterName" | "flowCharacterId" | "flowCharacterUrl" | "activeVersion" | "syncStatus" | "sourceReferenceUrl" | "sourceFingerprint" | "lastSyncedAt" | "lastError" | "createdAt" | "updatedAt", ExtArgs["result"]["flowCharacterMapping"]>
 export type FlowCharacterMappingInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   story?: boolean | Prisma.StoryDefaultArgs<ExtArgs>
   character?: boolean | Prisma.CharacterDefaultArgs<ExtArgs>
+  versions?: boolean | Prisma.FlowCharacterMapping$versionsArgs<ExtArgs>
+  _count?: boolean | Prisma.FlowCharacterMappingCountOutputTypeDefaultArgs<ExtArgs>
 }
 export type FlowCharacterMappingIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   story?: boolean | Prisma.StoryDefaultArgs<ExtArgs>
@@ -888,6 +1204,7 @@ export type $FlowCharacterMappingPayload<ExtArgs extends runtime.Types.Extension
   objects: {
     story: Prisma.$StoryPayload<ExtArgs>
     character: Prisma.$CharacterPayload<ExtArgs>
+    versions: Prisma.$FlowCharacterVersionPayload<ExtArgs>[]
   }
   scalars: runtime.Types.Extensions.GetPayloadResult<{
     id: string
@@ -895,6 +1212,9 @@ export type $FlowCharacterMappingPayload<ExtArgs extends runtime.Types.Extension
     characterId: string
     flowProjectId: string
     flowCharacterName: string
+    flowCharacterId: string | null
+    flowCharacterUrl: string | null
+    activeVersion: number
     syncStatus: string
     sourceReferenceUrl: string | null
     sourceFingerprint: string | null
@@ -1298,6 +1618,7 @@ export interface Prisma__FlowCharacterMappingClient<T, Null = never, ExtArgs ext
   readonly [Symbol.toStringTag]: "PrismaPromise"
   story<T extends Prisma.StoryDefaultArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.StoryDefaultArgs<ExtArgs>>): Prisma.Prisma__StoryClient<runtime.Types.Result.GetResult<Prisma.$StoryPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>
   character<T extends Prisma.CharacterDefaultArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.CharacterDefaultArgs<ExtArgs>>): Prisma.Prisma__CharacterClient<runtime.Types.Result.GetResult<Prisma.$CharacterPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>
+  versions<T extends Prisma.FlowCharacterMapping$versionsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.FlowCharacterMapping$versionsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$FlowCharacterVersionPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   /**
    * Attaches callbacks for the resolution and/or rejection of the Promise.
    * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -1332,6 +1653,9 @@ export interface FlowCharacterMappingFieldRefs {
   readonly characterId: Prisma.FieldRef<"FlowCharacterMapping", 'String'>
   readonly flowProjectId: Prisma.FieldRef<"FlowCharacterMapping", 'String'>
   readonly flowCharacterName: Prisma.FieldRef<"FlowCharacterMapping", 'String'>
+  readonly flowCharacterId: Prisma.FieldRef<"FlowCharacterMapping", 'String'>
+  readonly flowCharacterUrl: Prisma.FieldRef<"FlowCharacterMapping", 'String'>
+  readonly activeVersion: Prisma.FieldRef<"FlowCharacterMapping", 'Int'>
   readonly syncStatus: Prisma.FieldRef<"FlowCharacterMapping", 'String'>
   readonly sourceReferenceUrl: Prisma.FieldRef<"FlowCharacterMapping", 'String'>
   readonly sourceFingerprint: Prisma.FieldRef<"FlowCharacterMapping", 'String'>
@@ -1737,6 +2061,30 @@ export type FlowCharacterMappingDeleteManyArgs<ExtArgs extends runtime.Types.Ext
    * Limit how many FlowCharacterMappings to delete.
    */
   limit?: number
+}
+
+/**
+ * FlowCharacterMapping.versions
+ */
+export type FlowCharacterMapping$versionsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the FlowCharacterVersion
+   */
+  select?: Prisma.FlowCharacterVersionSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the FlowCharacterVersion
+   */
+  omit?: Prisma.FlowCharacterVersionOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.FlowCharacterVersionInclude<ExtArgs> | null
+  where?: Prisma.FlowCharacterVersionWhereInput
+  orderBy?: Prisma.FlowCharacterVersionOrderByWithRelationInput | Prisma.FlowCharacterVersionOrderByWithRelationInput[]
+  cursor?: Prisma.FlowCharacterVersionWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.FlowCharacterVersionScalarFieldEnum | Prisma.FlowCharacterVersionScalarFieldEnum[]
 }
 
 /**

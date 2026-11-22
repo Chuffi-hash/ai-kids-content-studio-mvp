@@ -68,6 +68,11 @@ export type StoryCharacter = Prisma.StoryCharacterModel
  */
 export type FlowCharacterMapping = Prisma.FlowCharacterMappingModel
 /**
+ * Model FlowCharacterVersion
+ * 
+ */
+export type FlowCharacterVersion = Prisma.FlowCharacterVersionModel
+/**
  * Model GenerationJob
  * 
  */

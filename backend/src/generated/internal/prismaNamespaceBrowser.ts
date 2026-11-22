@@ -61,6 +61,7 @@ export const ModelName = {
   IntegrationCredential: 'IntegrationCredential',
   StoryCharacter: 'StoryCharacter',
   FlowCharacterMapping: 'FlowCharacterMapping',
+  FlowCharacterVersion: 'FlowCharacterVersion',
   GenerationJob: 'GenerationJob'
 } as const
 
@@ -282,6 +283,9 @@ export const FlowCharacterMappingScalarFieldEnum = {
   characterId: 'characterId',
   flowProjectId: 'flowProjectId',
   flowCharacterName: 'flowCharacterName',
+  flowCharacterId: 'flowCharacterId',
+  flowCharacterUrl: 'flowCharacterUrl',
+  activeVersion: 'activeVersion',
   syncStatus: 'syncStatus',
   sourceReferenceUrl: 'sourceReferenceUrl',
   sourceFingerprint: 'sourceFingerprint',
@@ -292,6 +296,32 @@ export const FlowCharacterMappingScalarFieldEnum = {
 } as const
 
 export type FlowCharacterMappingScalarFieldEnum = (typeof FlowCharacterMappingScalarFieldEnum)[keyof typeof FlowCharacterMappingScalarFieldEnum]
+
+
+export const FlowCharacterVersionScalarFieldEnum = {
+  id: 'id',
+  mappingId: 'mappingId',
+  version: 'version',
+  provider: 'provider',
+  model: 'model',
+  flowProjectId: 'flowProjectId',
+  flowCharacterId: 'flowCharacterId',
+  flowCharacterUrl: 'flowCharacterUrl',
+  prompt: 'prompt',
+  formattedPrompt: 'formattedPrompt',
+  characterName: 'characterName',
+  characterInfo: 'characterInfo',
+  voiceName: 'voiceName',
+  voiceId: 'voiceId',
+  imageUrl: 'imageUrl',
+  storageKey: 'storageKey',
+  parentCharacterId: 'parentCharacterId',
+  metadata: 'metadata',
+  status: 'status',
+  createdAt: 'createdAt'
+} as const
+
+export type FlowCharacterVersionScalarFieldEnum = (typeof FlowCharacterVersionScalarFieldEnum)[keyof typeof FlowCharacterVersionScalarFieldEnum]
 
 
 export const GenerationJobScalarFieldEnum = {

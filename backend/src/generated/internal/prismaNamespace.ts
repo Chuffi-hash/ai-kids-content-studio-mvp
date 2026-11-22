@@ -80,12 +80,12 @@ export type PrismaVersion = {
 }
 
 /**
- * Prisma Client JS version: 7.9.1
- * Query Engine version: e922089b7d7502aff4249d5da3420f6fa55fc6ad
+ * Prisma Client JS version: 7.10.1
+ * Query Engine version: d1b3f377ca835d73fd50954a5e22128b9ebdd6b8
  */
 export const prismaVersion: PrismaVersion = {
-  client: "7.9.1",
-  engine: "e922089b7d7502aff4249d5da3420f6fa55fc6ad"
+  client: "7.10.1",
+  engine: "d1b3f377ca835d73fd50954a5e22128b9ebdd6b8"
 }
 
 /**
@@ -407,6 +407,7 @@ export const ModelName = {
   IntegrationCredential: 'IntegrationCredential',
   StoryCharacter: 'StoryCharacter',
   FlowCharacterMapping: 'FlowCharacterMapping',
+  FlowCharacterVersion: 'FlowCharacterVersion',
   GenerationJob: 'GenerationJob'
 } as const
 
@@ -423,7 +424,7 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
     omit: GlobalOmitOptions
   }
   meta: {
-    modelProps: "story" | "scene" | "sceneVersion" | "shot" | "image" | "backgroundImageVersion" | "character" | "integrationCredential" | "storyCharacter" | "flowCharacterMapping" | "generationJob"
+    modelProps: "story" | "scene" | "sceneVersion" | "shot" | "image" | "backgroundImageVersion" | "character" | "integrationCredential" | "storyCharacter" | "flowCharacterMapping" | "flowCharacterVersion" | "generationJob"
     txIsolationLevel: TransactionIsolationLevel
   }
   model: {
@@ -1167,6 +1168,80 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         }
       }
     }
+    FlowCharacterVersion: {
+      payload: Prisma.$FlowCharacterVersionPayload<ExtArgs>
+      fields: Prisma.FlowCharacterVersionFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.FlowCharacterVersionFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$FlowCharacterVersionPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.FlowCharacterVersionFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$FlowCharacterVersionPayload>
+        }
+        findFirst: {
+          args: Prisma.FlowCharacterVersionFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$FlowCharacterVersionPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.FlowCharacterVersionFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$FlowCharacterVersionPayload>
+        }
+        findMany: {
+          args: Prisma.FlowCharacterVersionFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$FlowCharacterVersionPayload>[]
+        }
+        create: {
+          args: Prisma.FlowCharacterVersionCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$FlowCharacterVersionPayload>
+        }
+        createMany: {
+          args: Prisma.FlowCharacterVersionCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.FlowCharacterVersionCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$FlowCharacterVersionPayload>[]
+        }
+        delete: {
+          args: Prisma.FlowCharacterVersionDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$FlowCharacterVersionPayload>
+        }
+        update: {
+          args: Prisma.FlowCharacterVersionUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$FlowCharacterVersionPayload>
+        }
+        deleteMany: {
+          args: Prisma.FlowCharacterVersionDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.FlowCharacterVersionUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.FlowCharacterVersionUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$FlowCharacterVersionPayload>[]
+        }
+        upsert: {
+          args: Prisma.FlowCharacterVersionUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$FlowCharacterVersionPayload>
+        }
+        aggregate: {
+          args: Prisma.FlowCharacterVersionAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateFlowCharacterVersion>
+        }
+        groupBy: {
+          args: Prisma.FlowCharacterVersionGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.FlowCharacterVersionGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.FlowCharacterVersionCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.FlowCharacterVersionCountAggregateOutputType> | number
+        }
+      }
+    }
     GenerationJob: {
       payload: Prisma.$GenerationJobPayload<ExtArgs>
       fields: Prisma.GenerationJobFieldRefs
@@ -1482,6 +1557,9 @@ export const FlowCharacterMappingScalarFieldEnum = {
   characterId: 'characterId',
   flowProjectId: 'flowProjectId',
   flowCharacterName: 'flowCharacterName',
+  flowCharacterId: 'flowCharacterId',
+  flowCharacterUrl: 'flowCharacterUrl',
+  activeVersion: 'activeVersion',
   syncStatus: 'syncStatus',
   sourceReferenceUrl: 'sourceReferenceUrl',
   sourceFingerprint: 'sourceFingerprint',
@@ -1492,6 +1570,32 @@ export const FlowCharacterMappingScalarFieldEnum = {
 } as const
 
 export type FlowCharacterMappingScalarFieldEnum = (typeof FlowCharacterMappingScalarFieldEnum)[keyof typeof FlowCharacterMappingScalarFieldEnum]
+
+
+export const FlowCharacterVersionScalarFieldEnum = {
+  id: 'id',
+  mappingId: 'mappingId',
+  version: 'version',
+  provider: 'provider',
+  model: 'model',
+  flowProjectId: 'flowProjectId',
+  flowCharacterId: 'flowCharacterId',
+  flowCharacterUrl: 'flowCharacterUrl',
+  prompt: 'prompt',
+  formattedPrompt: 'formattedPrompt',
+  characterName: 'characterName',
+  characterInfo: 'characterInfo',
+  voiceName: 'voiceName',
+  voiceId: 'voiceId',
+  imageUrl: 'imageUrl',
+  storageKey: 'storageKey',
+  parentCharacterId: 'parentCharacterId',
+  metadata: 'metadata',
+  status: 'status',
+  createdAt: 'createdAt'
+} as const
+
+export type FlowCharacterVersionScalarFieldEnum = (typeof FlowCharacterVersionScalarFieldEnum)[keyof typeof FlowCharacterVersionScalarFieldEnum]
 
 
 export const GenerationJobScalarFieldEnum = {
@@ -1805,6 +1909,7 @@ export type GlobalOmitConfig = {
   integrationCredential?: Prisma.IntegrationCredentialOmit
   storyCharacter?: Prisma.StoryCharacterOmit
   flowCharacterMapping?: Prisma.FlowCharacterMappingOmit
+  flowCharacterVersion?: Prisma.FlowCharacterVersionOmit
   generationJob?: Prisma.GenerationJobOmit
 }
 

@@ -2,6 +2,7 @@
   "name": "ai-kids-content-studio-api",
   "private": true,
   "scripts": {
+    "db:generate": "prisma generate --schema prisma/schema.prisma",
     "dev": "tsx watch src/bootstrap.ts",
     "build": "tsc",
     "start": "node dist/src/bootstrap.js",
@@ -33,7 +34,7 @@
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.1",
     "@types/node": "^22.15.0",
-    "prisma": "^8.0.0-rc.34",
+    "prisma": "^7.10.1",
     "tsx": "^4.23.11",
     "typescript": "^5.8.3"
   }

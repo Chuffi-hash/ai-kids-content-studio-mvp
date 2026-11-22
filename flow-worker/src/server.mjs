@@ -506,7 +506,9 @@ const server = http.createServer(async (request, response) => {
     }
 
     if (request.method === "POST" && (pathname === "/jobs/cancel-active" || pathname === "/session/cancel-active")) {
-      const result = worker.cancelActiveJob();
+      const body = await readJson(request).catch(() => ({}));
+      const role = body?.role || url.searchParams.get("role") || null;
+      const result = worker.cancelActiveJob(body?.reason || undefined, role);
       sendJson(response, 200, { success: true, ...result });
       return;
     }
@@ -524,7 +526,7 @@ const server = http.createServer(async (request, response) => {
         return;
       }
       if (body.cancelPrevious) {
-        worker.cancelActiveJob("Cancelled by new incoming job request.");
+        worker.cancelActiveJob("Cancelled by new incoming job request.", role);
       }
       const job = worker.createJob(body);
       const prepared = await worker.prepareJob(job.id);
