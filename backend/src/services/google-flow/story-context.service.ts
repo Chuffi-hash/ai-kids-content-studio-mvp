@@ -105,11 +105,26 @@ export function serializeBackgroundVersion(version: any): BackgroundVersionConte
   // Explicitly serialize the supported fields instead of spreading the Prisma
   // row. This prevents legacy flattened Google Flow properties from leaking
   // into each history item alongside providerMetadata.
+  const legacyFlowKeys = new Set([
+    "googleFlowProjectId",
+    "googleFlowEditId",
+    "googleFlowEditUrl",
+    "googleFlowImageId",
+    "googleFlowImageRef",
+    "googleFlowImageSourceUrl",
+    "googleFlowParentAssetId",
+    "googleFlowPrompt",
+    "googleFlowVersion",
+  ]);
+  const nonFlowMetadata = Object.fromEntries(
+    Object.entries(sourceMetadata).filter(
+      ([key]) => !legacyFlowKeys.has(key) && key !== "googleFlow",
+    ),
+  );
+
   const providerMetadata: BackgroundVersionProviderMetadata = googleFlow
     ? {
-        ...(sourceMetadata.sourceJobId
-          ? { sourceJobId: sourceMetadata.sourceJobId }
-          : {}),
+        ...nonFlowMetadata,
         googleFlow,
       }
     : { ...sourceMetadata };
@@ -154,6 +169,8 @@ function stripProviderMetadataFromAnimationBackground(
     "googleFlowImageId",
     "googleFlowImageRef",
     "googleFlowImageSourceUrl",
+    "googleFlow",
+    "providerMetadata",
   ]);
 
   const renderBackground = Object.fromEntries(
