@@ -765,8 +765,12 @@ export class GenerationOrchestratorService {
     const backgroundVersion =
       matchingBackgroundVersion ||
       (activeBackgroundVersion?.provider === imageRecord.provider &&
-      (!activeBackgroundVersion.localImageId ||
-        activeBackgroundVersion.localImageId === imageRecord.id)
+      (activeBackgroundVersion.localImageId === imageRecord.id ||
+        (!activeBackgroundVersion.localImageId &&
+          ((activeBackgroundVersion.storageKey &&
+            activeBackgroundVersion.storageKey === imageRecord.storageKey) ||
+            (activeBackgroundVersion.imageUrl &&
+              activeBackgroundVersion.imageUrl === imageRecord.imageUrl))))
         ? activeBackgroundVersion
         : null);
     const flowReferences = resolveGoogleFlowBackgroundVersionReferences(
