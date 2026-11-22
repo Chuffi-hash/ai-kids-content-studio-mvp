@@ -1410,8 +1410,11 @@ export class FlowBrowserWorker {
         try {
           if (typeof page.mainFrame === "function" && frame === page.mainFrame()) {
             const metadata = this.pageMetadata.get(page);
-            if (metadata?.role) {
-              this.updateFlowPageRouteMetadata(page);
+            if (metadata) {
+              // A null role means this worker deliberately disowned the page.
+              // Do not resurrect an older sessionStorage marker while its removal
+              // is still queued or if the browser write failed.
+              if (metadata.role) this.updateFlowPageRouteMetadata(page);
             } else {
               const marker = await this.readTabMarkerFromSessionStorage(page);
               if (marker?.role) this.registerFlowPage(page, marker);
