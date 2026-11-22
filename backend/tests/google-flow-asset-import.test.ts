@@ -6,7 +6,10 @@ import {
   GoogleFlowAssetImportService,
 } from '../src/services/google-flow/google-flow-asset-import.service.js';
 
-import { resolveGoogleFlowReferences } from '../src/services/google-flow/google-flow-asset-import.service.js';
+import {
+  resolveGoogleFlowReferences,
+  resolveGoogleFlowBackgroundVersionReferences,
+} from '../src/services/google-flow/google-flow-asset-import.service.js';
 import {
   serializeBackgroundVersion,
   serializeBackgroundVersions,
@@ -316,6 +319,69 @@ describe('GoogleFlowAssetImportService & Validation', () => {
         });
       },
       /characterId is required/
+    );
+  });
+});
+
+
+describe('Google Flow background regeneration references', () => {
+  it('resolves an existing editor URL from canonical version providerMetadata', () => {
+    const refs = resolveGoogleFlowBackgroundVersionReferences(
+      {
+        googleFlowProjectId: null,
+        googleFlowEditId: null,
+        googleFlowEditUrl: null,
+        googleFlowPrompt: null,
+        googleFlowVersion: null,
+      },
+      {
+        version: 4,
+        prompt: 'Original background prompt',
+        providerMetadata: {
+          sourceJobId: 'job-4',
+          googleFlow: {
+            projectId: '2ea32335-0e57-4d1a-9e1e-98fa3cd491e8',
+            editId: 'b55777af-ee1a-452c-96df-dfe4e6881cd7',
+            editUrl:
+              'https://flow.google.com/project/2ea32335-0e57-4d1a-9e1e-98fa3cd491e8/edit/b55777af-ee1a-452c-96df-dfe4e6881cd7',
+          },
+        },
+      },
+    );
+
+    assert.equal(
+      refs.googleFlowEditUrl,
+      'https://flow.google.com/project/2ea32335-0e57-4d1a-9e1e-98fa3cd491e8/edit/b55777af-ee1a-452c-96df-dfe4e6881cd7',
+    );
+    assert.equal(refs.googleFlowProjectId, '2ea32335-0e57-4d1a-9e1e-98fa3cd491e8');
+    assert.equal(refs.googleFlowEditId, 'b55777af-ee1a-452c-96df-dfe4e6881cd7');
+    assert.equal(refs.googleFlowPrompt, 'Original background prompt');
+    assert.equal(refs.googleFlowVersion, 4);
+  });
+
+  it('prefers the selected Image record but supports legacy flat provider metadata', () => {
+    const refs = resolveGoogleFlowBackgroundVersionReferences(
+      {
+        googleFlowProjectId: 'image-project',
+        googleFlowEditId: 'image-edit',
+        googleFlowEditUrl: null,
+      },
+      {
+        version: 2,
+        providerMetadata: {
+          googleFlowProjectId: 'legacy-project',
+          googleFlowEditId: 'legacy-edit',
+          googleFlowEditUrl:
+            'https://flow.google.com/project/legacy-project/edit/legacy-edit',
+        },
+      },
+    );
+
+    assert.equal(refs.googleFlowProjectId, 'image-project');
+    assert.equal(refs.googleFlowEditId, 'image-edit');
+    assert.equal(
+      refs.googleFlowEditUrl,
+      'https://flow.google.com/project/image-project/edit/image-edit',
     );
   });
 });
