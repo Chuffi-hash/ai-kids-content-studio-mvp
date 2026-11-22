@@ -168,46 +168,68 @@ export function resolveGoogleFlowBackgroundVersionReferences(
       ? (metadata.googleFlow as Record<string, any>)
       : metadata;
 
-  const refs = resolveGoogleFlowReferences({
+  const imageRefs = resolveGoogleFlowReferences({
+    googleFlowProjectId: image.googleFlowProjectId || undefined,
+    googleFlowEditId: image.googleFlowEditId || undefined,
+    googleFlowEditUrl: image.googleFlowEditUrl || undefined,
+    googleFlowPrompt: image.googleFlowPrompt || undefined,
+    googleFlowParentAssetId: image.googleFlowParentAssetId || undefined,
+    googleFlowImageId: image.googleFlowImageId || undefined,
+    googleFlowImageRef: image.googleFlowImageRef || undefined,
+    googleFlowImageSourceUrl: image.googleFlowImageSourceUrl || undefined,
+  });
+  const versionRefs = resolveGoogleFlowReferences({
     googleFlowProjectId:
-      image.googleFlowProjectId ||
-      flowMetadata.projectId ||
-      flowMetadata.googleFlowProjectId ||
-      undefined,
+      flowMetadata.projectId || flowMetadata.googleFlowProjectId || undefined,
     googleFlowEditId:
-      image.googleFlowEditId ||
-      flowMetadata.editId ||
-      flowMetadata.googleFlowEditId ||
-      undefined,
+      flowMetadata.editId || flowMetadata.googleFlowEditId || undefined,
     googleFlowEditUrl:
-      image.googleFlowEditUrl ||
-      flowMetadata.editUrl ||
-      flowMetadata.googleFlowEditUrl ||
-      undefined,
-    googleFlowPrompt:
-      image.googleFlowPrompt ||
-      flowMetadata.prompt ||
-      version?.prompt ||
-      undefined,
+      flowMetadata.editUrl || flowMetadata.googleFlowEditUrl || undefined,
+    googleFlowPrompt: flowMetadata.prompt || version?.prompt || undefined,
     googleFlowParentAssetId:
-      image.googleFlowParentAssetId ||
-      flowMetadata.parentAssetId ||
-      flowMetadata.googleFlowParentAssetId ||
+      flowMetadata.parentAssetId || flowMetadata.googleFlowParentAssetId || undefined,
+    googleFlowImageId:
+      flowMetadata.imageId || flowMetadata.googleFlowImageId || undefined,
+    googleFlowImageRef:
+      flowMetadata.imageRef || flowMetadata.googleFlowImageRef || undefined,
+    googleFlowImageSourceUrl:
+      flowMetadata.imageSourceUrl || flowMetadata.googleFlowImageSourceUrl || undefined,
+  });
+
+  // Never let an older history URL override explicit identifiers on the selected
+  // Image row. Use the version URL only when it describes the same Flow asset.
+  const versionUrlMatchesImage =
+    (!imageRefs.googleFlowProjectId ||
+      imageRefs.googleFlowProjectId === versionRefs.googleFlowProjectId) &&
+    (!imageRefs.googleFlowEditId ||
+      imageRefs.googleFlowEditId === versionRefs.googleFlowEditId);
+  const projectId =
+    imageRefs.googleFlowProjectId || versionRefs.googleFlowProjectId;
+  const editId = imageRefs.googleFlowEditId || versionRefs.googleFlowEditId;
+  const editUrl =
+    imageRefs.googleFlowEditUrl ||
+    (versionUrlMatchesImage ? versionRefs.googleFlowEditUrl : null) ||
+    (projectId && editId
+      ? `https://flow.google.com/project/${encodeURIComponent(projectId)}/edit/${encodeURIComponent(editId)}`
+      : null);
+
+  const refs = resolveGoogleFlowReferences({
+    googleFlowProjectId: projectId || undefined,
+    googleFlowEditId: editId || undefined,
+    googleFlowEditUrl: editUrl || undefined,
+    googleFlowPrompt:
+      imageRefs.googleFlowPrompt || versionRefs.googleFlowPrompt || undefined,
+    googleFlowParentAssetId:
+      imageRefs.googleFlowParentAssetId ||
+      versionRefs.googleFlowParentAssetId ||
       undefined,
     googleFlowImageId:
-      image.googleFlowImageId ||
-      flowMetadata.imageId ||
-      flowMetadata.googleFlowImageId ||
-      undefined,
+      imageRefs.googleFlowImageId || versionRefs.googleFlowImageId || undefined,
     googleFlowImageRef:
-      image.googleFlowImageRef ||
-      flowMetadata.imageRef ||
-      flowMetadata.googleFlowImageRef ||
-      undefined,
+      imageRefs.googleFlowImageRef || versionRefs.googleFlowImageRef || undefined,
     googleFlowImageSourceUrl:
-      image.googleFlowImageSourceUrl ||
-      flowMetadata.imageSourceUrl ||
-      flowMetadata.googleFlowImageSourceUrl ||
+      imageRefs.googleFlowImageSourceUrl ||
+      versionRefs.googleFlowImageSourceUrl ||
       undefined,
   });
 
