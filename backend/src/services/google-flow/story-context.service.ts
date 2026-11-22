@@ -9,7 +9,6 @@ export interface GoogleFlowVersionMetadata {
   imageRef: string | null;
   imageSourceUrl: string | null;
   parentAssetId: string | null;
-  prompt: string | null;
 }
 
 export interface BackgroundVersionProviderMetadata {
@@ -86,11 +85,6 @@ function getGoogleFlowVersionMetadata(version: any): GoogleFlowVersionMetadata |
     parentAssetId:
       flow.parentAssetId ||
       flow.googleFlowParentAssetId ||
-      null,
-    prompt:
-      flow.prompt ||
-      flow.googleFlowPrompt ||
-      version?.prompt ||
       null,
   };
 }
@@ -629,8 +623,10 @@ export class StoryContextService {
           (completedImage as any)?.googleFlowEditUrl ||
           bgData.googleFlowEditUrl ||
           null,
+        // The canonical active prompt is the BackgroundImageVersion.prompt
+        // column. Keep the scene-level field only as a compatibility snapshot.
         googleFlowPrompt:
-          activeGoogleFlow.prompt ||
+          activeVersionRecord?.prompt ||
           (completedImage as any)?.googleFlowPrompt ||
           bgData.googleFlowPrompt ||
           null,
