@@ -556,41 +556,50 @@ test("Google Flow Character Routing & Route Extraction Suite", async (t) => {
     assert.equal(job.isMasterReference, false);
   });
 
-  await t.test("13. saved Character editor prompt and submit control are identified independently of New character controls", async () => {
+  await t.test("13. saved Character editor prompt and submit are scoped to its live prompt box", async () => {
     const worker = new FlowBrowserWorker();
     const prompt = {
       isVisible: async () => true,
       isEnabled: async () => true,
       getAttribute: async (name) =>
         name === "aria-label" ? "What do you want to change?" : null,
+      locator: (selector) => ({
+        count: async () => selector.includes("ancestor::flow-base-prompt-box") ? 1 : 0,
+        locator: () => ({
+          count: async () => 1,
+          nth: () => submit,
+        }),
+      }),
     };
     const submit = {
       isVisible: async () => true,
       isEnabled: async () => true,
-      getAttribute: async () => null,
-      innerText: async () => "send",
+      getAttribute: async (name) =>
+        name === "aria-label" ? "Start generation" : null,
+      click: async () => {},
     };
     const page = {
       isClosed: () => false,
       url: () => "https://flow.google.com/project/proj-mapped/character/flow-char-mapped",
-      locator: (selector) => {
-        if (selector.includes("flow-edit-image-prompt-box") && selector.includes("textbox")) {
-          return { count: async () => 1, nth: () => prompt };
-        }
-        if (selector === "flow-edit-image-prompt-box button, flow-edit-image-prompt-box [role='button']") {
-          return { count: async () => 1, nth: () => submit };
-        }
-        return { count: async () => 0 };
-      },
+      waitForTimeout: async () => {},
+      locator: (selector) => ({
+        count: async () =>
+          selector.includes(".agent-panel-prompt-box flow-rich-text-editor.prompt-input [role=\"textbox\"]")
+            ? 1
+            : 0,
+        nth: () => prompt,
+      }),
     };
 
     const promptResult = await worker.findCharacterEditorPromptEditor(page);
-    const submitResult = await worker.findCharacterEditorSubmitButton(page);
+    const submitResult = await worker.findCharacterEditorSubmitButton(page, {
+      promptLocator: promptResult.locator,
+    });
 
     assert.equal(promptResult.locator, prompt);
-    assert.match(promptResult.selector, /flow-edit-image-prompt-box/);
+    assert.match(promptResult.selector, /agent-panel-prompt-box/);
     assert.equal(submitResult.locator, submit);
-    assert.match(submitResult.selector, /flow-edit-image-prompt-box/);
+    assert.match(submitResult.selector, /ancestor::flow-base-prompt-box/);
   });
 
   await t.test("14. prepareJob opens the mapped saved Character editor and fills its change prompt", async () => {
@@ -668,6 +677,86 @@ test("Google Flow Character Routing & Route Extraction Suite", async (t) => {
     assert.equal(job.characterPromptMode, "edit");
     assert.equal(filledPrompt, job.prompt);
     assert.equal(job.googleFlowCharacterId, "flow-char-mapped");
+  });
+
+  await t.test("14b. saved Character prompt waits for Angular to mount the editor after navigation", async () => {
+    const worker = new FlowBrowserWorker();
+    let firstPromptSelectorCalls = 0;
+    let waitCalls = 0;
+    const prompt = {
+      isVisible: async () => true,
+      isEnabled: async () => true,
+      getAttribute: async (name) =>
+        name === "aria-label" ? "What do you want to change?" : null,
+    };
+    const page = {
+      isClosed: () => false,
+      url: () => "https://flow.google.com/project/proj-mapped/character/flow-char-mapped",
+      waitForTimeout: async () => { waitCalls += 1; },
+      locator: (selector) => ({
+        count: async () => {
+          if (selector.includes(".agent-panel-prompt-box flow-rich-text-editor.prompt-input [role=\"textbox\"]")) {
+            firstPromptSelectorCalls += 1;
+            return firstPromptSelectorCalls >= 3 ? 1 : 0;
+          }
+          return 0;
+        },
+        nth: () => prompt,
+      }),
+    };
+
+    const result = await worker.findCharacterEditorPromptEditor(page, {
+      timeoutMs: 1000,
+      pollIntervalMs: 1,
+    });
+
+    assert.equal(result.locator, prompt);
+    assert.ok(result.waitedMs >= 0);
+    assert.ok(firstPromptSelectorCalls >= 3);
+    assert.ok(waitCalls >= 1);
+  });
+
+  await t.test("14c. saved Character submit lookup waits for the submit control after prompt mount", async () => {
+    const worker = new FlowBrowserWorker();
+    let submitLookupCount = 0;
+    let waitCalls = 0;
+    const prompt = {
+      isVisible: async () => true,
+      isEnabled: async () => true,
+      getAttribute: async () => "What do you want to change?",
+      locator: (selector) => ({
+        count: async () => selector.includes("ancestor::flow-base-prompt-box") ? 1 : 0,
+        locator: () => ({
+          count: async () => {
+            submitLookupCount += 1;
+            return submitLookupCount >= 3 ? 1 : 0;
+          },
+          nth: () => submit,
+        }),
+      }),
+    };
+    const submit = {
+      isVisible: async () => true,
+      isEnabled: async () => true,
+      getAttribute: async (name) =>
+        name === "aria-label" ? "Start generation" : null,
+    };
+    const page = {
+      isClosed: () => false,
+      url: () => "https://flow.google.com/project/proj-mapped/character/flow-char-mapped",
+      waitForTimeout: async () => { waitCalls += 1; },
+      locator: () => ({ count: async () => 0 }),
+    };
+
+    const result = await worker.findCharacterEditorSubmitButton(page, {
+      promptLocator: prompt,
+      timeoutMs: 1000,
+      pollIntervalMs: 1,
+    });
+
+    assert.equal(result.locator, submit);
+    assert.ok(submitLookupCount >= 3);
+    assert.ok(waitCalls >= 1);
   });
 
   await t.test("15. submitCharacterPrompt submits a directional view from the saved Character editor", async () => {
