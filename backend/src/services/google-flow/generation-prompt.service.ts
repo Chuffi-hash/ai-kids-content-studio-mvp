@@ -143,7 +143,8 @@ export class GenerationPromptService {
     ].join('\n');
 
     const flowReferenceName =
-      character.flowMapping?.syncStatus === 'synced'
+      character.flowMapping?.syncStatus === 'synced' &&
+      character.flowMapping.flowCharacterId
         ? character.flowMapping.flowCharacterName
         : null;
     const identitySource = flowReferenceName
