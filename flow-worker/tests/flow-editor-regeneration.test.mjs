@@ -535,6 +535,7 @@ describe("Google Flow Editor URL, Regeneration & Done Editing Suite", () => {
       isRegeneration: true,
       editUrl,
     });
+    job.status = "prompt_ready";
 
     await worker.requestGeneration(job.id, {
       confirmGenerate: true,
@@ -545,6 +546,81 @@ describe("Google Flow Editor URL, Regeneration & Done Editing Suite", () => {
     assert.equal(job.status, "generation_submitted");
     const eventNames = events.map((e) => e.event);
     assert.ok(eventNames.includes("FLOW_REGENERATION_STARTED"));
+  });
+
+  // -------------------------------------------------------------------------
+  // Additional regressions: resilient editor locators and terminal job protection
+  // -------------------------------------------------------------------------
+  it("15. findImageEditPromptEditor accepts a changed placeholder inside the image editor", async () => {
+    const worker = new FlowBrowserWorker();
+    const promptField = {
+      isVisible: async () => true,
+      isEnabled: async () => true,
+      getAttribute: async (name) => {
+        if (name === "role") return "textbox";
+        if (name === "placeholder") return "Describe what you want to change in this image";
+        return null;
+      },
+    };
+    const page = {
+      isClosed: () => false,
+      url: () => "https://flow.google.com/project/prompt-test/edit/asset-1",
+      locator: (selector) => {
+        if (selector.includes("flow-edit-image-prompt-box") && selector.includes("[role='textbox']")) {
+          return { count: async () => 1, nth: () => promptField };
+        }
+        return { count: async () => 0 };
+      },
+    };
+
+    const found = await worker.findImageEditPromptEditor(page, { timeoutMs: 0 });
+    assert.equal(found.locator, promptField);
+    assert.ok(found.selector.includes("flow-edit-image-prompt-box"));
+  });
+
+  it("16. findImageEditSubmitButton accepts a renamed Generate button inside the editor", async () => {
+    const worker = new FlowBrowserWorker();
+    const generateButton = {
+      isVisible: async () => true,
+      isEnabled: async () => true,
+      getAttribute: async (name) => name === "aria-label" ? "Generate" : null,
+      innerText: async () => "",
+    };
+    const page = {
+      isClosed: () => false,
+      url: () => "https://flow.google.com/project/prompt-test/edit/asset-1",
+      getByRole: () => ({ count: async () => 0 }),
+      locator: (selector) => {
+        if (selector.includes("flow-edit-image-prompt-box button")) {
+          return { count: async () => 1, nth: () => generateButton };
+        }
+        return { count: async () => 0 };
+      },
+    };
+
+    const found = await worker.findImageEditSubmitButton(page, { timeoutMs: 0 });
+    assert.equal(found.locator, generateButton);
+    assert.ok(found.selector.includes("flow-edit-image-prompt-box"));
+  });
+
+  it("17. requestGeneration rejects a failed preparation job without touching Google Flow", async () => {
+    const worker = new FlowBrowserWorker();
+    const job = worker.createJob({
+      sceneId: "scene-failed-prompt",
+      storyId: "story-failed-prompt",
+      prompt: "Change the lighting",
+      isRegeneration: true,
+      editUrl: "https://flow.google.com/project/prompt-test/edit/asset-1",
+    });
+    job.status = "failed";
+
+    await assert.rejects(
+      () => worker.requestGeneration(job.id, {
+        confirmGenerate: true,
+        referenceConfirmed: true,
+      }),
+      (error) => error.code === "FLOW_JOB_NOT_READY" && error.statusCode === 409,
+    );
   });
 
   // -------------------------------------------------------------------------
