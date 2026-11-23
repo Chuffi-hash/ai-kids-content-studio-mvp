@@ -531,4 +531,206 @@ test("Google Flow Character Routing & Route Extraction Suite", async (t) => {
       global.fetch = originalFetch;
     }
   });
+
+  await t.test("12. createJob retains the saved Google Flow character editor reference", () => {
+    const worker = new FlowBrowserWorker();
+    const job = worker.createJob({
+      targetType: "character",
+      pageRole: FLOW_TAB_ROLES.CHARACTER,
+      characterId: "studio-char-mapped",
+      characterName: "Mili",
+      projectUrl: "https://flow.google.com/project/proj-mapped",
+      googleFlowCharacterId: "flow-char-mapped",
+      googleFlowCharacterUrl:
+        "https://flow.google.com/project/proj-mapped/character/flow-char-mapped",
+      assetType: "turnaround",
+      view: "front-left",
+      prompt: "Create one clean front-left view.",
+    });
+
+    assert.equal(job.googleFlowCharacterId, "flow-char-mapped");
+    assert.equal(
+      job.googleFlowCharacterUrl,
+      "https://flow.google.com/project/proj-mapped/character/flow-char-mapped",
+    );
+    assert.equal(job.isMasterReference, false);
+  });
+
+  await t.test("13. saved Character editor prompt and submit control are identified independently of New character controls", async () => {
+    const worker = new FlowBrowserWorker();
+    const prompt = {
+      isVisible: async () => true,
+      isEnabled: async () => true,
+      getAttribute: async (name) =>
+        name === "aria-label" ? "What do you want to change?" : null,
+    };
+    const submit = {
+      isVisible: async () => true,
+      isEnabled: async () => true,
+      getAttribute: async () => null,
+      innerText: async () => "send",
+    };
+    const page = {
+      isClosed: () => false,
+      url: () => "https://flow.google.com/project/proj-mapped/character/flow-char-mapped",
+      locator: (selector) => {
+        if (selector.includes("flow-edit-image-prompt-box") && selector.includes("textbox")) {
+          return { count: async () => 1, nth: () => prompt };
+        }
+        if (selector === "flow-edit-image-prompt-box button, flow-edit-image-prompt-box [role='button']") {
+          return { count: async () => 1, nth: () => submit };
+        }
+        return { count: async () => 0 };
+      },
+    };
+
+    const promptResult = await worker.findCharacterEditorPromptEditor(page);
+    const submitResult = await worker.findCharacterEditorSubmitButton(page);
+
+    assert.equal(promptResult.locator, prompt);
+    assert.match(promptResult.selector, /flow-edit-image-prompt-box/);
+    assert.equal(submitResult.locator, submit);
+    assert.match(submitResult.selector, /flow-edit-image-prompt-box/);
+  });
+
+  await t.test("14. prepareJob opens the mapped saved Character editor and fills its change prompt", async () => {
+    const worker = new FlowBrowserWorker();
+    let currentUrl = "https://flow.google.com/project/proj-mapped/character";
+    let openedEditorArgs = null;
+    let filledPrompt = "";
+
+    const prompt = {
+      isVisible: async () => true,
+      isEnabled: async () => true,
+      fill: async (value) => { filledPrompt = value; },
+      click: async () => {},
+    };
+    const page = {
+      isClosed: () => false,
+      url: () => currentUrl,
+      goto: async (url) => { currentUrl = url; },
+      bringToFront: async () => {},
+      locator: () => ({ count: async () => 0 }),
+      on: () => {},
+    };
+
+    worker.context = {};
+    worker.registerFlowPage(page, {
+      role: FLOW_TAB_ROLES.CHARACTER,
+      projectId: "proj-mapped",
+    });
+    worker.resolveJobPage = async () => page;
+    worker.navigateToCharacterTab = async () => ({
+      success: true,
+      page,
+      url: currentUrl,
+      routeType: "character-create",
+    });
+    worker.openGoogleFlowCharacterEditor = async (args) => {
+      openedEditorArgs = args;
+      currentUrl =
+        "https://flow.google.com/project/proj-mapped/character/flow-char-mapped";
+      return {
+        success: true,
+        page,
+        url: currentUrl,
+        projectId: "proj-mapped",
+        characterId: "flow-char-mapped",
+        routeType: "character-editor",
+      };
+    };
+    worker.findCharacterEditorPromptEditor = async () => ({
+      locator: prompt,
+      selector: "flow-edit-image-prompt-box prompt",
+    });
+    worker.fillFlowPrompt = async (_page, locator, value) => locator.fill(value);
+    worker.attachCharacterReferences = async () => {};
+
+    const job = worker.createJob({
+      targetType: "character",
+      pageRole: FLOW_TAB_ROLES.CHARACTER,
+      characterId: "studio-char-mapped",
+      characterName: "Mili",
+      projectUrl: "https://flow.google.com/project/proj-mapped",
+      googleFlowCharacterId: "flow-char-mapped",
+      googleFlowCharacterUrl:
+        "https://flow.google.com/project/proj-mapped/character/flow-char-mapped",
+      assetType: "turnaround",
+      view: "front-left",
+      prompt: "Create one standalone front-left view.",
+    });
+
+    const prepared = await worker.prepareJob(job.id);
+
+    assert.equal(openedEditorArgs.projectId, "proj-mapped");
+    assert.equal(openedEditorArgs.characterId, "flow-char-mapped");
+    assert.equal(prepared.status, "prompt_ready");
+    assert.equal(job.characterPromptMode, "edit");
+    assert.equal(filledPrompt, job.prompt);
+    assert.equal(job.googleFlowCharacterId, "flow-char-mapped");
+  });
+
+  await t.test("15. submitCharacterPrompt submits a directional view from the saved Character editor", async () => {
+    const worker = new FlowBrowserWorker();
+    const page = {
+      isClosed: () => false,
+      url: () => "https://flow.google.com/project/proj-mapped/character/flow-char-mapped",
+    };
+    let filledPrompt = "";
+    let clickedSend = false;
+    const prompt = {
+      fill: async (value) => { filledPrompt = value; },
+      isVisible: async () => true,
+      isEnabled: async () => true,
+    };
+    const submit = {
+      isVisible: async () => true,
+      isEnabled: async () => true,
+      getAttribute: async () => null,
+      click: async () => { clickedSend = true; },
+    };
+
+    worker.registerFlowPage(page, {
+      role: FLOW_TAB_ROLES.CHARACTER,
+      projectId: "proj-mapped",
+    });
+    worker.findCharacterEditorPromptEditor = async () => ({
+      locator: prompt,
+      selector: "flow-edit-image-prompt-box prompt",
+    });
+    worker.findCharacterEditorSubmitButton = async () => ({
+      locator: submit,
+      selector: "flow-edit-image-prompt-box send button",
+    });
+    worker.fillFlowPrompt = async (_page, locator, value) => locator.fill(value);
+    worker.getCharacterOutputBaseline = async () => ({ identifiers: new Set() });
+    worker.startImageResponseCapture = async () => new Map();
+    worker.monitorCharacterGenerationAndDownload = async () => {};
+
+    const job = worker.createJob({
+      targetType: "character",
+      pageRole: FLOW_TAB_ROLES.CHARACTER,
+      characterId: "studio-char-mapped",
+      characterName: "Mili",
+      projectUrl: "https://flow.google.com/project/proj-mapped",
+      googleFlowCharacterId: "flow-char-mapped",
+      assetType: "turnaround",
+      view: "back",
+      prompt: "Create one standalone rear view with no text.",
+    });
+    job.characterPromptMode = "edit";
+
+    const result = await worker.submitCharacterPrompt(
+      job,
+      { confirmGenerate: true, referenceConfirmed: true },
+      page,
+    );
+
+    assert.equal(filledPrompt, job.prompt);
+    assert.equal(clickedSend, true);
+    assert.equal(result.status, "generation_submitted");
+    assert.equal(job.googleFlowCharacterId, "flow-char-mapped");
+    assert.match(job.submitSelectorUsed, /flow-edit-image-prompt-box/);
+  });
+
 });
