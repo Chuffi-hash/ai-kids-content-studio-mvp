@@ -1911,24 +1911,34 @@ export class FlowBrowserWorker {
   }
 
   createJob(input) {
+    // Character identity is a stronger discriminator than scene context.
+    // Some callers associate a character asset with a scene, so sceneId must
+    // never silently convert an explicitly identified character job to Background.
     const targetType =
-      input.targetType || (input.sceneId ? "background" : "character");
+      input.targetType ||
+      (input.pageRole === FLOW_TAB_ROLES.CHARACTER || input.characterId
+        ? "character"
+        : input.pageRole === FLOW_TAB_ROLES.BACKGROUND || input.sceneId
+          ? "background"
+          : "character");
 
-    if (input.pageRole && input.targetType) {
-      if (input.targetType === "character" && input.pageRole !== FLOW_TAB_ROLES.CHARACTER) {
-        const err = new Error(
-          `FLOW_JOB_ROLE_MISMATCH: Cannot create character job with pageRole "${input.pageRole}".`
-        );
-        err.code = "FLOW_JOB_ROLE_MISMATCH";
-        throw err;
-      }
-      if (input.targetType === "background" && input.pageRole !== FLOW_TAB_ROLES.BACKGROUND) {
-        const err = new Error(
-          `FLOW_JOB_ROLE_MISMATCH: Cannot create background job with pageRole "${input.pageRole}".`
-        );
-        err.code = "FLOW_JOB_ROLE_MISMATCH";
-        throw err;
-      }
+    const expectedRole =
+      targetType === "character"
+        ? FLOW_TAB_ROLES.CHARACTER
+        : targetType === "background"
+          ? FLOW_TAB_ROLES.BACKGROUND
+          : null;
+    if (!expectedRole) {
+      const error = new Error(`FLOW_JOB_TARGET_UNSUPPORTED: Unsupported targetType "${targetType}".`);
+      error.code = "FLOW_JOB_TARGET_UNSUPPORTED";
+      throw error;
+    }
+    if (input.pageRole && input.pageRole !== expectedRole) {
+      const err = new Error(
+        `FLOW_JOB_ROLE_MISMATCH: targetType "${targetType}" cannot use pageRole "${input.pageRole}".`,
+      );
+      err.code = "FLOW_JOB_ROLE_MISMATCH";
+      throw err;
     }
 
     if (targetType === "background") {
@@ -2017,12 +2027,17 @@ export class FlowBrowserWorker {
 
     if (!prompt) throw new Error("A non-empty prompt is required.");
 
+    const googleFlowProjectId =
+      input.googleFlowProjectId ||
+      extractProjectIdFromFlowUrl(projectUrl) ||
+      undefined;
     const job = {
       id: randomUUID(),
       targetType: "character",
-      pageRole: input.pageRole || FLOW_TAB_ROLES.CHARACTER,
+      pageRole: FLOW_TAB_ROLES.CHARACTER,
       characterId,
       characterName,
+      storyId: String(input.storyId || "").trim() || undefined,
       view,
       assetType,
       isMasterReference:
@@ -2030,6 +2045,8 @@ export class FlowBrowserWorker {
         assetType === "main" ||
         input.assetType === "master_reference",
       projectUrl,
+      googleFlowProjectId,
+      flowProjectId: googleFlowProjectId,
       prompt,
       status: "created",
       createdAt: new Date().toISOString(),
@@ -2734,7 +2751,7 @@ export class FlowBrowserWorker {
       );
     }
 
-    const page = await this.resolveJobPage(job);
+    let page = await this.resolveJobPage(job);
     if (!page || (typeof page.isClosed === "function" && page.isClosed())) {
       throw new Error(
         "Open a Google Flow browser session before preparing a job.",
@@ -2797,67 +2814,114 @@ export class FlowBrowserWorker {
         tabId: this.getFlowPageMetadata(page)?.tabId,
       });
 
-      // Ensure character tab route is reached
-      await this.navigateToCharacterTab(job.googleFlowProjectId);
+      const requestedProjectId =
+        job.googleFlowProjectId ||
+        this.extractProjectId(job.projectUrl) ||
+        this.getFlowPageMetadata(page)?.projectId ||
+        null;
+      const characterNavigation = await this.navigateToCharacterTab(requestedProjectId);
+      if (!characterNavigation?.success || !characterNavigation.page) {
+        const error = new Error(
+          "FLOW_CHARACTER_TAB_NOT_READY: Could not resolve the dedicated Google Flow Character tab.",
+        );
+        error.code = "FLOW_CHARACTER_TAB_NOT_READY";
+        throw error;
+      }
 
+      page = characterNavigation.page;
+      const characterRoute = extractGoogleFlowCharacterReference(
+        typeof page.url === "function" ? page.url() : "",
+      );
+      if (
+        !characterRoute ||
+        (requestedProjectId && characterRoute.projectId !== requestedProjectId) ||
+        this.getFlowPage(FLOW_TAB_ROLES.CHARACTER) !== page
+      ) {
+        const error = new Error(
+          "FLOW_CHARACTER_TAB_MISMATCH: Character generation must run on the dedicated /project/{projectId}/character tab.",
+        );
+        error.code = "FLOW_CHARACTER_TAB_MISMATCH";
+        error.details = {
+          expectedProjectId: requestedProjectId,
+          currentUrl: typeof page.url === "function" ? page.url() : "",
+          tabId: this.getFlowPageMetadata(page)?.tabId || null,
+        };
+        throw error;
+      }
+
+      job.googleFlowProjectId = characterRoute.projectId;
+      job.flowProjectId = characterRoute.projectId;
+
+      // The Character create/edit workspace has its own prompt component.
+      // Do not fall back to the generic project Agent prompt or a random textbox.
+      const characterPromptSelectors = [
+        'flow-character-prompt-box .prosemirror-editor [role="textbox"][aria-label*="Describe your character" i]',
+        'flow-character-prompt-box [role="textbox"][aria-label*="Describe your character" i]',
+        'flow-character-prompt-box .ProseMirror[contenteditable="true"]',
+        'flow-character-prompt-box [contenteditable="true"]',
+        'flow-character-editor flow-character-prompt-box [role="textbox"]',
+        'flow-character-create flow-character-prompt-box [role="textbox"]',
+      ];
       let characterPromptLocator = null;
       let promptSelectorUsed = null;
 
-      const selectors = [
-        'flow-character-editor [role="textbox"]',
-        'flow-character-create [role="textbox"]',
-        '[role="textbox"][aria-label*="character" i]',
-        '[role="textbox"][aria-label*="prompt" i]',
-        'textarea[placeholder*="character" i]',
-        'textarea[placeholder*="prompt" i]',
-        'flow-character-editor textarea',
-        'flow-character-create textarea',
-        'textarea',
-        '[role="textbox"]',
-        '[contenteditable="true"]',
-      ];
-
-      for (const sel of selectors) {
-        if (typeof page.locator === "function") {
-          const loc = page.locator(sel);
-          const count = await loc.count().catch(() => 0);
-          if (count > 0) {
-            for (let i = 0; i < count; i++) {
-              const cand = typeof loc.nth === "function" ? loc.nth(i) : (typeof loc.first === "function" ? loc.first() : loc);
-              if (await cand.isVisible().catch(() => false)) {
-                characterPromptLocator = cand;
-                promptSelectorUsed = sel;
-                break;
-              }
-            }
-          }
+      for (const selector of characterPromptSelectors) {
+        const locator = page.locator(selector);
+        const count = await locator.count().catch(() => 0);
+        const visibleMatches = [];
+        for (let index = 0; index < count; index += 1) {
+          const candidate =
+            typeof locator.nth === "function"
+              ? locator.nth(index)
+              : typeof locator.first === "function"
+                ? locator.first()
+                : locator;
+          const visible = await candidate.isVisible().catch(() => false);
+          const enabled =
+            typeof candidate.isEnabled !== "function" ||
+            (await candidate.isEnabled().catch(() => false));
+          if (visible && enabled) visibleMatches.push(candidate);
         }
-        if (characterPromptLocator) break;
+        if (visibleMatches.length > 1) {
+          const error = new Error(
+            `FLOW_CHARACTER_PROMPT_AMBIGUOUS: Selector "${selector}" matched ${visibleMatches.length} visible character prompt fields.`,
+          );
+          error.code = "FLOW_CHARACTER_PROMPT_AMBIGUOUS";
+          throw error;
+        }
+        if (visibleMatches.length === 1) {
+          characterPromptLocator = visibleMatches[0];
+          promptSelectorUsed = selector;
+          break;
+        }
       }
 
       if (!characterPromptLocator && typeof page.getByRole === "function") {
-        const byRole = page.getByRole("textbox");
-        if ((await byRole.count().catch(() => 0)) > 0) {
+        const byRole = page.getByRole("textbox", {
+          name: /Describe your character/i,
+        });
+        const count = await byRole.count().catch(() => 0);
+        if (count === 1 && await byRole.isVisible().catch(() => false)) {
           characterPromptLocator = byRole.first();
-          promptSelectorUsed = 'role="textbox"';
+          promptSelectorUsed = 'getByRole("textbox", { name: /Describe your character/i })';
         }
       }
 
-      if (!characterPromptLocator && typeof page.getByPlaceholder === "function") {
-        const byPl = page.getByPlaceholder(/character|prompt|describe/i);
-        if ((await byPl.count().catch(() => 0)) > 0) {
-          characterPromptLocator = byPl.first();
-          promptSelectorUsed = 'getByPlaceholder(/character|prompt|describe/i)';
-        }
+      if (!characterPromptLocator) {
+        const error = new Error(
+          "FLOW_CHARACTER_PROMPT_NOT_FOUND: Could not find the dedicated 'Describe your character…' textbox inside flow-character-prompt-box.",
+        );
+        error.code = "FLOW_CHARACTER_PROMPT_NOT_FOUND";
+        error.diagnostics = await collectFlowEditorDiagnostics(page).catch(() => null);
+        throw error;
       }
 
-      if (characterPromptLocator) {
-        await this.fillFlowPrompt(page, characterPromptLocator, job.prompt);
-      }
+      await this.fillFlowPrompt(page, characterPromptLocator, job.prompt);
 
       this.emitLifecycleLog("FLOW_PROMPT_DETECTION_COMPLETED", job, {
         role: targetRole,
         tabId: this.getFlowPageMetadata(page)?.tabId,
+        currentUrl: typeof page.url === "function" ? page.url() : "",
         selector: promptSelectorUsed,
       });
 
@@ -2866,7 +2930,7 @@ export class FlowBrowserWorker {
 
       job.promptSelectorUsed = promptSelectorUsed;
       job.status = "prompt_ready";
-      job.message = "Character prompt populated into Google Flow character tab.";
+      job.message = "Character prompt populated into Google Flow's dedicated Character tab.";
       job.error = undefined;
       this.touch(job);
       return job;
