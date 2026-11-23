@@ -244,3 +244,74 @@ describe("Flow Worker Verified Fixes Test Suite", () => {
     assert.equal(info.actionAvailable, true);
   });
 });
+
+
+  it("19. Background and Character tabs download/import independently at the same time", async () => {
+    const worker = new FlowBrowserWorker();
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "flow-dual-tab-download-"));
+    worker.downloadDir = tempDir;
+
+    const backgroundPage = {
+      url: () => "https://flow.google.com/project/project-1",
+      isClosed: () => false,
+    };
+    const characterPage = {
+      url: () => "https://flow.google.com/project/project-1/character/character-1",
+      isClosed: () => false,
+    };
+
+    worker.context = { pages: () => [backgroundPage, characterPage] };
+    worker.registerFlowPage(backgroundPage, { role: "background", projectId: "project-1" });
+    worker.registerFlowPage(characterPage, { role: "character", projectId: "project-1" });
+
+    const backgroundJob = worker.createJob({
+      targetType: "background",
+      sceneId: "scene-dual-tab",
+      storyId: "story-dual-tab",
+      prompt: "A bright forest clearing",
+    });
+    const characterJob = worker.createJob({
+      targetType: "character",
+      characterId: "character-1",
+      characterName: "Pip",
+      view: "front",
+      prompt: "Pip, front view",
+    });
+    backgroundJob.status = "generation_submitted";
+    characterJob.status = "generation_submitted";
+    worker.setActiveJob(backgroundJob, "background");
+    worker.setActiveJob(characterJob, "character");
+
+    const importedJobIds = [];
+    worker.importDownloadedAsset = async (job) => {
+      importedJobIds.push(job.id);
+      job.status = "completed";
+    };
+
+    const png = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAALUlEQVRYR+3QQREAAAzCQPr39g4fXgYk0L2Sqm8cAAAAAAAAAAAAAAAAAAB+1gO4/AH4rE2gOAAAAABJRU5ErkJggg==",
+      "base64",
+    );
+    const makeDownload = (name) => ({
+      suggestedFilename: () => name,
+      saveAs: async (targetPath) => fs.writeFile(targetPath, png),
+    });
+
+    try {
+      await Promise.all([
+        worker.handleDownload(makeDownload("background.png"), backgroundPage),
+        worker.handleDownload(makeDownload("character.png"), characterPage),
+      ]);
+
+      assert.deepEqual(new Set(importedJobIds), new Set([backgroundJob.id, characterJob.id]));
+      assert.equal(backgroundJob.status, "completed");
+      assert.equal(characterJob.status, "completed");
+      assert.equal(worker.getActiveJob("background"), null);
+      assert.equal(worker.getActiveJob("character"), null);
+      assert.equal(worker.downloadInProgress, false);
+      assert.equal(worker.getFlowPage("background"), backgroundPage);
+      assert.equal(worker.getFlowPage("character"), characterPage);
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
+  });
