@@ -295,6 +295,8 @@ export interface CharacterContextItem {
   flowMapping?: {
     flowCharacterName: string;
     flowProjectId: string;
+    flowCharacterId?: string | null;
+    flowCharacterUrl?: string | null;
     syncStatus: string;
     lastSyncedAt: string | null;
   } | null;
@@ -415,6 +417,8 @@ export class StoryContextService {
           ? {
               flowCharacterName: mapping.flowCharacterName,
               flowProjectId: mapping.flowProjectId,
+              flowCharacterId: mapping.flowCharacterId || null,
+              flowCharacterUrl: mapping.flowCharacterUrl || null,
               syncStatus: mapping.syncStatus,
               lastSyncedAt: mapping.lastSyncedAt ? mapping.lastSyncedAt.toISOString() : null,
             }
