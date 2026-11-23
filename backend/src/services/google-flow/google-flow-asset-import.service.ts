@@ -677,7 +677,7 @@ export class GoogleFlowAssetImportService {
       // the first view, so subsequent angles can reuse this saved Character
       // editor. Only the canonical master reference creates a Flow version;
       // directional views must never advance activeVersion.
-      if (options.storyId && (isMaster || flowCharId)) {
+      if (options.storyId && flowCharId) {
         try {
           const flowProjId =
             options.googleFlowProjectId ||
