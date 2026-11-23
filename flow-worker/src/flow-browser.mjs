@@ -5843,12 +5843,20 @@ export class FlowBrowserWorker {
       throw error;
     }
 
-    const { locator: promptLocator, selector: promptSelector } =
-      await this.findCharacterPromptEditor(page);
+    const promptControl =
+      job.characterPromptMode === "edit"
+        ? await this.findCharacterEditorPromptEditor(page)
+        : await this.findCharacterPromptEditor(page);
+    const promptLocator = promptControl.locator;
+    const promptSelector = promptControl.selector;
 
     await this.fillFlowPrompt(page, promptLocator, job.prompt);
-    const { locator: submitButton, selector: submitSelector } =
-      await this.findCharacterGenerationButton(page, promptLocator);
+    const submitControl =
+      job.characterPromptMode === "edit"
+        ? await this.findCharacterEditorSubmitButton(page)
+        : await this.findCharacterGenerationButton(page, promptLocator);
+    const submitButton = submitControl.locator;
+    const submitSelector = submitControl.selector;
     job.submitSelectorUsed = submitSelector;
 
     const baseline = await this.getCharacterOutputBaseline(page);
@@ -5863,7 +5871,9 @@ export class FlowBrowserWorker {
     job.generationRequestedAt = new Date().toISOString();
     job.characterPageUrl = currentUrl;
     job.message =
-      "Character prompt submitted in the dedicated Google Flow Characters workspace.";
+      job.characterPromptMode === "edit"
+        ? "Directional view prompt submitted in the saved Google Flow Character editor."
+        : "Character prompt submitted in the dedicated Google Flow Characters workspace.";
 
     const tabId = this.getFlowPageMetadata(page)?.tabId || null;
     this.emitLifecycleLog("CHARACTER_GENERATION_TRIGGERED", job, {
@@ -5902,7 +5912,9 @@ export class FlowBrowserWorker {
         job,
         "failed",
         error.message,
-        "Could not click Start generation in the Google Flow Character prompt box.",
+        job.characterPromptMode === "edit"
+          ? "Could not submit the directional prompt in the saved Google Flow Character editor."
+          : "Could not click Start generation in the Google Flow Character prompt box.",
       );
       throw error;
     }
@@ -6061,11 +6073,17 @@ export class FlowBrowserWorker {
           ambiguousCandidates = candidates;
           if (candidates.length === 1) {
             const candidate = candidates[0];
-            const submitControl = await this.findCharacterGenerationButton(
-              page,
-              null,
-              { allowDisabled: true },
-            ).catch(() => null);
+            const submitControl =
+              job.characterPromptMode === "edit"
+                ? await this.findCharacterEditorSubmitButton(page, {
+                    allowDisabled: true,
+                    timeoutMs: 0,
+                  }).catch(() => null)
+                : await this.findCharacterGenerationButton(
+                    page,
+                    null,
+                    { allowDisabled: true },
+                  ).catch(() => null);
             const submitButtonReady = Boolean(
               submitControl &&
               (typeof submitControl.locator.isEnabled !== "function" ||
