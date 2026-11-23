@@ -966,4 +966,108 @@ test("Google Flow Character Generation E2E Suite (17 Conditions)", async (t) => 
     );
   });
 
+
+  await t.test("Condition 20: Saved Character editor baseline excludes the old master image from captured turnaround results", async () => {
+    const worker = new FlowBrowserWorker();
+    const now = Date.now();
+    const existingUrl = "https://flow.google.com/asb/character-master-existing=s0";
+    const newViewUrl = "https://flow.google.com/asb/character-back-view-new=s0";
+    const importedSources = [];
+
+    const existingImage = {
+      isVisible: async () => true,
+      getAttribute: async (name) => (name === "src" ? existingUrl : null),
+      evaluate: async () => existingUrl,
+    };
+    const page = {
+      url: () => "https://flow.google.com/project/proj-mapped/character/flow-char-mapped",
+      isClosed: () => false,
+      locator: (selector) => {
+        if (selector.includes('img[src*="/asb/"]')) {
+          return {
+            count: async () => 1,
+            nth: () => existingImage,
+          };
+        }
+        return { count: async () => 0 };
+      },
+    };
+
+    const baseline = await worker.getCharacterOutputBaseline(page);
+    assert.ok(baseline.identifiers.has(existingUrl));
+    assert.ok(baseline.identifiers.has("character-master-existing"));
+
+    const job = worker.createJob({
+      targetType: "character",
+      pageRole: FLOW_TAB_ROLES.CHARACTER,
+      characterId: "studio-char-mapped",
+      characterName: "Mili",
+      projectUrl: "https://flow.google.com/project/proj-mapped",
+      googleFlowCharacterId: "flow-char-mapped",
+      assetType: "turnaround",
+      view: "back",
+      prompt: "Create one standalone rear view.",
+    });
+    job.characterPromptMode = "edit";
+    job.status = "generation_submitted";
+    job.generationRequestedAt = new Date(now - 100).toISOString();
+    job.capturedImageResponses = new Map([
+      [existingUrl, {
+        buffer: Buffer.alloc(700, 1),
+        capturedAt: now,
+      }],
+      [newViewUrl, {
+        buffer: Buffer.alloc(710, 2),
+        capturedAt: now + 1,
+      }],
+    ]);
+    job.pendingImageCaptures = [];
+
+    worker.collectNewCharacterOutput = async () => [];
+    worker.findCharacterEditorSubmitButton = async () => ({
+      locator: {
+        isEnabled: async () => true,
+        getAttribute: async () => null,
+      },
+      selector: "flow-edit-image-prompt-box send button",
+    });
+    worker.isCharacterOutputSourceVisible = async () => false;
+    worker.downloadCharacterImageSource = async (_page, receivedJob, sourceUrl, captured) => {
+      assert.equal(receivedJob, job);
+      assert.equal(sourceUrl, newViewUrl);
+      assert.equal(captured.buffer[0], 2);
+      importedSources.push(sourceUrl);
+      return {
+        path: "/tmp/mili-back-view.webp",
+        fileName: "mili-back-view.webp",
+        fileSize: 710,
+        buffer: captured.buffer,
+        mimeType: "image/webp",
+        extension: "webp",
+        width: 512,
+        height: 512,
+        sourceUrl,
+      };
+    };
+    worker.importCharacterAsset = async (receivedJob, buffer, imageType) => {
+      assert.equal(receivedJob.characterPromptMode, "edit");
+      assert.equal(receivedJob.googleFlowCharacterId, "flow-char-mapped");
+      assert.equal(receivedJob.view, "back");
+      assert.equal(imageType.mimeType, "image/webp");
+      receivedJob.importResult = { assetId: "mili-back-view-asset" };
+      receivedJob.asset = receivedJob.importResult;
+      worker.setJobTerminal(receivedJob, "completed", undefined, "Directional view imported.");
+    };
+
+    await worker.monitorCharacterGenerationAndDownload(
+      job.id,
+      page,
+      baseline,
+      { maxWaitMs: 40, pollIntervalMs: 1 },
+    );
+
+    assert.equal(job.status, "completed");
+    assert.deepEqual(importedSources, [newViewUrl]);
+  });
+
 });
