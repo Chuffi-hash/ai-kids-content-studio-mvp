@@ -673,7 +673,10 @@ export class GoogleFlowAssetImportService {
         });
       }
 
-      if (options.storyId) {
+      // Only the canonical master reference represents a saved Flow
+      // character version. Directional view images are independent video assets
+      // and must not advance FlowCharacterMapping.activeVersion.
+      if (options.storyId && isMaster) {
         try {
           const flowProjId =
             options.googleFlowProjectId ||
