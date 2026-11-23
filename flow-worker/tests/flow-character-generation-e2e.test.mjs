@@ -740,4 +740,174 @@ test("Google Flow Character Generation E2E Suite (17 Conditions)", async (t) => 
     assert.equal(charReqEvent.job.characterId, "char-lifecycle");
     assert.equal(charReqEvent.job.sceneId, undefined, "sceneId must not exist in character event metadata");
   });
+
+  await t.test("Condition 18: Character monitor imports only a generation-scoped output and commits New character", async () => {
+    const worker = new FlowBrowserWorker();
+    const events = [];
+    worker.emitLifecycleLog = (event, job, details = {}) => {
+      events.push({ event, job, details });
+    };
+
+    const now = Date.now();
+    const responseBuffer = Buffer.alloc(700, 7);
+    const sourceUrl = "https://flow.google.com/asb/character-result-123=s0";
+    const job = worker.createJob({
+      targetType: "character",
+      pageRole: FLOW_TAB_ROLES.CHARACTER,
+      characterId: "char-monitor-18",
+      characterName: "Milo",
+      storyId: "story-monitor-18",
+      view: "front",
+      prompt: "A full body character named Milo.",
+    });
+    job.status = "generation_submitted";
+    job.generationRequestedAt = new Date(now).toISOString();
+    job.capturedImageResponses = new Map([
+      [sourceUrl, {
+        url: sourceUrl,
+        buffer: responseBuffer,
+        mimeType: "image/webp",
+        capturedAt: now,
+      }],
+    ]);
+    job.pendingImageCaptures = [];
+
+    let doneClicked = false;
+    let importedBuffer = null;
+    const doneButton = {
+      isVisible: async () => true,
+      isEnabled: async () => true,
+      click: async () => { doneClicked = true; },
+    };
+    const page = {
+      url: () => "https://flow.google.com/project/proj-monitor-18/character",
+      isClosed: () => false,
+      locator: (selector) => {
+        if (selector === 'button[aria-label="Done"]') {
+          return {
+            count: async () => 1,
+            first: () => doneButton,
+          };
+        }
+        return { count: async () => 0 };
+      },
+    };
+    worker.findCharacterGenerationButton = async () => ({
+      locator: {
+        isEnabled: async () => true,
+        getAttribute: async () => null,
+      },
+      selector: "character-submit-button",
+    });
+    worker.isCharacterOutputSourceVisible = async () => false;
+    worker.collectNewCharacterOutput = async () => [];
+    worker.downloadCharacterImageSource = async (_page, receivedJob, receivedUrl, captured) => {
+      assert.equal(receivedJob, job);
+      assert.equal(receivedUrl, sourceUrl);
+      assert.equal(captured.buffer, responseBuffer);
+      return {
+        success: true,
+        path: "/tmp/character-monitor-18.webp",
+        fileName: "character-monitor-18.webp",
+        fileSize: responseBuffer.length,
+        buffer: responseBuffer,
+        mimeType: "image/webp",
+        extension: "webp",
+        width: 512,
+        height: 512,
+        sourceUrl,
+      };
+    };
+    worker.importCharacterAsset = async (receivedJob, buffer, imageType) => {
+      assert.equal(receivedJob.targetType, "character");
+      assert.equal(receivedJob.characterId, "char-monitor-18");
+      assert.equal(receivedJob.sceneId, undefined);
+      assert.equal(imageType.mimeType, "image/webp");
+      importedBuffer = buffer;
+      receivedJob.importResult = { assetId: "character-asset-18" };
+      receivedJob.asset = receivedJob.importResult;
+      worker.setJobTerminal(receivedJob, "completed", undefined, "Character import completed in test.");
+    };
+
+    await worker.monitorCharacterGenerationAndDownload(
+      job.id,
+      page,
+      { identifiers: new Set() },
+      { maxWaitMs: 50, pollIntervalMs: 1 },
+    );
+
+    assert.equal(job.status, "completed");
+    assert.equal(importedBuffer, responseBuffer);
+    assert.equal(doneClicked, true);
+    assert.equal(job.googleFlowCharacterId, undefined);
+    assert.equal(job.downloadMethod, "character_network_response_capture");
+    assert.ok(events.some((item) => item.event === "CHARACTER_OUTPUT_DETECTED"));
+    assert.ok(events.some((item) => item.event === "CHARACTER_IMAGE_CAPTURE_COMPLETED"));
+  });
+
+  await t.test("Condition 19: Character monitor rejects unrelated ambiguous image responses", async () => {
+    const worker = new FlowBrowserWorker();
+    const events = [];
+    worker.emitLifecycleLog = (event, job, details = {}) => {
+      events.push({ event, job, details });
+    };
+
+    const now = Date.now();
+    const job = worker.createJob({
+      targetType: "character",
+      pageRole: FLOW_TAB_ROLES.CHARACTER,
+      characterId: "char-ambiguous-19",
+      characterName: "Pip",
+      view: "front",
+      prompt: "A small blue bird.",
+    });
+    job.status = "generation_submitted";
+    job.generationRequestedAt = new Date(now).toISOString();
+    job.capturedImageResponses = new Map([
+      ["https://flow.google.com/asb/character-image-1=s0", {
+        buffer: Buffer.alloc(700, 1),
+        capturedAt: now,
+      }],
+      ["https://flow.google.com/asb/character-image-2=s0", {
+        buffer: Buffer.alloc(710, 2),
+        capturedAt: now + 1,
+      }],
+    ]);
+    job.pendingImageCaptures = [];
+
+    const page = {
+      url: () => "https://flow.google.com/project/proj-ambiguous-19/character",
+      isClosed: () => false,
+      locator: () => ({ count: async () => 0 }),
+    };
+    worker.collectNewCharacterOutput = async () => [];
+    worker.findCharacterGenerationButton = async () => ({
+      locator: {
+        isEnabled: async () => false,
+        getAttribute: async () => "true",
+      },
+      selector: "character-submit-button",
+    });
+    worker.isCharacterOutputSourceVisible = async () => false;
+    worker.importCharacterAsset = async () => {
+      throw new Error("Ambiguous character responses must never be imported.");
+    };
+
+    await worker.monitorCharacterGenerationAndDownload(
+      job.id,
+      page,
+      { identifiers: new Set() },
+      { maxWaitMs: 15, pollIntervalMs: 1 },
+    );
+
+    assert.equal(job.status, "failed");
+    assert.ok(
+      events.some(
+        (item) =>
+          item.event === "CHARACTER_GENERATION_FAILED" &&
+          item.details.errorCode === "FLOW_CHARACTER_OUTPUT_AMBIGUOUS",
+      ),
+    );
+  });
+
 });
