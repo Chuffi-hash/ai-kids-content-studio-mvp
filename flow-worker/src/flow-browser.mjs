@@ -4381,7 +4381,7 @@ export class FlowBrowserWorker {
   async requestGeneration(jobId, confirmation) {
     const job = this.requireJob(jobId);
 
-    if (!["prompt_ready", "awaiting_agent_confirmation"].includes(job.status)) {
+    if (!["prompt_ready", "awaiting_agent_confirmation", "awaiting_editor_cleanup"].includes(job.status)) {
       const error = new Error(
         `FLOW_JOB_NOT_READY: Job "${job.id}" cannot generate from status "${job.status}". Prepare the prompt successfully before confirming generation.`,
       );
