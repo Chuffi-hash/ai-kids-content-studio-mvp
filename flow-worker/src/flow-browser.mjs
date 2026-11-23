@@ -4799,6 +4799,21 @@ export class FlowBrowserWorker {
     const identifiers = new Set();
     if (!page || typeof page.locator !== "function") return { identifiers };
 
+    const addSource = (rawSource) => {
+      if (!rawSource) return;
+      let absoluteUrl = String(rawSource);
+      try {
+        absoluteUrl = new URL(absoluteUrl, page.url()).href;
+        identifiers.add(absoluteUrl);
+        const parsed = new URL(absoluteUrl);
+        const assetPath = parsed.pathname.split("/asb/")[1] || "";
+        const assetKey = assetPath ? assetPath.split("/")[0].split("=")[0] : "";
+        if (assetKey) identifiers.add(assetKey);
+      } catch {
+        identifiers.add(absoluteUrl);
+      }
+    };
+
     const images = page.locator(
       "flow-grid-tile-container flow-character-tile img.character-tile-thumbnail, flow-character-tile img.character-tile-thumbnail, img.character-tile-thumbnail",
     );
@@ -4806,14 +4821,34 @@ export class FlowBrowserWorker {
     for (let index = 0; index < count; index += 1) {
       const image = typeof images.nth === "function" ? images.nth(index) : images;
       const src = await image.getAttribute("src").catch(() => null);
-      if (src) {
-        try {
-          identifiers.add(new URL(src, page.url()).href);
-        } catch {
-          identifiers.add(src);
+      addSource(src);
+    }
+
+    // On an already-saved Character editor, the canonical image is displayed
+    // in the editor rather than as a character-tile thumbnail. Include all
+    // currently rendered Flow image sources so a delayed/duplicated response
+    // for the old reference cannot be mistaken for the new directional view.
+    const currentRoute = extractGoogleFlowCharacterReference(
+      typeof page.url === "function" ? page.url() : "",
+    );
+    if (currentRoute?.routeType === "character-editor") {
+      const visibleImages = page.locator('img[src*="/asb/"], img[srcset*="/asb/"]');
+      const visibleCount = await visibleImages.count().catch(() => 0);
+      for (let index = 0; index < visibleCount; index += 1) {
+        const image = typeof visibleImages.nth === "function"
+          ? visibleImages.nth(index)
+          : visibleImages;
+        if (!(await image.isVisible().catch(() => false))) continue;
+        let source = await image.getAttribute("src").catch(() => null);
+        if (typeof image.evaluate === "function") {
+          source = await image.evaluate((img) =>
+            img.currentSrc || img.src || img.getAttribute("src") || "",
+          ).catch(() => source);
         }
+        addSource(source);
       }
     }
+
     return { identifiers };
   }
 
@@ -4874,7 +4909,13 @@ export class FlowBrowserWorker {
       }
 
       if (!sourceUrl.startsWith("https://flow.google.com/asb/")) continue;
-      if (baseline?.identifiers?.has(sourceUrl) || baseline?.identifiers?.has(rawSrc)) {
+      const assetPath = new URL(sourceUrl).pathname.split("/asb/")[1] || "";
+      const assetKey = assetPath ? assetPath.split("/")[0].split("=")[0] : "";
+      if (
+        baseline?.identifiers?.has(sourceUrl) ||
+        baseline?.identifiers?.has(rawSrc) ||
+        (assetKey && baseline?.identifiers?.has(assetKey))
+      ) {
         continue;
       }
 
@@ -6029,6 +6070,13 @@ export class FlowBrowserWorker {
 
         const assetPath = parsed.pathname.split("/asb/")[1] || "";
         const assetKey = assetPath ? assetPath.split("/")[0].split("=")[0] : parsed.href;
+        if (
+          baseline?.identifiers?.has(url) ||
+          baseline?.identifiers?.has(parsed.href) ||
+          baseline?.identifiers?.has(assetKey)
+        ) {
+          continue;
+        }
         const candidate = { url, item, assetKey };
         const existing = groups.get(assetKey);
         if (!existing || item.buffer.length > existing.item.buffer.length) {
