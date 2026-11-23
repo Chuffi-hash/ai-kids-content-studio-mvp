@@ -334,11 +334,14 @@ export class FlowBrowserWorker {
 
   set page(p) {
     this._page = p;
-    if (p) {
-      if (!this.pagesByRole.has(FLOW_TAB_ROLES.BACKGROUND)) {
-        this.registerFlowPage(p, { role: FLOW_TAB_ROLES.BACKGROUND });
-      }
-    }
+    if (!p) return;
+
+    // Backwards-compatible active-page assignment must replace the old default
+    // page instead of leaving get page() pinned to a stale Background mapping.
+    // Preserve an existing explicit role or infer one from a special Flow route.
+    const existing = this.pageMetadata.get(p);
+    const role = this.getFlowRouteRole(p) || existing?.role || FLOW_TAB_ROLES.BACKGROUND;
+    this.registerFlowPage(p, { role });
   }
 
   getActiveJob(role = FLOW_TAB_ROLES.BACKGROUND) {
@@ -483,6 +486,11 @@ export class FlowBrowserWorker {
   async readTabMarkerFromSessionStorage(page) {
     if (!page || (typeof page.isClosed === "function" && page.isClosed())) return null;
     try {
+      // registerFlowPage() is intentionally synchronous. Wait for its queued
+      // marker write before reading, otherwise a fast recovery can observe an
+      // older role or an empty marker even though the write was already queued.
+      const pendingWrite = this.tabMetadataWriteChains.get(page);
+      if (pendingWrite) await pendingWrite.catch(() => {});
       if (typeof page.evaluate !== "function") return null;
       const raw = await page.evaluate((key) => {
         try {
@@ -691,6 +699,27 @@ export class FlowBrowserWorker {
       pageRole: targetRole,
       timestamp: new Date().toISOString(),
     });
+
+    const mappedPage = this.pagesByRole.get(targetRole);
+    if (mappedPage && !(typeof mappedPage.isClosed === "function" && mappedPage.isClosed())) {
+      const mappedMetadata = this.getFlowPageMetadata(mappedPage);
+      if (mappedMetadata?.role && mappedMetadata.role !== targetRole) {
+        const details = {
+          errorCode: "FLOW_JOB_ROLE_MISMATCH",
+          expectedRole: targetRole,
+          actualRole: mappedMetadata.role,
+          tabId: mappedMetadata.tabId || null,
+          currentUrl: typeof mappedPage.url === "function" ? mappedPage.url() : "",
+        };
+        const error = new Error(
+          `FLOW_JOB_ROLE_MISMATCH: The ${targetRole} mapping points to a tab registered as ${mappedMetadata.role}.`,
+        );
+        error.code = "FLOW_JOB_ROLE_MISMATCH";
+        error.details = details;
+        this.emitLifecycleLog("FLOW_JOB_ROLE_MISMATCH", job, details);
+        throw error;
+      }
+    }
 
     let page = this.getFlowPage(targetRole);
 
@@ -3304,6 +3333,10 @@ export class FlowBrowserWorker {
     ].join(", ");
 
     const selectors = [
+      {
+        selector: 'flow-edit-image-prompt-box [role="textbox"][aria-label="What do you want to change?"]',
+        scoped: true,
+      },
       { selector: scopedSelector, scoped: true },
       { selector: semanticSelector, scoped: false },
     ];
