@@ -23,6 +23,8 @@ import {
   collectFlowEditorDiagnostics,
   saveImageUsingNativeContextMenu,
   inspectGoogleFlowActiveImage,
+  inspectGoogleFlowEditedImage,
+  downloadGoogleFlowEditedImage,
 } from "./flow-download.mjs";
 
 export {
@@ -34,6 +36,8 @@ export {
   collectFlowEditorDiagnostics,
   saveImageUsingNativeContextMenu,
   inspectGoogleFlowActiveImage,
+  inspectGoogleFlowEditedImage,
+  downloadGoogleFlowEditedImage,
 };
 
 export const FLOW_TAB_ROLES = Object.freeze({
@@ -4141,6 +4145,142 @@ export class FlowBrowserWorker {
         flowCharacterName: characterName,
       },
     ]);
+  }
+
+  normalizeFlowEditorAspectRatio(value) {
+    const raw = String(value || "16:9").trim().toLowerCase().replace(/\s+/g, "");
+    const supported = new Map([
+      ["original", "Original"],
+      ["16:9", "16:9"],
+      ["4:3", "4:3"],
+      ["1:1", "1:1"],
+      ["3:4", "3:4"],
+      ["9:16", "9:16"],
+    ]);
+    const option = supported.get(raw);
+    if (!option) {
+      const error = new Error(
+        `FLOW_IMAGE_EDIT_RATIO_UNSUPPORTED: Google Flow image editing supports Original, 16:9, 4:3, 1:1, 3:4, or 9:16. Received "${value}".`,
+      );
+      error.code = "FLOW_IMAGE_EDIT_RATIO_UNSUPPORTED";
+      throw error;
+    }
+    return option;
+  }
+
+  async selectFlowEditorAspectRatio(targetPage, requestedRatio, job = null) {
+    const page = targetPage || this.page;
+    if (!page || (typeof page.isClosed === "function" && page.isClosed())) {
+      throw new Error("Flow page is not available for image-editor aspect-ratio selection.");
+    }
+
+    const optionLabel = this.normalizeFlowEditorAspectRatio(requestedRatio);
+    const settingsSelector =
+      'button.settings-trigger-button[aria-label="Settings trigger"], button[aria-label="Settings trigger"]';
+    const settingsButtons = page.locator(settingsSelector);
+    const settingsCount = await settingsButtons.count().catch(() => 0);
+    const visibleSettings = [];
+
+    for (let index = 0; index < settingsCount; index += 1) {
+      const candidate = typeof settingsButtons.nth === "function"
+        ? settingsButtons.nth(index)
+        : typeof settingsButtons.first === "function"
+          ? settingsButtons.first()
+          : settingsButtons;
+      if (await candidate.isVisible().catch(() => false)) {
+        visibleSettings.push(candidate);
+      }
+    }
+
+    if (visibleSettings.length !== 1) {
+      const error = new Error(
+        `FLOW_IMAGE_EDIT_SETTINGS_TRIGGER_NOT_FOUND: Expected one visible Settings trigger in the image editor, found ${visibleSettings.length}.`,
+      );
+      error.code = "FLOW_IMAGE_EDIT_SETTINGS_TRIGGER_NOT_FOUND";
+      throw error;
+    }
+
+    const settingsButton = visibleSettings[0];
+    if (
+      typeof settingsButton.isEnabled === "function" &&
+      !(await settingsButton.isEnabled().catch(() => false))
+    ) {
+      const error = new Error("FLOW_IMAGE_EDIT_SETTINGS_TRIGGER_DISABLED: Google Flow image-editor settings are disabled.");
+      error.code = "FLOW_IMAGE_EDIT_SETTINGS_TRIGGER_DISABLED";
+      throw error;
+    }
+
+    await settingsButton.click({ timeout: 10000 });
+    await new Promise((resolve) => setTimeout(resolve, 250));
+
+    const visibleMatches = [];
+    const strategies = [];
+    if (typeof page.getByRole === "function") {
+      strategies.push(() => page.getByRole("button", { name: optionLabel, exact: true }));
+      strategies.push(() => page.getByRole("menuitem", { name: optionLabel, exact: true }));
+    }
+    if (typeof page.getByText === "function") {
+      strategies.push(() => page.getByText(optionLabel, { exact: true }));
+    }
+
+    for (const createLocator of strategies) {
+      let locator;
+      try {
+        locator = createLocator();
+      } catch {
+        continue;
+      }
+      const count = await locator.count().catch(() => 0);
+      for (let index = 0; index < count; index += 1) {
+        const candidate = typeof locator.nth === "function"
+          ? locator.nth(index)
+          : typeof locator.first === "function"
+            ? locator.first()
+            : locator;
+        if (await candidate.isVisible().catch(() => false)) {
+          const enabled = typeof candidate.isEnabled !== "function" ||
+            (await candidate.isEnabled().catch(() => false));
+          if (enabled) visibleMatches.push(candidate);
+        }
+      }
+      if (visibleMatches.length > 0) break;
+    }
+
+    if (visibleMatches.length !== 1) {
+      const error = new Error(
+        `FLOW_IMAGE_EDIT_RATIO_OPTION_NOT_FOUND: Could not uniquely locate the "${optionLabel}" aspect-ratio option after opening Settings (visible matches: ${visibleMatches.length}).`,
+      );
+      error.code = "FLOW_IMAGE_EDIT_RATIO_OPTION_NOT_FOUND";
+      throw error;
+    }
+
+    await visibleMatches[0].click({ timeout: 10000 });
+    if (job) {
+      job.aspectRatio = requestedRatio || optionLabel;
+      job.aspectRatioApplied = optionLabel;
+    }
+    this.emitLifecycleLog("FLOW_EDITOR_ASPECT_RATIO_SELECTED", job, {
+      requestedAspectRatio: requestedRatio || optionLabel,
+      selectedAspectRatio: optionLabel,
+      settingsSelector,
+    });
+    return { selected: optionLabel };
+  }
+
+  async getEditorImageSnapshot(targetPage, options = {}) {
+    return await inspectGoogleFlowEditedImage(targetPage || this.page, options);
+  }
+
+  async downloadEditedEditorImage({ page, job, previousSourceUrl, timeoutMs = 30000 }) {
+    return await downloadGoogleFlowEditedImage({
+      page: page || this.getPageForJob(job) || this.page,
+      job,
+      downloadDir: this.downloadDir,
+      previousSourceUrl,
+      timeoutMs,
+      logger: console,
+      onPhase: (phase, details) => this.emitLifecycleLog(phase, job, details),
+    });
   }
 
   async submitRegenerationPrompt(job, confirmation, targetPage = null) {
