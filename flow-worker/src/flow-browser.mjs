@@ -5644,14 +5644,113 @@ export class FlowBrowserWorker {
     return job;
   }
 
+  async isCharacterOutputSourceVisible(page, sourceUrl) {
+    if (!page || typeof page.locator !== "function" || !sourceUrl) return false;
+
+    const assetKey = (value) => {
+      try {
+        const parsed = new URL(value);
+        const match = parsed.pathname.match(/\\/asb\\/([^/]+)/i);
+        return match ? match[1].split("=")[0] : parsed.href;
+      } catch {
+        return String(value || "");
+      }
+    };
+
+    const targetKey = assetKey(sourceUrl);
+    try {
+      const images = page.locator('img[src*="/asb/"], img');
+      if (typeof images.evaluateAll === "function") {
+        return await images.evaluateAll((elements, target) => {
+          const keyOf = (value) => {
+            try {
+              const parsed = new URL(value, window.location.href);
+              const match = parsed.pathname.match(/\\/asb\\/([^/]+)/i);
+              return match ? match[1].split("=")[0] : parsed.href;
+            } catch {
+              return String(value || "");
+            }
+          };
+          const targetKey = keyOf(target);
+          return elements.some((img) => {
+            const rect = img.getBoundingClientRect?.();
+            const visible = Boolean(
+              rect &&
+              rect.width > 0 &&
+              rect.height > 0 &&
+              window.getComputedStyle(img).visibility !== "hidden" &&
+              window.getComputedStyle(img).display !== "none",
+            );
+            const src = img.currentSrc || img.src || img.getAttribute("src") || "";
+            return visible && src && keyOf(src) === targetKey;
+          });
+        }, sourceUrl);
+      }
+
+      const count = await images.count().catch(() => 0);
+      for (let index = 0; index < count; index += 1) {
+        const image = typeof images.nth === "function" ? images.nth(index) : images;
+        if (!(await image.isVisible().catch(() => false))) continue;
+        const src = await image.getAttribute("src").catch(() => null);
+        if (src && assetKey(src) === targetKey) return true;
+      }
+    } catch {}
+    return false;
+  }
+
   async monitorCharacterGenerationAndDownload(
     jobId,
     targetPage = null,
     baseline = { identifiers: new Set() },
+    options = {},
   ) {
     const job = this.jobs.get(jobId);
     const page = targetPage || this.getFlowPage(FLOW_TAB_ROLES.CHARACTER);
     if (!job || !page || (typeof page.isClosed === "function" && page.isClosed())) return;
+
+    const maxWaitMs = Number.isFinite(options.maxWaitMs)
+      ? Math.max(1, options.maxWaitMs)
+      : 90000;
+    const pollIntervalMs = Number.isFinite(options.pollIntervalMs)
+      ? Math.max(1, options.pollIntervalMs)
+      : 750;
+
+    const getCapturedCandidates = () => {
+      const requestedAt = Date.parse(job.generationRequestedAt || "") || Date.now() - 5000;
+      const groups = new Map();
+      for (const [url, item] of job.capturedImageResponses || []) {
+        if (
+          !item?.buffer ||
+          item.buffer.length <= 500 ||
+          (item.capturedAt && item.capturedAt < requestedAt - 1500)
+        ) {
+          continue;
+        }
+
+        let parsed;
+        try {
+          parsed = new URL(url);
+        } catch {
+          continue;
+        }
+        if (
+          parsed.protocol !== "https:" ||
+          parsed.hostname !== "flow.google.com" ||
+          !parsed.pathname.startsWith("/asb/")
+        ) {
+          continue;
+        }
+
+        const match = parsed.pathname.match(/\\/asb\\/([^/]+)/i);
+        const assetKey = match ? match[1].split("=")[0] : parsed.href;
+        const candidate = { url, item, assetKey };
+        const existing = groups.get(assetKey);
+        if (!existing || item.buffer.length > existing.item.buffer.length) {
+          groups.set(assetKey, candidate);
+        }
+      }
+      return [...groups.values()];
+    };
 
     try {
       job.status = "generating";
@@ -5659,9 +5758,9 @@ export class FlowBrowserWorker {
       this.touch(job);
 
       const startedAt = Date.now();
-      const maxWaitMs = 90000;
       let output = null;
       let captured = null;
+      let ambiguousCandidates = [];
 
       while (Date.now() - startedAt < maxWaitMs) {
         if (
@@ -5672,42 +5771,70 @@ export class FlowBrowserWorker {
         }
 
         const tileOutputs = await this.collectNewCharacterOutput(page, baseline).catch(() => []);
-        if (tileOutputs.length > 1) {
-          const uniqueSources = [...new Set(tileOutputs.map((item) => item.sourceUrl))];
-          if (uniqueSources.length > 1) {
-            throw new Error(
-              "FLOW_CHARACTER_OUTPUT_AMBIGUOUS: More than one new Character thumbnail appeared after generation.",
-            );
-          }
+        const uniqueTileSources = [...new Set(tileOutputs.map((item) => item.sourceUrl))];
+        if (uniqueTileSources.length > 1) {
+          throw new Error(
+            "FLOW_CHARACTER_OUTPUT_AMBIGUOUS: More than one new Character thumbnail appeared after generation.",
+          );
         }
-        if (tileOutputs.length === 1) {
+        if (tileOutputs.length > 0) {
           output = tileOutputs[0];
-        }
-
-        if (output && job.capturedImageResponses?.size) {
           captured = this.findCapturedOutput(output, job.capturedImageResponses);
         }
 
-        // Character creation can return the generated /asb/ image through
-        // the page's authenticated network stream before the tile is committed.
-        // Wait briefly for that stream when the tile itself is not rendered yet.
-        if (!output && job.capturedImageResponses?.size) {
-          const entries = [...job.capturedImageResponses.entries()]
-            .filter(([, value]) => value?.buffer && value.buffer.length > 500)
-            .sort((a, b) => (b[1].capturedAt || 0) - (a[1].capturedAt || 0));
-          if (entries.length > 0 && Date.now() - startedAt > 5000) {
-            output = { sourceUrl: entries[0][0], rawSrc: entries[0][0] };
-            captured = entries[0][1];
+        if (!output) {
+          const candidates = getCapturedCandidates();
+          ambiguousCandidates = candidates;
+          if (candidates.length === 1) {
+            const candidate = candidates[0];
+            const submitControl = await this.findCharacterGenerationButton(
+              page,
+              null,
+              { allowDisabled: true },
+            ).catch(() => null);
+            const submitButtonReady = Boolean(
+              submitControl &&
+              (typeof submitControl.locator.isEnabled !== "function" ||
+                (await submitControl.locator.isEnabled().catch(() => false))) &&
+              (await submitControl.locator.getAttribute("disabled").catch(() => null)) == null,
+            );
+            const outputVisible = await this.isCharacterOutputSourceVisible(
+              page,
+              candidate.url,
+            );
+            const currentRef = extractGoogleFlowCharacterReference(
+              typeof page.url === "function" ? page.url() : "",
+            );
+            const editorRouteReady = currentRef?.routeType === "character-editor";
+
+            // A network image alone is not sufficient: it could be a reference
+            // preview or another UI asset. Require either the exact source to
+            // be visible in the Character workspace, the submit button to have
+            // re-enabled, or Flow to have navigated into the new character editor.
+            if (submitButtonReady || outputVisible || editorRouteReady) {
+              output = { sourceUrl: candidate.url, rawSrc: candidate.url };
+              captured = candidate.item;
+            }
           }
         }
 
-        if (output) break;
-        await new Promise((resolve) => setTimeout(resolve, 750));
+        if (output?.sourceUrl) break;
+        await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
       }
 
       if (!output?.sourceUrl) {
+        if (ambiguousCandidates.length > 1) {
+          const error = new Error(
+            "FLOW_CHARACTER_OUTPUT_AMBIGUOUS: Multiple different Google Flow /asb/ images were captured for this Character generation and no matching Character thumbnail identified the output.",
+          );
+          error.code = "FLOW_CHARACTER_OUTPUT_AMBIGUOUS";
+          error.details = {
+            candidateUrls: ambiguousCandidates.map((candidate) => candidate.url),
+          };
+          throw error;
+        }
         const error = new Error(
-          "FLOW_CHARACTER_GENERATION_TIMEOUT: No new Character thumbnail or generated /asb/ image response appeared within 90 seconds.",
+          "FLOW_CHARACTER_GENERATION_TIMEOUT: No verified new Character thumbnail or completed Character image response appeared within the configured timeout.",
         );
         error.code = "FLOW_CHARACTER_GENERATION_TIMEOUT";
         throw error;
@@ -5715,6 +5842,7 @@ export class FlowBrowserWorker {
 
       this.emitLifecycleLog("CHARACTER_OUTPUT_DETECTED", job, {
         sourceUrl: output.sourceUrl,
+        captureMethod: captured ? "generation_scoped_network_response" : "new_character_thumbnail",
         success: true,
       });
 
@@ -5765,7 +5893,7 @@ export class FlowBrowserWorker {
       }
 
       // On the New character route, Done commits the generated character to
-      // the project. Click it only after the generated image has been secured.
+      // the project. Click it only after the image has been captured safely.
       if (
         currentCharacterRef?.routeType === "character-create" ||
         currentUrl.endsWith("/character")
@@ -5777,12 +5905,12 @@ export class FlowBrowserWorker {
           'button:has-text("Done")',
         ];
         let doneBtn = null;
-        for (const sel of doneButtons) {
+        for (const selector of doneButtons) {
           if (typeof page.locator !== "function") break;
-          const loc = page.locator(sel);
-          const count = await loc.count().catch(() => 0);
-          if (count === 1 && (await loc.first().isVisible().catch(() => false))) {
-            doneBtn = loc.first();
+          const locator = page.locator(selector);
+          const count = await locator.count().catch(() => 0);
+          if (count === 1 && (await locator.first().isVisible().catch(() => false))) {
+            doneBtn = locator.first();
             break;
           }
         }
@@ -5797,11 +5925,7 @@ export class FlowBrowserWorker {
         }
 
         if (doneBtn) {
-          await doneBtn.click({ timeout: 10000 }).catch((error) => {
-            this.emitLifecycleLog("FLOW_CHARACTER_DONE_CLICK_FAILED", job, {
-              error: error.message,
-            });
-          });
+          await doneBtn.click({ timeout: 10000 });
           await new Promise((resolve) => setTimeout(resolve, 1000));
           const savedCharacterRef = extractGoogleFlowCharacterReference(
             typeof page.url === "function" ? page.url() : "",
@@ -5809,6 +5933,17 @@ export class FlowBrowserWorker {
           if (savedCharacterRef?.characterId) {
             job.googleFlowCharacterId = savedCharacterRef.characterId;
           }
+          this.emitLifecycleLog("FLOW_CHARACTER_DONE_CLICKED", job, {
+            currentUrl: typeof page.url === "function" ? page.url() : "",
+            googleFlowCharacterId: job.googleFlowCharacterId || null,
+            success: true,
+          });
+        } else {
+          this.emitLifecycleLog("FLOW_CHARACTER_DONE_BUTTON_NOT_FOUND", job, {
+            currentUrl,
+            success: false,
+            warning: "The generated image was captured, but Google Flow did not expose a visible Done button to commit the new Character.",
+          });
         }
       }
 
@@ -5817,7 +5952,6 @@ export class FlowBrowserWorker {
       job.message = "Character image captured. Importing it into the selected Studio character.";
       this.touch(job);
 
-      // Dedicated character asset import
       await this.importCharacterAsset(job, downloaded.buffer, {
         mimeType: downloaded.mimeType,
         extension: downloaded.extension,
