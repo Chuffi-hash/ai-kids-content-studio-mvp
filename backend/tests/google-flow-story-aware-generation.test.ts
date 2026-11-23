@@ -311,6 +311,41 @@ describe('Story-Aware Direct Generation & Context Resolver Test Suite', () => {
     assert.strictEqual(updatedChar.referenceImageUrl, res.imageUrl);
   });
 
+  test('5b. A front directional view is saved separately and never replaces the master reference', async () => {
+    const before = await prisma.character.findUnique({ where: { id: char2Id } });
+    assert.ok(before?.referenceImageUrl);
+    const masterReferenceBefore = before.referenceImageUrl;
+
+    const result = await GenerationOrchestratorService.generateCharacterAsset({
+      storyId: testStoryId,
+      characterId: char2Id,
+      provider: 'gemini_api',
+      assetType: 'turnaround',
+      variation: 'front',
+      testMockBuffer: validPngBuffer,
+    });
+
+    assert.strictEqual(result.success, true);
+    assert.strictEqual(result.target, 'character_view');
+    assert.ok(result.imageUrl);
+
+    const after = await prisma.character.findUnique({ where: { id: char2Id } });
+    assert.ok(after);
+    assert.strictEqual(after.referenceImageUrl, masterReferenceBefore);
+
+    const canonical = after.canonicalAppearance as any;
+    assert.strictEqual(canonical.references.directionalViews.front, result.imageUrl);
+    assert.ok(
+      canonical.assets.some(
+        (asset: any) =>
+          asset.url === result.imageUrl &&
+          asset.direction === 'front' &&
+          asset.assetType === 'turnaround' &&
+          asset.isMasterReference === false,
+      ),
+    );
+  });
+
   test('6. GenerationOrchestratorService: Batch missing generation executes across remaining targets', async () => {
     // Scene 3 is still missing a background
     const batchBg = await GenerationOrchestratorService.generateAllMissingBackgrounds(
