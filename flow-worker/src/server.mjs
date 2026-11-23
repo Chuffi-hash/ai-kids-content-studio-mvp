@@ -519,16 +519,50 @@ const server = http.createServer(async (request, response) => {
         sendJson(response, 409, { success: false, message: "Open the visible Flow browser session first." });
         return;
       }
-      const role = body.pageRole || (body.targetType === "character" ? "character" : "background");
-      const targetPage = worker.getFlowPage(role) || worker.page;
-      if (!targetPage || (typeof targetPage.isClosed === "function" && targetPage.isClosed())) {
-        sendJson(response, 409, { success: false, message: `The ${role} Flow browser page is not open.` });
+      // Resolve the target before selecting a browser page. Character jobs
+      // created by older clients may omit targetType/pageRole but still carry
+      // characterId + characterName; never default those requests to Background.
+      const inferredTargetType =
+        body.targetType ||
+        (body.pageRole === "character" || (body.characterId && body.characterName)
+          ? "character"
+          : body.pageRole === "background" || body.sceneId
+            ? "background"
+            : null);
+
+      if (inferredTargetType !== "character" && inferredTargetType !== "background") {
+        sendJson(response, 400, {
+          success: false,
+          code: "FLOW_JOB_TARGET_REQUIRED",
+          message: "Specify targetType='character' with characterId/characterName, or targetType='background' with sceneId.",
+        });
         return;
       }
+
+      const role = body.pageRole || (inferredTargetType === "character" ? "character" : "background");
+      if (
+        (inferredTargetType === "character" && role !== "character") ||
+        (inferredTargetType === "background" && role !== "background")
+      ) {
+        sendJson(response, 400, {
+          success: false,
+          code: "FLOW_JOB_ROLE_MISMATCH",
+          message: `targetType "${inferredTargetType}" cannot use pageRole "${role}".`,
+        });
+        return;
+      }
+
       if (body.cancelPrevious) {
         worker.cancelActiveJob("Cancelled by new incoming job request.", role);
       }
-      const job = worker.createJob(body);
+
+      // createJob() and prepareJob() own role-specific page resolution. Do not
+      // preselect worker.page here: that legacy alias is Background-biased.
+      const job = worker.createJob({
+        ...body,
+        targetType: inferredTargetType,
+        pageRole: role,
+      });
       const prepared = await worker.prepareJob(job.id);
       sendJson(response, 201, { success: true, job: prepared });
       return;
