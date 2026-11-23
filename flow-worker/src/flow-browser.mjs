@@ -5154,6 +5154,10 @@ export class FlowBrowserWorker {
       throw new Error("Flow page is not available.");
     }
 
+    if (pageRole === FLOW_TAB_ROLES.CHARACTER) {
+      return await this.submitCharacterPrompt(job, confirmation, page);
+    }
+
     if (job.isRegeneration) {
       return await this.submitRegenerationPrompt(job, confirmation, page);
     }
@@ -6020,7 +6024,14 @@ export class FlowBrowserWorker {
         );
       }
 
-      if (job.targetType === "background" || job.sceneId) {
+      const isBackgroundJob =
+        job.targetType === "background" ||
+        (!job.targetType && !job.characterId && Boolean(job.sceneId));
+
+      if (isBackgroundJob) {
+        if (!job.sceneId) {
+          throw new Error("FLOW_BACKGROUND_SCENE_ID_REQUIRED: Background import requires sceneId.");
+        }
         let bgResponse;
         try {
           bgResponse = await fetch(
@@ -6185,7 +6196,10 @@ export class FlowBrowserWorker {
   }
 
   async persistAssetMetadata(job) {
-    if (job.targetType === "background" || job.sceneId) {
+    const isBackgroundJob =
+      job.targetType === "background" ||
+      (!job.targetType && !job.characterId && Boolean(job.sceneId));
+    if (isBackgroundJob) {
       this.setJobTerminal(
         job,
         "completed",
