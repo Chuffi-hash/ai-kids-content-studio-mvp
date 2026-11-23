@@ -5071,6 +5071,210 @@ export class FlowBrowserWorker {
     return { locator: foundLocator, selector: foundSelector };
   }
 
+  async findCharacterEditorPromptEditor(page) {
+    if (!page || (typeof page.isClosed === "function" && page.isClosed())) {
+      throw new Error("FLOW_CHARACTER_PAGE_CLOSED: Saved Character editor is unavailable.");
+    }
+
+    const currentRoute = extractGoogleFlowCharacterReference(
+      typeof page.url === "function" ? page.url() : "",
+    );
+    if (currentRoute?.routeType !== "character-editor" || !currentRoute.characterId) {
+      const error = new Error(
+        "FLOW_CHARACTER_EDITOR_ROUTE_REQUIRED: Expected a saved Google Flow Character editor route.",
+      );
+      error.code = "FLOW_CHARACTER_EDITOR_ROUTE_REQUIRED";
+      throw error;
+    }
+
+    const selectors = [
+      'flow-edit-image-prompt-box [role="textbox"][aria-label="What do you want to change?"]',
+      'flow-edit-image-prompt-box [role="textbox"]',
+      'flow-edit-image-prompt-box textarea',
+      'flow-edit-image-prompt-box [contenteditable="true"]',
+      '[role="textbox"][aria-label="What do you want to change?"]',
+      'textarea[placeholder*="What do you want to change" i]',
+      '[contenteditable="true"][aria-label*="What do you want to change" i]',
+    ];
+
+    for (const selector of selectors) {
+      if (typeof page.locator !== "function") break;
+      const locator = page.locator(selector);
+      const count = await locator.count().catch(() => 0);
+      const matches = [];
+
+      for (let index = 0; index < count; index += 1) {
+        const candidate = typeof locator.nth === "function" ? locator.nth(index) : locator;
+        if (!(await candidate.isVisible().catch(() => false))) continue;
+        if (
+          typeof candidate.isEnabled === "function" &&
+          !(await candidate.isEnabled().catch(() => false))
+        ) {
+          continue;
+        }
+
+        const [ariaLabel, placeholder, dataPlaceholder, title] = await Promise.all([
+          typeof candidate.getAttribute === "function"
+            ? candidate.getAttribute("aria-label").catch(() => null)
+            : Promise.resolve(null),
+          typeof candidate.getAttribute === "function"
+            ? candidate.getAttribute("placeholder").catch(() => null)
+            : Promise.resolve(null),
+          typeof candidate.getAttribute === "function"
+            ? candidate.getAttribute("data-placeholder").catch(() => null)
+            : Promise.resolve(null),
+          typeof candidate.getAttribute === "function"
+            ? candidate.getAttribute("title").catch(() => null)
+            : Promise.resolve(null),
+        ]);
+        const description = [ariaLabel, placeholder, dataPlaceholder, title]
+          .filter(Boolean)
+          .join(" ");
+        if (
+          !/what do you want to change/i.test(description) &&
+          !selector.startsWith("flow-edit-image-prompt-box")
+        ) {
+          continue;
+        }
+        matches.push(candidate);
+      }
+
+      if (matches.length > 1) {
+        const error = new Error(
+          "FLOW_CHARACTER_EDITOR_PROMPT_AMBIGUOUS: Multiple edit prompts were found in the saved Character editor.",
+        );
+        error.code = "FLOW_CHARACTER_EDITOR_PROMPT_AMBIGUOUS";
+        throw error;
+      }
+      if (matches.length === 1) {
+        return { locator: matches[0], selector };
+      }
+    }
+
+    if (typeof page.getByRole === "function") {
+      const textbox = page.getByRole("textbox", {
+        name: /What do you want to change/i,
+      });
+      const count = await textbox.count().catch(() => 0);
+      if (count === 1) {
+        const candidate = typeof textbox.first === "function" ? textbox.first() : textbox;
+        if (await candidate.isVisible().catch(() => false)) {
+          return {
+            locator: candidate,
+            selector: 'getByRole("textbox", { name: /What do you want to change/i })',
+          };
+        }
+      }
+    }
+
+    const error = new Error(
+      "FLOW_CHARACTER_EDITOR_PROMPT_NOT_FOUND: Could not find the 'What do you want to change?' prompt in the saved Character editor.",
+    );
+    error.code = "FLOW_CHARACTER_EDITOR_PROMPT_NOT_FOUND";
+    throw error;
+  }
+
+  async findCharacterEditorSubmitButton(
+    page,
+    { allowDisabled = false, timeoutMs = 8000 } = {},
+  ) {
+    if (!page || (typeof page.isClosed === "function" && page.isClosed())) {
+      throw new Error("FLOW_CHARACTER_PAGE_CLOSED: Saved Character editor is unavailable.");
+    }
+
+    const currentRoute = extractGoogleFlowCharacterReference(
+      typeof page.url === "function" ? page.url() : "",
+    );
+    if (currentRoute?.routeType !== "character-editor" || !currentRoute.characterId) {
+      const error = new Error(
+        "FLOW_CHARACTER_EDITOR_ROUTE_REQUIRED: Cannot submit a view outside the saved Character editor.",
+      );
+      error.code = "FLOW_CHARACTER_EDITOR_ROUTE_REQUIRED";
+      throw error;
+    }
+
+    const startedAt = Date.now();
+    while (Date.now() - startedAt <= timeoutMs) {
+      if (typeof page.locator === "function") {
+        const controls = page.locator(
+          "flow-edit-image-prompt-box button, flow-edit-image-prompt-box [role='button']",
+        );
+        const count = await controls.count().catch(() => 0);
+        const matches = [];
+
+        for (let index = 0; index < count; index += 1) {
+          const candidate = typeof controls.nth === "function" ? controls.nth(index) : controls;
+          if (!(await candidate.isVisible().catch(() => false))) continue;
+
+          const [ariaLabel, title, tooltip, type, textContent] = await Promise.all([
+            typeof candidate.getAttribute === "function"
+              ? candidate.getAttribute("aria-label").catch(() => null)
+              : Promise.resolve(null),
+            typeof candidate.getAttribute === "function"
+              ? candidate.getAttribute("title").catch(() => null)
+              : Promise.resolve(null),
+            typeof candidate.getAttribute === "function"
+              ? candidate.getAttribute("data-tooltip").catch(() => null)
+              : Promise.resolve(null),
+            typeof candidate.getAttribute === "function"
+              ? candidate.getAttribute("type").catch(() => null)
+              : Promise.resolve(null),
+            typeof candidate.innerText === "function"
+              ? candidate.innerText().catch(() => "")
+              : typeof candidate.textContent === "function"
+                ? candidate.textContent().catch(() => "")
+                : Promise.resolve(""),
+          ]);
+          const label = [ariaLabel, title, tooltip, textContent]
+            .filter(Boolean)
+            .join(" ")
+            .replace(/\s+/g, " ")
+            .trim();
+          const isSubmit =
+            String(type || "").toLowerCase() === "submit" ||
+            /send|generate|submit|arrow[_ -]?(forward|right)|play[_ -]?arrow/i.test(label);
+          if (!isSubmit) continue;
+
+          const enabled =
+            typeof candidate.isEnabled !== "function" ||
+            (await candidate.isEnabled().catch(() => false));
+          const disabled =
+            typeof candidate.getAttribute === "function"
+              ? await candidate.getAttribute("disabled").catch(() => null)
+              : null;
+          const isDisabled =
+            !enabled ||
+            (disabled !== null && disabled !== false && disabled !== "false");
+          if (!allowDisabled && isDisabled) continue;
+          matches.push(candidate);
+        }
+
+        if (matches.length > 1) {
+          const error = new Error(
+            "FLOW_CHARACTER_EDITOR_SUBMIT_AMBIGUOUS: Multiple send/generate controls were found in the Character editor prompt.",
+          );
+          error.code = "FLOW_CHARACTER_EDITOR_SUBMIT_AMBIGUOUS";
+          throw error;
+        }
+        if (matches.length === 1) {
+          return {
+            locator: matches[0],
+            selector: "flow-edit-image-prompt-box generation submit control",
+          };
+        }
+      }
+
+      if (Date.now() - startedAt >= timeoutMs) break;
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+
+    const error = new Error(
+      "FLOW_CHARACTER_EDITOR_SUBMIT_NOT_FOUND: Could not find the send/generate arrow inside the saved Character editor prompt.",
+    );
+    error.code = "FLOW_CHARACTER_EDITOR_SUBMIT_NOT_FOUND";
+    throw error;
+  }
+
   async openCharacterCreationInterface(page, expectedProjectId, job = null) {
     if (!page || (typeof page.isClosed === "function" && page.isClosed())) {
       throw new Error("FLOW_CHARACTER_PAGE_CLOSED: Character page is closed.");
