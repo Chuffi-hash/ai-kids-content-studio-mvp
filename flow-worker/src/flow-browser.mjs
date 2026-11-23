@@ -4302,6 +4302,20 @@ export class FlowBrowserWorker {
       throw err;
     }
 
+    try {
+      // Apply ratio only in the existing-image editor. The first-time
+      // generation workflow continues to use its existing settings path.
+      await this.selectFlowEditorAspectRatio(page, job.aspectRatio, job);
+    } catch (error) {
+      this.emitLifecycleLog("FLOW_REGENERATION_FAILED", job, {
+        error: error.message,
+        errorCode: error.code || "FLOW_IMAGE_EDIT_RATIO_SELECTION_FAILED",
+        requestedAspectRatio: job.aspectRatio,
+        currentUrl,
+      });
+      throw error;
+    }
+
     let submitBtn;
     try {
       const submitControl = await this.findImageEditSubmitButton(page);
@@ -4337,6 +4351,31 @@ export class FlowBrowserWorker {
       this.emitLifecycleLog("FLOW_REGENERATION_FAILED", job, { error: err.message });
       throw err;
     }
+
+    // Remember the current editor image before clicking Generate. The
+    // regeneration monitor must observe a different read-only image source
+    // before it is allowed to download anything, avoiding stale-image imports.
+    const previousEditorImage = await this.getEditorImageSnapshot(page, {
+      timeoutMs: 5000,
+    });
+    if (!previousEditorImage?.sourceUrl) {
+      const error = new Error(
+        "FLOW_EDITOR_IMAGE_NOT_FOUND: Cannot safely regenerate because the existing read-only image source could not be verified.",
+      );
+      error.code = "FLOW_EDITOR_IMAGE_NOT_FOUND";
+      this.emitLifecycleLog("FLOW_REGENERATION_FAILED", job, {
+        error: error.message,
+        errorCode: error.code,
+        currentUrl,
+      });
+      throw error;
+    }
+    job.previousEditorImageSourceUrl = previousEditorImage.sourceUrl;
+    this.emitLifecycleLog("FLOW_EDITOR_BASELINE_IMAGE_CAPTURED", job, {
+      sourceUrl: previousEditorImage.sourceUrl,
+      naturalWidth: previousEditorImage.naturalWidth,
+      naturalHeight: previousEditorImage.naturalHeight,
+    });
 
     const baseline = await this.getOutputAssetBaseline(page);
     await this.startImageResponseCapture(job, page);
