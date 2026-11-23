@@ -4413,14 +4413,15 @@ export class FlowBrowserWorker {
   async monitorRegenerationAndDownload(jobId, pageOrBaseline = { count: 0, identifiers: new Set() }, maybeBaseline = null) {
     const job = this.jobs.get(jobId);
     let page = null;
-    let baseline = { count: 0, identifiers: new Set() };
-    if (pageOrBaseline && typeof pageOrBaseline === "object" && typeof pageOrBaseline.goto === "function") {
+
+    // Preserve the old call signature, but regeneration no longer downloads
+    // from the chat gallery or uses the native Windows Save As menu.
+    if (
+      pageOrBaseline &&
+      typeof pageOrBaseline === "object" &&
+      typeof pageOrBaseline.goto === "function"
+    ) {
       page = pageOrBaseline;
-      if (maybeBaseline && typeof maybeBaseline === "object") {
-        baseline = maybeBaseline;
-      }
-    } else if (pageOrBaseline && typeof pageOrBaseline === "object") {
-      baseline = pageOrBaseline;
     }
     if (!page) {
       page = this.getPageForJob(job) || this.page;
@@ -4431,39 +4432,63 @@ export class FlowBrowserWorker {
     }
 
     try {
+      const previousSourceUrl = job.previousEditorImageSourceUrl;
+      if (!previousSourceUrl) {
+        const error = new Error(
+          "FLOW_EDITOR_BASELINE_IMAGE_MISSING: Regeneration cannot download an edited image because the pre-generation editor image URL was not captured.",
+        );
+        error.code = "FLOW_EDITOR_BASELINE_IMAGE_MISSING";
+        throw error;
+      }
+
       job.status = "generating";
-      job.message = "Regeneration in progress in Google Flow. Waiting for updated output...";
+      job.message = "Regeneration in progress in Google Flow. Waiting for the editor image source to change...";
       this.touch(job);
 
+      // The editor keeps the existing image visible while generation runs.
+      // Wait for the read-only image's actual source URL to change and for the
+      // replacement image to finish loading. Never treat a re-enabled button
+      // or an unrelated /asb/ network response as proof of a new editor image.
       const maxWaitMs = 90000;
       const startTime = Date.now();
-      const pollIntervalMs = 1500;
+      const pollIntervalMs = 750;
+      let updatedImage = null;
 
       while (Date.now() - startTime < maxWaitMs) {
-        if (!page || (typeof page.isClosed === "function" && page.isClosed()) || job.status === "completed" || job.status === "cancelled") {
+        if (
+          !page ||
+          (typeof page.isClosed === "function" && page.isClosed()) ||
+          job.status === "completed" ||
+          job.status === "cancelled"
+        ) {
           return;
         }
 
-        if (Date.now() - startTime > 3000) {
-          const submitBtn = getFirstLocator(
-            page.locator('flow-edit-image-prompt-box button[aria-label="Start generation"], button[aria-label="Start generation"]')
-          );
-          const isBtnEnabled = submitBtn && typeof submitBtn.isEnabled === "function" ? await submitBtn.isEnabled().catch(() => false) : false;
-          const disabledAttr = submitBtn && typeof submitBtn.getAttribute === "function" ? await submitBtn.getAttribute("disabled").catch(() => null) : null;
-          const isNotDisabled = disabledAttr === null || disabledAttr === false || disabledAttr === "false";
-
-          const newOutputs = await this.collectNewAgentOutputs(job, page, baseline).catch(() => []);
-          const hasCaptured = job.capturedImageResponses && job.capturedImageResponses.size > 0;
-
-          if ((isBtnEnabled && isNotDisabled) || newOutputs.length > 0 || hasCaptured) {
-            break;
-          }
+        updatedImage = await this.getEditorImageSnapshot(page, {
+          previousSourceUrl,
+          timeoutMs: 0,
+        }).catch(() => null);
+        if (updatedImage?.sourceUrl && updatedImage.sourceUrl !== previousSourceUrl) {
+          break;
         }
 
-        await new Promise((r) => setTimeout(r, pollIntervalMs));
+        await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
       }
 
-      this.emitLifecycleLog("FLOW_REGENERATION_COMPLETED", job);
+      if (!updatedImage?.sourceUrl || updatedImage.sourceUrl === previousSourceUrl) {
+        const error = new Error(
+          "FLOW_EDITOR_IMAGE_NOT_UPDATED: Google Flow did not replace the read-only image source before the regeneration timeout.",
+        );
+        error.code = "FLOW_EDITOR_IMAGE_NOT_UPDATED";
+        throw error;
+      }
+
+      this.emitLifecycleLog("FLOW_REGENERATION_COMPLETED", job, {
+        previousImageSourceUrl: previousSourceUrl,
+        updatedImageSourceUrl: updatedImage.sourceUrl,
+        naturalWidth: updatedImage.naturalWidth,
+        naturalHeight: updatedImage.naturalHeight,
+      });
 
       const currentUrl = typeof page.url === "function" ? page.url() : "";
       const updatedEditorRef = extractGoogleFlowEditorReference(currentUrl);
@@ -4479,46 +4504,42 @@ export class FlowBrowserWorker {
       }
 
       job.status = "downloading";
-      this.emitLifecycleLog("DOWNLOAD_STARTED", job);
-      job.message = "Downloading regenerated background from Google Flow...";
+      this.emitLifecycleLog("DOWNLOAD_STARTED", job, {
+        downloadMethod: "editor_image_source_fetch",
+        imageSourceUrl: updatedImage.sourceUrl,
+      });
+      job.message = "Downloading the regenerated image directly from the Google Flow image editor...";
       this.touch(job);
 
-      const viewerLocators = page.locator(
-        'flow-image-editor img, .editor-container img, flow-creative-agent-image-viewer img, flow-image-viewer img, div[role="dialog"] img.editor-image, div[role="dialog"] img, .image-viewer img'
-      );
-      let activeImage = null;
-      const vCount = await viewerLocators.count().catch(() => 0);
-      if (vCount > 0) {
-        activeImage = viewerLocators.first();
-      }
-
-      if (!activeImage) {
-        throw new Error("FLOW_IMAGE_VIEWER_NOT_FOUND: Could not find active image in Flow image editor.");
-      }
-
-      const activeImageDetails = await inspectGoogleFlowActiveImage(page).catch(() => null);
-      if (activeImageDetails) {
-        if (activeImageDetails.googleFlowProjectId) job.googleFlowProjectId = activeImageDetails.googleFlowProjectId;
-        if (activeImageDetails.googleFlowEditId) job.googleFlowEditId = activeImageDetails.googleFlowEditId;
-        if (activeImageDetails.googleFlowEditUrl) job.googleFlowEditUrl = activeImageDetails.googleFlowEditUrl;
-        if (activeImageDetails.googleFlowImageId !== undefined) job.googleFlowImageId = activeImageDetails.googleFlowImageId;
-        if (activeImageDetails.googleFlowImageRef) job.googleFlowImageRef = activeImageDetails.googleFlowImageRef;
-        if (activeImageDetails.googleFlowImageSourceUrl) job.googleFlowImageSourceUrl = activeImageDetails.googleFlowImageSourceUrl;
-      }
-
-      const targetDir = this.downloadDir || path.join(os.tmpdir(), "flow-downloads");
-      const nativeResult = await saveImageUsingNativeContextMenu({
+      const editedImage = await this.downloadEditedEditorImage({
         page,
-        imageLocator: activeImage,
         job,
-        downloadDir: targetDir,
+        previousSourceUrl,
         timeoutMs: 30000,
-        logger: console,
-        automationRunner: this.automationRunner,
-        onPhase: (ph, details) => this.emitLifecycleLog(ph, job, details),
       });
 
-      // Close editor using Done editing button
+      if (!editedImage?.success || !Buffer.isBuffer(editedImage.buffer)) {
+        throw new Error(
+          "FLOW_EDITOR_IMAGE_DOWNLOAD_FAILED: The active edited image could not be fetched and validated.",
+        );
+      }
+
+      job.googleFlowImageRef =
+        editedImage.googleFlowImageRef || editedImage.sourceUrl;
+      job.googleFlowImageSourceUrl =
+        editedImage.googleFlowImageSourceUrl || editedImage.sourceUrl;
+      job.downloadPath = editedImage.path;
+      job.downloadMethod = "editor_image_source_fetch";
+      this.emitLifecycleLog("FLOW_BACKGROUND_IMAGE_VALIDATED", job, {
+        success: true,
+        downloadMethod: "editor_image_source_fetch",
+        mimeType: editedImage.mimeType,
+        width: editedImage.width,
+        height: editedImage.height,
+        sourceUrl: editedImage.sourceUrl,
+      });
+
+      // Keep the existing Done-editing cleanup and import/persistence flow.
       let editorClosed = false;
       let editorCloseError = null;
       try {
@@ -4531,7 +4552,10 @@ export class FlowBrowserWorker {
         editorClosed = closeRes?.closed ?? Boolean(closeRes);
       } catch (closeErr) {
         editorCloseError = closeErr.message;
-        console.warn(`[FlowBrowser] Editor close cleanup notice for job ${job.id}:`, closeErr.message);
+        console.warn(
+          `[FlowBrowser] Editor close cleanup notice for job ${job.id}:`,
+          closeErr.message,
+        );
       }
 
       job.status = "importing";
@@ -4539,21 +4563,26 @@ export class FlowBrowserWorker {
       job.editorCloseStatus = editorClosed ? "closed" : "failed";
       job.flowSessionReady = editorClosed;
       job.editorCloseError = editorCloseError || null;
-      job.downloadPath = nativeResult.path;
-      job.downloadMethod = nativeResult.downloadMethod || "native_context_menu_save_as";
-      if (nativeResult.googleFlowImageId !== undefined) job.googleFlowImageId = nativeResult.googleFlowImageId;
-      if (nativeResult.googleFlowImageRef) job.googleFlowImageRef = nativeResult.googleFlowImageRef;
-      if (nativeResult.googleFlowImageSourceUrl) job.googleFlowImageSourceUrl = nativeResult.googleFlowImageSourceUrl;
+      job.downloadPath = editedImage.path;
+      job.downloadMethod = "editor_image_source_fetch";
       this.touch(job);
 
-      await this.importDownloadedAsset(job, nativeResult.buffer, {
-        mimeType: nativeResult.mimeType,
-        extension: nativeResult.fileName.split(".").pop(),
+      await this.importDownloadedAsset(job, editedImage.buffer, {
+        mimeType: editedImage.mimeType,
+        extension: editedImage.extension,
       });
       job.flowSessionReady = editorClosed;
     } catch (error) {
-      this.emitLifecycleLog("FLOW_REGENERATION_FAILED", job, { error: error.message });
-      this.setJobTerminal(job, "failed", error.message, "Google Flow background regeneration failed.");
+      this.emitLifecycleLog("FLOW_REGENERATION_FAILED", job, {
+        error: error.message,
+        errorCode: error.code || "FLOW_REGENERATION_FAILED",
+      });
+      this.setJobTerminal(
+        job,
+        "failed",
+        error.message,
+        "Google Flow background regeneration failed.",
+      );
     }
   }
 
