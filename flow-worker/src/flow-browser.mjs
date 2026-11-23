@@ -5650,8 +5650,8 @@ export class FlowBrowserWorker {
     const assetKey = (value) => {
       try {
         const parsed = new URL(value);
-        const match = parsed.pathname.match(/\\/asb\\/([^/]+)/i);
-        return match ? match[1].split("=")[0] : parsed.href;
+        const assetPath = parsed.pathname.split("/asb/")[1] || "";
+        return assetPath ? assetPath.split("/")[0].split("=")[0] : parsed.href;
       } catch {
         return String(value || "");
       }
@@ -5665,8 +5665,8 @@ export class FlowBrowserWorker {
           const keyOf = (value) => {
             try {
               const parsed = new URL(value, window.location.href);
-              const match = parsed.pathname.match(/\\/asb\\/([^/]+)/i);
-              return match ? match[1].split("=")[0] : parsed.href;
+              const assetPath = parsed.pathname.split("/asb/")[1] || "";
+              return assetPath ? assetPath.split("/")[0].split("=")[0] : parsed.href;
             } catch {
               return String(value || "");
             }
@@ -5741,8 +5741,8 @@ export class FlowBrowserWorker {
           continue;
         }
 
-        const match = parsed.pathname.match(/\\/asb\\/([^/]+)/i);
-        const assetKey = match ? match[1].split("=")[0] : parsed.href;
+        const assetPath = parsed.pathname.split("/asb/")[1] || "";
+        const assetKey = assetPath ? assetPath.split("/")[0].split("=")[0] : parsed.href;
         const candidate = { url, item, assetKey };
         const existing = groups.get(assetKey);
         if (!existing || item.buffer.length > existing.item.buffer.length) {
