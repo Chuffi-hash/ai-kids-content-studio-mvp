@@ -4951,24 +4951,45 @@ export class FlowBrowserWorker {
           (await candidate.isEnabled().catch(() => false));
         if (!visible || !enabled) continue;
 
-        // CRITICAL CHECK: Reject any prompt that is inside the creative agent panel!
-        const isAgent = await candidate.evaluate((el) => {
-          if (!el) return false;
+        // Real Playwright locators support evaluate(). Keep a guarded fallback
+        // for locator-compatible adapters/test doubles; explicit Character
+        // selectors are already label-scoped and must not require evaluate().
+        let isAgent = false;
+        if (typeof candidate.evaluate === "function") {
+          isAgent = await candidate.evaluate((el) => {
+            if (!el) return false;
+            if (
+              el.closest("flow-creative-agent-prompt-box") ||
+              el.closest(".agent-panel-prompt-box")
+            ) {
+              return true;
+            }
+            const label = el.getAttribute("aria-label") || "";
+            return /what do you want to create/i.test(label);
+          }).catch(() => false);
+        } else {
+          const [ariaLabel, placeholder] = await Promise.all([
+            typeof candidate.getAttribute === "function"
+              ? candidate.getAttribute("aria-label").catch(() => null)
+              : Promise.resolve(null),
+            typeof candidate.getAttribute === "function"
+              ? candidate.getAttribute("placeholder").catch(() => null)
+              : Promise.resolve(null),
+          ]);
+          const promptDescription = [ariaLabel, placeholder].filter(Boolean).join(" ");
+          isAgent = /what do you want to create/i.test(promptDescription);
           if (
-            el.closest("flow-creative-agent-prompt-box") ||
-            el.closest(".agent-panel-prompt-box")
+            !isAgent &&
+            !/describe your character/i.test(promptDescription) &&
+            !/flow-character-prompt-box|Describe your character/i.test(selector)
           ) {
-            return true;
+            // A generic contenteditable without DOM inspection or a
+            // Character-specific label is not safe to treat as our prompt.
+            isAgent = true;
           }
-          const label = el.getAttribute("aria-label") || "";
-          if (/what do you want to create/i.test(label)) {
-            return true;
-          }
-          return false;
-        }).catch(() => false);
+        }
 
         if (isAgent) continue;
-
         visibleMatches.push(candidate);
       }
 
@@ -4991,17 +5012,23 @@ export class FlowBrowserWorker {
         name: /Describe your character/i,
       });
       const count = await byRole.count().catch(() => 0);
-      if (count === 1 && (await byRole.isVisible().catch(() => false))) {
-        const isAgent = await byRole.first().evaluate((el) => {
-          if (!el) return false;
-          return Boolean(
-            el.closest("flow-creative-agent-prompt-box") ||
-              el.closest(".agent-panel-prompt-box"),
-          );
-        }).catch(() => false);
-
-        if (!isAgent) {
-          foundLocator = byRole.first();
+      if (count === 1) {
+        const candidate = typeof byRole.first === "function" ? byRole.first() : byRole;
+        const visible = await candidate.isVisible().catch(() => false);
+        let isAgent = false;
+        if (typeof candidate.evaluate === "function") {
+          isAgent = await candidate.evaluate((el) =>
+            Boolean(
+              el?.closest("flow-creative-agent-prompt-box") ||
+              el?.closest(".agent-panel-prompt-box"),
+            ),
+          ).catch(() => false);
+        } else if (typeof candidate.getAttribute === "function") {
+          const label = await candidate.getAttribute("aria-label").catch(() => "");
+          isAgent = /what do you want to create/i.test(label || "");
+        }
+        if (visible && !isAgent) {
+          foundLocator = candidate;
           foundSelector = 'getByRole("textbox", { name: /Describe your character/i })';
         }
       }
@@ -5106,17 +5133,89 @@ export class FlowBrowserWorker {
     return { success: true, method: "new_character_tile_clicked" };
   }
 
-  async findCharacterGenerationButton(page) {
-    const selectors = [
-      'button[type="submit"][aria-label="Start generation"]',
-      'button[aria-label="Start generation"]',
-      '.character-controls ~ button[type="submit"]',
-      'flow-rich-text-editor.prompt-input ~ button[type="submit"]',
+  async findCharacterGenerationButton(
+    page,
+    characterPromptLocator = null,
+    { allowDisabled = false } = {},
+  ) {
+    if (!page || (typeof page.isClosed === "function" && page.isClosed())) {
+      throw new Error("FLOW_CHARACTER_PAGE_CLOSED: Character page is closed.");
+    }
+
+    const selectors = [];
+
+    // The live DOM supplied for Character creation places both the editable
+    // textbox and submit button inside the same flow-base-prompt-box host.
+    // Scope the button to that exact host rather than choosing a page-global
+    // Start generation button which could belong to another prompt context.
+    if (characterPromptLocator && typeof characterPromptLocator.locator === "function") {
+      for (const ancestorSelector of [
+        "xpath=ancestor::flow-base-prompt-box[1]",
+        "xpath=ancestor::flow-character-prompt-box[1]",
+      ]) {
+        try {
+          const promptRoot = characterPromptLocator.locator(ancestorSelector);
+          if ((await promptRoot.count().catch(() => 0)) === 1) {
+            const scopedButtons = promptRoot.locator(
+              'button[type="submit"][aria-label="Start generation"], button[aria-label="Start generation"]',
+            );
+            const scopedCount = await scopedButtons.count().catch(() => 0);
+            if (scopedCount > 0) {
+              const visible = [];
+              for (let index = 0; index < scopedCount; index += 1) {
+                const candidate =
+                  typeof scopedButtons.nth === "function"
+                    ? scopedButtons.nth(index)
+                    : scopedButtons;
+                if (!(await candidate.isVisible().catch(() => false))) continue;
+                const enabled =
+                  typeof candidate.isEnabled !== "function" ||
+                  (await candidate.isEnabled().catch(() => false));
+                const disabled =
+                  typeof candidate.getAttribute === "function"
+                    ? await candidate.getAttribute("disabled").catch(() => null)
+                    : null;
+                const isDisabled =
+                  !enabled ||
+                  (disabled !== null && disabled !== false && disabled !== "false");
+                if (!allowDisabled && isDisabled) continue;
+                visible.push(candidate);
+              }
+
+              if (visible.length > 1) {
+                const error = new Error(
+                  "FLOW_CHARACTER_GENERATE_BUTTON_AMBIGUOUS: Multiple submit buttons were found in the Character prompt component.",
+                );
+                error.code = "FLOW_CHARACTER_GENERATE_BUTTON_AMBIGUOUS";
+                throw error;
+              }
+              if (visible.length === 1) {
+                return {
+                  locator: visible[0],
+                  selector: ancestorSelector + ' >> button[aria-label="Start generation"]',
+                };
+              }
+            }
+          }
+        } catch (error) {
+          if (error.code === "FLOW_CHARACTER_GENERATE_BUTTON_AMBIGUOUS") throw error;
+        }
+      }
+    }
+
+    const actualCharacterSelector =
+      'flow-base-prompt-box:has(flow-rich-text-editor.prompt-input [role="textbox"][aria-label*="Describe your character" i]) button[type="submit"][aria-label="Start generation"]';
+    selectors.push(actualCharacterSelector);
+
+    // Compatibility selectors for Google Flow DOM variants and the previously
+    // observed Character prompt wrapper. These still remain Character-only.
+    selectors.push(
       'flow-character-prompt-box flow-generate-icon-button button[aria-label="Start generation"]',
       'flow-character-prompt-box button.generate-icon-button[aria-label="Start generation"]',
       'flow-character-prompt-box button[aria-label="Start generation"]',
-      'button:has-text("Start generation")',
-    ];
+      'button[type="submit"][aria-label="Start generation"]',
+    );
+
     for (const selector of selectors) {
       if (typeof page.locator !== "function") break;
       const locator = page.locator(selector);
@@ -5126,19 +5225,22 @@ export class FlowBrowserWorker {
         const candidate =
           typeof locator.nth === "function" ? locator.nth(index) : locator;
         if (!(await candidate.isVisible().catch(() => false))) continue;
-        if (
-          typeof candidate.isEnabled === "function" &&
-          !(await candidate.isEnabled().catch(() => false))
-        ) {
-          continue;
-        }
-        const disabled = await candidate.getAttribute("disabled").catch(() => null);
-        if (disabled !== null && disabled !== false && disabled !== "false") continue;
+        const enabled =
+          typeof candidate.isEnabled !== "function" ||
+          (await candidate.isEnabled().catch(() => false));
+        const disabled =
+          typeof candidate.getAttribute === "function"
+            ? await candidate.getAttribute("disabled").catch(() => null)
+            : null;
+        const isDisabled =
+          !enabled ||
+          (disabled !== null && disabled !== false && disabled !== "false");
+        if (!allowDisabled && isDisabled) continue;
         visible.push(candidate);
       }
       if (visible.length > 1) {
         const error = new Error(
-          "FLOW_CHARACTER_GENERATE_BUTTON_AMBIGUOUS: Multiple Start generation buttons were found inside the Character prompt box.",
+          "FLOW_CHARACTER_GENERATE_BUTTON_AMBIGUOUS: Multiple Start generation buttons were found in the Character prompt context.",
         );
         error.code = "FLOW_CHARACTER_GENERATE_BUTTON_AMBIGUOUS";
         throw error;
@@ -5148,23 +5250,10 @@ export class FlowBrowserWorker {
       }
     }
 
-    if (typeof page.getByRole === "function") {
-      const byRole = page.getByRole("button", { name: "Start generation", exact: true });
-      const count = await byRole.count().catch(() => 0);
-      if (
-        count === 1 &&
-        (await byRole.isVisible().catch(() => false)) &&
-        (await byRole.isEnabled().catch(() => false))
-      ) {
-        return {
-          locator: byRole.first(),
-          selector: 'getByRole("button", { name: "Start generation" })',
-        };
-      }
-    }
-
     const error = new Error(
-      "FLOW_CHARACTER_GENERATE_BUTTON_NOT_FOUND: Could not find the enabled Start generation button inside the Character controls.",
+      allowDisabled
+        ? "FLOW_CHARACTER_GENERATE_BUTTON_NOT_FOUND: Could not find the Character Start generation button."
+        : "FLOW_CHARACTER_GENERATE_BUTTON_NOT_FOUND: Could not find an enabled Start generation button in the Character prompt.",
     );
     error.code = "FLOW_CHARACTER_GENERATE_BUTTON_NOT_FOUND";
     throw error;
@@ -5485,7 +5574,7 @@ export class FlowBrowserWorker {
 
     await this.fillFlowPrompt(page, promptLocator, job.prompt);
     const { locator: submitButton, selector: submitSelector } =
-      await this.findCharacterGenerationButton(page);
+      await this.findCharacterGenerationButton(page, promptLocator);
     job.submitSelectorUsed = submitSelector;
 
     const baseline = await this.getCharacterOutputBaseline(page);
