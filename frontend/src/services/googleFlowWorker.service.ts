@@ -202,6 +202,10 @@ export async function createFlowCharacterJob(
   input: {
     characterId: string;
     characterName: string;
+    targetType?: "character";
+    pageRole?: "character";
+    storyId?: string;
+    googleFlowProjectId?: string;
     view: string;
     projectUrl?: string;
     assetType: "main" | "custom";
@@ -214,7 +218,14 @@ export async function createFlowCharacterJob(
     "/jobs",
     workerUrl,
     token,
-    { method: "POST", body: JSON.stringify(input) },
+    {
+      method: "POST",
+      body: JSON.stringify({
+        ...input,
+        targetType: "character",
+        pageRole: "character",
+      }),
+    },
   );
   return payload.job;
 }
