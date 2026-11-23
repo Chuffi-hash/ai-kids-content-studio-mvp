@@ -132,108 +132,129 @@ export class GenerationPromptService {
       promptOverride?: string;
     }
   ): CharacterPromptResult {
-    const artStyle = story.visualStyle || 'whimsical children book 2D cartoon illustration, soft cell shading, clean crisp outlines';
-    const dims = { width: 1024, height: 1024 }; // 1:1 square for character assets
+    const artStyle =
+      story.visualStyle ||
+      'whimsical children book 2D cartoon illustration, soft cell shading, clean crisp outlines';
+    const dimensions = { width: 1024, height: 1024 };
+    const identityDescription = [
+      `Species: ${character.species || 'character'}`,
+      `Appearance: ${character.visualDescription || 'Use the supplied canonical character reference'}`,
+      `Clothing and distinctive features: ${character.clothing || character.distinctiveFeatures || 'Preserve the established outfit and accessories'}`,
+    ].join('\n');
+
+    const flowReferenceName =
+      character.flowMapping?.syncStatus === 'synced'
+        ? character.flowMapping.flowCharacterName
+        : null;
+    const identitySource = flowReferenceName
+      ? `Use the saved Google Flow character identity @${flowReferenceName} as the only subject. Match that saved character exactly. Do not create a new design.`
+      : `Use the following visual identity details as generation guidance only. Do not render these words in the artwork:\n${identityDescription}`;
+
+    const commonRestrictions = [
+      'Create exactly ONE image of ONE character.',
+      'The character name is application metadata only. Never write the name inside the image.',
+      'No text, letters, numbers, typography, title, heading, labels, captions, callouts, annotations, speech bubbles, logos, signatures, watermarks, borders, panels, grids, contact sheets, collages, model sheets, or multiple views.',
+      'Keep the complete character visible from head to toe, with comfortable space around the silhouette. Do not crop the head, hands, feet, hair, clothing, or accessories.',
+      'Use a simple, uniform, neutral studio background with no environment, props, scenery, furniture, or decorative objects.',
+      `Art direction: ${artStyle}.`,
+    ];
 
     if (options?.promptOverride && options.promptOverride.trim().length > 0) {
+      const prompt = [
+        'CHARACTER IMAGE TASK',
+        options.promptOverride.trim(),
+        'OUTPUT RULES',
+        ...commonRestrictions,
+      ].join('\n\n');
       return {
-        prompt: options.promptOverride.trim(),
-        negativePrompt: 'complex background, background scenery, multiple characters, text, watermark, blurry',
+        prompt,
+        negativePrompt: [
+          'text, letters, words, names, typography, titles, labels, annotations, watermark, logo, signature',
+          'character sheet, turnaround sheet, contact sheet, collage, panels, grid, multiple views, extra characters',
+          'complex background, background scenery, cropped body, blurry image, low quality, extra limbs, distorted anatomy',
+        ].join(', '),
         aspectRatio: '1:1',
-        width: dims.width,
-        height: dims.height,
+        width: dimensions.width,
+        height: dimensions.height,
         referenceImageUrl: character.referenceImageUrl,
       };
     }
 
-    const hasFlowMapping = Boolean(
-      character.flowMapping &&
-      character.flowMapping.syncStatus === 'synced' &&
-      character.flowMapping.flowCharacterName
-    );
-    const flowTag = hasFlowMapping ? `@${character.flowMapping!.flowCharacterName}` : character.name;
+    const variation = String(options?.variation || '').trim();
+    const directionalViews: Record<string, string> = {
+      front: 'front-facing view, chest and hips facing the camera, face looking directly forward',
+      'front-left': 'front three-quarter view, torso and face turned approximately 45 degrees toward the character’s left',
+      'front-right': 'front three-quarter view, torso and face turned approximately 45 degrees toward the character’s right',
+      left: 'true left side profile, body facing left at 90 degrees, show the side silhouette clearly',
+      right: 'true right side profile, body facing right at 90 degrees, show the side silhouette clearly',
+      'back-left': 'rear three-quarter view, body turned approximately 135 degrees away from the front toward the character’s left',
+      'back-right': 'rear three-quarter view, body turned approximately 135 degrees away from the front toward the character’s right',
+      back: 'full rear view, back facing the camera, show the back of the outfit and hairstyle',
+    };
 
-    const baseIdentity = hasFlowMapping
-      ? `Using character model reference ${flowTag}.`
-      : [
-          `Character: ${character.name}`,
-          `Species: ${character.species}`,
-          `Personality: ${character.personality}`,
-          `Appearance: ${character.visualDescription}`,
-          `Clothing & Features: ${character.clothing || character.distinctiveFeatures || 'Standard storybook attire'}`,
-        ].join('. ');
-
-    let prompt = '';
-    const variation = options?.variation || '';
+    const parts: string[] = [
+      'CHARACTER IMAGE TASK',
+      identitySource,
+      `Visual style: ${artStyle}.`,
+    ];
 
     switch (assetType) {
       case 'master_reference':
-        prompt = [
-          `Master canonical character reference sheet for ${character.name}.`,
-          `Art Style: ${artStyle}.`,
-          [
-            `Character: ${character.name}`,
-            `Species: ${character.species}`,
-            `Personality: ${character.personality}`,
-            `Appearance: ${character.visualDescription}`,
-            `Clothing & Features: ${character.clothing || character.distinctiveFeatures || 'Standard storybook attire'}`,
-          ].join('. '),
-          `Full-body portrait, standing pose facing forward with a welcoming friendly expression.`,
-          `Complete character design visible from head to toe. Centered in frame.`,
-          `Background: Isolated on pure solid neutral off-white background with soft ground shadow. No scenery, no background clutter.`,
-          `High consistency model sheet asset.`,
-        ].join(' ');
+        parts.push(
+          'Create one canonical full-body character reference illustration. This is a single portrait image, not a sheet or page layout.',
+          'View: straight-on front view. Pose: relaxed neutral standing pose, arms slightly separated from the torso, both feet visible and balanced.',
+          'Expression: friendly, calm, and readable. Use the exact design described above.',
+          'Make the face, hair, body proportions, outfit, colors, shoes, and distinctive accessories clear enough to reuse as the visual identity anchor.'
+        );
         break;
 
       case 'turnaround': {
-        const direction = variation || 'front view';
-        prompt = [
-          `Character turnaround reference of ${flowTag} in ${direction}.`,
-          `Art Style: ${artStyle}.`,
-          baseIdentity,
-          `Directional view: ${direction}. Consistent character proportions, clothing, and colors exactly matching the master reference.`,
-          `Full body standing pose, centered in frame.`,
-          `Background: Pure solid clean neutral studio background, no environment.`,
-        ].join(' ');
+        const direction = directionalViews[variation] || directionalViews.front;
+        parts.push(
+          'Create one standalone directional reference image of the existing character. Generate only the requested camera angle in this image; never place several angles together.',
+          `Requested view: ${direction}.`,
+          'Keep the same face identity, head and body proportions, hairstyle, skin/fur/feather colors, clothing, patterns, shoes, accessories, and illustration style as the canonical master reference.',
+          'Use the same neutral standing pose and full-body framing for every direction so the images can be switched between one another in the character preview and used as individual animation references.'
+        );
         break;
       }
 
       case 'expression': {
-        const expr = variation || 'happy and smiling';
-        prompt = [
-          `Expressive character facial sheet for ${flowTag}.`,
-          `Art Style: ${artStyle}.`,
-          baseIdentity,
-          `Facial emotion: ${expr}. Expressive, animated children storybook expression while strictly maintaining identical face shape, eyes, and character features.`,
-          `Close-up bust portrait, centered.`,
-          `Background: Solid clean neutral studio background.`,
-        ].join(' ');
+        const expression = variation || 'happy and smiling';
+        parts.push(
+          'Create one standalone head-and-shoulders character expression portrait, not an expression sheet.',
+          `Expression to show: ${expression}.`,
+          'Keep the same face shape, eye design, hairstyle, colors, and character identity. Only the facial expression may change.'
+        );
         break;
       }
 
       case 'pose': {
-        const actionPose = variation || 'waving hand and greeting';
-        prompt = [
-          `Dynamic action character pose of ${flowTag}.`,
-          `Art Style: ${artStyle}.`,
-          baseIdentity,
-          `Full-body action pose: ${actionPose}. Dynamic gesture suitable for 2D animation, maintaining exact character design, attire, and colors.`,
-          `Full body, centered in frame.`,
-          `Background: Solid clean neutral studio background with soft drop shadow.`,
-        ].join(' ');
+        const action = variation || 'standing naturally';
+        parts.push(
+          'Create one standalone full-body character pose illustration, not a pose sheet.',
+          `Action or pose to show: ${action}.`,
+          'Keep the same character identity, anatomy, outfit, colors, and distinctive features. Change only the body pose/action.'
+        );
         break;
       }
     }
 
-    const negativePrompt =
-      'detailed background, scenery, forest, room, trees, furniture, multiple characters, extra limbs, distorted anatomy, disfigured face, mutated hands, text, watermark, signature, blurry, grain, dark moody lighting';
+    parts.push('OUTPUT RULES', ...commonRestrictions);
+
+    const negativePrompt = [
+      'text, letters, words, character name, title, heading, label, caption, typography, watermark, logo, signature, annotation',
+      'character sheet, turnaround sheet, model sheet, contact sheet, expression sheet, pose sheet, collage, grid, panels, multiple views',
+      'multiple characters, extra people, scenery, detailed background, furniture, props, border',
+      'cropped head, cropped hands, cropped feet, cropped body, extra limbs, distorted face, deformed anatomy, blurry, low resolution',
+    ].join(', ');
 
     return {
-      prompt,
+      prompt: parts.join('\n\n'),
       negativePrompt,
       aspectRatio: '1:1',
-      width: dims.width,
-      height: dims.height,
+      width: dimensions.width,
+      height: dimensions.height,
       referenceImageUrl: character.referenceImageUrl,
     };
   }
