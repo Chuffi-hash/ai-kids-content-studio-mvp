@@ -5796,7 +5796,10 @@ export class FlowBrowserWorker {
               submitControl &&
               (typeof submitControl.locator.isEnabled !== "function" ||
                 (await submitControl.locator.isEnabled().catch(() => false))) &&
-              (await submitControl.locator.getAttribute("disabled").catch(() => null)) == null,
+              (
+                typeof submitControl.locator.getAttribute !== "function" ||
+                (await submitControl.locator.getAttribute("disabled").catch(() => null)) == null
+              ),
             );
             const outputVisible = await this.isCharacterOutputSourceVisible(
               page,
