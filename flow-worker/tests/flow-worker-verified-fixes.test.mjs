@@ -285,7 +285,7 @@ describe("Flow Worker Verified Fixes Test Suite", () => {
     const importedJobIds = [];
     worker.importDownloadedAsset = async (job) => {
       importedJobIds.push(job.id);
-      job.status = "completed";
+      worker.setJobTerminal(job, "completed");
     };
 
     const png = Buffer.from(
