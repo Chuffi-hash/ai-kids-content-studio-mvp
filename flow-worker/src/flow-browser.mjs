@@ -5170,6 +5170,15 @@ export class FlowBrowserWorker {
     }
 
     const selectors = [
+      // Current saved-character editor DOM: .agent-panel-prompt-box ->
+      // flow-base-prompt-box -> flow-rich-text-editor.prompt-input.
+      '.agent-panel-prompt-box [role="textbox"][aria-label*="What do you want to change" i]',
+      '.agent-panel-prompt-box flow-rich-text-editor.prompt-input [role="textbox"]',
+      '.agent-panel-prompt-box flow-rich-text-editor.prompt-input [contenteditable="true"]',
+      '.agent-panel-prompt-box [contenteditable="true"]',
+      'flow-base-prompt-box [role="textbox"][aria-label*="What do you want to change" i]',
+      'flow-base-prompt-box flow-rich-text-editor.prompt-input [contenteditable="true"]',
+      // Older Flow editor wrappers, retained as fallbacks.
       'flow-edit-image-prompt-box [role="textbox"][aria-label="What do you want to change?"]',
       'flow-edit-image-prompt-box [role="textbox"]',
       'flow-edit-image-prompt-box textarea',
@@ -5212,10 +5221,11 @@ export class FlowBrowserWorker {
         const description = [ariaLabel, placeholder, dataPlaceholder, title]
           .filter(Boolean)
           .join(" ");
-        if (
-          !/what do you want to change/i.test(description) &&
-          !selector.startsWith("flow-edit-image-prompt-box")
-        ) {
+        const isKnownCharacterEditPrompt =
+          selector.startsWith("flow-edit-image-prompt-box") ||
+          selector.startsWith(".agent-panel-prompt-box") ||
+          selector.startsWith("flow-base-prompt-box");
+        if (!/what do you want to change/i.test(description) && !isKnownCharacterEditPrompt) {
           continue;
         }
         matches.push(candidate);
@@ -5278,8 +5288,14 @@ export class FlowBrowserWorker {
     const startedAt = Date.now();
     while (Date.now() - startedAt <= timeoutMs) {
       if (typeof page.locator === "function") {
+        // Current Flow DOM puts the submit arrow inside the same agent
+        // prompt box as the textbox. Keep selectors character-route-only.
         const controls = page.locator(
-          "flow-edit-image-prompt-box button, flow-edit-image-prompt-box [role='button']",
+          '.agent-panel-prompt-box flow-generate-icon-button button[type="submit"][aria-label="Start generation"], ' +
+          '.agent-panel-prompt-box button[type="submit"][aria-label="Start generation"], ' +
+          'flow-base-prompt-box flow-generate-icon-button button[type="submit"][aria-label="Start generation"], ' +
+          'flow-base-prompt-box button[type="submit"][aria-label="Start generation"], ' +
+          'flow-edit-image-prompt-box button, flow-edit-image-prompt-box [role="button"]',
         );
         const count = await controls.count().catch(() => 0);
         const matches = [];
