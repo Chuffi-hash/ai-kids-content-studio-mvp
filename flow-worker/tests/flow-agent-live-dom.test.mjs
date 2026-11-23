@@ -357,23 +357,26 @@ describe("Google Flow Agent Live DOM & Prompt Submission Suite", () => {
     previousJob.status = "prompt_ready"; // idle state
     worker.activeJobId = previousJob.id;
 
+    const characterUrl = projectUrl + "/character";
     worker.context = {};
     worker.page = {
       isClosed: () => false,
-      url: () => projectUrl,
-      locator: () => createMockLocator([{
-        tagName: "div",
-        role: "textbox",
-        ariaLabel: "What do you want to create?",
-        visible: true,
-        disabled: false,
-      }]),
+      url: () => characterUrl,
+      locator: (selector) => selector.includes("flow-character-prompt-box")
+        ? createMockLocator([{
+            tagName: "div",
+            role: "textbox",
+            ariaLabel: "Describe your character…",
+            visible: true,
+            disabled: false,
+          }])
+        : createMockLocator([]),
     };
     worker.registerFlowPage(worker.page, { role: "character", projectId: "2ea32335-0e57-4d1a-9e1e-98fa3cd491e8" });
     worker.navigateToCharacterTab = async () => ({
       success: true,
       page: worker.page,
-      url: projectUrl,
+      url: characterUrl,
       routeType: "character-create",
     });
     worker.setActiveJob(previousJob, "character");
