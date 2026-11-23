@@ -173,6 +173,8 @@ describe("Google Flow Agent Live DOM & Prompt Submission Suite", () => {
       },
     };
 
+    worker.registerFlowPage(worker.page, { role: "character", projectId: "2ea32335-0e57-4d1a-9e1e-98fa3cd491e8" });
+
     // When prompt is populated, enable submit button
     promptElement.onFill = async (val) => {
       promptElement.text = val;
@@ -367,12 +369,20 @@ describe("Google Flow Agent Live DOM & Prompt Submission Suite", () => {
         disabled: false,
       }]),
     };
+    worker.registerFlowPage(worker.page, { role: "character", projectId: "2ea32335-0e57-4d1a-9e1e-98fa3cd491e8" });
+    worker.navigateToCharacterTab = async () => ({
+      success: true,
+      page: worker.page,
+      url: projectUrl,
+      routeType: "character-create",
+    });
+    worker.setActiveJob(previousJob, "character");
 
     const newJob = worker.createJob({ characterId: "c2", characterName: "Second", projectUrl });
     await worker.prepareJob(newJob.id);
 
     assert.equal(previousJob.status, "cancelled", "Previous idle job must be superseded");
-    assert.equal(worker.activeJobId, newJob.id, "New job must acquire active lock");
+    assert.equal(worker.activeJobsByRole.get("character"), newJob.id, "New character job must acquire the Character lock");
   });
 
   it("10. WebP Dimension Parsing: Validates VP8, VP8L, VP8X formats and returns 0x0 on invalid/corrupted bytes", async () => {
