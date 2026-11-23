@@ -208,17 +208,31 @@ describe('Story-Aware Direct Generation & Context Resolver Test Suite', () => {
     const context = await StoryContextService.resolveStoryContext(testStoryId);
     const luna = context.characters.find((c) => c.id === char2Id)!;
 
-    // Master Reference
+    // Master Reference: the character name remains metadata, never visible artwork text.
     const masterPrompt = GenerationPromptService.buildCharacterPrompt(context.story, luna, 'master_reference');
-    assert.ok(masterPrompt.prompt.includes('Master canonical character reference sheet for Luna Rabbit'));
-    assert.ok(masterPrompt.prompt.includes('Full-body portrait, standing pose'));
-    assert.ok(masterPrompt.prompt.includes('Isolated on pure solid neutral off-white background'));
+    assert.ok(masterPrompt.prompt.includes('Create one canonical full-body character reference illustration'));
+    assert.ok(masterPrompt.prompt.includes('straight-on front view'));
+    assert.ok(masterPrompt.prompt.includes('The character name is application metadata only'));
+    assert.ok(masterPrompt.prompt.includes('No text, letters, numbers, typography'));
+    assert.ok(!masterPrompt.prompt.includes('Luna Rabbit'));
+    assert.ok(!/reference sheet|model sheet|contact sheet/i.test(masterPrompt.prompt));
+    assert.ok(masterPrompt.negativePrompt.includes('character name'));
 
-    // Turnaround
+    // Directional view: each call requests one standalone angle, not a labelled sheet.
     const turnaroundPrompt = GenerationPromptService.buildCharacterPrompt(context.story, luna, 'turnaround', {
-      variation: 'three-quarter view',
+      variation: 'front-left',
     });
-    assert.ok(turnaroundPrompt.prompt.includes('Character turnaround reference of Luna Rabbit in three-quarter view'));
+    assert.ok(turnaroundPrompt.prompt.includes('front three-quarter view'));
+    assert.ok(turnaroundPrompt.prompt.includes('Generate only the requested camera angle in this image'));
+    assert.ok(turnaroundPrompt.prompt.includes('Never place several angles together'));
+    assert.ok(!turnaroundPrompt.prompt.includes('Luna Rabbit'));
+    assert.ok(!/turnaround sheet|multiple views|collage/i.test(turnaroundPrompt.prompt));
+
+    const backPrompt = GenerationPromptService.buildCharacterPrompt(context.story, luna, 'turnaround', {
+      variation: 'back',
+    });
+    assert.ok(backPrompt.prompt.includes('full rear view'));
+    assert.ok(backPrompt.prompt.includes('same neutral standing pose'));
 
     // Expression
     const exprPrompt = GenerationPromptService.buildCharacterPrompt(context.story, luna, 'expression', {
