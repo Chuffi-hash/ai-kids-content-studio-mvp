@@ -287,7 +287,10 @@ test("Google Flow Character Generation E2E Suite (17 Conditions)", async (t) => 
 
     const btn = await worker.findCharacterGenerationButton(page);
     assert.ok(btn.locator);
-    assert.equal(btn.selector, 'button[type="submit"][aria-label="Start generation"]');
+    assert.equal(
+      btn.selector,
+      'flow-base-prompt-box:has(flow-rich-text-editor.prompt-input [role="textbox"][aria-label*="Describe your character" i]) button[type="submit"][aria-label="Start generation"]',
+    );
   });
 
   await t.test("Condition 8: Prompt content is correctly entered", async () => {
@@ -631,11 +634,28 @@ test("Google Flow Character Generation E2E Suite (17 Conditions)", async (t) => 
     // 10. CHARACTER_PROJECT_REFERENCE_SELECTED
     // 11. CHARACTER_REFERENCES_VERIFIED
     const charPage = createMockPage("https://flow.google.com/project/proj-lifecycle/character");
+    const characterSubmitButton = {
+      isVisible: async () => true,
+      isEnabled: async () => true,
+      getAttribute: async () => null,
+      click: async () => {},
+    };
+    const characterPromptRoot = {
+      count: async () => 1,
+      locator: () => ({
+        count: async () => 1,
+        nth: () => characterSubmitButton,
+      }),
+    };
     charPage.registerElement('flow-rich-text-editor.prompt-input [role="textbox"][aria-label*="Describe your character" i]', {
       isVisible: async () => true,
       isEnabled: async () => true,
       fill: async () => {},
       evaluate: async () => false,
+      locator: (selector) =>
+        selector.includes("ancestor::flow-base-prompt-box")
+          ? characterPromptRoot
+          : { count: async () => 0 },
     });
     charPage.registerElement('input[type="file"]', {
       isVisible: async () => true,
@@ -660,14 +680,10 @@ test("Google Flow Character Generation E2E Suite (17 Conditions)", async (t) => 
     assert.ok(eventNames.includes("CHARACTER_REFERENCES_VERIFIED"), "Missing CHARACTER_REFERENCES_VERIFIED");
 
     // 12. CHARACTER_GENERATION_TRIGGERED & 13. CHARACTER_GENERATION_WAITING
-    charPage.registerElement('button[type="submit"][aria-label="Start generation"]', {
-      isVisible: async () => true,
-      isEnabled: async () => true,
-      getAttribute: async () => null,
-      click: async () => {},
-    });
+    charPage.registerElement('button[type="submit"][aria-label="Start generation"]', characterSubmitButton);
 
     await worker.submitCharacterPrompt(job, { confirmGenerate: true, referenceConfirmed: true }, charPage);
+    assert.match(job.submitSelectorUsed, /ancestor::flow-base-prompt-box/);
     assert.ok(eventsLogged.some((e) => e.event === "CHARACTER_GENERATION_TRIGGERED"));
     assert.ok(eventsLogged.some((e) => e.event === "CHARACTER_GENERATION_WAITING"));
 
