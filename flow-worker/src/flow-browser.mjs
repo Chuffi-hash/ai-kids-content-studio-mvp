@@ -2031,6 +2031,30 @@ export class FlowBrowserWorker {
       input.googleFlowProjectId ||
       extractProjectIdFromFlowUrl(projectUrl) ||
       undefined;
+    const rawGoogleFlowCharacterUrl = input.googleFlowCharacterUrl
+      ? assertAllowedFlowUrl(input.googleFlowCharacterUrl)
+      : input.googleFlowCharacterId && googleFlowProjectId
+        ? `https://flow.google.com/project/${encodeURIComponent(googleFlowProjectId)}/character/${encodeURIComponent(String(input.googleFlowCharacterId))}`
+        : undefined;
+    const parsedGoogleFlowCharacter = rawGoogleFlowCharacterUrl
+      ? extractGoogleFlowCharacterReference(rawGoogleFlowCharacterUrl)
+      : null;
+    if (
+      rawGoogleFlowCharacterUrl &&
+      (!parsedGoogleFlowCharacter ||
+        (googleFlowProjectId && parsedGoogleFlowCharacter.projectId !== googleFlowProjectId) ||
+        (input.googleFlowCharacterId &&
+          parsedGoogleFlowCharacter.characterId !== String(input.googleFlowCharacterId)))
+    ) {
+      const error = new Error(
+        "FLOW_CHARACTER_REFERENCE_MISMATCH: The saved Google Flow character URL does not match the requested project or character ID.",
+      );
+      error.code = "FLOW_CHARACTER_REFERENCE_MISMATCH";
+      throw error;
+    }
+    const googleFlowCharacterId =
+      parsedGoogleFlowCharacter?.characterId ||
+      (input.googleFlowCharacterId ? String(input.googleFlowCharacterId) : undefined);
     const uploadedReferences = Array.isArray(input.uploadedReferences)
       ? input.uploadedReferences
       : input.referenceImagePath
@@ -2059,6 +2083,8 @@ export class FlowBrowserWorker {
       projectUrl,
       googleFlowProjectId,
       flowProjectId: googleFlowProjectId,
+      googleFlowCharacterId,
+      googleFlowCharacterUrl: rawGoogleFlowCharacterUrl,
       prompt,
       uploadedReferences,
       projectReferences,
