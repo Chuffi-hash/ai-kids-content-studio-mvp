@@ -785,7 +785,6 @@ export class GenerationOrchestratorService {
         googleFlowVersion: imageRecord.googleFlowVersion ?? undefined,
         googleFlowImageId: imageRecord.googleFlowImageId ?? undefined,
         googleFlowImageRef: imageRecord.googleFlowImageRef ?? undefined,
-        googleFlowImageSourceUrl: imageRecord.googleFlowImageSourceUrl ?? undefined,
       },
       backgroundVersion,
     );
