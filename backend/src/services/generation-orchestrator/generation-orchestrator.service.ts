@@ -1192,6 +1192,10 @@ export class GenerationOrchestratorService {
             targetType: 'character',
             characterId: character.id,
             characterName: flowCharacterName,
+            googleFlowCharacterId:
+              mapping?.syncStatus === 'synced' ? mapping.flowCharacterId || undefined : undefined,
+            googleFlowCharacterUrl:
+              mapping?.syncStatus === 'synced' ? mapping.flowCharacterUrl || undefined : undefined,
             assetType: assetType === 'master_reference' ? 'main' : 'turnaround',
             isMasterReference: assetType === 'master_reference',
             view: variation || 'front',
@@ -1214,6 +1218,10 @@ export class GenerationOrchestratorService {
                 targetType: 'character',
                 characterId: character.id,
                 characterName: flowCharacterName,
+            googleFlowCharacterId:
+              mapping?.syncStatus === 'synced' ? mapping.flowCharacterId || undefined : undefined,
+            googleFlowCharacterUrl:
+              mapping?.syncStatus === 'synced' ? mapping.flowCharacterUrl || undefined : undefined,
                 assetType: assetType === 'master_reference' ? 'main' : 'turnaround',
                 view: variation || 'front',
                 prompt: finalPrompt,
@@ -1247,6 +1255,10 @@ export class GenerationOrchestratorService {
                     targetType: 'character',
                     characterId: character.id,
                     characterName: flowCharacterName,
+            googleFlowCharacterId:
+              mapping?.syncStatus === 'synced' ? mapping.flowCharacterId || undefined : undefined,
+            googleFlowCharacterUrl:
+              mapping?.syncStatus === 'synced' ? mapping.flowCharacterUrl || undefined : undefined,
                     assetType: assetType === 'master_reference' ? 'main' : 'turnaround',
                     isMasterReference: assetType === 'master_reference',
                     view: variation || 'front',
