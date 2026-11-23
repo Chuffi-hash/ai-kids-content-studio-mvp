@@ -1378,14 +1378,39 @@ export class FlowBrowserWorker {
     const projectId = extractProjectIdFromFlowUrl(projectUrl) || null;
     const target = assertAllowedFlowUrl(projectUrl || FLOW_HOME_URL);
 
-    // 1. Scan context pages and recover any role markers from sessionStorage
+    // 1. Recover valid role markers before repairing stale ones. A tab's live
+    // route is authoritative, but stale markers must never displace a correctly
+    // marked Background or Character tab just because Chrome enumerates tabs in
+    // a different order after restart.
     const existingPages = this.context.pages ? this.context.pages() : [];
+    const pendingRoleRepairs = [];
     for (const p of existingPages) {
       this.attachPage(p);
       const marker = await this.readTabMarkerFromSessionStorage(p);
-      if (marker && marker.role) {
-        this.registerFlowPage(p, marker);
+      if (!marker || !marker.role) continue;
+
+      const routeRole = this.getFlowRouteRole(p);
+      if (routeRole && routeRole !== marker.role) {
+        pendingRoleRepairs.push({ page: p, marker, routeRole });
+        continue;
       }
+      this.registerFlowPage(p, marker);
+    }
+
+    for (const repair of pendingRoleRepairs) {
+      const currentOwner = this.getFlowPage(repair.routeRole);
+      if (currentOwner && currentOwner !== repair.page) {
+        this.disownFlowPage(repair.page, repair.marker.role);
+        continue;
+      }
+      this.registerFlowPage(repair.page, {
+        ...repair.marker,
+        role: repair.routeRole,
+        projectId:
+          extractProjectIdFromFlowUrl(repair.page.url()) ||
+          repair.marker.projectId ||
+          projectId,
+      });
     }
 
     // 2. Ensure Background tab exists and is navigated
