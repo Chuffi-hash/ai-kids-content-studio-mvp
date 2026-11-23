@@ -673,10 +673,11 @@ export class GoogleFlowAssetImportService {
         });
       }
 
-      // Only the canonical master reference represents a saved Flow
-      // character version. Directional view images are independent video assets
-      // and must not advance FlowCharacterMapping.activeVersion.
-      if (options.storyId && isMaster) {
+      // A directional Google Flow import may establish the Flow mapping on
+      // the first view, so subsequent angles can reuse this saved Character
+      // editor. Only the canonical master reference creates a Flow version;
+      // directional views must never advance activeVersion.
+      if (options.storyId && (isMaster || flowCharId)) {
         try {
           const flowProjId =
             options.googleFlowProjectId ||
@@ -699,7 +700,7 @@ export class GoogleFlowAssetImportService {
             flowCharacterId: flowCharId,
             flowCharacterUrl: flowCharUrl,
           });
-          if (flowCharId && mapping?.id) {
+          if (isMaster && flowCharId && mapping?.id) {
             await createFlowCharacterVersion({
               mappingId: mapping.id,
               flowProjectId: flowProjId,
