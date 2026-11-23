@@ -6237,10 +6237,10 @@ export class FlowBrowserWorker {
 
       // On the New character route, Done commits the generated character to
       // the project. Click it only after the image has been captured safely.
-      if (
-        currentCharacterRef?.routeType === "character-create" ||
-        currentUrl.endsWith("/character")
-      ) {
+      if (job.characterPromptMode !== "edit") {
+        // Commit only a newly-created Flow Character. Directional edits on an
+        // existing mapped Character remain separate references; clicking Done
+        // there could promote a side/back view over the saved master portrait.
         const doneButtons = [
           'button[aria-label="Done editing"]',
           'header button:has-text("Done")',
