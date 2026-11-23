@@ -68,6 +68,57 @@ type ActiveTab =
   | "background"
   | "character";
 
+type CharacterPreviewView = {
+  direction: string;
+  label: string;
+  url: string;
+};
+
+const CHARACTER_TURNAROUND_DIRECTIONS = [
+  { direction: "front", label: "Front" },
+  { direction: "front-left", label: "Front ¾ left" },
+  { direction: "front-right", label: "Front ¾ right" },
+  { direction: "left", label: "Left profile" },
+  { direction: "right", label: "Right profile" },
+  { direction: "back-left", label: "Back ¾ left" },
+  { direction: "back-right", label: "Back ¾ right" },
+  { direction: "back", label: "Back" },
+] as const;
+
+function getCharacterDirectionalPreviewViews(
+  character: StoryFlowCharacterItem,
+): CharacterPreviewView[] {
+  const canonical = character.canonicalAppearance || {};
+  const references = (canonical.references || {}) as Record<string, any>;
+  const directionalViews = (references.directionalViews || {}) as Record<string, any>;
+  const assets = Array.isArray(canonical.assets) ? canonical.assets : [];
+
+  const views = CHARACTER_TURNAROUND_DIRECTIONS.flatMap(({ direction, label }) => {
+    const mapped = directionalViews[direction];
+    const mappedUrl = typeof mapped === "string" ? mapped : mapped?.url;
+    const savedAsset = assets.find(
+      (asset: any) =>
+        asset?.direction === direction &&
+        asset?.url &&
+        asset?.assetType !== "main",
+    );
+    const url = mappedUrl || savedAsset?.url;
+    return url ? [{ direction, label, url: String(url) }] : [];
+  });
+
+  if (views.length > 0) return views;
+  if (character.referenceImageUrl) {
+    return [
+      {
+        direction: "master",
+        label: "Master reference",
+        url: character.referenceImageUrl,
+      },
+    ];
+  }
+  return [];
+}
+
 function cleanScriptText(text?: string): string {
   if (!text) return "";
   let clean = text;
@@ -281,6 +332,13 @@ export default function GoogleFlowPage() {
     "all",
   );
 
+  const [characterGenerationProgress, setCharacterGenerationProgress] = useState<
+    Record<string, { current: number; total: number; direction: string }>
+  >({});
+  const [characterPreviewIndexes, setCharacterPreviewIndexes] = useState<
+    Record<string, number>
+  >({});
+
   // Lightbox Preview Modal
   interface PreviewAssetModalData {
     url: string;
@@ -290,6 +348,8 @@ export default function GoogleFlowPage() {
     sceneId?: string;
     characterId?: string;
     type: "background" | "character";
+    images?: CharacterPreviewView[];
+    activeIndex?: number;
   }
   const [previewAsset, setPreviewAsset] =
     useState<PreviewAssetModalData | null>(null);
@@ -915,54 +975,99 @@ export default function GoogleFlowPage() {
       delete next[characterId];
       return next;
     });
+
+    const viewsToGenerate =
+      assetType === "turnaround"
+        ? CHARACTER_TURNAROUND_DIRECTIONS.map((item) => item.direction)
+        : [variation || (assetType === "master_reference" ? "front" : assetType)];
+
     try {
-      const res = await generateCharacterAssetDirect({
-        storyId: selectedStoryId,
-        characterId,
-        provider: generationProvider,
-        assetType,
-        variation,
-      });
+      for (let index = 0; index < viewsToGenerate.length; index += 1) {
+        const currentDirection = viewsToGenerate[index];
+        const directionLabel =
+          CHARACTER_TURNAROUND_DIRECTIONS.find(
+            (item) => item.direction === currentDirection,
+          )?.label || currentDirection;
 
-      if (res?.jobId && res?.status === "generating") {
-        let completed = false;
-        const timeoutMs = 90000;
-        const pollStart = Date.now();
+        setCharacterGenerationProgress((prev) => ({
+          ...prev,
+          [characterId]: {
+            current: index + 1,
+            total: viewsToGenerate.length,
+            direction: directionLabel,
+          },
+        }));
 
-        while (!completed) {
-          if (Date.now() - pollStart > timeoutMs) {
-            console.warn(
-              "UI timeout reached while character generation job is still active on server.",
-            );
-            break;
-          }
+        const res = await generateCharacterAssetDirect({
+          storyId: selectedStoryId,
+          characterId,
+          provider: generationProvider,
+          assetType,
+          variation: currentDirection,
+        });
 
-          const job = await fetchGenerationJob(res.jobId);
-          switch (job?.status) {
-            case "completed":
-              completed = true;
-              break;
-            case "failed":
+        if (res?.jobId && res?.status === "generating") {
+          let completed = false;
+          const timeoutMs = 120000;
+          const pollStart = Date.now();
+
+          while (!completed) {
+            if (Date.now() - pollStart > timeoutMs) {
               throw new Error(
-                job?.error || "Google Flow character generation failed.",
+                `Timed out while generating the ${directionLabel} view. Previously completed views have been saved.`,
               );
-            case "cancelled":
-              throw new Error("Google Flow generation was cancelled.");
-            default:
-              await new Promise((resolve) => setTimeout(resolve, 2000));
+            }
+
+            const job = await fetchGenerationJob(res.jobId);
+            switch (job?.status) {
+              case "completed":
+                completed = true;
+                break;
+              case "failed":
+                throw new Error(
+                  job?.error ||
+                    `Google Flow failed to generate the ${directionLabel} view.`,
+                );
+              case "cancelled":
+                throw new Error(
+                  `Generation of the ${directionLabel} view was cancelled.`,
+                );
+              default:
+                await new Promise((resolve) => setTimeout(resolve, 2000));
+            }
           }
+        } else if (res?.status === "failed") {
+          throw new Error(
+            res.message || `Could not generate the ${directionLabel} view.`,
+          );
         }
       }
 
+      setCharacterPreviewIndexes((prev) => ({ ...prev, [characterId]: 0 }));
       await loadStoryContext(selectedStoryId);
       getAllCharacters().then(setCharacters);
+
+      if (assetType === "turnaround") {
+        setBatchCharSummary(
+          "All 8 directional character images were generated and saved separately. Use the preview arrows to inspect each view.",
+        );
+        setTimeout(() => setBatchCharSummary(null), 7000);
+      }
     } catch (err: any) {
       setCharErrors((prev) => ({
         ...prev,
         [characterId]: err.message || "Character generation failed.",
       }));
+      // Reload successful earlier views even if a later direction failed.
+      await loadStoryContext(selectedStoryId).catch(() => {});
+      getAllCharacters().then(setCharacters);
     } finally {
       setGeneratingCharIds((prev) => ({ ...prev, [characterId]: false }));
+      setCharacterGenerationProgress((prev) => {
+        const next = { ...prev };
+        delete next[characterId];
+        return next;
+      });
     }
   };
 
