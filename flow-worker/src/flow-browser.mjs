@@ -312,6 +312,7 @@ export class FlowBrowserWorker {
     this.browserChannel = process.env.FLOW_BROWSER_CHANNEL || "";
     this.promptSelector = process.env.FLOW_PROMPT_SELECTOR || "";
     this.downloadInProgress = false;
+    this.downloadInProgressByRole = new Set();
     this.attachedPages = new WeakSet();
   }
 
@@ -372,12 +373,10 @@ export class FlowBrowserWorker {
     const currentUrl = typeof page.url === "function" ? page.url() : String(page.url || "");
     const currentRouteType = detectFlowRouteType(currentUrl);
     const routeProjectId = extractProjectIdFromFlowUrl(currentUrl);
-    // A page on the Characters route must not be restored as the background tab
-    // just because it carries an old or duplicated sessionStorage marker.
-    const routeRole =
-      currentRouteType === "character-create" || currentRouteType === "character-editor"
-        ? FLOW_TAB_ROLES.CHARACTER
-        : null;
+    // The live Flow route is authoritative over stale role markers:
+    // Characters routes belong to the character tab; image-editor routes belong
+    // to the background tab. Generic project routes retain the requested role.
+    const routeRole = this.getFlowRouteRole(page);
     const role = routeRole || requestedRole;
     const requestedTabId = metadata.tabId || existing?.tabId || randomUUID();
     const duplicateTabId = Array.from(this.pagesByRole.values()).some((mappedPage) => {
@@ -515,17 +514,86 @@ export class FlowBrowserWorker {
     }
   }
 
+  getFlowRouteRole(pageOrUrl) {
+    let currentUrl = "";
+    try {
+      currentUrl =
+        typeof pageOrUrl === "string"
+          ? pageOrUrl
+          : typeof pageOrUrl?.url === "function"
+            ? pageOrUrl.url()
+            : String(pageOrUrl?.url || "");
+    } catch {
+      return null;
+    }
+
+    const routeType = detectFlowRouteType(currentUrl);
+    if (routeType === "character-create" || routeType === "character-editor") {
+      return FLOW_TAB_ROLES.CHARACTER;
+    }
+    if (routeType === "image-editor") {
+      return FLOW_TAB_ROLES.BACKGROUND;
+    }
+    return null;
+  }
+
+  isFlowPageCompatibleWithRole(page, role) {
+    if (!page || (typeof page.isClosed === "function" && page.isClosed())) {
+      return false;
+    }
+    if (role !== FLOW_TAB_ROLES.BACKGROUND && role !== FLOW_TAB_ROLES.CHARACTER) {
+      return false;
+    }
+    const routeRole = this.getFlowRouteRole(page);
+    return !routeRole || routeRole === role;
+  }
+
+  disownFlowPage(page, expectedRole = null) {
+    if (!page) return false;
+    const metadata = this.pageMetadata.get(page) || {
+      tabId: randomUUID(),
+      role: null,
+      projectId: null,
+      purpose: null,
+      createdAt: new Date().toISOString(),
+    };
+
+    if (expectedRole && metadata.role && metadata.role !== expectedRole) {
+      return false;
+    }
+
+    for (const [role, mappedPage] of Array.from(this.pagesByRole.entries())) {
+      if (mappedPage === page) this.pagesByRole.delete(role);
+    }
+
+    metadata.role = null;
+    metadata.purpose = null;
+    metadata.updatedAt = new Date().toISOString();
+    metadata.currentUrl = typeof page.url === "function" ? page.url() : "";
+    metadata.currentRouteType = detectFlowRouteType(metadata.currentUrl);
+    this.pageMetadata.set(page, metadata);
+    this.writeTabMarkerToSessionStorage(page, metadata).catch(() => {});
+    return true;
+  }
+
   getFlowPage(role = FLOW_TAB_ROLES.BACKGROUND) {
     const page = this.pagesByRole.get(role);
     if (!page) return null;
 
     const isClosed = typeof page.isClosed === "function" && page.isClosed();
     const metadata = this.pageMetadata.get(page);
-    if (isClosed || (metadata && metadata.role !== role)) {
+    const metadataMismatch = Boolean(metadata && metadata.role !== role);
+    const routeMismatch = !isClosed && !this.isFlowPageCompatibleWithRole(page, role);
+
+    if (isClosed || metadataMismatch || routeMismatch) {
       this.pagesByRole.delete(role);
-      if (metadata && metadata.role === role) {
+      if (routeMismatch) {
+        this.disownFlowPage(page, role);
+      } else if (metadata && metadata.role === role) {
         metadata.role = null;
         metadata.purpose = null;
+        metadata.updatedAt = new Date().toISOString();
+        this.writeTabMarkerToSessionStorage(page, metadata).catch(() => {});
       }
       if (isClosed) this.pageMetadata.delete(page);
       return null;
@@ -744,6 +812,10 @@ export class FlowBrowserWorker {
       if (typeof candidate.isClosed === "function" && candidate.isClosed()) continue;
       const marker = await this.readTabMarkerFromSessionStorage(candidate);
       if (marker && marker.role === role) {
+        if (!this.isFlowPageCompatibleWithRole(candidate, role)) {
+          this.disownFlowPage(candidate, role);
+          continue;
+        }
         page = candidate;
         this.attachPage(page);
         this.registerFlowPage(page, {
@@ -760,7 +832,7 @@ export class FlowBrowserWorker {
       const unassigned = contextPages.find((p) => {
         if (typeof p.isClosed === "function" && p.isClosed()) return false;
         const m = this.pageMetadata.get(p);
-        return !m || !m.role;
+        return (!m || !m.role) && this.isFlowPageCompatibleWithRole(p, role);
       });
 
       if (unassigned) {
@@ -1320,7 +1392,10 @@ export class FlowBrowserWorker {
     let bgPage = this.getFlowPage(FLOW_TAB_ROLES.BACKGROUND);
     if (!bgPage) {
       const candidates = (this.context.pages ? this.context.pages() : []).filter(
-        (p) => (!p.isClosed || !p.isClosed()) && !this.pageMetadata.get(p)?.role,
+        (p) =>
+          (!p.isClosed || !p.isClosed()) &&
+          !this.pageMetadata.get(p)?.role &&
+          this.isFlowPageCompatibleWithRole(p, FLOW_TAB_ROLES.BACKGROUND),
       );
       bgPage =
         candidates.find((candidate) => isFlowUrl(candidate.url())) ||
@@ -1349,7 +1424,11 @@ export class FlowBrowserWorker {
     let charPage = this.getFlowPage(FLOW_TAB_ROLES.CHARACTER);
     if (!charPage) {
       const remainingCandidates = (this.context.pages ? this.context.pages() : []).filter(
-        (p) => (!p.isClosed || !p.isClosed()) && p !== bgPage && !this.pageMetadata.get(p)?.role,
+        (p) =>
+          (!p.isClosed || !p.isClosed()) &&
+          p !== bgPage &&
+          !this.pageMetadata.get(p)?.role &&
+          this.isFlowPageCompatibleWithRole(p, FLOW_TAB_ROLES.CHARACTER),
       );
       charPage =
         remainingCandidates.find((candidate) => isFlowUrl(candidate.url())) ||
@@ -1414,10 +1493,33 @@ export class FlowBrowserWorker {
               // A null role means this worker deliberately disowned the page.
               // Do not resurrect an older sessionStorage marker while its removal
               // is still queued or if the browser write failed.
-              if (metadata.role) this.updateFlowPageRouteMetadata(page);
+              if (metadata.role) {
+                const routeRole = this.getFlowRouteRole(page);
+                if (routeRole && routeRole !== metadata.role) {
+                  const currentOwner = this.getFlowPage(routeRole);
+                  if (!currentOwner || currentOwner === page) {
+                    this.registerFlowPage(page, {
+                      role: routeRole,
+                      projectId: extractProjectIdFromFlowUrl(page.url()),
+                      purpose:
+                        routeRole === FLOW_TAB_ROLES.CHARACTER
+                          ? "character-generation"
+                          : "scene-background",
+                    });
+                  } else {
+                    this.disownFlowPage(page, metadata.role);
+                  }
+                } else {
+                  this.updateFlowPageRouteMetadata(page);
+                }
+              }
             } else {
               const marker = await this.readTabMarkerFromSessionStorage(page);
-              if (marker?.role) this.registerFlowPage(page, marker);
+              if (marker?.role && this.isFlowPageCompatibleWithRole(page, marker.role)) {
+                this.registerFlowPage(page, marker);
+              } else if (marker?.role) {
+                this.disownFlowPage(page, marker.role);
+              }
             }
           }
         } catch {}
@@ -1909,6 +2011,12 @@ export class FlowBrowserWorker {
   setJobTerminal(job, terminalStatus, error = undefined, message = undefined) {
     if (!job) return;
     const prevStatus = job.status;
+    if (
+      prevStatus === terminalStatus &&
+      ["completed", "cancelled", "failed"].includes(terminalStatus)
+    ) {
+      return;
+    }
     job.status = terminalStatus;
     if (error !== undefined) job.error = error;
     if (message !== undefined) job.message = message;
@@ -3129,61 +3237,253 @@ export class FlowBrowserWorker {
     throw err;
   }
 
-  async findImageEditPromptEditor(targetPage = null) {
+  async findImageEditPromptEditor(targetPage = null, options = {}) {
     const page = targetPage || this.page;
     if (!page || (typeof page.isClosed === "function" && page.isClosed())) {
       throw new Error("Flow page is not available.");
     }
 
     const currentUrl = typeof page.url === "function" ? page.url() : "";
-
     if (!isGoogleFlowEditorRoute(currentUrl)) {
-      throw new Error(
-        `FLOW_WRONG_INTERFACE: Expected image editor route. Current URL: ${currentUrl}`
+      const error = new Error(
+        `FLOW_WRONG_INTERFACE: Expected image editor route. Current URL: ${currentUrl}`,
       );
+      error.code = "FLOW_WRONG_INTERFACE";
+      throw error;
     }
 
-    const selectors = [
-      'flow-edit-image-prompt-box [role="textbox"][aria-label="What do you want to change?"]',
-      'flow-edit-image-prompt-box [contenteditable="true"]',
+    const timeoutMs = Number.isFinite(options.timeoutMs)
+      ? Math.max(0, options.timeoutMs)
+      : 8000;
+    const scopedSelector = [
+      "flow-edit-image-prompt-box [role='textbox']",
+      "flow-edit-image-prompt-box textarea",
+      "flow-edit-image-prompt-box [contenteditable='true']",
+      "flow-edit-image-prompt-box input:not([type='button']):not([type='submit']):not([type='hidden'])",
+    ].join(", ");
+    const semanticSelector = [
       '[role="textbox"][aria-label="What do you want to change?"]',
+      '[role="textbox"][aria-label*="change" i]',
+      '[role="textbox"][aria-label*="edit" i]',
+      '[role="textbox"][aria-label*="prompt" i]',
+      '[contenteditable="true"][aria-label*="change" i]',
+      '[contenteditable="true"][aria-label*="prompt" i]',
+      'textarea[placeholder*="change" i]',
+      'textarea[placeholder*="edit" i]',
+      'textarea[placeholder*="prompt" i]',
+      'textarea[aria-label*="change" i]',
+      'textarea[aria-label*="prompt" i]',
+      'input[placeholder*="change" i]',
+      'input[placeholder*="edit" i]',
+      'input[placeholder*="prompt" i]',
+    ].join(", ");
+
+    const selectors = [
+      { selector: scopedSelector, scoped: true },
+      { selector: semanticSelector, scoped: false },
     ];
+    const startedAt = Date.now();
 
-    for (const selector of selectors) {
-      const locator = page.locator(selector);
+    while (Date.now() - startedAt <= timeoutMs) {
+      for (const entry of selectors) {
+        let locator;
+        try {
+          locator = page.locator(entry.selector);
+        } catch {
+          continue;
+        }
 
-      const count = await locator.count().catch(() => 0);
+        const count = await locator.count().catch(() => 0);
+        const scored = [];
 
-      const visible = [];
+        for (let index = 0; index < count; index += 1) {
+          const candidate =
+            typeof locator.nth === "function"
+              ? locator.nth(index)
+              : typeof locator.first === "function"
+                ? locator.first()
+                : locator;
+          const visible = await candidate.isVisible().catch(() => false);
+          const enabled =
+            typeof candidate.isEnabled !== "function" ||
+            (await candidate.isEnabled().catch(() => false));
+          if (!visible || !enabled) continue;
 
-      for (let i = 0; i < count; i++) {
-        const candidate = typeof locator.nth === "function" ? locator.nth(i) : (typeof locator.first === "function" ? locator.first() : locator);
+          const readAttribute = async (name) =>
+            typeof candidate.getAttribute === "function"
+              ? await candidate.getAttribute(name).catch(() => null)
+              : null;
+          const [ariaLabel, placeholder, dataPlaceholder, title, role, editable] =
+            await Promise.all([
+              readAttribute("aria-label"),
+              readAttribute("placeholder"),
+              readAttribute("data-placeholder"),
+              readAttribute("title"),
+              readAttribute("role"),
+              readAttribute("contenteditable"),
+            ]);
+          const description = [
+            ariaLabel,
+            placeholder,
+            dataPlaceholder,
+            title,
+          ]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase();
 
-        if (
-          (await candidate.isVisible().catch(() => false)) &&
-          (typeof candidate.isEnabled !== "function" || (await candidate.isEnabled().catch(() => true)))
-        ) {
-          visible.push(candidate);
+          let score = entry.scoped ? 5 : 0;
+          if (/what do you want to change/.test(description)) score += 10;
+          else if (/change|modify|edit|prompt|describe|instruction/.test(description)) {
+            score += 6;
+          }
+          if (role === "textbox") score += 2;
+          if (editable === "true") score += 2;
+
+          if (score > 0) scored.push({ locator: candidate, selector: entry.selector, score });
+        }
+
+        if (scored.length > 0) {
+          const highestScore = Math.max(...scored.map((item) => item.score));
+          const best = scored.filter((item) => item.score === highestScore);
+          if (best.length > 1) {
+            const error = new Error(
+              "FLOW_IMAGE_EDIT_PROMPT_AMBIGUOUS: Multiple visible image-edit prompt fields matched.",
+            );
+            error.code = "FLOW_IMAGE_EDIT_PROMPT_AMBIGUOUS";
+            throw error;
+          }
+          return {
+            locator: best[0].locator,
+            selector: best[0].selector,
+          };
         }
       }
 
-      if (visible.length > 1) {
-        throw new Error(
-          "FLOW_IMAGE_EDIT_PROMPT_AMBIGUOUS"
-        );
-      }
-
-      if (visible.length === 1) {
-        return {
-          locator: visible[0],
-          selector,
-        };
-      }
+      if (Date.now() - startedAt >= timeoutMs) break;
+      await new Promise((resolve) => setTimeout(resolve, 250));
     }
 
-    throw new Error(
-      "FLOW_IMAGE_EDIT_PROMPT_NOT_FOUND: Could not find 'What do you want to change?' inside flow-edit-image-prompt-box."
+    const error = new Error(
+      "FLOW_IMAGE_EDIT_PROMPT_NOT_FOUND: Could not find a visible, enabled prompt textbox inside the Google Flow image editor (checked role, contenteditable, textarea, input, aria-label and placeholder).",
     );
+    error.code = "FLOW_IMAGE_EDIT_PROMPT_NOT_FOUND";
+    error.diagnostics = await collectFlowEditorDiagnostics(page).catch(() => null);
+    throw error;
+  }
+
+  async findImageEditSubmitButton(targetPage = null, options = {}) {
+    const page = targetPage || this.page;
+    if (!page || (typeof page.isClosed === "function" && page.isClosed())) {
+      throw new Error("Flow page is not available.");
+    }
+    const timeoutMs = Number.isFinite(options.timeoutMs)
+      ? Math.max(0, options.timeoutMs)
+      : 8000;
+    const startedAt = Date.now();
+
+    const visibleEnabled = async (locator) =>
+      Boolean(
+        locator &&
+          (await locator.isVisible().catch(() => false)) &&
+          (typeof locator.isEnabled !== "function" ||
+            (await locator.isEnabled().catch(() => false))),
+      );
+
+    while (Date.now() - startedAt <= timeoutMs) {
+      // Prefer the known accessible name, then inspect the editor's own controls.
+      if (typeof page.getByRole === "function") {
+        const exact = page.getByRole("button", { name: "Start generation" });
+        const exactCount = await exact.count().catch(() => 0);
+        if (exactCount === 1 && (await visibleEnabled(getFirstLocator(exact)))) {
+          return {
+            locator: getFirstLocator(exact),
+            selector: 'getByRole("button", { name: "Start generation" })',
+          };
+        }
+      }
+
+      if (typeof page.locator === "function") {
+        const scopedSelector =
+          "flow-edit-image-prompt-box button, flow-edit-image-prompt-box [role='button']";
+        const controls = page.locator(scopedSelector);
+        const count = await controls.count().catch(() => 0);
+        const matches = [];
+
+        for (let index = 0; index < count; index += 1) {
+          const candidate =
+            typeof controls.nth === "function"
+              ? controls.nth(index)
+              : typeof controls.first === "function"
+                ? controls.first()
+                : controls;
+          if (!(await candidate.isVisible().catch(() => false))) continue;
+
+          const readAttribute = async (name) =>
+            typeof candidate.getAttribute === "function"
+              ? await candidate.getAttribute(name).catch(() => null)
+              : null;
+          const [ariaLabel, title, tooltip, type, text] = await Promise.all([
+            readAttribute("aria-label"),
+            readAttribute("title"),
+            readAttribute("data-tooltip"),
+            readAttribute("type"),
+            typeof candidate.innerText === "function"
+              ? candidate.innerText().catch(() => "")
+              : typeof candidate.textContent === "function"
+                ? candidate.textContent().catch(() => "")
+                : Promise.resolve(""),
+          ]);
+          const label = [ariaLabel, title, tooltip, text]
+            .filter(Boolean)
+            .join(" ")
+            .replace(/\s+/g, " ")
+            .trim()
+            .toLowerCase();
+          const isGenerationControl =
+            /start\s+generation|generate(?:\s+image)?|regenerate|submit/i.test(label) ||
+            String(type || "").toLowerCase() === "submit";
+          if (isGenerationControl && (typeof candidate.isEnabled !== "function" ||
+              (await candidate.isEnabled().catch(() => false)))) {
+            matches.push(candidate);
+          }
+        }
+
+        if (matches.length === 1) {
+          return { locator: matches[0], selector: scopedSelector };
+        }
+        if (matches.length > 1) {
+          const error = new Error(
+            "FLOW_IMAGE_EDIT_SUBMIT_AMBIGUOUS: Multiple visible generation controls matched inside the image editor.",
+          );
+          error.code = "FLOW_IMAGE_EDIT_SUBMIT_AMBIGUOUS";
+          throw error;
+        }
+      }
+
+      if (typeof page.getByRole === "function") {
+        const named = page.getByRole("button", {
+          name: /^(start generation|generate image|generate|regenerate)$/i,
+        });
+        const count = await named.count().catch(() => 0);
+        if (count === 1 && (await visibleEnabled(getFirstLocator(named)))) {
+          return {
+            locator: getFirstLocator(named),
+            selector: 'getByRole("button", { name: /generation action/i })',
+          };
+        }
+      }
+
+      if (Date.now() - startedAt >= timeoutMs) break;
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+
+    const error = new Error(
+      "FLOW_IMAGE_EDIT_SUBMIT_NOT_FOUND: Could not find a visible, enabled generation button inside the Google Flow image editor.",
+    );
+    error.code = "FLOW_IMAGE_EDIT_SUBMIT_NOT_FOUND";
+    error.diagnostics = await collectFlowEditorDiagnostics(page).catch(() => null);
+    throw error;
   }
 
   async fillFlowPrompt(pageOrLocator, locatorOrPrompt, maybePrompt) {
@@ -3804,27 +4104,18 @@ export class FlowBrowserWorker {
       throw err;
     }
 
-    let submitBtn = null;
-    if (typeof page.getByRole === "function") {
-      const byRoleBtn = page.getByRole("button", { name: "Start generation" });
-      if ((await byRoleBtn.count().catch(() => 0)) > 0 && (await byRoleBtn.first().isVisible().catch(() => false))) {
-        submitBtn = byRoleBtn.first();
-      }
-    }
-
-    if (!submitBtn && typeof page.locator === "function") {
-      const loc = page.locator(
-        'flow-edit-image-prompt-box button[aria-label="Start generation"], flow-edit-image-prompt-box button[type="submit"], button[aria-label="Start generation"]'
-      );
-      if ((await loc.count().catch(() => 0)) > 0) {
-        submitBtn = getFirstLocator(loc);
-      }
-    }
-
-    if (!submitBtn || !(await submitBtn.isVisible().catch(() => false))) {
-      const err = new Error("Could not find visible 'Start generation' submit button in Google Flow image editor.");
-      this.emitLifecycleLog("FLOW_REGENERATION_FAILED", job, { error: err.message });
-      throw err;
+    let submitBtn;
+    try {
+      const submitControl = await this.findImageEditSubmitButton(page);
+      submitBtn = submitControl.locator;
+      job.submitSelectorUsed = submitControl.selector;
+    } catch (error) {
+      this.emitLifecycleLog("FLOW_REGENERATION_FAILED", job, {
+        error: error.message,
+        errorCode: error.code || "FLOW_IMAGE_EDIT_SUBMIT_NOT_FOUND",
+        currentUrl,
+      });
+      throw error;
     }
 
     let isEnabled = false;
@@ -4031,6 +4322,15 @@ export class FlowBrowserWorker {
 
   async requestGeneration(jobId, confirmation) {
     const job = this.requireJob(jobId);
+
+    if (!["prompt_ready", "awaiting_agent_confirmation"].includes(job.status)) {
+      const error = new Error(
+        `FLOW_JOB_NOT_READY: Job "${job.id}" cannot generate from status "${job.status}". Prepare the prompt successfully before confirming generation.`,
+      );
+      error.code = "FLOW_JOB_NOT_READY";
+      error.statusCode = 409;
+      throw error;
+    }
 
     if (
       confirmation?.confirmGenerate !== true ||
@@ -4786,26 +5086,37 @@ export class FlowBrowserWorker {
           ? download.page()
           : null;
 
-    if (page && !isValidFlowDownloadSource(page, this, this.context)) {
-      // Ignore downloads from unrelated tabs, non-Flow pages, or closed sessions
+    // Without the originating tab we cannot safely distinguish background and
+    // character downloads. Never guess which active job should receive the file.
+    if (!page || !isValidFlowDownloadSource(page, this, this.context)) return;
+
+    const metadata = this.getFlowPageMetadata(page);
+    const role = metadata?.role || this.getFlowRouteRole(page);
+    if (
+      !role ||
+      (metadata?.role && metadata.role !== role) ||
+      !this.isFlowPageCompatibleWithRole(page, role)
+    ) {
       return;
     }
 
-    if (this.downloadInProgress || !this.activeJobId) return;
-
-    const job = this.jobs.get(this.activeJobId);
+    const job = this.getActiveJob(role);
     if (
       !job ||
+      this.downloadInProgressByRole.has(role) ||
       ![
         "generating",
         "output_detected",
         "downloading",
         "awaiting_download",
         "awaiting_manual_generate",
+        "generation_submitted",
       ].includes(job.status)
-    )
+    ) {
       return;
+    }
 
+    this.downloadInProgressByRole.add(role);
     this.downloadInProgress = true;
 
     try {
@@ -4856,14 +5167,12 @@ export class FlowBrowserWorker {
 
       job.downloadPath = finalPath;
       job.status = "importing";
-      job.message =
-        "Image downloaded and validated. Importing it into the selected character.";
+      job.message = "Image downloaded and validated. Importing it into the selected Flow asset.";
       this.touch(job);
 
       await this.importDownloadedAsset(job, buffer, imageType);
     } catch (error) {
       if (job.importResult) {
-        // The image file was already uploaded to backend storage, but metadata registration failed
         job.status = "import_metadata_failed";
         job.error = error.message;
         job.message =
@@ -4878,7 +5187,8 @@ export class FlowBrowserWorker {
       }
       this.touch(job);
     } finally {
-      this.downloadInProgress = false;
+      this.downloadInProgressByRole.delete(role);
+      this.downloadInProgress = this.downloadInProgressByRole.size > 0;
     }
   }
 
