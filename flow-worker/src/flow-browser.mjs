@@ -4650,6 +4650,478 @@ export class FlowBrowserWorker {
     }
   }
 
+  async getCharacterOutputBaseline(targetPage) {
+    const page = targetPage || this.getFlowPage(FLOW_TAB_ROLES.CHARACTER);
+    const identifiers = new Set();
+    if (!page || typeof page.locator !== "function") return { identifiers };
+
+    const images = page.locator(
+      "flow-grid-tile-container flow-character-tile img.character-tile-thumbnail, flow-character-tile img.character-tile-thumbnail, img.character-tile-thumbnail",
+    );
+    const count = await images.count().catch(() => 0);
+    for (let index = 0; index < count; index += 1) {
+      const image = typeof images.nth === "function" ? images.nth(index) : images;
+      const src = await image.getAttribute("src").catch(() => null);
+      if (src) {
+        try {
+          identifiers.add(new URL(src, page.url()).href);
+        } catch {
+          identifiers.add(src);
+        }
+      }
+    }
+    return { identifiers };
+  }
+
+  async collectNewCharacterOutput(targetPage, baseline = { identifiers: new Set() }) {
+    const page = targetPage || this.getFlowPage(FLOW_TAB_ROLES.CHARACTER);
+    if (!page || typeof page.locator !== "function") return [];
+
+    const selector =
+      "flow-grid-tile-container[aria-label] flow-character-tile img.character-tile-thumbnail, " +
+      "flow-character-tile img.character-tile-thumbnail, img.character-tile-thumbnail";
+    const images = page.locator(selector);
+    const count = await images.count().catch(() => 0);
+    const results = [];
+
+    for (let index = 0; index < count; index += 1) {
+      const image = typeof images.nth === "function" ? images.nth(index) : images;
+      if (!(await image.isVisible().catch(() => false))) continue;
+
+      const details = await image.evaluate((img) => {
+        const rect = img.getBoundingClientRect
+          ? img.getBoundingClientRect()
+          : { width: 0, height: 0 };
+        const tile =
+          img.closest("flow-grid-tile-container") ||
+          img.closest("flow-character-tile");
+        const name =
+          tile?.getAttribute("aria-label") ||
+          tile?.querySelector(".character-tile-name")?.textContent?.trim() ||
+          "";
+        return {
+          src: img.getAttribute("src") || img.currentSrc || img.src || "",
+          currentSrc: img.currentSrc || img.src || "",
+          alt: img.alt || "",
+          complete: Boolean(img.complete),
+          naturalWidth: img.naturalWidth || 0,
+          naturalHeight: img.naturalHeight || 0,
+          visible: rect.width > 0 && rect.height > 0,
+          characterName: name,
+        };
+      }).catch(() => null);
+
+      if (
+        !details?.visible ||
+        !details.complete ||
+        details.naturalWidth < 32 ||
+        details.naturalHeight < 32
+      ) {
+        continue;
+      }
+
+      const rawSrc = details.currentSrc || details.src;
+      if (!rawSrc) continue;
+      let sourceUrl;
+      try {
+        sourceUrl = new URL(rawSrc, page.url()).href;
+      } catch {
+        continue;
+      }
+
+      if (!sourceUrl.startsWith("https://flow.google.com/asb/")) continue;
+      if (baseline?.identifiers?.has(sourceUrl) || baseline?.identifiers?.has(rawSrc)) {
+        continue;
+      }
+
+      results.push({
+        sourceUrl,
+        rawSrc,
+        naturalWidth: details.naturalWidth,
+        naturalHeight: details.naturalHeight,
+        characterName: details.characterName,
+        imageLocator: image,
+      });
+    }
+
+    return results;
+  }
+
+  async downloadCharacterImageSource(page, job, sourceUrl, captured = null) {
+    if (!sourceUrl || typeof sourceUrl !== "string") {
+      throw new Error("FLOW_CHARACTER_IMAGE_SOURCE_MISSING: No character image URL was identified.");
+    }
+    const parsed = new URL(sourceUrl);
+    if (
+      parsed.protocol !== "https:" ||
+      parsed.hostname !== "flow.google.com" ||
+      !parsed.pathname.startsWith("/asb/")
+    ) {
+      throw new Error(
+        "FLOW_CHARACTER_IMAGE_SOURCE_REJECTED: Expected an https://flow.google.com/asb/ character thumbnail URL.",
+      );
+    }
+
+    let buffer = captured?.buffer || null;
+    if (!buffer) {
+      const context = typeof page.context === "function" ? page.context() : null;
+      const requestContext = context?.request || page.request || null;
+      if (requestContext && typeof requestContext.get === "function") {
+        const response = await requestContext.get(sourceUrl, { timeout: 30000 });
+        const ok =
+          typeof response.ok === "function"
+            ? response.ok()
+            : typeof response.status === "function" && response.status() === 200;
+        if (!ok) {
+          const status = typeof response.status === "function" ? response.status() : "unknown";
+          throw new Error(
+            "FLOW_CHARACTER_IMAGE_FETCH_FAILED: Google Flow returned HTTP " + status + ".",
+          );
+        }
+        buffer = await response.body();
+      } else if (typeof page.evaluate === "function") {
+        const fetched = await page.evaluate(async (url) => {
+          const response = await fetch(url, { credentials: "include" });
+          if (!response.ok) throw new Error("Image request failed with HTTP " + response.status);
+          const bytes = new Uint8Array(await response.arrayBuffer());
+          let binary = "";
+          for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+            binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+          }
+          return {
+            base64: btoa(binary),
+            contentType: response.headers.get("content-type") || "",
+          };
+        }, sourceUrl);
+        buffer = Buffer.from(fetched.base64, "base64");
+      } else {
+        throw new Error("FLOW_CHARACTER_IMAGE_FETCH_UNAVAILABLE: No authenticated image fetch mechanism is available.");
+      }
+    }
+
+    if (!Buffer.isBuffer(buffer) || buffer.length === 0 || buffer.length > MAX_IMAGE_BYTES) {
+      throw new Error("FLOW_CHARACTER_IMAGE_INVALID_SIZE: Character image response is empty or exceeds the worker image limit.");
+    }
+    const imageType = detectImageType(buffer);
+    if (!imageType) {
+      throw new Error("FLOW_CHARACTER_IMAGE_UNSUPPORTED: Character thumbnail is not a supported PNG, JPEG, or WebP image.");
+    }
+    const dimensions = parseImageDimensions(buffer);
+    if (dimensions.width < 32 || dimensions.height < 32) {
+      throw new Error(
+        `FLOW_CHARACTER_IMAGE_INVALID_DIMENSIONS: Character image dimensions are ${dimensions.width}x${dimensions.height}.`,
+      );
+    }
+
+    await fs.mkdir(this.downloadDir, { recursive: true });
+    const fileName =
+      safeFilename(job.id || "flow-character") +
+      "-character-" +
+      Date.now() +
+      "." +
+      imageType.extension;
+    const outputPath = path.join(this.downloadDir, fileName);
+    await fs.writeFile(outputPath, buffer);
+
+    return {
+      buffer,
+      path: outputPath,
+      fileName,
+      fileSize: buffer.length,
+      mimeType: imageType.mimeType,
+      extension: imageType.extension,
+      width: dimensions.width,
+      height: dimensions.height,
+      sourceUrl,
+    };
+  }
+
+  async findCharacterGenerationButton(page) {
+    const selectors = [
+      'flow-character-prompt-box flow-generate-icon-button button[aria-label="Start generation"]',
+      'flow-character-prompt-box button.generate-icon-button[aria-label="Start generation"]',
+      'flow-character-prompt-box button[aria-label="Start generation"]',
+    ];
+    for (const selector of selectors) {
+      const locator = page.locator(selector);
+      const count = await locator.count().catch(() => 0);
+      const visible = [];
+      for (let index = 0; index < count; index += 1) {
+        const candidate =
+          typeof locator.nth === "function" ? locator.nth(index) : locator;
+        if (!(await candidate.isVisible().catch(() => false))) continue;
+        if (
+          typeof candidate.isEnabled === "function" &&
+          !(await candidate.isEnabled().catch(() => false))
+        ) {
+          continue;
+        }
+        const disabled = await candidate.getAttribute("disabled").catch(() => null);
+        if (disabled !== null && disabled !== false && disabled !== "false") continue;
+        visible.push(candidate);
+      }
+      if (visible.length > 1) {
+        const error = new Error(
+          "FLOW_CHARACTER_GENERATE_BUTTON_AMBIGUOUS: Multiple Start generation buttons were found inside the Character prompt box.",
+        );
+        error.code = "FLOW_CHARACTER_GENERATE_BUTTON_AMBIGUOUS";
+        throw error;
+      }
+      if (visible.length === 1) {
+        return { locator: visible[0], selector };
+      }
+    }
+
+    const error = new Error(
+      "FLOW_CHARACTER_GENERATE_BUTTON_NOT_FOUND: Could not find the enabled Start generation button inside flow-character-prompt-box.",
+    );
+    error.code = "FLOW_CHARACTER_GENERATE_BUTTON_NOT_FOUND";
+    throw error;
+  }
+
+  async submitCharacterPrompt(job, confirmation, targetPage = null) {
+    const page = targetPage || (await this.resolveJobPage(job));
+    if (!page || (typeof page.isClosed === "function" && page.isClosed())) {
+      throw new Error("Flow Character page is not available.");
+    }
+    if (getJobPageRole(job) !== FLOW_TAB_ROLES.CHARACTER) {
+      const error = new Error("FLOW_CHARACTER_ROLE_REQUIRED: Character submission cannot run from the Background tab.");
+      error.code = "FLOW_CHARACTER_ROLE_REQUIRED";
+      throw error;
+    }
+
+    const currentUrl = typeof page.url === "function" ? page.url() : "";
+    const characterRoute = extractGoogleFlowCharacterReference(currentUrl);
+    if (!characterRoute || this.getFlowPage(FLOW_TAB_ROLES.CHARACTER) !== page) {
+      const error = new Error(
+        "FLOW_CHARACTER_WRONG_TAB: Expected the dedicated /project/{projectId}/character route before submitting a character prompt. Current URL: " + currentUrl,
+      );
+      error.code = "FLOW_CHARACTER_WRONG_TAB";
+      throw error;
+    }
+
+    const promptSelector =
+      'flow-character-prompt-box .prosemirror-editor [role="textbox"][aria-label*="Describe your character" i], ' +
+      'flow-character-prompt-box [role="textbox"][aria-label*="Describe your character" i], ' +
+      'flow-character-prompt-box [contenteditable="true"]';
+    const promptLocators = page.locator(promptSelector);
+    const promptCount = await promptLocators.count().catch(() => 0);
+    const visiblePrompts = [];
+    for (let index = 0; index < promptCount; index += 1) {
+      const candidate =
+        typeof promptLocators.nth === "function"
+          ? promptLocators.nth(index)
+          : promptLocators;
+      if (await candidate.isVisible().catch(() => false)) {
+        visiblePrompts.push(candidate);
+      }
+    }
+    if (visiblePrompts.length !== 1) {
+      const error = new Error(
+        `FLOW_CHARACTER_PROMPT_NOT_UNIQUE: Expected one visible Describe your character textbox inside flow-character-prompt-box, found ${visiblePrompts.length}.`,
+      );
+      error.code = "FLOW_CHARACTER_PROMPT_NOT_UNIQUE";
+      throw error;
+    }
+
+    await this.fillFlowPrompt(page, visiblePrompts[0], job.prompt);
+    const { locator: submitButton, selector: submitSelector } =
+      await this.findCharacterGenerationButton(page);
+    job.submitSelectorUsed = submitSelector;
+
+    const baseline = await this.getCharacterOutputBaseline(page);
+    await this.startImageResponseCapture(job, page);
+
+    job.status = "generation_submitted";
+    job.generationRequestedAt = new Date().toISOString();
+    job.characterPageUrl = currentUrl;
+    job.message = "Character prompt submitted in the dedicated Google Flow Characters workspace.";
+    this.emitLifecycleLog("FLOW_CHARACTER_GENERATION_SUBMITTED", job, {
+      projectId: characterRoute.projectId,
+      characterId: characterRoute.characterId,
+      pageRole: FLOW_TAB_ROLES.CHARACTER,
+      tabId: this.getFlowPageMetadata(page)?.tabId || null,
+      promptSelector,
+      submitSelector,
+    });
+    this.touch(job);
+
+    try {
+      await submitButton.click({ timeout: 15000 });
+    } catch (error) {
+      this.setJobTerminal(
+        job,
+        "failed",
+        error.message,
+        "Could not click Start generation in the Google Flow Character prompt box.",
+      );
+      throw error;
+    }
+
+    this.monitorCharacterGenerationAndDownload(job.id, page, baseline).catch((error) => {
+      console.warn(
+        `[FlowBrowser] Character generation monitor notice for job ${job.id}:`,
+        error.message,
+      );
+    });
+    return job;
+  }
+
+  async monitorCharacterGenerationAndDownload(
+    jobId,
+    targetPage = null,
+    baseline = { identifiers: new Set() },
+  ) {
+    const job = this.jobs.get(jobId);
+    const page = targetPage || this.getFlowPage(FLOW_TAB_ROLES.CHARACTER);
+    if (!job || !page || (typeof page.isClosed === "function" && page.isClosed())) return;
+
+    try {
+      job.status = "generating";
+      job.message = "Character generation is running in the Google Flow Characters tab.";
+      this.touch(job);
+
+      const startedAt = Date.now();
+      const maxWaitMs = 90000;
+      let output = null;
+      let captured = null;
+
+      while (Date.now() - startedAt < maxWaitMs) {
+        if (
+          (typeof page.isClosed === "function" && page.isClosed()) ||
+          ["completed", "cancelled", "failed"].includes(job.status)
+        ) {
+          return;
+        }
+
+        const tileOutputs = await this.collectNewCharacterOutput(page, baseline).catch(() => []);
+        if (tileOutputs.length > 1) {
+          const uniqueSources = [...new Set(tileOutputs.map((item) => item.sourceUrl))];
+          if (uniqueSources.length > 1) {
+            throw new Error(
+              "FLOW_CHARACTER_OUTPUT_AMBIGUOUS: More than one new Character thumbnail appeared after generation.",
+            );
+          }
+        }
+        if (tileOutputs.length === 1) {
+          output = tileOutputs[0];
+        }
+
+        if (output && job.capturedImageResponses?.size) {
+          captured = this.findCapturedOutput(output, job.capturedImageResponses);
+        }
+
+        // Character creation can return the generated /asb/ image through
+        // the page's authenticated network stream before the tile is committed.
+        // Wait briefly for that stream when the tile itself is not rendered yet.
+        if (!output && job.capturedImageResponses?.size) {
+          const entries = [...job.capturedImageResponses.entries()]
+            .filter(([, value]) => value?.buffer && value.buffer.length > 500)
+            .sort((a, b) => (b[1].capturedAt || 0) - (a[1].capturedAt || 0));
+          if (entries.length > 0 && Date.now() - startedAt > 5000) {
+            output = { sourceUrl: entries[0][0], rawSrc: entries[0][0] };
+            captured = entries[0][1];
+          }
+        }
+
+        if (output) break;
+        await new Promise((resolve) => setTimeout(resolve, 750));
+      }
+
+      if (!output?.sourceUrl) {
+        const error = new Error(
+          "FLOW_CHARACTER_GENERATION_TIMEOUT: No new Character thumbnail or generated /asb/ image response appeared within 90 seconds.",
+        );
+        error.code = "FLOW_CHARACTER_GENERATION_TIMEOUT";
+        throw error;
+      }
+
+      if (job.pendingImageCaptures?.length) {
+        await Promise.all(job.pendingImageCaptures).catch(() => {});
+        captured =
+          captured ||
+          this.findCapturedOutput(output, job.capturedImageResponses);
+      }
+
+      const downloaded = await this.downloadCharacterImageSource(
+        page,
+        job,
+        output.sourceUrl,
+        captured,
+      );
+      job.downloadPath = downloaded.path;
+      job.downloadMethod = captured
+        ? "character_network_response_capture"
+        : "character_thumbnail_source_fetch";
+      job.googleFlowImageRef = downloaded.sourceUrl;
+      job.googleFlowImageSourceUrl = downloaded.sourceUrl;
+      this.emitLifecycleLog("FLOW_CHARACTER_IMAGE_CAPTURED", job, {
+        downloadMethod: job.downloadMethod,
+        sourceUrl: downloaded.sourceUrl,
+        width: downloaded.width,
+        height: downloaded.height,
+      });
+
+      const currentUrl = typeof page.url === "function" ? page.url() : "";
+      const currentCharacterRef = extractGoogleFlowCharacterReference(currentUrl);
+      if (currentCharacterRef?.characterId) {
+        job.googleFlowCharacterId = currentCharacterRef.characterId;
+      }
+
+      // On the New character route, Done commits the generated character to
+      // the project. Click it only after the generated image has been secured.
+      if (currentCharacterRef?.routeType === "character-create") {
+        const doneButtons = page.getByRole
+          ? page.getByRole("button", { name: "Done", exact: true })
+          : page.locator('button[aria-label="Done"]');
+        const doneCount = await doneButtons.count().catch(() => 0);
+        if (doneCount === 1) {
+          const doneButton =
+            typeof doneButtons.first === "function" ? doneButtons.first() : doneButtons;
+          if (await doneButton.isVisible().catch(() => false)) {
+            await doneButton.click({ timeout: 10000 }).catch((error) => {
+              this.emitLifecycleLog("FLOW_CHARACTER_DONE_CLICK_FAILED", job, {
+                error: error.message,
+              });
+            });
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+            const savedCharacterRef = extractGoogleFlowCharacterReference(
+              typeof page.url === "function" ? page.url() : "",
+            );
+            if (savedCharacterRef?.characterId) {
+              job.googleFlowCharacterId = savedCharacterRef.characterId;
+            }
+          }
+        }
+      }
+
+      job.status = "importing";
+      job.downloadStatus = "completed";
+      job.message = "Character image captured. Importing it into the selected Studio character.";
+      this.touch(job);
+      await this.importDownloadedAsset(job, downloaded.buffer, {
+        mimeType: downloaded.mimeType,
+        extension: downloaded.extension,
+      });
+    } catch (error) {
+      this.emitLifecycleLog("FLOW_CHARACTER_GENERATION_FAILED", job, {
+        error: error.message,
+        errorCode: error.code || "FLOW_CHARACTER_GENERATION_FAILED",
+      });
+      this.setJobTerminal(
+        job,
+        "failed",
+        error.message,
+        "Google Flow Character generation failed.",
+      );
+    } finally {
+      if (typeof job._cleanupResponseListener === "function") {
+        job._cleanupResponseListener();
+        delete job._cleanupResponseListener;
+      }
+    }
+  }
+
   async requestGeneration(jobId, confirmation) {
     const job = this.requireJob(jobId);
 
