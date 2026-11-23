@@ -3603,6 +3603,35 @@ export default function GoogleFlowPage() {
                       {filteredCharacters.map((ch) => {
                         const isGenerating = Boolean(generatingCharIds[ch.id]);
                         const error = charErrors[ch.id];
+                        const generationProgress = characterGenerationProgress[ch.id];
+                        const previewViews = getCharacterDirectionalPreviewViews(ch);
+                        const previewIndex = previewViews.length
+                          ? Math.min(characterPreviewIndexes[ch.id] || 0, previewViews.length - 1)
+                          : 0;
+                        const activePreviewView = previewViews[previewIndex];
+
+                        const changeCharacterPreview = (delta: number) => {
+                          if (previewViews.length < 2) return;
+                          setCharacterPreviewIndexes((prev) => ({
+                            ...prev,
+                            [ch.id]:
+                              (previewIndex + delta + previewViews.length) %
+                              previewViews.length,
+                          }));
+                        };
+
+                        const openCharacterPreview = () => {
+                          if (!activePreviewView) return;
+                          setPreviewAsset({
+                            url: activePreviewView.url,
+                            title: ch.name,
+                            subtitle: `${ch.species || "Character"} • ${activePreviewView.label}`,
+                            characterId: ch.id,
+                            type: "character",
+                            images: previewViews,
+                            activeIndex: previewIndex,
+                          });
+                        };
 
                         return (
                           <div key={ch.id} className="flow-char-card">
@@ -3622,48 +3651,28 @@ export default function GoogleFlowPage() {
                                         borderWidth: "2px",
                                       }}
                                     />
-                                    <small
-                                      style={{
-                                        fontSize: "9px",
-                                        color: "#cbd5e1",
-                                      }}
-                                    >
-                                      Rendering...
+                                    <small className="flow-char-rendering-label">
+                                      {generationProgress
+                                        ? `${generationProgress.current}/${generationProgress.total} • ${generationProgress.direction}`
+                                        : "Rendering..."}
                                     </small>
                                   </div>
-                                ) : ch.referenceImageUrl ? (
+                                ) : activePreviewView ? (
                                   <div
-                                    style={{
-                                      width: "100%",
-                                      height: "100%",
-                                      position: "relative",
-                                      cursor: "pointer",
-                                    }}
-                                    onClick={() =>
-                                      setPreviewAsset({
-                                        url: ch.referenceImageUrl!,
-                                        title: ch.name,
-                                        subtitle: `${ch.species || "Character"} • Canonical Master Reference`,
-                                        characterId: ch.id,
-                                        type: "character",
-                                      })
-                                    }
-                                    title="Click to view enlarged master reference"
+                                    className="flow-char-preview-image"
+                                    onClick={openCharacterPreview}
+                                    title={`Preview ${activePreviewView.label} character view`}
                                   >
                                     <img
-                                      src={ch.referenceImageUrl}
-                                      alt={ch.name}
+                                      src={activePreviewView.url}
+                                      alt={`${ch.name} • ${activePreviewView.label}`}
                                       onError={(e) => {
-                                        (
-                                          e.target as HTMLElement
-                                        ).style.display = "none";
-                                        const parent = (e.target as HTMLElement)
-                                          .parentElement;
+                                        (e.target as HTMLElement).style.display = "none";
+                                        const parent = (e.target as HTMLElement).parentElement;
                                         const fallback = parent?.querySelector(
                                           ".flow-thumb-fallback",
                                         ) as HTMLElement;
-                                        if (fallback)
-                                          fallback.style.display = "flex";
+                                        if (fallback) fallback.style.display = "flex";
                                       }}
                                     />
                                     <div
@@ -3671,13 +3680,38 @@ export default function GoogleFlowPage() {
                                       style={{ display: "none" }}
                                     >
                                       <UsersIcon size={18} color="#f59e0b" />
-                                      <small style={{ fontSize: "8px" }}>
-                                        Load Error
-                                      </small>
+                                      <small style={{ fontSize: "8px" }}>Load Error</small>
                                     </div>
                                     <div className="flow-thumb-hover-overlay">
-                                      <span>🔍</span>
+                                      <span>🔍 Preview views</span>
                                     </div>
+                                    {previewViews.length > 1 && (
+                                      <div className="flow-turnaround-card-controls">
+                                        <button
+                                          type="button"
+                                          aria-label={`Previous ${ch.name} view`}
+                                          onClick={(event) => {
+                                            event.stopPropagation();
+                                            changeCharacterPreview(-1);
+                                          }}
+                                        >
+                                          ‹
+                                        </button>
+                                        <span>
+                                          {activePreviewView.label} · {previewIndex + 1}/{previewViews.length}
+                                        </span>
+                                        <button
+                                          type="button"
+                                          aria-label={`Next ${ch.name} view`}
+                                          onClick={(event) => {
+                                            event.stopPropagation();
+                                            changeCharacterPreview(1);
+                                          }}
+                                        >
+                                          ›
+                                        </button>
+                                      </div>
+                                    )}
                                   </div>
                                 ) : (
                                   <div
@@ -3917,9 +3951,9 @@ export default function GoogleFlowPage() {
                                     "turnaround",
                                   )
                                 }
-                                title="Generate 8-way directional turnaround sheet"
+                                title="Generate 8 separate text-free directional images: front, left/right angles, side profiles and back views"
                               >
-                                <span>🔄 Turnaround</span>
+                                <span>🔄 Generate 8 Views</span>
                               </button>
 
                               <button
