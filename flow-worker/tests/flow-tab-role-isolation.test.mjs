@@ -424,3 +424,23 @@ test("Google Flow Tab Role Isolation Suite", async (t) => {
     assert.equal(worker.activeJobId, null);
   });
 });
+
+
+test("Background jobs never reuse a tab whose live URL is a Character workspace", async () => {
+  const worker = new FlowBrowserWorker();
+  const misplacedBackground = createMockPage("https://flow.google.com/project/proj-1/character/character-1");
+  const characterPage = createMockPage("https://flow.google.com/project/proj-1/character/character-2");
+  worker.context = createMockContext([misplacedBackground, characterPage]);
+  worker.pageMetadata.set(misplacedBackground, { tabId: "stale-background-tab", role: FLOW_TAB_ROLES.BACKGROUND, projectId: "proj-1", purpose: "scene-background", createdAt: new Date().toISOString() });
+  worker.pagesByRole.set(FLOW_TAB_ROLES.BACKGROUND, misplacedBackground);
+  worker.pageMetadata.set(characterPage, { tabId: "character-tab", role: FLOW_TAB_ROLES.CHARACTER, projectId: "proj-1", purpose: "character-generation", createdAt: new Date().toISOString() });
+  worker.pagesByRole.set(FLOW_TAB_ROLES.CHARACTER, characterPage);
+  const job = { id: "background-after-character-route", targetType: "background", sceneId: "scene-77", googleFlowProjectId: "proj-1" };
+  const resolved = await worker.resolveJobPage(job);
+  assert.notEqual(resolved, misplacedBackground, "A background job must not reuse a tab currently showing a character route");
+  assert.notEqual(resolved, characterPage, "A background job must not borrow the dedicated Character tab");
+  assert.equal(worker.getFlowPage(FLOW_TAB_ROLES.BACKGROUND), resolved);
+  assert.equal(worker.getFlowPage(FLOW_TAB_ROLES.CHARACTER), characterPage);
+  assert.equal(worker.getFlowPageMetadata(resolved).role, FLOW_TAB_ROLES.BACKGROUND);
+  assert.equal(resolved.url(), "https://flow.google.com/project/proj-1");
+});
