@@ -475,6 +475,62 @@ test("Google Flow Character Generation E2E Suite (17 Conditions)", async (t) => 
     }
   });
 
+  await t.test("Condition 13b: A non-master front turnaround view imports as character_view", async () => {
+    const worker = new FlowBrowserWorker();
+    worker.backendUrl = "http://localhost:3000";
+
+    const originalFetch = globalThis.fetch;
+    let importedBody = null;
+    globalThis.fetch = async (url, opts) => {
+      if (url.includes("/api/integrations/google-flow/import-asset")) {
+        importedBody = JSON.parse(opts.body);
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            success: true,
+            assetId: "char-direction-front-123",
+            imageUrl: "http://localhost:3000/storage/char-direction-front-123.webp",
+          }),
+        };
+      }
+      return originalFetch(url, opts);
+    };
+
+    try {
+      const validWebpBuffer = Buffer.from(
+        "52494646240000005745425056503820180000003001009d012a640064000000",
+        "hex",
+      );
+      const job = {
+        id: "char-job-direction-front",
+        targetType: "character",
+        pageRole: FLOW_TAB_ROLES.CHARACTER,
+        characterId: "char-uuid-42",
+        characterName: "Kiko the Bear",
+        storyId: "story-10",
+        view: "front",
+        assetType: "turnaround",
+        isMasterReference: false,
+        googleFlowCharacterId: "flow-char-99",
+        prompt: "One clean standalone front view. No text or labels.",
+      };
+
+      await worker.importCharacterAsset(job, validWebpBuffer, {
+        mimeType: "image/webp",
+        extension: "webp",
+      });
+
+      assert.equal(importedBody.target, "character_view");
+      assert.equal(importedBody.isMasterReference, false);
+      assert.equal(importedBody.view, "front");
+      assert.equal(importedBody.characterId, "char-uuid-42");
+      assert.equal(job.status, "completed");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   await t.test("Condition 14: Character jobs never enter scene/background association", async () => {
     const worker = new FlowBrowserWorker();
     const emittedEvents = [];
