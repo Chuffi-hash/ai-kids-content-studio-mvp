@@ -816,6 +816,7 @@ test("Google Flow Character Generation E2E Suite (17 Conditions)", async (t) => 
       view: "front",
       prompt: "A full body character named Milo.",
     });
+    job.characterPromptMode = "create";
     job.status = "generation_submitted";
     job.generationRequestedAt = new Date(now).toISOString();
     job.capturedImageResponses = new Map([
@@ -836,7 +837,8 @@ test("Google Flow Character Generation E2E Suite (17 Conditions)", async (t) => 
       click: async () => { doneClicked = true; },
     };
     const page = {
-      url: () => "https://flow.google.com/project/proj-monitor-18/character",
+      // Google Flow can assign the new character ID before the first Done save.
+      url: () => "https://flow.google.com/project/proj-monitor-18/character/flow-new-char-18",
       isClosed: () => false,
       locator: (selector) => {
         if (selector === 'button[aria-label="Done"]') {
@@ -895,7 +897,7 @@ test("Google Flow Character Generation E2E Suite (17 Conditions)", async (t) => 
     assert.equal(job.status, "completed");
     assert.equal(importedBuffer, responseBuffer);
     assert.equal(doneClicked, true);
-    assert.equal(job.googleFlowCharacterId, undefined);
+    assert.equal(job.googleFlowCharacterId, "flow-new-char-18");
     assert.equal(job.downloadMethod, "character_network_response_capture");
     assert.ok(events.some((item) => item.event === "CHARACTER_OUTPUT_DETECTED"));
     assert.ok(events.some((item) => item.event === "CHARACTER_IMAGE_CAPTURE_COMPLETED"));
