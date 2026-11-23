@@ -605,6 +605,8 @@ export interface StoryFlowCharacterItem {
   clothing: string;
   distinctiveFeatures: string;
   referenceImageUrl: string | null;
+  referenceImagePrompt?: string | null;
+  canonicalAppearance?: Record<string, any> | null;
   hasMasterReference: boolean;
   scenesAppearedIn: Array<{ sceneId: string; number: number; title: string }>;
   scenesCount: number;
