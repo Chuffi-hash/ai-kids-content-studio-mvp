@@ -3003,10 +3003,35 @@ export class FlowBrowserWorker {
       let characterPromptLocator = null;
       let promptSelectorUsed = null;
       try {
-        const promptRes =
-          job.characterPromptMode === "edit"
-            ? await this.findCharacterEditorPromptEditor(page)
-            : await this.findCharacterPromptEditor(page);
+        let promptRes;
+        if (job.characterPromptMode === "edit") {
+          this.emitLifecycleLog("CHARACTER_EDITOR_READY_WAIT_STARTED", job, {
+            timeoutMs: 30000,
+            currentUrl: typeof page.url === "function" ? page.url() : "",
+            browserTabId: tabId,
+          });
+
+          // page.goto()/route changes can complete before Angular mounts the
+          // agent-panel prompt. Wait for the real visible textbox, not just URL.
+          if (typeof page.waitForLoadState === "function") {
+            await page
+              .waitForLoadState("domcontentloaded", { timeout: 15000 })
+              .catch(() => {});
+          }
+          promptRes = await this.findCharacterEditorPromptEditor(page, {
+            timeoutMs: 30000,
+            pollIntervalMs: 300,
+          });
+          this.emitLifecycleLog("CHARACTER_EDITOR_READY_WAIT_COMPLETED", job, {
+            waitedMs: promptRes.waitedMs || 0,
+            selector: promptRes.selector,
+            currentUrl: typeof page.url === "function" ? page.url() : "",
+            browserTabId: tabId,
+            success: true,
+          });
+        } else {
+          promptRes = await this.findCharacterPromptEditor(page);
+        }
         characterPromptLocator = promptRes.locator;
         promptSelectorUsed = promptRes.selector;
       } catch (promptErr) {
@@ -6008,7 +6033,11 @@ export class FlowBrowserWorker {
     await this.fillFlowPrompt(page, promptLocator, job.prompt);
     const submitControl =
       job.characterPromptMode === "edit"
-        ? await this.findCharacterEditorSubmitButton(page)
+        ? await this.findCharacterEditorSubmitButton(page, {
+            promptLocator,
+            timeoutMs: 20000,
+            pollIntervalMs: 250,
+          })
         : await this.findCharacterGenerationButton(page, promptLocator);
     const submitButton = submitControl.locator;
     const submitSelector = submitControl.selector;
