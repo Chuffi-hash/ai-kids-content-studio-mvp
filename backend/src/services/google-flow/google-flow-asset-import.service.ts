@@ -650,11 +650,10 @@ export class GoogleFlowAssetImportService {
           options.characterId,
           {
             id: assetId,
-            assetType: isMaster
-              ? "main"
-              : view === "front"
-                ? "main"
-                : "turnaround",
+            // Every non-master Flow image is an individual directional view,
+            // including the front view generated as part of an 8-view set.
+            // It must never replace the canonical master image.
+            assetType: isMaster ? "main" : "turnaround",
             direction: view,
             prompt:
               options.prompt || `${character.name} reference view (${view})`,
