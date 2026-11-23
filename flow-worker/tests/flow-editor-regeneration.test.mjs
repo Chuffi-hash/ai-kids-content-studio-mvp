@@ -9,6 +9,8 @@ import {
   closeFlowImageEditor,
   extractGoogleFlowEditorReference,
   isGoogleFlowEditorRoute,
+  inspectGoogleFlowEditedImage,
+  downloadGoogleFlowEditedImage,
 } from "../src/flow-download.mjs";
 
 describe("Google Flow Editor URL, Regeneration & Done Editing Suite", () => {
@@ -526,6 +528,15 @@ describe("Google Flow Editor URL, Regeneration & Done Editing Suite", () => {
 
     worker.getOutputAssetBaseline = async () => ({ count: 1, identifiers: new Set() });
     worker.startImageResponseCapture = async () => {};
+    worker.selectFlowEditorAspectRatio = async (_page, ratio, targetJob) => {
+      targetJob.aspectRatioApplied = ratio;
+      return { selected: ratio };
+    };
+    worker.getEditorImageSnapshot = async () => ({
+      sourceUrl: "https://flow.google.com/asb/old-image=s0",
+      naturalWidth: 1024,
+      naturalHeight: 576,
+    });
     worker.monitorRegenerationAndDownload = async () => {};
 
     const job = worker.createJob({
@@ -534,6 +545,7 @@ describe("Google Flow Editor URL, Regeneration & Done Editing Suite", () => {
       prompt: "Regenerate sky with starry night",
       isRegeneration: true,
       editUrl,
+      aspectRatio: "9:16",
     });
     job.status = "prompt_ready";
 
@@ -544,6 +556,8 @@ describe("Google Flow Editor URL, Regeneration & Done Editing Suite", () => {
 
     assert.equal(startGenClicked, true);
     assert.equal(job.status, "generation_submitted");
+    assert.equal(job.aspectRatioApplied, "9:16");
+    assert.equal(job.previousEditorImageSourceUrl, "https://flow.google.com/asb/old-image=s0");
     const eventNames = events.map((e) => e.event);
     assert.ok(eventNames.includes("FLOW_REGENERATION_STARTED"));
   });
@@ -621,6 +635,141 @@ describe("Google Flow Editor URL, Regeneration & Done Editing Suite", () => {
       }),
       (error) => error.code === "FLOW_JOB_NOT_READY" && error.statusCode === 409,
     );
+  });
+
+  it("18. image-editor aspect ratio selection uses the Settings trigger and exact ratio option", async () => {
+    const worker = new FlowBrowserWorker();
+    let settingsClicked = false;
+    let selectedRatio = null;
+    const settingsButton = {
+      isVisible: async () => true,
+      isEnabled: async () => true,
+      click: async () => { settingsClicked = true; },
+    };
+    const ratioOption = {
+      isVisible: async () => settingsClicked,
+      isEnabled: async () => true,
+      click: async () => { selectedRatio = "9:16"; },
+    };
+    const page = {
+      isClosed: () => false,
+      locator: (selector) => {
+        if (selector.includes("settings-trigger-button")) {
+          return { count: async () => 1, nth: () => settingsButton };
+        }
+        return { count: async () => 0 };
+      },
+      getByRole: (role, options) => {
+        if (role === "button" && options?.name === "9:16") {
+          return { count: async () => 1, nth: () => ratioOption };
+        }
+        return { count: async () => 0 };
+      },
+    };
+    const job = { id: "ratio-job", aspectRatio: "9:16" };
+
+    const result = await worker.selectFlowEditorAspectRatio(page, "9:16", job);
+
+    assert.equal(settingsClicked, true);
+    assert.equal(selectedRatio, "9:16");
+    assert.equal(job.aspectRatioApplied, "9:16");
+    assert.deepEqual(result, { selected: "9:16" });
+  });
+
+  it("19. image-editor aspect ratio rejects options not exposed by Google Flow", async () => {
+    const worker = new FlowBrowserWorker();
+    await assert.rejects(
+      () => worker.selectFlowEditorAspectRatio({}, "2:1"),
+      (error) => error.code === "FLOW_IMAGE_EDIT_RATIO_UNSUPPORTED",
+    );
+  });
+
+  it("20. inspectGoogleFlowEditedImage selects the loaded read-only image source from image-container", async () => {
+    const image = {
+      isVisible: async () => true,
+      evaluate: async (fn) => fn({
+        getAttribute: (name) => name === "src"
+          ? "https://flow.google.com/asb/edited=s0"
+          : null,
+        currentSrc: "https://flow.google.com/asb/edited=s0",
+        alt: "Read-only image view",
+        complete: true,
+        naturalWidth: 1920,
+        naturalHeight: 1080,
+        getBoundingClientRect: () => ({ width: 900, height: 506 }),
+      }),
+    };
+    const page = {
+      isClosed: () => false,
+      url: () => "https://flow.google.com/project/p1/edit/a1",
+      locator: (selector) => {
+        assert.ok(selector.includes("img.read-only-image"));
+        return { count: async () => 1, nth: () => image };
+      },
+    };
+
+    const snapshot = await inspectGoogleFlowEditedImage(page);
+    assert.equal(snapshot.sourceUrl, "https://flow.google.com/asb/edited=s0");
+    assert.equal(snapshot.naturalWidth, 1920);
+    assert.equal(snapshot.naturalHeight, 1080);
+    assert.equal(snapshot.alt, "Read-only image view");
+  });
+
+  it("21. downloadGoogleFlowEditedImage fetches the editor /asb/ URL using the browser session and validates it", async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "flow-edit-source-download-"));
+    const image = {
+      isVisible: async () => true,
+      evaluate: async (fn) => fn({
+        getAttribute: (name) => name === "src"
+          ? "https://flow.google.com/asb/edited-new=s0"
+          : null,
+        currentSrc: "https://flow.google.com/asb/edited-new=s0",
+        alt: "Read-only image view",
+        complete: true,
+        naturalWidth: 32,
+        naturalHeight: 32,
+        getBoundingClientRect: () => ({ width: 320, height: 180 }),
+      }),
+    };
+    let requestedUrl = null;
+    const page = {
+      isClosed: () => false,
+      url: () => "https://flow.google.com/project/p1/edit/a1",
+      locator: () => ({ count: async () => 1, nth: () => image }),
+      context: () => ({
+        request: {
+          get: async (url) => {
+            requestedUrl = url;
+            return {
+              ok: () => true,
+              status: () => 200,
+              body: async () => samplePngBuffer,
+              headers: () => ({ "content-type": "image/png" }),
+            };
+          },
+        },
+      }),
+    };
+
+    try {
+      const result = await downloadGoogleFlowEditedImage({
+        page,
+        job: { id: "download-edited-test", sceneId: "scene-1", storyId: "story-1" },
+        downloadDir: tempDir,
+        previousSourceUrl: "https://flow.google.com/asb/edited-old=s0",
+      });
+
+      assert.equal(requestedUrl, "https://flow.google.com/asb/edited-new=s0");
+      assert.equal(result.success, true);
+      assert.equal(result.sourceUrl, requestedUrl);
+      assert.equal(result.mimeType, "image/png");
+      assert.equal(result.extension, "png");
+      assert.equal(result.width, 32);
+      assert.equal(result.height, 32);
+      assert.equal((await fs.readFile(result.path)).length, samplePngBuffer.length);
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+    }
   });
 
   // -------------------------------------------------------------------------
@@ -714,6 +863,29 @@ describe("Google Flow Editor URL, Regeneration & Done Editing Suite", () => {
 
     worker.collectNewAgentOutputs = async () => [];
     worker.saveDiagnosticScreenshot = async () => null;
+    worker.getEditorImageSnapshot = async (_page, options = {}) => ({
+      sourceUrl: "https://flow.google.com/asb/regen-new=s0",
+      naturalWidth: 1024,
+      naturalHeight: 576,
+      ...(options.previousSourceUrl
+        ? {}
+        : { sourceUrl: "https://flow.google.com/asb/regen-old=s0" }),
+    });
+    worker.downloadEditedEditorImage = async ({ previousSourceUrl }) => {
+      assert.equal(previousSourceUrl, "https://flow.google.com/asb/regen-old=s0");
+      return {
+        success: true,
+        path: path.join(tempDir, "regenerated.png"),
+        fileName: "regenerated.png",
+        fileSize: samplePngBuffer.length,
+        buffer: samplePngBuffer,
+        mimeType: "image/png",
+        extension: "png",
+        sourceUrl: "https://flow.google.com/asb/regen-new=s0",
+        googleFlowImageRef: "https://flow.google.com/asb/regen-new=s0",
+        googleFlowImageSourceUrl: "https://flow.google.com/asb/regen-new=s0",
+      };
+    };
 
     const job = worker.createJob({
       sceneId: "scene-14",
@@ -721,9 +893,11 @@ describe("Google Flow Editor URL, Regeneration & Done Editing Suite", () => {
       prompt: "Regenerate with snow on trees",
       isRegeneration: true,
       editUrl: initialEditUrl,
+      aspectRatio: "16:9",
       googleFlowParentAssetId: "asset-v1-id",
       googleFlowVersion: 2,
     });
+    job.previousEditorImageSourceUrl = "https://flow.google.com/asb/regen-old=s0";
 
     let backendImportCalled = false;
     let persistedPayload = null;
