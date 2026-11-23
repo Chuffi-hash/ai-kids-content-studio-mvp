@@ -1046,10 +1046,10 @@ export class GenerationOrchestratorService {
       { variation, promptOverride }
     );
 
-    let finalPrompt = promptData.prompt;
-    if (provider === 'google_flow' && assetType !== 'master_reference' && mapping?.syncStatus === 'synced') {
-      finalPrompt = `Use the saved Google Flow character reference named @${flowCharacterName} as the exact subject identity.\n\n${promptData.prompt}`;
-    }
+    // GenerationPromptService already embeds the saved @Character identity
+    // when a mapping is synced. Keep a single canonical prompt instruction
+    // rather than prepending a duplicate mention here.
+    const finalPrompt = promptData.prompt;
 
     const jobId = `job-char-${Date.now()}-${randomUUID().slice(0, 6)}`;
     const jobRecord: GenerationJobRecord = {
