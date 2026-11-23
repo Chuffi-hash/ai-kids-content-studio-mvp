@@ -4045,6 +4045,9 @@ export default function GoogleFlowPage() {
                 {previewAsset.subtitle && (
                   <p className="flow-lightbox-subtitle">
                     {previewAsset.subtitle}
+                    {previewAsset.images && previewAsset.images.length > 1
+                      ? ` • ${previewAsset.images[previewAsset.activeIndex || 0]?.label || ""}`
+                      : ""}
                   </p>
                 )}
               </div>
@@ -4061,8 +4064,15 @@ export default function GoogleFlowPage() {
             {/* Viewing Canvas */}
             <div className="flow-lightbox-stage">
               <img
-                src={previewAsset.url}
-                alt={previewAsset.title}
+                src={
+                  previewAsset.images?.[previewAsset.activeIndex || 0]?.url ||
+                  previewAsset.url
+                }
+                alt={
+                  previewAsset.images?.[previewAsset.activeIndex || 0]
+                    ? `${previewAsset.title} • ${previewAsset.images[previewAsset.activeIndex || 0].label}`
+                    : previewAsset.title
+                }
                 className="flow-lightbox-image"
                 onError={(e) => {
                   (e.target as HTMLElement).style.display = "none";
@@ -4073,6 +4083,49 @@ export default function GoogleFlowPage() {
                   if (errorBox) errorBox.style.display = "flex";
                 }}
               />
+              {previewAsset.type === "character" &&
+                previewAsset.images &&
+                previewAsset.images.length > 1 && (
+                  <div className="flow-lightbox-turnaround-controls">
+                    <button
+                      type="button"
+                      aria-label="Previous character view"
+                      onClick={() =>
+                        setPreviewAsset((current) => {
+                          if (!current?.images?.length) return current;
+                          const length = current.images.length;
+                          const index = current.activeIndex || 0;
+                          return {
+                            ...current,
+                            activeIndex: (index - 1 + length) % length,
+                          };
+                        })
+                      }
+                    >
+                      ‹
+                    </button>
+                    <span>
+                      {(previewAsset.activeIndex || 0) + 1} / {previewAsset.images.length}
+                    </span>
+                    <button
+                      type="button"
+                      aria-label="Next character view"
+                      onClick={() =>
+                        setPreviewAsset((current) => {
+                          if (!current?.images?.length) return current;
+                          const length = current.images.length;
+                          const index = current.activeIndex || 0;
+                          return {
+                            ...current,
+                            activeIndex: (index + 1) % length,
+                          };
+                        })
+                      }
+                    >
+                      ›
+                    </button>
+                  </div>
+                )}
               <div
                 className="flow-lightbox-error-box"
                 style={{ display: "none" }}
@@ -4105,7 +4158,9 @@ export default function GoogleFlowPage() {
                 <span className="flow-status-badge ready">
                   {previewAsset.type === "background"
                     ? "✓ Scene Environment Plate"
-                    : "✓ Master Character Reference"}
+                    : previewAsset.images && previewAsset.images.length > 1
+                      ? "✓ Directional Character View"
+                      : "✓ Master Character Reference"}
                 </span>
                 {previewAsset.aspectRatio && (
                   <span className="flow-tag" style={{ margin: 0 }}>
