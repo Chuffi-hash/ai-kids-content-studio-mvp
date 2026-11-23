@@ -2922,7 +2922,7 @@ export class FlowBrowserWorker {
       }
 
       page = characterNavigation.page;
-      const characterRoute = extractGoogleFlowCharacterReference(
+      let characterRoute = extractGoogleFlowCharacterReference(
         typeof page.url === "function" ? page.url() : "",
       );
       if (
@@ -2947,32 +2947,73 @@ export class FlowBrowserWorker {
         throw error;
       }
 
+      // A mapped character must reuse its saved Flow editor. Creating another
+      // Flow Character for every turnaround angle would break identity and
+      // produce duplicate characters in the user's Flow project.
+      if (job.googleFlowCharacterId) {
+        const editorNavigation = await this.openGoogleFlowCharacterEditor({
+          projectId: characterRoute.projectId,
+          characterId: job.googleFlowCharacterId,
+          characterUrl: job.googleFlowCharacterUrl,
+        });
+        page = editorNavigation.page;
+        characterRoute = extractGoogleFlowCharacterReference(
+          typeof page.url === "function" ? page.url() : "",
+        );
+        if (
+          !characterRoute ||
+          characterRoute.routeType !== "character-editor" ||
+          characterRoute.projectId !== requestedProjectId &&
+            requestedProjectId !== null ||
+          characterRoute.characterId !== job.googleFlowCharacterId ||
+          this.getFlowPage(FLOW_TAB_ROLES.CHARACTER) !== page
+        ) {
+          const error = new Error(
+            "FLOW_CHARACTER_EDITOR_MISMATCH: The saved Google Flow Character editor route did not match the mapped character.",
+          );
+          error.code = "FLOW_CHARACTER_EDITOR_MISMATCH";
+          throw error;
+        }
+        job.characterPromptMode = "edit";
+      } else {
+        await this.openCharacterCreationInterface(page, characterRoute.projectId, job);
+        job.characterPromptMode = "create";
+      }
+
       job.googleFlowProjectId = characterRoute.projectId;
       job.flowProjectId = characterRoute.projectId;
+      if (characterRoute.characterId) {
+        job.googleFlowCharacterId = characterRoute.characterId;
+      }
 
       const tabId = this.getFlowPageMetadata(page)?.tabId || null;
       job.browserTabId = tabId;
       this.emitLifecycleLog("CHARACTER_FLOW_TAB_RESOLVED", job, {
         projectId: characterRoute.projectId,
+        googleFlowCharacterId: job.googleFlowCharacterId || null,
+        promptMode: job.characterPromptMode,
         browserTabId: tabId,
         currentUrl: typeof page.url === "function" ? page.url() : "",
         success: true,
       });
 
-      // Ensure the New character creation page is opened
-      await this.openCharacterCreationInterface(page, characterRoute.projectId, job);
-
-      // Locate character prompt editor
+      // Locate the prompt belonging to this exact Character workflow. New
+      // characters use "Describe your character"; saved characters use the
+      // existing editor's "What do you want to change?" prompt.
       let characterPromptLocator = null;
       let promptSelectorUsed = null;
       try {
-        const promptRes = await this.findCharacterPromptEditor(page);
+        const promptRes =
+          job.characterPromptMode === "edit"
+            ? await this.findCharacterEditorPromptEditor(page)
+            : await this.findCharacterPromptEditor(page);
         characterPromptLocator = promptRes.locator;
         promptSelectorUsed = promptRes.selector;
       } catch (promptErr) {
         this.emitLifecycleLog("CHARACTER_GENERATION_FAILED", job, {
           errorCode: promptErr.code || "FLOW_CHARACTER_PROMPT_NOT_FOUND",
           error: promptErr.message,
+          promptMode: job.characterPromptMode,
           success: false,
         });
         throw promptErr;
