@@ -979,7 +979,7 @@ export default function GoogleFlowPage() {
     const viewsToGenerate =
       assetType === "turnaround"
         ? CHARACTER_TURNAROUND_DIRECTIONS.map((item) => item.direction)
-        : [variation || (assetType === "master_reference" ? "front" : assetType)];
+        : [variation || (assetType === "master_reference" ? "front" : "")];
 
     try {
       for (let index = 0; index < viewsToGenerate.length; index += 1) {
@@ -987,7 +987,13 @@ export default function GoogleFlowPage() {
         const directionLabel =
           CHARACTER_TURNAROUND_DIRECTIONS.find(
             (item) => item.direction === currentDirection,
-          )?.label || currentDirection;
+          )?.label ||
+          currentDirection ||
+          (assetType === "expression"
+            ? "Expression"
+            : assetType === "pose"
+              ? "Pose"
+              : "Master reference");
 
         setCharacterGenerationProgress((prev) => ({
           ...prev,
@@ -1003,7 +1009,7 @@ export default function GoogleFlowPage() {
           characterId,
           provider: generationProvider,
           assetType,
-          variation: currentDirection,
+          variation: currentDirection || undefined,
         });
 
         if (res?.jobId && res?.status === "generating") {
