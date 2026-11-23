@@ -5416,7 +5416,10 @@ export class FlowBrowserWorker {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
-            target: "character_reference",
+            target:
+              job.isMasterReference === true || job.assetType === "main"
+                ? "character_reference"
+                : "character_view",
             imageData: dataUri,
             characterId: job.characterId,
             characterName: job.characterName,
