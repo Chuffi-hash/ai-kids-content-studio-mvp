@@ -973,11 +973,16 @@ test("Google Flow Character Generation E2E Suite (17 Conditions)", async (t) => 
     const existingUrl = "https://flow.google.com/asb/character-master-existing=s0";
     const newViewUrl = "https://flow.google.com/asb/character-back-view-new=s0";
     const importedSources = [];
+    let doneClicked = false;
 
     const existingImage = {
       isVisible: async () => true,
       getAttribute: async (name) => (name === "src" ? existingUrl : null),
       evaluate: async () => existingUrl,
+    };
+    const doneButton = {
+      isVisible: async () => true,
+      click: async () => { doneClicked = true; },
     };
     const page = {
       url: () => "https://flow.google.com/project/proj-mapped/character/flow-char-mapped",
@@ -987,6 +992,12 @@ test("Google Flow Character Generation E2E Suite (17 Conditions)", async (t) => 
           return {
             count: async () => 1,
             nth: () => existingImage,
+          };
+        }
+        if (selector === 'button[aria-label="Done editing"]') {
+          return {
+            count: async () => 1,
+            first: () => doneButton,
           };
         }
         return { count: async () => 0 };
@@ -1068,6 +1079,7 @@ test("Google Flow Character Generation E2E Suite (17 Conditions)", async (t) => 
 
     assert.equal(job.status, "completed");
     assert.deepEqual(importedSources, [newViewUrl]);
+    assert.equal(doneClicked, false, "A saved Character editor must not promote a directional view to the master image.");
   });
 
 });
