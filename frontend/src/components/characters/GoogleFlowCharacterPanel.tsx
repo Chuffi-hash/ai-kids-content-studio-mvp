@@ -53,6 +53,11 @@ const VIEW_OPTIONS = [
 
 const TERMINAL_STATUSES = new Set(['completed', 'cancelled', 'failed']);
 const POLLING_STATUSES = new Set([
+  'generation_submitted',
+  'agent_prompt_submitted',
+  'generating',
+  'output_detected',
+  'downloading',
   'awaiting_download',
   'awaiting_manual_generate',
   'importing',
@@ -468,8 +473,13 @@ export default function GoogleFlowCharacterPanel({
               The worker could not safely identify the Generate Image button. Click it manually in the visible Flow browser, then use Flow's Download action when the image is ready.
             </div>
           )}
+          {['generation_submitted', 'agent_prompt_submitted', 'generating', 'output_detected', 'downloading'].includes(job.status) && (
+            <div className="google-flow-status">
+              Character generation is running in the dedicated Google Flow Characters tab. The worker is waiting for the new character image and will import it automatically.
+            </div>
+          )}
           {job.status === 'awaiting_download' && (
-            <div className="google-flow-status">Generation was submitted. Download the resulting image using Flow's normal Download control in the visible browser.</div>
+            <div className="google-flow-status">Generation was submitted. The worker is waiting for the character image download.</div>
           )}
           {job.status === 'import_metadata_failed' && (
             <div className="google-flow-status google-flow-error">
