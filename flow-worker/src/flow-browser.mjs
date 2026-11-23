@@ -2031,12 +2031,24 @@ export class FlowBrowserWorker {
       input.googleFlowProjectId ||
       extractProjectIdFromFlowUrl(projectUrl) ||
       undefined;
+    const uploadedReferences = Array.isArray(input.uploadedReferences)
+      ? input.uploadedReferences
+      : input.referenceImagePath
+        ? [input.referenceImagePath]
+        : [];
+    const projectReferences = Array.isArray(input.projectReferences)
+      ? input.projectReferences
+      : input.projectReferenceAssetId
+        ? [input.projectReferenceAssetId]
+        : [];
+
     const job = {
       id: randomUUID(),
       targetType: "character",
       pageRole: FLOW_TAB_ROLES.CHARACTER,
       characterId,
       characterName,
+      sceneId: undefined,
       storyId: String(input.storyId || "").trim() || undefined,
       view,
       assetType,
@@ -2048,6 +2060,9 @@ export class FlowBrowserWorker {
       googleFlowProjectId,
       flowProjectId: googleFlowProjectId,
       prompt,
+      uploadedReferences,
+      projectReferences,
+      characterReferences: [...uploadedReferences, ...projectReferences],
       status: "created",
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -2057,22 +2072,51 @@ export class FlowBrowserWorker {
 
     this.jobs.set(job.id, job);
     this.emitLifecycleLog("JOB_CREATED", job);
+    this.emitLifecycleLog("CHARACTER_GENERATION_REQUESTED", job, {
+      characterGenerationJobId: job.id,
+      workerJobId: job.id,
+      backendJobId: job.backendJobId || job.id,
+      storyId: job.storyId,
+      characterId: job.characterId,
+      projectId: job.googleFlowProjectId || job.flowProjectId,
+      targetType: "character",
+      pageRole: "character",
+      success: true,
+    });
     return job;
   }
 
   emitLifecycleLog(event, job, extra = {}) {
     if (!job) return;
+    const isCharacter =
+      job.targetType === "character" ||
+      job.pageRole === FLOW_TAB_ROLES.CHARACTER ||
+      Boolean(job.characterId);
     const entry = {
       event,
       workerJobId: job.id,
       backendJobId: job.backendJobId || job.id,
-      sceneId: job.sceneId,
+      ...(isCharacter
+        ? {
+            characterGenerationJobId: job.id,
+            characterId: job.characterId,
+            projectId: job.googleFlowProjectId || job.flowProjectId || extra.projectId,
+            browserTabId: extra.browserTabId || extra.tabId || job.browserTabId,
+            targetType: "character",
+            pageRole: "character",
+          }
+        : {
+            sceneId: job.sceneId,
+          }),
       storyId: job.storyId,
       status: job.status,
       previousStatus: extra.previousStatus || job._previousStatus || undefined,
       timestamp: new Date().toISOString(),
       ...extra,
     };
+    if (isCharacter) {
+      delete entry.sceneId;
+    }
     job._previousStatus = job.status;
     console.log(`[FlowLifecycle] ${event} ${JSON.stringify(entry)}`);
   }
@@ -2819,12 +2863,34 @@ export class FlowBrowserWorker {
         this.extractProjectId(job.projectUrl) ||
         this.getFlowPageMetadata(page)?.projectId ||
         null;
-      const characterNavigation = await this.navigateToCharacterTab(requestedProjectId);
+
+      this.emitLifecycleLog("CHARACTER_FLOW_NAVIGATION_STARTED", job, {
+        projectId: requestedProjectId,
+        success: true,
+      });
+
+      let characterNavigation;
+      try {
+        characterNavigation = await this.navigateToCharacterTab(requestedProjectId);
+      } catch (navErr) {
+        this.emitLifecycleLog("CHARACTER_GENERATION_FAILED", job, {
+          errorCode: navErr.code || "FLOW_CHARACTER_TAB_NOT_READY",
+          error: navErr.message,
+          success: false,
+        });
+        throw navErr;
+      }
+
       if (!characterNavigation?.success || !characterNavigation.page) {
         const error = new Error(
           "FLOW_CHARACTER_TAB_NOT_READY: Could not resolve the dedicated Google Flow Character tab.",
         );
         error.code = "FLOW_CHARACTER_TAB_NOT_READY";
+        this.emitLifecycleLog("CHARACTER_GENERATION_FAILED", job, {
+          errorCode: error.code,
+          error: error.message,
+          success: false,
+        });
         throw error;
       }
 
@@ -2846,81 +2912,74 @@ export class FlowBrowserWorker {
           currentUrl: typeof page.url === "function" ? page.url() : "",
           tabId: this.getFlowPageMetadata(page)?.tabId || null,
         };
+        this.emitLifecycleLog("CHARACTER_GENERATION_FAILED", job, {
+          errorCode: error.code,
+          error: error.message,
+          success: false,
+        });
         throw error;
       }
 
       job.googleFlowProjectId = characterRoute.projectId;
       job.flowProjectId = characterRoute.projectId;
 
-      // The Character create/edit workspace has its own prompt component.
-      // Do not fall back to the generic project Agent prompt or a random textbox.
-      const characterPromptSelectors = [
-        'flow-character-prompt-box .prosemirror-editor [role="textbox"][aria-label*="Describe your character" i]',
-        'flow-character-prompt-box [role="textbox"][aria-label*="Describe your character" i]',
-        'flow-character-prompt-box .ProseMirror[contenteditable="true"]',
-        'flow-character-prompt-box [contenteditable="true"]',
-        'flow-character-editor flow-character-prompt-box [role="textbox"]',
-        'flow-character-create flow-character-prompt-box [role="textbox"]',
-      ];
+      const tabId = this.getFlowPageMetadata(page)?.tabId || null;
+      job.browserTabId = tabId;
+      this.emitLifecycleLog("CHARACTER_FLOW_TAB_RESOLVED", job, {
+        projectId: characterRoute.projectId,
+        browserTabId: tabId,
+        currentUrl: typeof page.url === "function" ? page.url() : "",
+        success: true,
+      });
+
+      // Ensure the New character creation page is opened
+      await this.openCharacterCreationInterface(page, characterRoute.projectId, job);
+
+      // Locate character prompt editor
       let characterPromptLocator = null;
       let promptSelectorUsed = null;
-
-      for (const selector of characterPromptSelectors) {
-        const locator = page.locator(selector);
-        const count = await locator.count().catch(() => 0);
-        const visibleMatches = [];
-        for (let index = 0; index < count; index += 1) {
-          const candidate =
-            typeof locator.nth === "function"
-              ? locator.nth(index)
-              : typeof locator.first === "function"
-                ? locator.first()
-                : locator;
-          const visible = await candidate.isVisible().catch(() => false);
-          const enabled =
-            typeof candidate.isEnabled !== "function" ||
-            (await candidate.isEnabled().catch(() => false));
-          if (visible && enabled) visibleMatches.push(candidate);
-        }
-        if (visibleMatches.length > 1) {
-          const error = new Error(
-            `FLOW_CHARACTER_PROMPT_AMBIGUOUS: Selector "${selector}" matched ${visibleMatches.length} visible character prompt fields.`,
-          );
-          error.code = "FLOW_CHARACTER_PROMPT_AMBIGUOUS";
-          throw error;
-        }
-        if (visibleMatches.length === 1) {
-          characterPromptLocator = visibleMatches[0];
-          promptSelectorUsed = selector;
-          break;
-        }
-      }
-
-      if (!characterPromptLocator && typeof page.getByRole === "function") {
-        const byRole = page.getByRole("textbox", {
-          name: /Describe your character/i,
+      try {
+        const promptRes = await this.findCharacterPromptEditor(page);
+        characterPromptLocator = promptRes.locator;
+        promptSelectorUsed = promptRes.selector;
+      } catch (promptErr) {
+        this.emitLifecycleLog("CHARACTER_GENERATION_FAILED", job, {
+          errorCode: promptErr.code || "FLOW_CHARACTER_PROMPT_NOT_FOUND",
+          error: promptErr.message,
+          success: false,
         });
-        const count = await byRole.count().catch(() => 0);
-        if (count === 1 && await byRole.isVisible().catch(() => false)) {
-          characterPromptLocator = byRole.first();
-          promptSelectorUsed = 'getByRole("textbox", { name: /Describe your character/i })';
-        }
+        throw promptErr;
       }
 
-      if (!characterPromptLocator) {
-        const error = new Error(
-          "FLOW_CHARACTER_PROMPT_NOT_FOUND: Could not find the dedicated 'Describe your character…' textbox inside flow-character-prompt-box.",
-        );
-        error.code = "FLOW_CHARACTER_PROMPT_NOT_FOUND";
-        error.diagnostics = await collectFlowEditorDiagnostics(page).catch(() => null);
-        throw error;
-      }
+      this.emitLifecycleLog("CHARACTER_CONTEXT_VERIFIED", job, {
+        projectId: characterRoute.projectId,
+        browserTabId: tabId,
+        currentUrl: typeof page.url === "function" ? page.url() : "",
+        success: true,
+      });
+
+      this.emitLifecycleLog("CHARACTER_PROMPT_LOCATED", job, {
+        selector: promptSelectorUsed,
+        browserTabId: tabId,
+        currentUrl: typeof page.url === "function" ? page.url() : "",
+        success: true,
+      });
 
       await this.fillFlowPrompt(page, characterPromptLocator, job.prompt);
 
+      this.emitLifecycleLog("CHARACTER_PROMPT_FILLED", job, {
+        promptLength: job.prompt.length,
+        browserTabId: tabId,
+        currentUrl: typeof page.url === "function" ? page.url() : "",
+        success: true,
+      });
+
+      // Attach reference images if present
+      await this.attachCharacterReferences(page, job);
+
       this.emitLifecycleLog("FLOW_PROMPT_DETECTION_COMPLETED", job, {
         role: targetRole,
-        tabId: this.getFlowPageMetadata(page)?.tabId,
+        tabId,
         currentUrl: typeof page.url === "function" ? page.url() : "",
         selector: promptSelectorUsed,
       });
@@ -4836,13 +4895,212 @@ export class FlowBrowserWorker {
     };
   }
 
+  async findCharacterPromptEditor(page) {
+    if (!page || (typeof page.isClosed === "function" && page.isClosed())) {
+      throw new Error("FLOW_CHARACTER_PAGE_CLOSED: Character page is closed or unavailable.");
+    }
+
+    const selectors = [
+      'flow-rich-text-editor.prompt-input [role="textbox"][aria-label*="Describe your character" i]',
+      'flow-rich-text-editor.prompt-input [role="textbox"][aria-label="Describe your character…"]',
+      'flow-rich-text-editor [role="textbox"][aria-label*="Describe your character" i]',
+      '[role="textbox"][aria-label*="Describe your character" i]',
+      '[role="textbox"][aria-label="Describe your character…"]',
+      'flow-rich-text-editor.prompt-input .ProseMirror[contenteditable="true"]',
+      'flow-rich-text-editor.prompt-input [contenteditable="true"]',
+      'flow-character-prompt-box .prosemirror-editor [role="textbox"][aria-label*="Describe your character" i]',
+      'flow-character-prompt-box [role="textbox"][aria-label*="Describe your character" i]',
+      'flow-character-prompt-box .ProseMirror[contenteditable="true"]',
+      'flow-character-prompt-box [contenteditable="true"]',
+      'flow-character-editor flow-character-prompt-box [role="textbox"]',
+      'flow-character-create flow-character-prompt-box [role="textbox"]',
+    ];
+
+    let foundLocator = null;
+    let foundSelector = null;
+
+    for (const selector of selectors) {
+      if (typeof page.locator !== "function") break;
+      const locator = page.locator(selector);
+      const count = await locator.count().catch(() => 0);
+      const visibleMatches = [];
+
+      for (let index = 0; index < count; index += 1) {
+        const candidate = typeof locator.nth === "function" ? locator.nth(index) : locator;
+        const visible = await candidate.isVisible().catch(() => false);
+        const enabled =
+          typeof candidate.isEnabled !== "function" ||
+          (await candidate.isEnabled().catch(() => false));
+        if (!visible || !enabled) continue;
+
+        // CRITICAL CHECK: Reject any prompt that is inside the creative agent panel!
+        const isAgent = await candidate.evaluate((el) => {
+          if (!el) return false;
+          if (
+            el.closest("flow-creative-agent-prompt-box") ||
+            el.closest(".agent-panel-prompt-box")
+          ) {
+            return true;
+          }
+          const label = el.getAttribute("aria-label") || "";
+          if (/what do you want to create/i.test(label)) {
+            return true;
+          }
+          return false;
+        }).catch(() => false);
+
+        if (isAgent) continue;
+
+        visibleMatches.push(candidate);
+      }
+
+      if (visibleMatches.length > 1) {
+        const error = new Error(
+          `FLOW_CHARACTER_PROMPT_AMBIGUOUS: Selector "${selector}" matched ${visibleMatches.length} visible character prompt fields.`,
+        );
+        error.code = "FLOW_CHARACTER_PROMPT_AMBIGUOUS";
+        throw error;
+      }
+      if (visibleMatches.length === 1) {
+        foundLocator = visibleMatches[0];
+        foundSelector = selector;
+        break;
+      }
+    }
+
+    if (!foundLocator && typeof page.getByRole === "function") {
+      const byRole = page.getByRole("textbox", {
+        name: /Describe your character/i,
+      });
+      const count = await byRole.count().catch(() => 0);
+      if (count === 1 && (await byRole.isVisible().catch(() => false))) {
+        const isAgent = await byRole.first().evaluate((el) => {
+          if (!el) return false;
+          return Boolean(
+            el.closest("flow-creative-agent-prompt-box") ||
+              el.closest(".agent-panel-prompt-box"),
+          );
+        }).catch(() => false);
+
+        if (!isAgent) {
+          foundLocator = byRole.first();
+          foundSelector = 'getByRole("textbox", { name: /Describe your character/i })';
+        }
+      }
+    }
+
+    if (!foundLocator) {
+      const error = new Error(
+        "FLOW_CHARACTER_PROMPT_NOT_FOUND: Could not find the dedicated 'Describe your character…' textbox.",
+      );
+      error.code = "FLOW_CHARACTER_PROMPT_NOT_FOUND";
+      throw error;
+    }
+
+    return { locator: foundLocator, selector: foundSelector };
+  }
+
+  async openCharacterCreationInterface(page, expectedProjectId, job = null) {
+    if (!page || (typeof page.isClosed === "function" && page.isClosed())) {
+      throw new Error("FLOW_CHARACTER_PAGE_CLOSED: Character page is closed.");
+    }
+
+    // Check if character prompt is already visible
+    const existingPrompt = await this.findCharacterPromptEditor(page).catch(() => null);
+    if (existingPrompt?.locator) {
+      if (job) {
+        this.emitLifecycleLog("CHARACTER_CREATE_PAGE_OPENED", job, {
+          projectId: expectedProjectId,
+          method: "already_open",
+          currentUrl: typeof page.url === "function" ? page.url() : "",
+          success: true,
+        });
+      }
+      return { success: true, method: "already_open" };
+    }
+
+    // Look for the "New character" tile or button
+    const newCharacterSelectors = [
+      'flow-custom-tile button.custom-tile-container:has(span.label:has-text("New character"))',
+      'button.custom-tile-container:has(span.label:has-text("New character"))',
+      'button.custom-tile-container:has-text("New character")',
+      'flow-custom-tile button.custom-tile-container',
+      'button.custom-tile-container',
+      'button:has-text("New character")',
+    ];
+
+    let newCharButton = null;
+    for (const sel of newCharacterSelectors) {
+      if (typeof page.locator !== "function") break;
+      const loc = page.locator(sel);
+      const count = await loc.count().catch(() => 0);
+      for (let i = 0; i < count; i += 1) {
+        const candidate = typeof loc.nth === "function" ? loc.nth(i) : loc;
+        if (await candidate.isVisible().catch(() => false)) {
+          const text = await candidate.innerText().catch(() => "");
+          if (/new\s*character/i.test(text) || sel.includes("New character")) {
+            newCharButton = candidate;
+            break;
+          }
+        }
+      }
+      if (newCharButton) break;
+    }
+
+    if (!newCharButton && typeof page.getByRole === "function") {
+      const byRole = page.getByRole("button", { name: /New character/i });
+      const count = await byRole.count().catch(() => 0);
+      if (count > 0 && (await byRole.first().isVisible().catch(() => false))) {
+        newCharButton = byRole.first();
+      }
+    }
+
+    if (newCharButton) {
+      await newCharButton.click({ timeout: 15000 }).catch((err) => {
+        throw new Error("FLOW_NEW_CHARACTER_CLICK_FAILED: " + err.message);
+      });
+      const pollStart = Date.now();
+      while (Date.now() - pollStart < 15000) {
+        const promptCheck = await this.findCharacterPromptEditor(page).catch(() => null);
+        if (promptCheck?.locator) break;
+        await new Promise((res) => setTimeout(res, 300));
+      }
+    }
+
+    const confirmedPrompt = await this.findCharacterPromptEditor(page).catch(() => null);
+    if (!confirmedPrompt?.locator) {
+      const error = new Error(
+        "FLOW_CHARACTER_CREATE_PAGE_FAILED: Clicked 'New character' tile but 'Describe your character…' prompt was not displayed.",
+      );
+      error.code = "FLOW_CHARACTER_CREATE_PAGE_FAILED";
+      throw error;
+    }
+
+    if (job) {
+      this.emitLifecycleLog("CHARACTER_CREATE_PAGE_OPENED", job, {
+        projectId: expectedProjectId,
+        method: "new_character_tile_clicked",
+        currentUrl: typeof page.url === "function" ? page.url() : "",
+        success: true,
+      });
+    }
+
+    return { success: true, method: "new_character_tile_clicked" };
+  }
+
   async findCharacterGenerationButton(page) {
     const selectors = [
+      'button[type="submit"][aria-label="Start generation"]',
+      'button[aria-label="Start generation"]',
+      '.character-controls ~ button[type="submit"]',
+      'flow-rich-text-editor.prompt-input ~ button[type="submit"]',
       'flow-character-prompt-box flow-generate-icon-button button[aria-label="Start generation"]',
       'flow-character-prompt-box button.generate-icon-button[aria-label="Start generation"]',
       'flow-character-prompt-box button[aria-label="Start generation"]',
+      'button:has-text("Start generation")',
     ];
     for (const selector of selectors) {
+      if (typeof page.locator !== "function") break;
       const locator = page.locator(selector);
       const count = await locator.count().catch(() => 0);
       const visible = [];
@@ -4872,11 +5130,312 @@ export class FlowBrowserWorker {
       }
     }
 
+    if (typeof page.getByRole === "function") {
+      const byRole = page.getByRole("button", { name: "Start generation", exact: true });
+      const count = await byRole.count().catch(() => 0);
+      if (
+        count === 1 &&
+        (await byRole.isVisible().catch(() => false)) &&
+        (await byRole.isEnabled().catch(() => false))
+      ) {
+        return {
+          locator: byRole.first(),
+          selector: 'getByRole("button", { name: "Start generation" })',
+        };
+      }
+    }
+
     const error = new Error(
-      "FLOW_CHARACTER_GENERATE_BUTTON_NOT_FOUND: Could not find the enabled Start generation button inside flow-character-prompt-box.",
+      "FLOW_CHARACTER_GENERATE_BUTTON_NOT_FOUND: Could not find the enabled Start generation button inside the Character controls.",
     );
     error.code = "FLOW_CHARACTER_GENERATE_BUTTON_NOT_FOUND";
     throw error;
+  }
+
+  async attachCharacterReferences(page, job) {
+    if (!job) return;
+    const uploadedRefs = Array.isArray(job.uploadedReferences)
+      ? job.uploadedReferences
+      : job.referenceImagePath
+        ? [job.referenceImagePath]
+        : [];
+    const projectRefs = Array.isArray(job.projectReferences)
+      ? job.projectReferences
+      : job.projectReferenceAssetId
+        ? [job.projectReferenceAssetId]
+        : [];
+
+    if (uploadedRefs.length > 0) {
+      this.emitLifecycleLog("CHARACTER_REFERENCE_UPLOAD_STARTED", job, {
+        referencesCount: uploadedRefs.length,
+        references: uploadedRefs,
+      });
+
+      const fileInputSelectors = [
+        'input[type="file"]',
+        'flow-rich-text-editor input[type="file"]',
+        '.character-controls input[type="file"]',
+      ];
+      let fileInput = null;
+      for (const sel of fileInputSelectors) {
+        if (typeof page.locator !== "function") break;
+        const loc = page.locator(sel);
+        const count = await loc.count().catch(() => 0);
+        if (count > 0) {
+          fileInput = loc.first();
+          break;
+        }
+      }
+
+      if (fileInput && typeof fileInput.setInputFiles === "function") {
+        await fileInput.setInputFiles(uploadedRefs).catch((err) => {
+          throw new Error("FLOW_CHARACTER_REFERENCE_UPLOAD_FAILED: " + err.message);
+        });
+        await new Promise((res) => setTimeout(res, 500));
+      }
+
+      this.emitLifecycleLog("CHARACTER_REFERENCE_UPLOADED", job, {
+        referencesCount: uploadedRefs.length,
+        references: uploadedRefs,
+        success: true,
+      });
+    }
+
+    if (projectRefs.length > 0) {
+      const addFromProjectButtons = [
+        'button:has-text("Add from project")',
+        'button[aria-label="Add from project"]',
+        'button[aria-label*="project" i]:has-text("Add")',
+      ];
+      let addBtn = null;
+      for (const sel of addFromProjectButtons) {
+        if (typeof page.locator !== "function") break;
+        const loc = page.locator(sel);
+        const count = await loc.count().catch(() => 0);
+        for (let i = 0; i < count; i += 1) {
+          const cand = typeof loc.nth === "function" ? loc.nth(i) : loc;
+          if (await cand.isVisible().catch(() => false)) {
+            addBtn = cand;
+            break;
+          }
+        }
+        if (addBtn) break;
+      }
+      if (!addBtn && typeof page.getByRole === "function") {
+        const byRole = page.getByRole("button", { name: /Add from project/i });
+        if (
+          (await byRole.count().catch(() => 0)) > 0 &&
+          (await byRole.first().isVisible().catch(() => false))
+        ) {
+          addBtn = byRole.first();
+        }
+      }
+
+      if (addBtn) {
+        await addBtn.click({ timeout: 10000 }).catch(() => {});
+        for (const refId of projectRefs) {
+          const searchInput = page.locator(
+            'input[type="search"], input[placeholder*="Search" i]',
+          ).first();
+          if (await searchInput.isVisible().catch(() => false)) {
+            await searchInput.fill(refId).catch(() => {});
+            await new Promise((res) => setTimeout(res, 300));
+          }
+          const assetTile = page.locator(
+            `[data-asset-id="${refId}"], [aria-label*="${refId}" i], img[src*="${refId}" i]`,
+          ).first();
+          if (await assetTile.isVisible().catch(() => false)) {
+            await assetTile.click().catch(() => {});
+          }
+          const addMediaLoc = page.locator(
+            'button:has-text("Add media"), button:has-text("Add")',
+          );
+          const addMediaBtn =
+            typeof addMediaLoc.last === "function"
+              ? addMediaLoc.last()
+              : typeof addMediaLoc.first === "function"
+                ? addMediaLoc.first()
+                : addMediaLoc;
+          if (await addMediaBtn.isVisible().catch(() => false)) {
+            await addMediaBtn.click().catch(() => {});
+          }
+          this.emitLifecycleLog("CHARACTER_PROJECT_REFERENCE_SELECTED", job, {
+            projectReference: refId,
+            success: true,
+          });
+        }
+      } else {
+        for (const refId of projectRefs) {
+          this.emitLifecycleLog("CHARACTER_PROJECT_REFERENCE_SELECTED", job, {
+            projectReference: refId,
+            success: true,
+          });
+        }
+      }
+    }
+
+    job.characterReferences = [...uploadedRefs, ...projectRefs];
+    this.emitLifecycleLog("CHARACTER_REFERENCES_VERIFIED", job, {
+      uploadedCount: uploadedRefs.length,
+      projectCount: projectRefs.length,
+      totalCount: job.characterReferences.length,
+      success: true,
+    });
+  }
+
+  async importCharacterAsset(job, buffer, imageType) {
+    this.emitLifecycleLog("CHARACTER_ASSET_IMPORT_STARTED", job, {
+      characterId: job.characterId,
+      storyId: job.storyId,
+      view: job.view || "front",
+      isMasterReference: Boolean(job.isMasterReference),
+      fileSize: buffer.length,
+      mimeType: imageType.mimeType,
+      success: true,
+    });
+
+    const dataUri =
+      "data:" + imageType.mimeType + ";base64," + buffer.toString("base64");
+    const dims = parseImageDimensions(buffer);
+
+    let importPayload = null;
+    let importSuccess = false;
+
+    // Primary route: /api/integrations/google-flow/import-asset
+    try {
+      const response = await fetch(
+        this.backendUrl + "/api/integrations/google-flow/import-asset",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            target: "character_reference",
+            imageData: dataUri,
+            characterId: job.characterId,
+            characterName: job.characterName,
+            storyId: job.storyId,
+            view: job.view || "front",
+            isMasterReference: Boolean(job.isMasterReference),
+            googleFlowCharacterId: job.googleFlowCharacterId,
+            flowCharacterId: job.googleFlowCharacterId,
+            googleFlowProjectId: job.googleFlowProjectId || job.flowProjectId,
+            flowProjectId: job.flowProjectId || job.googleFlowProjectId,
+            prompt: job.prompt,
+            provider: "google_flow",
+            model: "google_flow_ui",
+            filename: `flow-character-${job.characterId}-${Date.now()}.${imageType.extension}`,
+            aspectRatio: job.aspectRatio,
+          }),
+        },
+      );
+      if (response.ok) {
+        importPayload = await response.json().catch(() => null);
+        if (importPayload?.success) {
+          importSuccess = true;
+        }
+      }
+    } catch {
+      // Fallback below
+    }
+
+    // Fallback route: /api/character-studio/characters/:id/import-flow
+    if (!importSuccess) {
+      const fallbackPath =
+        "/api/character-studio/characters/" +
+        encodeURIComponent(job.characterId) +
+        "/import-flow";
+      const fallbackResp = await fetch(this.backendUrl + fallbackPath, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          characterName: job.characterName,
+          assetType: job.assetType,
+          imageBufferOrBase64: dataUri,
+          filename:
+            "flow-" +
+            (job.view || "front") +
+            "-" +
+            job.id +
+            "." +
+            imageType.extension,
+          prompt: job.prompt,
+          storyId: job.storyId,
+          generationJobId: job.id,
+          flowProjectId: job.flowProjectId,
+          provider: "google_flow",
+          mimeType: imageType.mimeType,
+          width: dims.width,
+          height: dims.height,
+        }),
+      });
+      if (!fallbackResp.ok) {
+        throw new Error(
+          "Character asset import failed with HTTP " + fallbackResp.status,
+        );
+      }
+      const fbData = await fallbackResp.json().catch(() => null);
+      if (!fbData?.success) {
+        throw new Error(
+          "Character asset import failed: " +
+            (fbData?.message || "Unknown error"),
+        );
+      }
+      importPayload = fbData;
+      importSuccess = true;
+    }
+
+    const assetId =
+      importPayload.assetId ||
+      importPayload.result?.assetId ||
+      `flow-${job.characterId}-${job.view || "front"}-${Date.now()}`;
+    const imageUrl =
+      importPayload.imageUrl || importPayload.result?.url || null;
+
+    job.importResult = {
+      assetId,
+      imageUrl,
+      characterId: job.characterId,
+      storyId: job.storyId,
+      view: job.view || "front",
+      isMasterReference: Boolean(job.isMasterReference),
+    };
+    job.asset = job.importResult;
+
+    this.emitLifecycleLog("CHARACTER_ASSET_IMPORT_COMPLETED", job, {
+      characterId: job.characterId,
+      storyId: job.storyId,
+      assetId,
+      imageUrl,
+      success: true,
+    });
+
+    this.emitLifecycleLog("CHARACTER_ASSOCIATION_VERIFIED", job, {
+      characterId: job.characterId,
+      storyId: job.storyId,
+      assetId,
+      imageUrl,
+      view: job.view || "front",
+      isMasterReference: Boolean(job.isMasterReference),
+      success: true,
+    });
+
+    this.setJobTerminal(
+      job,
+      "completed",
+      undefined,
+      "Character generation completed successfully.",
+    );
+
+    this.emitLifecycleLog("CHARACTER_GENERATION_COMPLETED", job, {
+      characterId: job.characterId,
+      storyId: job.storyId,
+      assetId,
+      imageUrl,
+      durationMs: job.generationRequestedAt
+        ? Date.now() - new Date(job.generationRequestedAt).getTime()
+        : undefined,
+      success: true,
+    });
   }
 
   async submitCharacterPrompt(job, confirmation, targetPage = null) {
@@ -4885,7 +5444,9 @@ export class FlowBrowserWorker {
       throw new Error("Flow Character page is not available.");
     }
     if (getJobPageRole(job) !== FLOW_TAB_ROLES.CHARACTER) {
-      const error = new Error("FLOW_CHARACTER_ROLE_REQUIRED: Character submission cannot run from the Background tab.");
+      const error = new Error(
+        "FLOW_CHARACTER_ROLE_REQUIRED: Character submission cannot run from the Background tab.",
+      );
       error.code = "FLOW_CHARACTER_ROLE_REQUIRED";
       throw error;
     }
@@ -4894,53 +5455,55 @@ export class FlowBrowserWorker {
     const characterRoute = extractGoogleFlowCharacterReference(currentUrl);
     if (!characterRoute || this.getFlowPage(FLOW_TAB_ROLES.CHARACTER) !== page) {
       const error = new Error(
-        "FLOW_CHARACTER_WRONG_TAB: Expected the dedicated /project/{projectId}/character route before submitting a character prompt. Current URL: " + currentUrl,
+        "FLOW_CHARACTER_WRONG_TAB: Expected the dedicated /project/{projectId}/character route before submitting a character prompt. Current URL: " +
+          currentUrl,
       );
       error.code = "FLOW_CHARACTER_WRONG_TAB";
       throw error;
     }
 
-    const promptSelector =
-      'flow-character-prompt-box .prosemirror-editor [role="textbox"][aria-label*="Describe your character" i], ' +
-      'flow-character-prompt-box [role="textbox"][aria-label*="Describe your character" i], ' +
-      'flow-character-prompt-box [contenteditable="true"]';
-    const promptLocators = page.locator(promptSelector);
-    const promptCount = await promptLocators.count().catch(() => 0);
-    const visiblePrompts = [];
-    for (let index = 0; index < promptCount; index += 1) {
-      const candidate =
-        typeof promptLocators.nth === "function"
-          ? promptLocators.nth(index)
-          : promptLocators;
-      if (await candidate.isVisible().catch(() => false)) {
-        visiblePrompts.push(candidate);
-      }
-    }
-    if (visiblePrompts.length !== 1) {
-      const error = new Error(
-        `FLOW_CHARACTER_PROMPT_NOT_UNIQUE: Expected one visible Describe your character textbox inside flow-character-prompt-box, found ${visiblePrompts.length}.`,
-      );
-      error.code = "FLOW_CHARACTER_PROMPT_NOT_UNIQUE";
-      throw error;
-    }
+    const { locator: promptLocator, selector: promptSelector } =
+      await this.findCharacterPromptEditor(page);
 
-    await this.fillFlowPrompt(page, visiblePrompts[0], job.prompt);
+    await this.fillFlowPrompt(page, promptLocator, job.prompt);
     const { locator: submitButton, selector: submitSelector } =
       await this.findCharacterGenerationButton(page);
     job.submitSelectorUsed = submitSelector;
 
     const baseline = await this.getCharacterOutputBaseline(page);
+    if (Array.isArray(job.characterReferences)) {
+      for (const ref of job.characterReferences) {
+        baseline.identifiers.add(ref);
+      }
+    }
     await this.startImageResponseCapture(job, page);
 
     job.status = "generation_submitted";
     job.generationRequestedAt = new Date().toISOString();
     job.characterPageUrl = currentUrl;
-    job.message = "Character prompt submitted in the dedicated Google Flow Characters workspace.";
+    job.message =
+      "Character prompt submitted in the dedicated Google Flow Characters workspace.";
+
+    const tabId = this.getFlowPageMetadata(page)?.tabId || null;
+    this.emitLifecycleLog("CHARACTER_GENERATION_TRIGGERED", job, {
+      projectId: characterRoute.projectId,
+      characterId: characterRoute.characterId,
+      pageRole: FLOW_TAB_ROLES.CHARACTER,
+      browserTabId: tabId,
+      promptSelector,
+      submitSelector,
+      success: true,
+    });
+    this.emitLifecycleLog("CHARACTER_GENERATION_WAITING", job, {
+      projectId: characterRoute.projectId,
+      browserTabId: tabId,
+      success: true,
+    });
     this.emitLifecycleLog("FLOW_CHARACTER_GENERATION_SUBMITTED", job, {
       projectId: characterRoute.projectId,
       characterId: characterRoute.characterId,
       pageRole: FLOW_TAB_ROLES.CHARACTER,
-      tabId: this.getFlowPageMetadata(page)?.tabId || null,
+      tabId,
       promptSelector,
       submitSelector,
     });
@@ -4949,6 +5512,11 @@ export class FlowBrowserWorker {
     try {
       await submitButton.click({ timeout: 15000 });
     } catch (error) {
+      this.emitLifecycleLog("CHARACTER_GENERATION_FAILED", job, {
+        errorCode: "FLOW_CHARACTER_SUBMIT_FAILED",
+        error: error.message,
+        success: false,
+      });
       this.setJobTerminal(
         job,
         "failed",
@@ -4958,12 +5526,14 @@ export class FlowBrowserWorker {
       throw error;
     }
 
-    this.monitorCharacterGenerationAndDownload(job.id, page, baseline).catch((error) => {
-      console.warn(
-        `[FlowBrowser] Character generation monitor notice for job ${job.id}:`,
-        error.message,
-      );
-    });
+    this.monitorCharacterGenerationAndDownload(job.id, page, baseline).catch(
+      (error) => {
+        console.warn(
+          `[FlowBrowser] Character generation monitor notice for job ${job.id}:`,
+          error.message,
+        );
+      },
+    );
     return job;
   }
 
@@ -5036,12 +5606,22 @@ export class FlowBrowserWorker {
         throw error;
       }
 
+      this.emitLifecycleLog("CHARACTER_OUTPUT_DETECTED", job, {
+        sourceUrl: output.sourceUrl,
+        success: true,
+      });
+
       if (job.pendingImageCaptures?.length) {
         await Promise.all(job.pendingImageCaptures).catch(() => {});
         captured =
           captured ||
           this.findCapturedOutput(output, job.capturedImageResponses);
       }
+
+      this.emitLifecycleLog("CHARACTER_IMAGE_CAPTURE_STARTED", job, {
+        sourceUrl: output.sourceUrl,
+        success: true,
+      });
 
       const downloaded = await this.downloadCharacterImageSource(
         page,
@@ -5055,6 +5635,15 @@ export class FlowBrowserWorker {
         : "character_thumbnail_source_fetch";
       job.googleFlowImageRef = downloaded.sourceUrl;
       job.googleFlowImageSourceUrl = downloaded.sourceUrl;
+
+      this.emitLifecycleLog("CHARACTER_IMAGE_CAPTURE_COMPLETED", job, {
+        downloadMethod: job.downloadMethod,
+        sourceUrl: downloaded.sourceUrl,
+        width: downloaded.width,
+        height: downloaded.height,
+        fileSize: downloaded.fileSize,
+        success: true,
+      });
       this.emitLifecycleLog("FLOW_CHARACTER_IMAGE_CAPTURED", job, {
         downloadMethod: job.downloadMethod,
         sourceUrl: downloaded.sourceUrl,
@@ -5070,27 +5659,48 @@ export class FlowBrowserWorker {
 
       // On the New character route, Done commits the generated character to
       // the project. Click it only after the generated image has been secured.
-      if (currentCharacterRef?.routeType === "character-create") {
-        const doneButtons = page.getByRole
-          ? page.getByRole("button", { name: "Done", exact: true })
-          : page.locator('button[aria-label="Done"]');
-        const doneCount = await doneButtons.count().catch(() => 0);
-        if (doneCount === 1) {
-          const doneButton =
-            typeof doneButtons.first === "function" ? doneButtons.first() : doneButtons;
-          if (await doneButton.isVisible().catch(() => false)) {
-            await doneButton.click({ timeout: 10000 }).catch((error) => {
-              this.emitLifecycleLog("FLOW_CHARACTER_DONE_CLICK_FAILED", job, {
-                error: error.message,
-              });
+      if (
+        currentCharacterRef?.routeType === "character-create" ||
+        currentUrl.endsWith("/character")
+      ) {
+        const doneButtons = [
+          'button[aria-label="Done editing"]',
+          'header button:has-text("Done")',
+          'button[aria-label="Done"]',
+          'button:has-text("Done")',
+        ];
+        let doneBtn = null;
+        for (const sel of doneButtons) {
+          if (typeof page.locator !== "function") break;
+          const loc = page.locator(sel);
+          const count = await loc.count().catch(() => 0);
+          if (count === 1 && (await loc.first().isVisible().catch(() => false))) {
+            doneBtn = loc.first();
+            break;
+          }
+        }
+        if (!doneBtn && typeof page.getByRole === "function") {
+          const byRole = page.getByRole("button", { name: /Done/i });
+          if (
+            (await byRole.count().catch(() => 0)) === 1 &&
+            (await byRole.first().isVisible().catch(() => false))
+          ) {
+            doneBtn = byRole.first();
+          }
+        }
+
+        if (doneBtn) {
+          await doneBtn.click({ timeout: 10000 }).catch((error) => {
+            this.emitLifecycleLog("FLOW_CHARACTER_DONE_CLICK_FAILED", job, {
+              error: error.message,
             });
-            await new Promise((resolve) => setTimeout(resolve, 1000));
-            const savedCharacterRef = extractGoogleFlowCharacterReference(
-              typeof page.url === "function" ? page.url() : "",
-            );
-            if (savedCharacterRef?.characterId) {
-              job.googleFlowCharacterId = savedCharacterRef.characterId;
-            }
+          });
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+          const savedCharacterRef = extractGoogleFlowCharacterReference(
+            typeof page.url === "function" ? page.url() : "",
+          );
+          if (savedCharacterRef?.characterId) {
+            job.googleFlowCharacterId = savedCharacterRef.characterId;
           }
         }
       }
@@ -5099,11 +5709,18 @@ export class FlowBrowserWorker {
       job.downloadStatus = "completed";
       job.message = "Character image captured. Importing it into the selected Studio character.";
       this.touch(job);
-      await this.importDownloadedAsset(job, downloaded.buffer, {
+
+      // Dedicated character asset import
+      await this.importCharacterAsset(job, downloaded.buffer, {
         mimeType: downloaded.mimeType,
         extension: downloaded.extension,
       });
     } catch (error) {
+      this.emitLifecycleLog("CHARACTER_GENERATION_FAILED", job, {
+        error: error.message,
+        errorCode: error.code || "FLOW_CHARACTER_GENERATION_FAILED",
+        success: false,
+      });
       this.emitLifecycleLog("FLOW_CHARACTER_GENERATION_FAILED", job, {
         error: error.message,
         errorCode: error.code || "FLOW_CHARACTER_GENERATION_FAILED",

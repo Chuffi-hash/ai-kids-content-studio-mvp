@@ -9,6 +9,8 @@ import {
   getCharacterById,
   updateCharacter,
   createBackgroundImageVersion,
+  upsertFlowCharacterMapping,
+  createFlowCharacterVersion,
 } from "../database/database.service.js";
 import { CharacterReferenceService } from "../character-studio/character-reference.service.js";
 import { BackgroundStudioService } from "../background-studio/background-studio.service.js";
@@ -53,8 +55,12 @@ export interface ImportAssetOptions {
 
   // Character options
   characterId?: string;
+  characterName?: string;
   view?: string;
   isMasterReference?: boolean;
+  googleFlowCharacterId?: string;
+  flowCharacterId?: string;
+  flowCharacterUrl?: string;
 }
 
 export interface ImportAssetResult {
@@ -668,6 +674,52 @@ export class GoogleFlowAssetImportService {
         });
       }
 
+      if (options.storyId) {
+        try {
+          const flowProjId =
+            options.googleFlowProjectId ||
+            options.flowProjectId ||
+            "default";
+          const flowCharId =
+            options.googleFlowCharacterId ||
+            options.flowCharacterId ||
+            null;
+          const flowCharUrl =
+            options.flowCharacterUrl ||
+            (flowCharId
+              ? `https://flow.google.com/project/${flowProjId}/character/${flowCharId}`
+              : null);
+          const mapping = await upsertFlowCharacterMapping({
+            storyId: options.storyId,
+            characterId: options.characterId,
+            flowProjectId: flowProjId,
+            flowCharacterName: options.characterName || character.name,
+            flowCharacterId: flowCharId,
+            flowCharacterUrl: flowCharUrl,
+          });
+          if (flowCharId && mapping?.id) {
+            await createFlowCharacterVersion({
+              mappingId: mapping.id,
+              flowProjectId: flowProjId,
+              flowCharacterId: flowCharId,
+              flowCharacterUrl: flowCharUrl || "",
+              prompt: options.prompt,
+              imageUrl: url,
+              metadata: {
+                view,
+                isMasterReference: isMaster,
+                assetId,
+              },
+            });
+          }
+        } catch (mappingErr) {
+          console.warn(
+            "[AssetImport] Character flow mapping update notice:",
+            (mappingErr as Error).message,
+          );
+        }
+      }
+
       return {
         success: true,
         target: target,
@@ -675,6 +727,7 @@ export class GoogleFlowAssetImportService {
         imageUrl: url,
         width,
         height,
+        characterId: options.characterId,
         metadata: {
           characterId: options.characterId,
           characterName: character.name,
