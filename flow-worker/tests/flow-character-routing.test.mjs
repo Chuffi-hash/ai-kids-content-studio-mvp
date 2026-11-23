@@ -342,8 +342,6 @@ test("Google Flow Character Routing & Route Extraction Suite", async (t) => {
       "https://flow.google.com/project/proj-200/character/char-special-1",
     );
   });
-});
-
 
   await t.test("8. createJob keeps Character role when scene context is also present", () => {
     const worker = new FlowBrowserWorker();
@@ -533,3 +531,4 @@ test("Google Flow Character Routing & Route Extraction Suite", async (t) => {
       global.fetch = originalFetch;
     }
   });
+});
