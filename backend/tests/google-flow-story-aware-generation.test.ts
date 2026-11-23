@@ -218,6 +218,25 @@ describe('Story-Aware Direct Generation & Context Resolver Test Suite', () => {
     assert.ok(!/reference sheet|model sheet|contact sheet/i.test(masterPrompt.prompt));
     assert.ok(masterPrompt.negativePrompt.includes('character name'));
 
+    const staleMappingWithoutFlowId = {
+      ...luna,
+      flowMapping: {
+        flowCharacterName: 'Luna Flow',
+        flowProjectId: 'flow-project',
+        flowCharacterId: null,
+        syncStatus: 'synced',
+        lastSyncedAt: null,
+      },
+    } as any;
+    const noIdPrompt = GenerationPromptService.buildCharacterPrompt(
+      context.story,
+      staleMappingWithoutFlowId,
+      'turnaround',
+      { variation: 'front' },
+    );
+    assert.ok(!noIdPrompt.prompt.includes('@Luna Flow'));
+    assert.ok(noIdPrompt.prompt.includes('visual identity details'));
+
     // Directional view: each call requests one standalone angle, not a labelled sheet.
     const turnaroundPrompt = GenerationPromptService.buildCharacterPrompt(context.story, luna, 'turnaround', {
       variation: 'front-left',
