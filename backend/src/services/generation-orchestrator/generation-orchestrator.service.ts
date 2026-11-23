@@ -775,10 +775,17 @@ export class GenerationOrchestratorService {
         : null);
     const flowReferences = resolveGoogleFlowBackgroundVersionReferences(
       {
-        ...imageRecord,
-        // Prisma nullable columns need to be normalized to undefined at the
-        // optional import-metadata boundary.
+        // Prisma stores these optional reference columns as nullable. The
+        // reference resolver accepts undefined for absent optional metadata.
         googleFlowProjectId: imageRecord.googleFlowProjectId ?? undefined,
+        googleFlowEditId: imageRecord.googleFlowEditId ?? undefined,
+        googleFlowEditUrl: imageRecord.googleFlowEditUrl ?? undefined,
+        googleFlowPrompt: imageRecord.googleFlowPrompt ?? undefined,
+        googleFlowParentAssetId: imageRecord.googleFlowParentAssetId ?? undefined,
+        googleFlowVersion: imageRecord.googleFlowVersion ?? undefined,
+        googleFlowImageId: imageRecord.googleFlowImageId ?? undefined,
+        googleFlowImageRef: imageRecord.googleFlowImageRef ?? undefined,
+        googleFlowImageSourceUrl: imageRecord.googleFlowImageSourceUrl ?? undefined,
       },
       backgroundVersion,
     );
