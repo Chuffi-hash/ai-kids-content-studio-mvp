@@ -774,7 +774,12 @@ export class GenerationOrchestratorService {
         ? activeBackgroundVersion
         : null);
     const flowReferences = resolveGoogleFlowBackgroundVersionReferences(
-      imageRecord,
+      {
+        ...imageRecord,
+        // Prisma nullable columns need to be normalized to undefined at the
+        // optional import-metadata boundary.
+        googleFlowProjectId: imageRecord.googleFlowProjectId ?? undefined,
+      },
       backgroundVersion,
     );
     const editUrl = flowReferences.googleFlowEditUrl;
