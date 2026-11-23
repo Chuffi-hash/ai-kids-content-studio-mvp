@@ -342,4 +342,193 @@ test("Google Flow Character Routing & Route Extraction Suite", async (t) => {
       "https://flow.google.com/project/proj-200/character/char-special-1",
     );
   });
+
+  await t.test("8. createJob keeps Character role when scene context is also present", () => {
+    const worker = new FlowBrowserWorker();
+    const job = worker.createJob({
+      characterId: "studio-character-1",
+      characterName: "Milo",
+      sceneId: "scene-associated-with-character",
+      storyId: "story-1",
+      projectUrl: "https://flow.google.com/project/proj-character",
+      view: "front",
+      prompt: "Create Milo as a reusable character.",
+      pageRole: FLOW_TAB_ROLES.CHARACTER,
+    });
+
+    assert.equal(job.targetType, "character");
+    assert.equal(job.pageRole, FLOW_TAB_ROLES.CHARACTER);
+    assert.equal(job.characterId, "studio-character-1");
+    assert.equal(job.googleFlowProjectId, "proj-character");
+    assert.equal(job.sceneId, undefined);
+  });
+
+  await t.test("9. requestGeneration dispatches Character jobs to the Character submit handler", async () => {
+    const worker = new FlowBrowserWorker();
+    const page = {
+      isClosed: () => false,
+      url: () => "https://flow.google.com/project/proj-character/character",
+    };
+    worker.registerFlowPage(page, {
+      role: FLOW_TAB_ROLES.CHARACTER,
+      projectId: "proj-character",
+    });
+
+    const job = worker.createJob({
+      targetType: "character",
+      pageRole: FLOW_TAB_ROLES.CHARACTER,
+      characterId: "studio-character-2",
+      characterName: "Milo",
+      projectUrl: "https://flow.google.com/project/proj-character",
+      view: "front",
+      prompt: "Create Milo.",
+    });
+    job.status = "prompt_ready";
+    worker.recoverActiveJobLock = () => {};
+    worker.resolveJobPage = async () => page;
+
+    let calledWithPage = null;
+    worker.submitCharacterPrompt = async (receivedJob, confirmation, targetPage) => {
+      calledWithPage = targetPage;
+      receivedJob.status = "generation_submitted";
+      return receivedJob;
+    };
+    worker.detectInterfaceMode = async () => {
+      throw new Error("Character jobs must not use the generic Agent/Background detector.");
+    };
+
+    const result = await worker.requestGeneration(job.id, {
+      confirmGenerate: true,
+      referenceConfirmed: true,
+    });
+
+    assert.equal(result, job);
+    assert.equal(calledWithPage, page);
+    assert.equal(job.status, "generation_submitted");
+  });
+
+  await t.test("10. submitCharacterPrompt uses the Character prompt and Character Start generation button", async () => {
+    const worker = new FlowBrowserWorker();
+    const pageUrl = "https://flow.google.com/project/proj-character/character";
+    let enteredPrompt = "";
+    let clickedGenerate = false;
+    const prompt = {
+      isVisible: async () => true,
+      isEnabled: async () => true,
+      click: async () => {},
+      fill: async (value) => { enteredPrompt = value; },
+      innerText: async () => enteredPrompt,
+    };
+    const button = {
+      isVisible: async () => true,
+      isEnabled: async () => true,
+      getAttribute: async () => null,
+      click: async () => { clickedGenerate = true; },
+    };
+    const page = {
+      isClosed: () => false,
+      url: () => pageUrl,
+      locator: (selector) => {
+        if (selector.includes("flow-character-prompt-box") && selector.includes("contenteditable")) {
+          return { count: async () => 1, nth: () => prompt };
+        }
+        if (selector.includes("flow-character-prompt-box") && selector.includes("button[aria-label")) {
+          return { count: async () => 1, nth: () => button };
+        }
+        if (selector.includes("img.character-tile-thumbnail")) {
+          return { count: async () => 0 };
+        }
+        return { count: async () => 0 };
+      },
+      on: () => {},
+    };
+    worker.registerFlowPage(page, {
+      role: FLOW_TAB_ROLES.CHARACTER,
+      projectId: "proj-character",
+    });
+    worker.getCharacterOutputBaseline = async () => ({ identifiers: new Set() });
+    worker.startImageResponseCapture = async () => new Map();
+    worker.monitorCharacterGenerationAndDownload = async () => {};
+
+    const job = worker.createJob({
+      targetType: "character",
+      pageRole: FLOW_TAB_ROLES.CHARACTER,
+      characterId: "studio-character-3",
+      characterName: "Milo",
+      projectUrl: "https://flow.google.com/project/proj-character",
+      view: "front",
+      prompt: "Create a full-body reusable character named Milo.",
+    });
+
+    await worker.submitCharacterPrompt(
+      job,
+      { confirmGenerate: true, referenceConfirmed: true },
+      page,
+    );
+
+    assert.equal(enteredPrompt, job.prompt);
+    assert.equal(clickedGenerate, true);
+    assert.equal(job.status, "generation_submitted");
+    assert.match(job.submitSelectorUsed, /flow-character-prompt-box/);
+  });
+
+  await t.test("11. Character targetType wins over an incidental sceneId during image import", async () => {
+    const worker = new FlowBrowserWorker();
+    worker.backendUrl = "http://127.0.0.1:9999";
+    const originalFetch = global.fetch;
+    const requests = [];
+    global.fetch = async (url, options) => {
+      requests.push(String(url));
+      if (String(url).includes("/import-flow")) {
+        return {
+          ok: true,
+          json: async () => ({
+            success: true,
+            result: {
+              assetId: "flow-character-asset-1",
+              url: "/storage/characters/milo.png",
+              storagePath: "storage/characters/milo.png",
+            },
+          }),
+        };
+      }
+      if (String(url).includes("/assets")) {
+        return {
+          ok: true,
+          json: async () => ({
+            success: true,
+            asset: { id: "flow-character-asset-1", url: "/storage/characters/milo.png" },
+          }),
+        };
+      }
+      throw new Error("Unexpected backend route: " + url);
+    };
+
+    try {
+      const job = worker.createJob({
+        targetType: "character",
+        pageRole: FLOW_TAB_ROLES.CHARACTER,
+        characterId: "studio-character-4",
+        characterName: "Milo",
+        view: "front",
+        prompt: "Milo character reference",
+      });
+      job.sceneId = "scene-context-only";
+      await worker.importDownloadedAsset(
+        job,
+        Buffer.from(
+          "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAALUlEQVRYR+3QQREAAAzCQPr39g4fXgYk0L2Sqm8cAAAAAAAAAAAAAAAAAAB+1gO4/AH4rE2gOAAAAABJRU5ErkJggg==",
+          "base64",
+        ),
+        { mimeType: "image/png", extension: "png" },
+      );
+
+      assert.ok(requests.some((url) => url.includes("/api/character-studio/characters/studio-character-4/import-flow")));
+      assert.ok(requests.some((url) => url.includes("/api/character-studio/characters/studio-character-4/assets")));
+      assert.ok(requests.every((url) => !url.includes("/api/background-studio/import-flow")));
+      assert.equal(job.status, "completed");
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
 });

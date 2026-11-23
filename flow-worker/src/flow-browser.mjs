@@ -2853,6 +2853,7 @@ export class FlowBrowserWorker {
 
     // Role-specific preparation
     if (targetRole === FLOW_TAB_ROLES.CHARACTER) {
+      try {
       this.emitLifecycleLog("FLOW_PROMPT_DETECTION_STARTED", job, {
         role: targetRole,
         tabId: this.getFlowPageMetadata(page)?.tabId,
@@ -2993,6 +2994,23 @@ export class FlowBrowserWorker {
       job.error = undefined;
       this.touch(job);
       return job;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.emitLifecycleLog("FLOW_CHARACTER_PREPARATION_FAILED", job, {
+          error: message,
+          errorCode: error?.code || "FLOW_CHARACTER_PREPARATION_FAILED",
+          pageRole: targetRole,
+          currentUrl: typeof page.url === "function" ? page.url() : "",
+          tabId: this.getFlowPageMetadata(page)?.tabId || null,
+        });
+        this.setJobTerminal(
+          job,
+          "failed",
+          message,
+          "Google Flow Character prompt preparation failed. Check that the dedicated Characters tab is open and the 'Describe your character' prompt is available.",
+        );
+        throw error;
+      }
     }
 
     // Otherwise BACKGROUND role:
