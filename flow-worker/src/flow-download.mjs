@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import {
   detectImageType,
   parseImageDimensions,
+  safeFilename,
 } from "./image-validation.mjs";
 
 export function getFirstLocator(loc) {
@@ -161,6 +162,292 @@ export async function inspectGoogleFlowActiveImage(page) {
   } catch {
     return null;
   }
+}
+
+/**
+ * Reads the full-resolution read-only image shown by Google Flow's existing
+ * image editor. This is deliberately separate from the gallery/native Save As
+ * workflow used by first-time generation.
+ *
+ * Google Flow currently renders the active editor image as:
+ *   div.image-container > img.read-only-image[alt="Read-only image view"]
+ */
+export async function inspectGoogleFlowEditedImage(
+  page,
+  { previousSourceUrl = null, timeoutMs = 0 } = {},
+) {
+  if (!page || (typeof page.isClosed === "function" && page.isClosed())) {
+    throw new Error("FLOW_PAGE_CLOSED: Google Flow editor page is unavailable.");
+  }
+  if (typeof page.locator !== "function") {
+    throw new Error("FLOW_EDITOR_IMAGE_LOCATOR_UNAVAILABLE: Page locator is unavailable.");
+  }
+
+  const selector = [
+    'div.image-container img.read-only-image[alt="Read-only image view"]',
+    "div.image-container img.read-only-image",
+    "img.read-only-image",
+  ].join(", ");
+  const startedAt = Date.now();
+
+  while (true) {
+    const images = page.locator(selector);
+    const count = await images.count().catch(() => 0);
+    const candidates = [];
+
+    for (let index = 0; index < count; index += 1) {
+      const image = typeof images.nth === "function"
+        ? images.nth(index)
+        : typeof images.first === "function"
+          ? images.first()
+          : images;
+      const visible = typeof image.isVisible === "function"
+        ? await image.isVisible().catch(() => false)
+        : true;
+      if (!visible) continue;
+
+      const snapshot = await image.evaluate((img) => {
+        const rect = img.getBoundingClientRect
+          ? img.getBoundingClientRect()
+          : { width: 0, height: 0 };
+        return {
+          srcAttribute: img.getAttribute("src") || "",
+          currentSrc: img.currentSrc || "",
+          alt: img.alt || "",
+          complete: Boolean(img.complete),
+          naturalWidth: img.naturalWidth || 0,
+          naturalHeight: img.naturalHeight || 0,
+          visible: rect.width > 0 && rect.height > 0,
+          renderedArea: Math.max(0, rect.width) * Math.max(0, rect.height),
+        };
+      }).catch(() => null);
+
+      if (!snapshot || !snapshot.visible) continue;
+      const rawSrc = snapshot.srcAttribute || snapshot.currentSrc;
+      if (!rawSrc) continue;
+
+      let sourceUrl;
+      try {
+        sourceUrl = new URL(
+          rawSrc,
+          typeof page.url === "function" ? page.url() : undefined,
+        ).href;
+      } catch {
+        continue;
+      }
+
+      if (
+        !snapshot.complete ||
+        snapshot.naturalWidth < 32 ||
+        snapshot.naturalHeight < 32 ||
+        (previousSourceUrl && sourceUrl === previousSourceUrl)
+      ) {
+        continue;
+      }
+
+      candidates.push({
+        ...snapshot,
+        rawSrc,
+        sourceUrl,
+      });
+    }
+
+    if (candidates.length > 0) {
+      candidates.sort((a, b) => {
+        const areaDifference = b.renderedArea - a.renderedArea;
+        if (areaDifference !== 0) return areaDifference;
+        return (b.naturalWidth * b.naturalHeight) - (a.naturalWidth * a.naturalHeight);
+      });
+      return candidates[0];
+    }
+
+    if (Date.now() - startedAt >= Math.max(0, timeoutMs)) {
+      return null;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+}
+
+/**
+ * Downloads the new image already rendered in the Google Flow editor.
+ * Unlike first-time generation, this does not open the gallery or use the
+ * Windows native context menu. It fetches the exact /asb/ source used by the
+ * editor's read-only image element with the active browser session cookies.
+ */
+export async function downloadGoogleFlowEditedImage({
+  page,
+  job,
+  downloadDir,
+  previousSourceUrl = null,
+  timeoutMs = 30000,
+  maxBytes = 25 * 1024 * 1024,
+  logger = console,
+  onPhase,
+}) {
+  const startedAt = Date.now();
+  const logPhase = (phase, details = {}) => {
+    const entry = {
+      workerJobId: job?.id,
+      backendJobId: job?.backendJobId || job?.id,
+      sceneId: job?.sceneId,
+      storyId: job?.storyId,
+      phase,
+      timestamp: new Date().toISOString(),
+      durationMs: Date.now() - startedAt,
+      ...details,
+    };
+    onPhase?.(phase, details);
+    logger?.info?.("[FlowDownload] " + JSON.stringify(entry));
+  };
+
+  const snapshot = await inspectGoogleFlowEditedImage(page, {
+    previousSourceUrl,
+    timeoutMs,
+  });
+  if (!snapshot) {
+    const error = new Error(
+      previousSourceUrl
+        ? "FLOW_EDITOR_IMAGE_NOT_UPDATED: The image editor did not render a new read-only image after regeneration."
+        : "FLOW_EDITOR_IMAGE_NOT_FOUND: Could not find a loaded read-only image inside the Google Flow image editor.",
+    );
+    error.code = previousSourceUrl
+      ? "FLOW_EDITOR_IMAGE_NOT_UPDATED"
+      : "FLOW_EDITOR_IMAGE_NOT_FOUND";
+    throw error;
+  }
+
+  const parsedUrl = new URL(snapshot.sourceUrl);
+  if (
+    parsedUrl.protocol !== "https:" ||
+    parsedUrl.hostname !== "flow.google.com" ||
+    !parsedUrl.pathname.startsWith("/asb/")
+  ) {
+    const error = new Error(
+      "FLOW_EDITOR_IMAGE_URL_REJECTED: Expected an https://flow.google.com/asb/ image URL, received " + snapshot.sourceUrl,
+    );
+    error.code = "FLOW_EDITOR_IMAGE_URL_REJECTED";
+    throw error;
+  }
+
+  logPhase("FLOW_EDITOR_IMAGE_SOURCE_FOUND", {
+    sourceUrl: snapshot.sourceUrl,
+    naturalWidth: snapshot.naturalWidth,
+    naturalHeight: snapshot.naturalHeight,
+    alt: snapshot.alt,
+  });
+
+  let response = null;
+  const browserContext =
+    typeof page.context === "function" ? page.context() : null;
+  const requestContext = browserContext?.request || page.request || null;
+
+  logPhase("FLOW_EDITOR_IMAGE_FETCH_STARTED", {
+    sourceUrl: snapshot.sourceUrl,
+    fetchMethod: requestContext?.get ? "browser_context_request" : "in_page_fetch",
+  });
+
+  let buffer;
+  let responseContentType = "";
+  if (requestContext && typeof requestContext.get === "function") {
+    response = await requestContext.get(snapshot.sourceUrl, { timeout: timeoutMs });
+    const responseOk =
+      typeof response.ok === "function" ? response.ok() : response.status?.() === 200;
+    if (!responseOk) {
+      const status = typeof response.status === "function" ? response.status() : "unknown";
+      const error = new Error(
+        "FLOW_EDITOR_IMAGE_FETCH_FAILED: Google Flow returned HTTP " + status + " for the active editor image.",
+      );
+      error.code = "FLOW_EDITOR_IMAGE_FETCH_FAILED";
+      throw error;
+    }
+    buffer = await response.body();
+    const headers = typeof response.headers === "function" ? response.headers() : {};
+    responseContentType = String(headers?.["content-type"] || "");
+  } else {
+    if (typeof page.evaluate !== "function") {
+      throw new Error(
+        "FLOW_EDITOR_IMAGE_FETCH_UNAVAILABLE: Browser-context request and in-page fetch are unavailable.",
+      );
+    }
+    const fetched = await page.evaluate(async (sourceUrl) => {
+      const imageResponse = await fetch(sourceUrl, { credentials: "include" });
+      if (!imageResponse.ok) {
+        throw new Error("Image request failed with HTTP " + imageResponse.status);
+      }
+      const arrayBuffer = await imageResponse.arrayBuffer();
+      const bytes = new Uint8Array(arrayBuffer);
+      let binary = "";
+      const chunkSize = 0x8000;
+      for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+        binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+      }
+      return {
+        base64: btoa(binary),
+        contentType: imageResponse.headers.get("content-type") || "",
+      };
+    }, snapshot.sourceUrl);
+    buffer = Buffer.from(fetched.base64, "base64");
+    responseContentType = fetched.contentType || "";
+  }
+
+  if (!Buffer.isBuffer(buffer) || buffer.length === 0) {
+    throw new Error("FLOW_EDITOR_IMAGE_EMPTY: Google Flow returned an empty image.");
+  }
+  if (buffer.length > maxBytes) {
+    throw new Error(
+      "FLOW_EDITOR_IMAGE_TOO_LARGE: Downloaded editor image exceeds " + Math.round(maxBytes / (1024 * 1024)) + " MB.",
+    );
+  }
+
+  const imageType = detectImageType(buffer);
+  if (!imageType) {
+    throw new Error(
+      "FLOW_EDITOR_IMAGE_UNSUPPORTED: The active editor source did not return a supported PNG, JPEG, or WebP image (content-type: " + (responseContentType || "unknown") + ").",
+    );
+  }
+
+  const dimensions = parseImageDimensions(buffer);
+  if (dimensions.width < 32 || dimensions.height < 32) {
+    throw new Error(
+      "FLOW_EDITOR_IMAGE_INVALID_DIMENSIONS: Downloaded image dimensions are " + dimensions.width + "x" + dimensions.height + ".",
+    );
+  }
+
+  const targetDir = downloadDir || path.join(os.tmpdir(), "flow-downloads");
+  await fs.mkdir(targetDir, { recursive: true });
+  const baseName = safeFilename(job?.id || "flow-edited-image");
+  const fileName = baseName + "-edited-" + Date.now() + "." + imageType.extension;
+  const outputPath = path.join(targetDir, fileName);
+  await fs.writeFile(outputPath, buffer);
+
+  logPhase("FLOW_EDITOR_IMAGE_FETCHED", {
+    sourceUrl: snapshot.sourceUrl,
+    path: outputPath,
+    fileName,
+    fileSize: buffer.length,
+  });
+  logPhase("FLOW_EDITOR_IMAGE_VALIDATED", {
+    success: true,
+    mimeType: imageType.mimeType,
+    width: dimensions.width,
+    height: dimensions.height,
+    sourceUrl: snapshot.sourceUrl,
+  });
+
+  return {
+    success: true,
+    path: outputPath,
+    fileName,
+    fileSize: buffer.length,
+    buffer,
+    mimeType: imageType.mimeType,
+    extension: imageType.extension,
+    width: dimensions.width,
+    height: dimensions.height,
+    sourceUrl: snapshot.sourceUrl,
+    googleFlowImageRef: snapshot.sourceUrl,
+    googleFlowImageSourceUrl: snapshot.sourceUrl,
+  };
 }
 
 /**
