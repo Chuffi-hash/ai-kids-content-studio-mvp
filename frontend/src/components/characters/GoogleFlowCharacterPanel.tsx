@@ -61,7 +61,6 @@ const POLLING_STATUSES = new Set([
   'awaiting_download',
   'awaiting_manual_generate',
   'importing',
-  'import_metadata_failed',
 ]);
 
 export default function GoogleFlowCharacterPanel({
@@ -102,16 +101,16 @@ export default function GoogleFlowCharacterPanel({
   };
 
   const session = propSession !== undefined ? propSession : (flowContext?.session !== undefined ? flowContext.session : internalSession);
-  const setSession = (s: FlowWorkerSession | null | ((prev: FlowWorkerSession | null) => FlowWorkerSession | null)) => {
-    setInternalSession(s);
-    if (typeof s === 'function') {
-      const next = s(session);
-      if (flowContext) flowContext.setSession(next);
-      onSessionChange?.(next);
-    } else {
-      if (flowContext) flowContext.setSession(s);
-      onSessionChange?.(s);
-    }
+  const setSession = (
+    value:
+      | FlowWorkerSession
+      | null
+      | ((prev: FlowWorkerSession | null) => FlowWorkerSession | null),
+  ) => {
+    const next = typeof value === 'function' ? value(session) : value;
+    setInternalSession(next);
+    flowContext?.setSession(next);
+    onSessionChange?.(next);
   };
 
   const [view, setView] = useState('front-left');
@@ -133,13 +132,12 @@ export default function GoogleFlowCharacterPanel({
     Boolean(characterId)
   );
   const canGenerate = Boolean(
-    (session?.canGenerateJob ?? (
-      jobBelongsToCurrentCharacter &&
+    jobBelongsToCurrentCharacter &&
       job?.status === 'prompt_ready' &&
       referenceConfirmed &&
       generationConfirmed &&
-      !busy
-    ))
+      !busy &&
+      (session?.canGenerateJob ?? true),
   );
 
   useEffect(() => {
@@ -191,7 +189,7 @@ export default function GoogleFlowCharacterPanel({
     'Show a full-body front-facing view, head to feet, with a clear readable silhouette.',
     'Use a simple clean plain background. Keep the character centered and fully inside the frame.',
     'Use consistent colors, proportions, face shape, eyes, clothing and distinctive features.',
-    'Create a polished 2D illustration suitable as the canonical reference for a reusable animated character.',
+    'Create a polished illustration in the selected visual style, suitable as the canonical reference for a reusable animated character.',
     'Do not include text, labels, watermarks, extra characters, multiple views or a turnaround sheet.'
   ].filter(Boolean).join('\n\n');
 
