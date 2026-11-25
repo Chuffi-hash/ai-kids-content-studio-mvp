@@ -103,11 +103,17 @@ const DIRECTION_ALIASES: Record<string, CharacterFacingDirection> = {
 export function normalizeCharacterFacingDirection(
   raw?: string | null,
 ): CharacterFacingDirection {
-  const key = String(raw || 'front')
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, '_');
-  return DIRECTION_ALIASES[key] || 'front';
+  if (raw === undefined || raw === null || String(raw).trim() === '') {
+    return 'front';
+  }
+  const key = String(raw).trim().toLowerCase().replace(/\s+/g, '_');
+  const normalized = DIRECTION_ALIASES[key];
+  if (!normalized) {
+    throw new Error(
+      `Unsupported character facing direction: "${String(raw)}". Expected one of: ${Object.keys(DIRECTIONAL_CAMERA_ORIENTATIONS).join(', ')}.`,
+    );
+  }
+  return normalized;
 }
 
 export function extractCanonicalCharacterIdentity(
@@ -491,42 +497,16 @@ export class GenerationPromptService {
       promptOverride?: string;
     }
   ): CharacterPromptResult {
-    const artStyle = (story.visualStyle || 'storybook illustration')
-      .replace(/[_-]+/g, ' ')
-      .trim();
-    const variation = String(options?.variation || '').trim().toLowerCase();
-    const dimensions = { width: 1024, height: 1024 };
-
-    // Describe the direction in screen-space terms. "Viewer left/right" is
-    // less ambiguous for an image model than "the character's left/right".
-    const directions: Record<string, string> = {
-      front: 'Front view: the character faces straight toward the viewer; face, chest, hips and feet point forward.',
-      'front-left': 'Front three-quarter LEFT view: rotate the whole character about 45 degrees so the nose and chest point toward the LEFT side of the image. Keep both eyes partly visible.',
-      'front-right': 'Front three-quarter RIGHT view: rotate the whole character about 45 degrees so the nose and chest point toward the RIGHT side of the image. Keep both eyes partly visible.',
-      left: 'LEFT side profile: rotate the whole character 90 degrees so the nose points directly to the LEFT side of the image. Show a true side silhouette, not a three-quarter view.',
-      right: 'RIGHT side profile: rotate the whole character 90 degrees so the nose points directly to the RIGHT side of the image. Show a true side silhouette, not a three-quarter view.',
-      'back-left': 'BACK three-quarter LEFT view: turn the whole character away from the viewer about 135 degrees, toward the LEFT side of the image. Show mostly the back with a small side edge of the face.',
-      'back-right': 'BACK three-quarter RIGHT view: turn the whole character away from the viewer about 135 degrees, toward the RIGHT side of the image. Show mostly the back with a small side edge of the face.',
-      back: 'Direct BACK view: the back of the head, hair and clothing face the viewer. The face must not be visible.',
-    };
-
-    const direction = directions[variation] || directions.front;
-    const appearance = [
-      character.species ? `Character type: ${character.species}.` : '',
-      character.visualDescription ? `Appearance: ${character.visualDescription}.` : '',
-      character.clothing ? `Clothing: ${character.clothing}.` : '',
-      character.distinctiveFeatures ? `Distinctive details: ${character.distinctiveFeatures}.` : '',
-    ].filter(Boolean).join(' ');
-
+    const identity = extractCanonicalCharacterIdentity(character, story.visualStyle);
+    const artStyle = identity.illustrationStyle;
     const isTurnaround = assetType === 'turnaround';
-    const fullBody = assetType !== 'expression';
-    const angleInstruction = isTurnaround
-      ? direction
-      : assetType === 'expression'
-        ? `Head-and-shoulders portrait with a ${variation || 'friendly neutral'} expression.`
-        : assetType === 'pose'
-          ? `Full-body view showing this pose: ${variation || 'a relaxed neutral standing pose'}.`
-          : directions.front;
+    const normalizedDirection = isTurnaround
+      ? normalizeCharacterFacingDirection(options?.variation)
+      : 'front';
+    const variation = String(options?.variation || '').trim();
+    const dimensions = { width: 1024, height: 1024 };
+    const appearance = formatCanonicalIdentitySection(identity);
+    const directionSpec = DIRECTIONAL_CAMERA_ORIENTATIONS[normalizedDirection];
 
     const identityInstruction = options?.isExistingFlowCharacter
       ? 'Use the character in the image currently selected in this Google Flow editor as the ONLY identity reference. Edit that same character; do not invent, replace or redesign the character.'
@@ -536,23 +516,32 @@ export class GenerationPromptService {
       ? `Additional creative detail: ${options.promptOverride.trim()}.`
       : '';
 
+    const angleInstruction = isTurnaround
+      ? `Requested camera angle — ${directionSpec.label}: ${directionSpec.orientation} Generate only this one camera angle; do not combine it with another angle.`
+      : assetType === 'expression'
+        ? `Head-and-shoulders portrait with a ${variation || 'friendly neutral'} expression.`
+        : assetType === 'pose'
+          ? `Full-body view showing this pose: ${variation || 'a relaxed neutral standing pose'}.`
+          : directionSpec.orientation;
+
+    const fullBody = assetType !== 'expression';
     const promptParts = [
       identityInstruction,
       assetType === 'master_reference'
         ? 'Create one clean canonical full-body character reference.'
         : isTurnaround
-          ? 'Create ONE separate turnaround image for this single camera angle. This is one image only, not a turnaround sheet.'
+          ? 'Create ONE standalone directional character image. This is one image only, not a turnaround sheet, grid, contact sheet or collage.'
           : assetType === 'expression'
             ? 'Create one expression variation of the same character.'
             : 'Create one pose variation of the same character.',
       angleInstruction,
-      'Preserve the exact same identity: face shape, age, skin or fur tone, eyes, hairstyle, body proportions, outfit, clothing patterns, footwear, accessories and colors. Do not add, remove or redesign any identifying feature.',
+      'Preserve the exact same identity: face shape, age, skin or fur tone, eye shape and colour, hairstyle, hair colour, body proportions, height/build, outfit, clothing patterns and colours, footwear, accessories and distinctive features. Do not add, remove or redesign any identifying feature.',
       fullBody
         ? 'Keep the same simple neutral standing pose for every turnaround view: arms relaxed slightly away from the body, hands visible, legs natural and both feet fully visible. Show the complete character from head to toe.'
-        : 'Keep the same face identity, hairstyle, colors and clothing; change only the facial expression.',
+        : 'Keep the same face identity, hairstyle, colours and clothing; change only the facial expression.',
       'Keep the camera at eye level, the character centered, and the full figure at a consistent scale and distance.',
-      `Match the original ${artStyle} illustration style, line quality, shading and color palette.`,
-      'Use the same plain warm off-white background as the reference. No scenery or props.',
+      `Match the original ${artStyle} illustration style, line quality, shading and colour palette.`,
+      'Use the same plain warm off-white background as the canonical reference. No scenery or props.',
       customDetail,
       'Final image: one character, one view, no text, no name, no labels, no captions, no watermark, no logo, no panels, no grid and no collage.',
     ].filter(Boolean);
@@ -564,7 +553,9 @@ export class GenerationPromptService {
       aspectRatio: '1:1',
       width: dimensions.width,
       height: dimensions.height,
-      referenceImageUrl: character.referenceImageUrl,
+      referenceImageUrl: identity.canonicalReferenceUrl,
+      canonicalIdentity: identity,
+      requestedDirection: isTurnaround ? normalizedDirection : undefined,
     };
   }
 
