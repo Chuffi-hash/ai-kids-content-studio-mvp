@@ -67,7 +67,12 @@ test('CharacterReferenceService - Idempotent Asset Registration and Retry', asyn
       'back-right',
       'back',
     ]);
-    if (asset.direction && supportedDirections.has(asset.direction)) {
+    if (
+      !asset.isMasterReference &&
+      asset.assetType !== 'main' &&
+      asset.direction &&
+      supportedDirections.has(asset.direction)
+    ) {
       updatedRefs.directionalViews = {
         ...(existingRefs.directionalViews || {}),
         [asset.direction]: asset.url,
@@ -147,7 +152,31 @@ test('CharacterReferenceService - Idempotent Asset Registration and Retry', asyn
     const res = await (service as any).saveAssetToCharacter('char-mock-flow-1', asset2);
     assert.equal(res.character.canonicalAppearance.assets.length, 2);
     assert.equal(res.character.canonicalAppearance.references.mainUrl, '/storage/char-1/front.png');
-    assert.equal(res.character.canonicalAppearance.references.directionalViews.front, '/storage/char-1/front.png');
+    assert.equal(
+      res.character.canonicalAppearance.references.directionalViews?.front,
+      undefined,
+      'The canonical master image must not be registered as a directional Front view',
+    );
+  });
+
+  await t.test('3b. A separate front turnaround image populates only the directional Front slot', async () => {
+    const frontView = {
+      id: 'asset-flow-uuid-3',
+      assetType: 'turnaround' as const,
+      direction: 'front',
+      prompt: 'Sammy front directional view',
+      url: '/storage/char-1/front-turnaround.png',
+      storagePath: 'char-1/front-turnaround.png',
+      isMasterReference: false,
+      createdAt: '2026-11-18T10:10:00.000Z',
+    };
+
+    const res = await (service as any).saveAssetToCharacter('char-mock-flow-1', frontView);
+    assert.equal(res.character.referenceImageUrl, '/storage/char-1/front.png');
+    assert.equal(
+      res.character.canonicalAppearance.references.directionalViews.front,
+      '/storage/char-1/front-turnaround.png',
+    );
   });
 
   await t.test('4. Retrying asset2 multiple times leaves total asset count at 2', async () => {
@@ -165,6 +194,6 @@ test('CharacterReferenceService - Idempotent Asset Registration and Retry', asyn
     await (service as any).saveAssetToCharacter('char-mock-flow-1', asset2);
     await (service as any).saveAssetToCharacter('char-mock-flow-1', asset2);
 
-    assert.equal(mockCharacter.canonicalAppearance.assets.length, 2, 'Still exactly 2 assets');
+    assert.equal(mockCharacter.canonicalAppearance.assets.length, 2, 'Still exactly 2 assets before the independent turnaround asset is added');
   });
 });
