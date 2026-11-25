@@ -342,7 +342,7 @@ export class GenerationPromptService {
     }
 
     return {
-      prompt: prompt.replace(/\\s+/g, ' ').trim(),
+      prompt: prompt.replace(/\s+/g, ' ').trim(),
       negativePrompt: 'text, letters, labels, watermark, logo, extra characters, collage, multiple views, cropped body, distorted anatomy',
       aspectRatio: '1:1',
       width: dimensions.width,
