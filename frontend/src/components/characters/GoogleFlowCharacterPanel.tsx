@@ -193,7 +193,7 @@ export default function GoogleFlowCharacterPanel({
     'Use consistent colors, proportions, face shape, eyes, clothing and distinctive features.',
     'Create a polished 2D illustration suitable as the canonical reference for a reusable animated character.',
     'Do not include text, labels, watermarks, extra characters, multiple views or a turnaround sheet.'
-  ].filter(Boolean).join('\\n\\n');
+  ].filter(Boolean).join('\n\n');
 
   async function handleCopyInitialPrompt() {
     setError(null);
