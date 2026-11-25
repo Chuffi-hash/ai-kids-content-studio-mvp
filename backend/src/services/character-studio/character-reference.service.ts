@@ -127,6 +127,24 @@ export class CharacterReferenceService {
       updatedRefs.poseUrl = asset.url;
     }
 
+    const directionAliases: Record<string, string> = {
+      three_quarter_left: 'front-left',
+      front_three_quarter_left: 'front-left',
+      three_quarter_right: 'front-right',
+      front_three_quarter_right: 'front-right',
+      left_profile: 'left',
+      right_profile: 'right',
+      back_three_quarter_left: 'back-left',
+      back_three_quarter_right: 'back-right',
+      front_view: 'front',
+      back_view: 'back',
+    };
+    const rawDir = String(asset.direction || '').trim().toLowerCase();
+    const normalizedDirection = directionAliases[rawDir] || rawDir;
+    if (normalizedDirection) {
+      fullAsset.direction = normalizedDirection;
+    }
+
     // Keep individually imported Google Flow views discoverable without requiring
     // a full turnaround sheet. Only authored view keys are registered here.
     const supportedDirections = new Set([
@@ -139,10 +157,23 @@ export class CharacterReferenceService {
       'back-right',
       'back',
     ]);
-    if (asset.direction && supportedDirections.has(asset.direction)) {
+    if (normalizedDirection && supportedDirections.has(normalizedDirection)) {
       updatedRefs.directionalViews = {
         ...(existingRefs.directionalViews || {}),
-        [asset.direction]: asset.url,
+        [normalizedDirection]: asset.url,
+      };
+      updatedRefs.directionalViewMetadata = {
+        ...(existingRefs.directionalViewMetadata || {}),
+        [normalizedDirection]: {
+          assetId: fullAsset.id,
+          direction: normalizedDirection,
+          url: fullAsset.url,
+          jobId: fullAsset.jobId || null,
+          sourceCanonicalReferenceId: fullAsset.sourceCanonicalReferenceId || null,
+          validationStatus: fullAsset.validationStatus || (fullAsset.isMasterReference ? 'validated' : 'needs_review'),
+          validationDetails: fullAsset.validationDetails || null,
+          updatedAt: fullAsset.createdAt,
+        },
       };
     }
 
@@ -258,6 +289,7 @@ export class CharacterReferenceService {
 
     const existingRefs = canonical.references || {};
     const updatedDirectionalViews = { ...(existingRefs.directionalViews || {}) };
+    const updatedDirectionalMeta = { ...(existingRefs.directionalViewMetadata || {}) };
 
     // Remove a directional pointer only when it still points to the deleted file.
     // If another asset for the same direction remains, use the newest remaining one.
@@ -265,36 +297,51 @@ export class CharacterReferenceService {
       const replacement = remaining.find((asset) => asset.direction === target.direction);
       if (replacement) {
         updatedDirectionalViews[target.direction] = replacement.url;
+        updatedDirectionalMeta[target.direction] = {
+          assetId: replacement.id,
+          direction: target.direction,
+          url: replacement.url,
+          jobId: replacement.jobId || null,
+          sourceCanonicalReferenceId: replacement.sourceCanonicalReferenceId || null,
+          validationStatus: replacement.validationStatus || (replacement.isMasterReference ? 'validated' : 'needs_review'),
+          validationDetails: replacement.validationDetails || null,
+          updatedAt: replacement.createdAt,
+        };
       } else {
         delete updatedDirectionalViews[target.direction];
+        delete updatedDirectionalMeta[target.direction];
+      }
+    }
+
+    const updatedRefs: Record<string, any> = {
+      ...existingRefs,
+      directionalViews: updatedDirectionalViews,
+      directionalViewMetadata: updatedDirectionalMeta,
+    };
+
+    const updatePayload: any = {};
+
+    // If master reference was forcefully deleted, clear referenceImageUrl & mainUrl or fallback to remaining asset
+    if (target.isMasterReference) {
+      const nextMaster = remaining[0];
+      if (nextMaster) {
+        nextMaster.isMasterReference = true;
+        updatedRefs.mainUrl = nextMaster.url;
+        updatePayload.referenceImageUrl = nextMaster.url;
+        updatePayload.referenceImagePrompt = nextMaster.prompt;
+      } else {
+        delete updatedRefs.mainUrl;
+        updatePayload.referenceImageUrl = null;
+        updatePayload.referenceImagePrompt = null;
       }
     }
 
     const updatedCanonical = {
       ...canonical,
-      references: {
-        ...existingRefs,
-        directionalViews: updatedDirectionalViews,
-      },
+      references: updatedRefs,
       assets: remaining,
     };
-
-    const updatePayload: any = {
-      canonicalAppearance: updatedCanonical,
-    };
-
-    // If master reference was forcefully deleted, clear referenceImageUrl or fallback to remaining asset
-    if (target.isMasterReference) {
-      const nextMaster = remaining[0];
-      if (nextMaster) {
-        nextMaster.isMasterReference = true;
-        updatePayload.referenceImageUrl = nextMaster.url;
-        updatePayload.referenceImagePrompt = nextMaster.prompt;
-      } else {
-        updatePayload.referenceImageUrl = null;
-        updatePayload.referenceImagePrompt = null;
-      }
-    }
+    updatePayload.canonicalAppearance = updatedCanonical;
 
     const updated = await updateCharacter(characterId, updatePayload);
 

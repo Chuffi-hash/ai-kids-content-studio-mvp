@@ -1,5 +1,218 @@
 import { SceneContextItem, CharacterContextItem } from './story-context.service.js';
 import { VisualStylesService } from '../visual-styles/visual-styles.service.js';
+import { CharacterFacingDirection } from '../character-studio/character-studio.types.js';
+
+export interface CanonicalCharacterIdentity {
+  characterId?: string;
+  name: string;
+  speciesCategory: string;
+  age?: string;
+  genderPresentation?: string;
+  skinOrFurColour?: string;
+  faceShape?: string;
+  eyeDetails?: string;
+  hairColour?: string;
+  hairstyle?: string;
+  bodyProportions?: string;
+  heightOrBuild?: string;
+  clothing: string;
+  footwear?: string;
+  accessories?: string;
+  distinctiveFeatures: string;
+  visualDescription: string;
+  illustrationStyle: string;
+  colourPalette?: string;
+  canonicalReferenceUrl?: string | null;
+}
+
+export const DIRECTIONAL_CAMERA_ORIENTATIONS: Record<
+  CharacterFacingDirection,
+  { label: string; orientation: string; suppressFace: boolean }
+> = {
+  front: {
+    label: 'Front',
+    orientation:
+      'Straight-on front-facing view (0 degrees). Chest, hips, and face looking directly forward toward the camera.',
+    suppressFace: false,
+  },
+  'front-left': {
+    label: 'Front three-quarter left',
+    orientation:
+      'Front three-quarter view turned approximately 45 degrees toward the character’s left. Both eyes remain visible, with the left side slightly angled away.',
+    suppressFace: false,
+  },
+  'front-right': {
+    label: 'Front three-quarter right',
+    orientation:
+      'Front three-quarter view turned approximately 45 degrees toward the character’s right. Both eyes remain visible, with the right side slightly angled away.',
+    suppressFace: false,
+  },
+  left: {
+    label: 'Left profile',
+    orientation:
+      'True left side profile (90 degrees). Character facing strictly to the left of the frame, showing only the left side of the face and full side silhouette.',
+    suppressFace: false,
+  },
+  right: {
+    label: 'Right profile',
+    orientation:
+      'True right side profile (90 degrees). Character facing strictly to the right of the frame, showing only the right side of the face and full side silhouette.',
+    suppressFace: false,
+  },
+  'back-left': {
+    label: 'Back three-quarter left',
+    orientation:
+      'Rear three-quarter view turned approximately 135 degrees away from the camera toward the character’s left. Show primarily the back of the head, hair, and outfit with at most a slight cheek/ear edge.',
+    suppressFace: true,
+  },
+  'back-right': {
+    label: 'Back three-quarter right',
+    orientation:
+      'Rear three-quarter view turned approximately 135 degrees away from the camera toward the character’s right. Show primarily the back of the head, hair, and outfit with at most a slight cheek/ear edge.',
+    suppressFace: true,
+  },
+  back: {
+    label: 'Back',
+    orientation:
+      'Full rear view (180 degrees). Back of the head, hair, shoulders, outfit, and heels facing directly toward the camera. Face, eyes, nose, and mouth must NOT be visible.',
+    suppressFace: true,
+  },
+};
+
+const DIRECTION_ALIASES: Record<string, CharacterFacingDirection> = {
+  front: 'front',
+  front_view: 'front',
+  'front-left': 'front-left',
+  three_quarter_left: 'front-left',
+  front_three_quarter_left: 'front-left',
+  'front-right': 'front-right',
+  three_quarter_right: 'front-right',
+  front_three_quarter_right: 'front-right',
+  left: 'left',
+  left_profile: 'left',
+  right: 'right',
+  right_profile: 'right',
+  'back-left': 'back-left',
+  back_three_quarter_left: 'back-left',
+  'back-right': 'back-right',
+  back_three_quarter_right: 'back-right',
+  back: 'back',
+  back_view: 'back',
+};
+
+export function normalizeCharacterFacingDirection(
+  raw?: string | null,
+): CharacterFacingDirection {
+  const key = String(raw || 'front')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '_');
+  return DIRECTION_ALIASES[key] || 'front';
+}
+
+export function extractCanonicalCharacterIdentity(
+  character: Partial<CharacterContextItem> & Record<string, any>,
+  fallbackVisualStyle?: string,
+): CanonicalCharacterIdentity {
+  const canonical =
+    character?.canonicalAppearance && typeof character.canonicalAppearance === 'object'
+      ? (character.canonicalAppearance as Record<string, any>)
+      : {};
+
+  const clothingField =
+    typeof canonical.clothing === 'string'
+      ? canonical.clothing
+      : canonical.clothing && typeof canonical.clothing === 'object'
+        ? [
+            canonical.clothing.top,
+            canonical.clothing.bottom,
+            canonical.clothing.outfit,
+            canonical.clothing.colors,
+            canonical.clothing.details,
+          ]
+            .filter(Boolean)
+            .join(', ')
+        : '';
+
+  const eyeDetails = [canonical.eyeShape, canonical.eyeColor]
+    .filter(Boolean)
+    .join(', ');
+
+  return {
+    characterId: character.id,
+    name: String(character.name || 'Character').trim(),
+    speciesCategory: String(character.species || canonical.species || 'character').trim(),
+    age: canonical.age ? String(canonical.age).trim() : undefined,
+    genderPresentation: canonical.gender ? String(canonical.gender).trim() : undefined,
+    skinOrFurColour: canonical.skinColor || canonical.furColor || canonical.skinTone
+      ? String(canonical.skinColor || canonical.furColor || canonical.skinTone).trim()
+      : undefined,
+    faceShape: canonical.faceShape ? String(canonical.faceShape).trim() : undefined,
+    eyeDetails: eyeDetails || undefined,
+    hairColour: canonical.hairColor ? String(canonical.hairColor).trim() : undefined,
+    hairstyle: canonical.hairstyle ? String(canonical.hairstyle).trim() : undefined,
+    bodyProportions: canonical.bodyProportions
+      ? String(canonical.bodyProportions).trim()
+      : undefined,
+    heightOrBuild: canonical.height || canonical.build
+      ? String(canonical.height || canonical.build).trim()
+      : undefined,
+    clothing:
+      String(
+        character.clothing ||
+          clothingField ||
+          'Preserve the established outfit and colours from the canonical reference',
+      ).trim(),
+    footwear: canonical.footwear ? String(canonical.footwear).trim() : undefined,
+    accessories: canonical.accessories ? String(canonical.accessories).trim() : undefined,
+    distinctiveFeatures: String(
+      character.distinctiveFeatures ||
+        canonical.distinctiveFeatures ||
+        'Preserve all established distinctive physical features',
+    ).trim(),
+    visualDescription: String(
+      character.visualDescription ||
+        canonical.visualDescription ||
+        'Preserve the exact character appearance from the canonical reference',
+    ).trim(),
+    illustrationStyle: String(
+      canonical.artStyle ||
+        fallbackVisualStyle ||
+        'whimsical children book 2D cartoon illustration, soft cell shading, clean crisp outlines',
+    ).trim(),
+    colourPalette: canonical.colourPalette || canonical.colorPalette
+      ? String(canonical.colourPalette || canonical.colorPalette).trim()
+      : undefined,
+    canonicalReferenceUrl:
+      character.referenceImageUrl || canonical.references?.mainUrl || null,
+  };
+}
+
+export function formatCanonicalIdentitySection(
+  identity: CanonicalCharacterIdentity,
+): string {
+  const lines = [
+    `Species/Category: ${identity.speciesCategory}`,
+    identity.age ? `Age: ${identity.age}` : '',
+    identity.genderPresentation ? `Presentation: ${identity.genderPresentation}` : '',
+    `Appearance: ${identity.visualDescription}`,
+    identity.skinOrFurColour ? `Skin/Fur Colour: ${identity.skinOrFurColour}` : '',
+    identity.faceShape ? `Face Shape: ${identity.faceShape}` : '',
+    identity.eyeDetails ? `Eyes: ${identity.eyeDetails}` : '',
+    identity.hairColour || identity.hairstyle
+      ? `Hair: ${[identity.hairColour, identity.hairstyle].filter(Boolean).join(', ')}`
+      : '',
+    identity.bodyProportions ? `Body Proportions: ${identity.bodyProportions}` : '',
+    identity.heightOrBuild ? `Height/Build: ${identity.heightOrBuild}` : '',
+    `Clothing: ${identity.clothing}`,
+    identity.footwear ? `Footwear: ${identity.footwear}` : '',
+    identity.accessories ? `Accessories: ${identity.accessories}` : '',
+    `Distinctive Features: ${identity.distinctiveFeatures}`,
+    identity.colourPalette ? `Colour Palette: ${identity.colourPalette}` : '',
+  ].filter(Boolean);
+
+  return lines.join('\n');
+}
 
 export interface BackgroundPromptResult {
   prompt: string;
@@ -16,6 +229,8 @@ export interface CharacterPromptResult {
   width: number;
   height: number;
   referenceImageUrl?: string | null;
+  canonicalIdentity?: CanonicalCharacterIdentity;
+  requestedDirection?: CharacterFacingDirection;
 }
 
 export type ImageStylePreset =
@@ -132,39 +347,40 @@ export class GenerationPromptService {
       promptOverride?: string;
     }
   ): CharacterPromptResult {
-    const artStyle =
-      story.visualStyle ||
-      'whimsical children book 2D cartoon illustration, soft cell shading, clean crisp outlines';
+    const identity = extractCanonicalCharacterIdentity(character, story.visualStyle);
+    const artStyle = identity.illustrationStyle;
     const dimensions = { width: 1024, height: 1024 };
-    const identityDescription = [
-      `Species: ${character.species || 'character'}`,
-      `Appearance: ${character.visualDescription || 'Use the supplied canonical character reference'}`,
-      `Clothing and distinctive features: ${character.clothing || character.distinctiveFeatures || 'Preserve the established outfit and accessories'}`,
-    ].join('\n');
+    const identityDescription = formatCanonicalIdentitySection(identity);
 
     const flowReferenceName =
       character.flowMapping?.syncStatus === 'synced' &&
       character.flowMapping.flowCharacterId
         ? character.flowMapping.flowCharacterName
         : null;
-    const identitySource = flowReferenceName
-      ? `Use the saved Google Flow character identity @${flowReferenceName} as the only subject. Match that saved character exactly. Do not create a new design.`
-      : `Use the following visual identity details as generation guidance only. Do not render these words in the artwork:\n${identityDescription}`;
+
+    const identityLines: string[] = [
+      'IMMUTABLE CHARACTER IDENTITY:',
+      flowReferenceName
+        ? `Use the saved Google Flow character identity @${flowReferenceName} as the exact subject. Match that saved character 100%.`
+        : identity.canonicalReferenceUrl && assetType !== 'master_reference'
+          ? 'Preserve the exact same character from the supplied canonical character reference image.'
+          : 'Create the canonical character matching this exact specification:',
+      'Maintain the exact same facial structure, skin/fur tone, eye shape and colour, hairstyle, hair colour, body proportions, clothing, fabric details, footwear, accessories, distinctive features, illustration style, and colour palette.',
+      'Canonical Specification (metadata only — never render words inside the image):\n' +
+        identityDescription,
+    ];
 
     const commonRestrictions = [
-      'Create exactly ONE image of ONE character.',
-      'The character name is application metadata only. Never write the name inside the image.',
-      'No text, letters, numbers, typography, title, heading, labels, captions, callouts, annotations, speech bubbles, logos, signatures, watermarks, borders, panels, grids, contact sheets, collages, model sheets, or multiple views.',
-      'Keep the complete character visible from head to toe, with comfortable space around the silhouette. Do not crop the head, hands, feet, hair, clothing, or accessories.',
-      'Use a simple, uniform, neutral studio background with no environment, props, scenery, furniture, or decorative objects.',
-      `Art direction: ${artStyle}.`,
+      'POSE AND COMPOSITION:\nFull body visible from head to feet in a natural neutral standing pose.\nAnatomically correct body proportions with arms and legs clearly visible.\nCharacter centred in the frame with comfortable margin around head, hands, and feet.\nConsistent character scale across all references.',
+      `VISUAL STYLE:\nPreserve the original illustration style: ${artStyle}.\nClean, polished, professional children's animation character design with consistent shading, line quality, and material details.`,
+      'BACKGROUND:\nSimple plain white or uniform neutral studio background. No scenery, no furniture, no additional characters, no unnecessary props.',
+      'STRICT RESTRICTIONS:\nCreate exactly ONE image of ONE character.\nDo not redesign the character, change clothing, add accessories, change hairstyle, or change age or proportions.\nDo not introduce another character, generate a collage/model sheet/grid, or add text, labels, names, or watermarks.',
     ];
 
     if (options?.promptOverride && options.promptOverride.trim().length > 0) {
       const prompt = [
         'CHARACTER IMAGE TASK',
         options.promptOverride.trim(),
-        'OUTPUT RULES',
         ...commonRestrictions,
       ].join('\n\n');
       return {
@@ -177,45 +393,38 @@ export class GenerationPromptService {
         aspectRatio: '1:1',
         width: dimensions.width,
         height: dimensions.height,
-        referenceImageUrl: character.referenceImageUrl,
+        referenceImageUrl: identity.canonicalReferenceUrl,
+        canonicalIdentity: identity,
       };
     }
 
     const variation = String(options?.variation || '').trim();
-    const directionalViews: Record<string, string> = {
-      front: 'front-facing view, chest and hips facing the camera, face looking directly forward',
-      'front-left': 'front three-quarter view, torso and face turned approximately 45 degrees toward the character’s left',
-      'front-right': 'front three-quarter view, torso and face turned approximately 45 degrees toward the character’s right',
-      left: 'true left side profile, body facing left at 90 degrees, show the side silhouette clearly',
-      right: 'true right side profile, body facing right at 90 degrees, show the side silhouette clearly',
-      'back-left': 'rear three-quarter view, body turned approximately 135 degrees away from the front toward the character’s left',
-      'back-right': 'rear three-quarter view, body turned approximately 135 degrees away from the front toward the character’s right',
-      back: 'full rear view, back facing the camera, show the back of the outfit and hairstyle',
-    };
+    const requestedDirection =
+      assetType === 'turnaround'
+        ? normalizeCharacterFacingDirection(variation || 'front')
+        : assetType === 'master_reference'
+          ? 'front'
+          : undefined;
 
     const parts: string[] = [
-      'CHARACTER IMAGE TASK',
-      identitySource,
-      `Visual style: ${artStyle}.`,
+      assetType === 'turnaround' && identity.canonicalReferenceUrl
+        ? 'Generate a high-quality full-body character reference image using the supplied canonical character reference image.'
+        : 'CHARACTER IMAGE TASK',
+      identityLines.join('\n'),
     ];
 
     switch (assetType) {
       case 'master_reference':
         parts.push(
-          'Create one canonical full-body character reference illustration. This is a single portrait image, not a sheet or page layout.',
-          'View: straight-on front view. Pose: relaxed neutral standing pose, arms slightly separated from the torso, both feet visible and balanced.',
-          'Expression: friendly, calm, and readable. Use the exact design described above.',
-          'Make the face, hair, body proportions, outfit, colors, shoes, and distinctive accessories clear enough to reuse as the visual identity anchor.'
+          'CAMERA ORIENTATION:\nStraight-on front-facing view (0 degrees). Chest, hips, and face looking directly forward toward the camera.',
+          'PURPOSE:\nThis is the canonical master identity anchor. Make the face, hair, body proportions, outfit, colours, shoes, and distinctive accessories completely clear for reuse across all directional views and scenes.'
         );
         break;
 
       case 'turnaround': {
-        const direction = directionalViews[variation] || directionalViews.front;
+        const dirSpec = DIRECTIONAL_CAMERA_ORIENTATIONS[requestedDirection!];
         parts.push(
-          'Create one standalone directional reference image of the existing character. Generate only the requested camera angle in this image; never place several angles together.',
-          `Requested view: ${direction}.`,
-          'Keep the same face identity, head and body proportions, hairstyle, skin/fur/feather colors, clothing, patterns, shoes, accessories, and illustration style as the canonical master reference.',
-          'Use the same neutral standing pose and full-body framing for every direction so the images can be switched between one another in the character preview and used as individual animation references.'
+          `CAMERA ORIENTATION:\nGenerate ONLY the requested [${dirSpec.label}] view.\n${dirSpec.orientation}\nDo NOT combine or mix this perspective with any other angle or panel.`
         );
         break;
       }
@@ -223,9 +432,8 @@ export class GenerationPromptService {
       case 'expression': {
         const expression = variation || 'happy and smiling';
         parts.push(
-          'Create one standalone head-and-shoulders character expression portrait, not an expression sheet.',
-          `Expression to show: ${expression}.`,
-          'Keep the same face shape, eye design, hairstyle, colors, and character identity. Only the facial expression may change.'
+          'FACIAL EXPRESSION PORTRAIT:\nCreate one standalone head-and-shoulders character expression portrait, not an expression sheet.',
+          `Expression to show: ${expression}. Keep the exact same face shape, eye design, hairstyle, colours, and identity; only the facial expression changes.`
         );
         break;
       }
@@ -233,30 +441,35 @@ export class GenerationPromptService {
       case 'pose': {
         const action = variation || 'standing naturally';
         parts.push(
-          'Create one standalone full-body character pose illustration, not a pose sheet.',
-          `Action or pose to show: ${action}.`,
-          'Keep the same character identity, anatomy, outfit, colors, and distinctive features. Change only the body pose/action.'
+          'CHARACTER POSE:\nCreate one standalone full-body character pose illustration, not a pose sheet.',
+          `Action or pose to show: ${action}. Keep the exact same character identity, anatomy, outfit, colours, and distinctive features.`
         );
         break;
       }
     }
 
-    parts.push('OUTPUT RULES', ...commonRestrictions);
+    parts.push(...commonRestrictions);
 
-    const negativePrompt = [
+    const negativeParts = [
       'text, letters, words, character name, title, heading, label, caption, typography, watermark, logo, signature, annotation',
       'character sheet, turnaround sheet, model sheet, contact sheet, expression sheet, pose sheet, collage, grid, panels, multiple views',
       'multiple characters, extra people, scenery, detailed background, furniture, props, border',
       'cropped head, cropped hands, cropped feet, cropped body, extra limbs, distorted face, deformed anatomy, blurry, low resolution',
-    ].join(', ');
+    ];
+
+    if (requestedDirection && DIRECTIONAL_CAMERA_ORIENTATIONS[requestedDirection].suppressFace) {
+      negativeParts.push('front face, both eyes visible, forward-facing face, staring at camera');
+    }
 
     return {
       prompt: parts.join('\n\n'),
-      negativePrompt,
+      negativePrompt: negativeParts.join(', '),
       aspectRatio: '1:1',
       width: dimensions.width,
       height: dimensions.height,
-      referenceImageUrl: character.referenceImageUrl,
+      referenceImageUrl: identity.canonicalReferenceUrl,
+      canonicalIdentity: identity,
+      requestedDirection,
     };
   }
 }

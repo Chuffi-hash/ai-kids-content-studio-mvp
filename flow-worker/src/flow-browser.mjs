@@ -2068,6 +2068,7 @@ export class FlowBrowserWorker {
 
     const job = {
       id: randomUUID(),
+      backendJobId: input.backendJobId || undefined,
       targetType: "character",
       pageRole: FLOW_TAB_ROLES.CHARACTER,
       characterId,
@@ -2080,6 +2081,7 @@ export class FlowBrowserWorker {
         input.isMasterReference === true ||
         assetType === "main" ||
         input.assetType === "master_reference",
+      sourceCanonicalReferenceId: input.sourceCanonicalReferenceId || undefined,
       projectUrl,
       googleFlowProjectId,
       flowProjectId: googleFlowProjectId,
@@ -5881,6 +5883,9 @@ export class FlowBrowserWorker {
             flowCharacterId: job.googleFlowCharacterId,
             googleFlowProjectId: job.googleFlowProjectId || job.flowProjectId,
             flowProjectId: job.flowProjectId || job.googleFlowProjectId,
+            sourceCanonicalReferenceId: job.sourceCanonicalReferenceId,
+            jobId: job.backendJobId || job.id,
+            sourceJobId: job.backendJobId || job.id,
             prompt: job.prompt,
             provider: "google_flow",
             model: "google_flow_ui",
@@ -6000,6 +6005,9 @@ export class FlowBrowserWorker {
   }
 
   async submitCharacterPrompt(job, confirmation, targetPage = null) {
+    if (["generation_submitted", "generating", "importing", "completed"].includes(job?.status)) {
+      return job;
+    }
     const page = targetPage || (await this.resolveJobPage(job));
     if (!page || (typeof page.isClosed === "function" && page.isClosed())) {
       throw new Error("Flow Character page is not available.");

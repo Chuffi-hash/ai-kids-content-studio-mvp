@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { StoryContextService, SceneContextItem, CharacterContextItem } from '../google-flow/story-context.service.js';
-import { GenerationPromptService } from '../google-flow/generation-prompt.service.js';
+import { GenerationPromptService, normalizeCharacterFacingDirection } from '../google-flow/generation-prompt.service.js';
 import { GeminiImageProvider } from '../image-generation/providers/gemini-image.provider.js';
 import { GoogleFlowAssetImportService, ImportAssetResult, resolveGoogleFlowBackgroundVersionReferences } from '../google-flow/google-flow-asset-import.service.js';
 import { GoogleFlowCredentialService } from '../google-flow/google-flow-credential.service.js';
@@ -31,6 +31,7 @@ export interface GenerationJobRecord {
   sceneId?: string;
   characterId?: string;
   assetType?: 'scene_background' | 'master_reference' | 'turnaround' | 'expression' | 'pose';
+  variation?: string;
   provider: GenerationProviderType;
   prompt: string;
   status:
@@ -248,6 +249,12 @@ export class GenerationOrchestratorService {
           } catch {}
         }
       }
+      try {
+        await prisma.generationJob.updateMany({
+          where: { status: { notIn: ['completed', 'cancelled', 'failed'] } },
+          data: { status: 'cancelled', error: 'Cancelled by user request.' },
+        });
+      } catch {}
 
       if (res && res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -1004,6 +1011,24 @@ export class GenerationOrchestratorService {
   /**
    * Generates a character asset (Master Reference, Turnaround, Expression, or Pose).
    */
+  private static resolveLocalReferencePath(referenceUrl?: string | null): string | null {
+    if (!referenceUrl || typeof referenceUrl !== 'string') return null;
+    const cleanUrl = referenceUrl.trim().replace(/\\/g, '/');
+    const storageMatch = cleanUrl.match(/(?:^|https?:\/\/[^/]+)(\/storage\/.+)$/i);
+    if (!storageMatch) return null;
+    const relFromRoot = storageMatch[1].replace(/^\/+/, '');
+    const candidates = [
+      path.resolve(process.cwd(), relFromRoot),
+      path.resolve(process.cwd(), 'backend', relFromRoot),
+    ];
+    for (const candidate of candidates) {
+      if (fs.existsSync(candidate)) {
+        return candidate;
+      }
+    }
+    return null;
+  }
+
   public static async generateCharacterAsset(params: {
     storyId: string;
     characterId: string;
@@ -1023,12 +1048,40 @@ export class GenerationOrchestratorService {
       testMockBuffer,
     } = params;
 
+    const normalizedVariation =
+      assetType === 'turnaround'
+        ? normalizeCharacterFacingDirection(variation || 'front')
+        : variation;
+
     // 1. Resolve Story and Character Context
     const context = await StoryContextService.resolveStoryContext(storyId, { characterId });
     const character = context.characters.find((c) => c.id === characterId);
 
     if (!character) {
       throw new Error(`Character ${characterId} not found in story ${storyId}`);
+    }
+
+    // Prevent duplicate active jobs for the same character + assetType + direction
+    const activeStatuses = new Set(['preparing', 'generating', 'importing', 'generation_submitted', 'output_detected', 'downloading']);
+    for (const existing of this.jobs.values()) {
+      if (
+        existing.characterId === character.id &&
+        existing.assetType === assetType &&
+        (existing.variation || '') === (normalizedVariation || '') &&
+        activeStatuses.has(existing.status)
+      ) {
+        return {
+          success: true,
+          jobId: existing.id,
+          workerJobId: existing.workerJobId,
+          status: existing.status,
+          target: assetType === 'master_reference' ? 'character_reference' : 'character_view',
+          assetId: character.id,
+          characterId: character.id,
+          imageUrl: null,
+          message: `Generation for ${normalizedVariation || assetType} is already in progress.`,
+        };
+      }
     }
 
     // 2. Check for existing Flow Character Mapping
@@ -1043,7 +1096,7 @@ export class GenerationOrchestratorService {
       { visualStyle: context.story.visualStyle },
       character,
       assetType,
-      { variation, promptOverride }
+      { variation: normalizedVariation, promptOverride }
     );
 
     // GenerationPromptService already embeds the saved @Character identity
@@ -1051,13 +1104,20 @@ export class GenerationOrchestratorService {
     // rather than prepending a duplicate mention here.
     const finalPrompt = promptData.prompt;
 
+    const canonicalRefUrl =
+      character.referenceImageUrl ||
+      (character.canonicalAppearance as any)?.references?.mainUrl ||
+      null;
+    const localCanonicalRefPath = this.resolveLocalReferencePath(canonicalRefUrl);
+
     const jobId = `job-char-${Date.now()}-${randomUUID().slice(0, 6)}`;
-    const jobRecord: GenerationJobRecord = {
+    const jobRecord: GenerationJobRecord & { variation?: string } = {
       id: jobId,
       storyId,
       characterId: character.id,
       targetType: 'character',
       assetType,
+      variation: normalizedVariation,
       provider,
       prompt: finalPrompt,
       status: 'preparing',
@@ -1079,6 +1139,10 @@ export class GenerationOrchestratorService {
         flowProjectId: context.story.flowProjectId || undefined,
         status: 'preparing',
         progress: 10,
+        metadata: {
+          variation: normalizedVariation || null,
+          sourceCanonicalReferenceId: canonicalRefUrl,
+        },
       });
     } catch {}
 
@@ -1103,14 +1167,22 @@ export class GenerationOrchestratorService {
           let referenceBuffer: Buffer | undefined;
           let referenceMime: string | undefined;
 
-          if (character.referenceImageUrl && assetType !== 'master_reference') {
+          if (assetType !== 'master_reference' && canonicalRefUrl) {
             try {
-              const cleanUrl = character.referenceImageUrl.replace(/\\/g, '/');
-              const relPath = cleanUrl.replace(/^.*?\/storage\//, 'storage/');
-              const diskPath = path.resolve(process.cwd(), relPath);
-              if (fs.existsSync(diskPath)) {
-                referenceBuffer = await fs.promises.readFile(diskPath);
-                referenceMime = diskPath.endsWith('.jpg') || diskPath.endsWith('.jpeg') ? 'image/jpeg' : 'image/png';
+              if (localCanonicalRefPath) {
+                referenceBuffer = await fs.promises.readFile(localCanonicalRefPath);
+                referenceMime =
+                  localCanonicalRefPath.endsWith('.jpg') || localCanonicalRefPath.endsWith('.jpeg')
+                    ? 'image/jpeg'
+                    : localCanonicalRefPath.endsWith('.webp')
+                      ? 'image/webp'
+                      : 'image/png';
+              } else if (canonicalRefUrl.startsWith('data:image/')) {
+                const match = canonicalRefUrl.match(/^data:(image\/[a-zA-Z0-9.+_-]+);base64,(.+)$/);
+                if (match) {
+                  referenceMime = match[1];
+                  referenceBuffer = Buffer.from(match[2], 'base64');
+                }
               }
             } catch {}
           }
@@ -1132,17 +1204,21 @@ export class GenerationOrchestratorService {
         jobRecord.updatedAt = new Date().toISOString();
 
         const targetKind = assetType === 'master_reference' ? 'character_reference' : 'character_view';
+        const geminiModel = process.env.GEMINI_IMAGE_MODEL || 'gemini-2.5-flash-image';
         const importResult = await GoogleFlowAssetImportService.importAsset({
           target: targetKind,
           characterId: character.id,
           storyId,
           isMasterReference: assetType === 'master_reference',
-          view: variation || (assetType === 'master_reference' ? 'front' : assetType),
+          view: normalizedVariation || (assetType === 'master_reference' ? 'front' : assetType),
           imageData: imageBuffer,
           prompt: finalPrompt,
           provider: 'gemini_api',
-          model: 'imagen-3',
+          model: geminiModel,
           sourceJobId: jobId,
+          jobId,
+          sourceCanonicalReferenceId:
+            assetType !== 'master_reference' ? canonicalRefUrl || undefined : undefined,
           filename: `gemini-${character.id}-${assetType}-${Date.now()}.png`,
         });
 
@@ -1181,6 +1257,28 @@ export class GenerationOrchestratorService {
         GoogleFlowCredentialService.syncLocalWorkerTokenFile(token);
 
         const projectUrl = `https://flow.google.com/project/${flowProjectId}`;
+        const workerJobPayload = {
+          targetType: 'character',
+          backendJobId: jobId,
+          characterId: character.id,
+          characterName: flowCharacterName,
+          googleFlowCharacterId:
+            mapping?.syncStatus === 'synced' ? mapping.flowCharacterId || undefined : undefined,
+          googleFlowCharacterUrl:
+            mapping?.syncStatus === 'synced' ? mapping.flowCharacterUrl || undefined : undefined,
+          assetType: assetType === 'master_reference' ? 'main' : 'turnaround',
+          isMasterReference: assetType === 'master_reference',
+          view: normalizedVariation || 'front',
+          uploadedReferences:
+            assetType !== 'master_reference' && localCanonicalRefPath
+              ? [localCanonicalRefPath]
+              : undefined,
+          sourceCanonicalReferenceId:
+            assetType !== 'master_reference' ? canonicalRefUrl || undefined : undefined,
+          prompt: finalPrompt,
+          projectUrl,
+          storyId,
+        };
 
         let submitRes = await fetch(`${workerUrl}/jobs`, {
           method: 'POST',
@@ -1188,21 +1286,7 @@ export class GenerationOrchestratorService {
             'Content-Type': 'application/json',
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
-          body: JSON.stringify({
-            targetType: 'character',
-            characterId: character.id,
-            characterName: flowCharacterName,
-            googleFlowCharacterId:
-              mapping?.syncStatus === 'synced' ? mapping.flowCharacterId || undefined : undefined,
-            googleFlowCharacterUrl:
-              mapping?.syncStatus === 'synced' ? mapping.flowCharacterUrl || undefined : undefined,
-            assetType: assetType === 'master_reference' ? 'main' : 'turnaround',
-            isMasterReference: assetType === 'master_reference',
-            view: variation || 'front',
-            prompt: finalPrompt,
-            projectUrl,
-            storyId,
-          }),
+          body: JSON.stringify(workerJobPayload),
         });
 
         if (submitRes.status === 401 && token) {
@@ -1214,20 +1298,7 @@ export class GenerationOrchestratorService {
                 'Content-Type': 'application/json',
                 Authorization: `Bearer ${token}`,
               },
-              body: JSON.stringify({
-                targetType: 'character',
-                characterId: character.id,
-                characterName: flowCharacterName,
-            googleFlowCharacterId:
-              mapping?.syncStatus === 'synced' ? mapping.flowCharacterId || undefined : undefined,
-            googleFlowCharacterUrl:
-              mapping?.syncStatus === 'synced' ? mapping.flowCharacterUrl || undefined : undefined,
-                assetType: assetType === 'master_reference' ? 'main' : 'turnaround',
-                view: variation || 'front',
-                prompt: finalPrompt,
-                projectUrl,
-                storyId,
-              }),
+              body: JSON.stringify(workerJobPayload),
             });
           } catch {}
         }
@@ -1252,19 +1323,7 @@ export class GenerationOrchestratorService {
                     ...(token ? { Authorization: `Bearer ${token}` } : {}),
                   },
                   body: JSON.stringify({
-                    targetType: 'character',
-                    characterId: character.id,
-                    characterName: flowCharacterName,
-            googleFlowCharacterId:
-              mapping?.syncStatus === 'synced' ? mapping.flowCharacterId || undefined : undefined,
-            googleFlowCharacterUrl:
-              mapping?.syncStatus === 'synced' ? mapping.flowCharacterUrl || undefined : undefined,
-                    assetType: assetType === 'master_reference' ? 'main' : 'turnaround',
-                    isMasterReference: assetType === 'master_reference',
-                    view: variation || 'front',
-                    prompt: finalPrompt,
-                    projectUrl,
-                    storyId,
+                    ...workerJobPayload,
                     cancelPrevious: true,
                   }),
                 });
@@ -1389,7 +1448,7 @@ export class GenerationOrchestratorService {
           jobId: jobRecord.id,
           workerJobId,
           status: 'generating',
-          target: 'character_reference',
+          target: assetType === 'master_reference' ? 'character_reference' : 'character_view',
           assetId: character.id,
           characterId: character.id,
           imageUrl: null,
@@ -1439,17 +1498,12 @@ export class GenerationOrchestratorService {
 
     // Check existing mapping
     const existingMapping = await getFlowCharacterMapping(storyId, characterId);
-    const referenceUrl = character.referenceImageUrl;
+    const referenceUrl =
+      character.referenceImageUrl ||
+      (character.canonicalAppearance as any)?.references?.mainUrl ||
+      null;
 
-    let localImagePath: string | null = null;
-    if (referenceUrl) {
-      if (referenceUrl.startsWith('/storage/')) {
-        localImagePath = path.join(process.cwd(), 'backend', referenceUrl);
-        if (!fs.existsSync(localImagePath)) {
-          localImagePath = path.join(process.cwd(), referenceUrl);
-        }
-      }
-    }
+    const localImagePath = this.resolveLocalReferencePath(referenceUrl);
 
     // Idempotent: If already synced and reference has not changed
     if (!options?.force && existingMapping && existingMapping.syncStatus === 'synced') {
@@ -1505,6 +1559,8 @@ export class GenerationOrchestratorService {
       characterId,
       flowProjectId,
       flowCharacterName: flowCharName,
+      flowCharacterId: syncPayload.flowCharacterId || undefined,
+      flowCharacterUrl: syncPayload.flowCharacterUrl || undefined,
       syncStatus: 'synced',
       sourceReferenceUrl: referenceUrl,
       lastSyncedAt: new Date(),

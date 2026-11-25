@@ -14,6 +14,7 @@ import {
 } from "../database/database.service.js";
 import { CharacterReferenceService } from "../character-studio/character-reference.service.js";
 import { BackgroundStudioService } from "../background-studio/background-studio.service.js";
+import { normalizeCharacterFacingDirection } from "./generation-prompt.service.js";
 
 const MAX_IMAGE_BYTES = 25 * 1024 * 1024; // 25 MB
 
@@ -61,6 +62,9 @@ export interface ImportAssetOptions {
   googleFlowCharacterId?: string;
   flowCharacterId?: string;
   flowCharacterUrl?: string;
+  sourceCanonicalReferenceId?: string;
+  jobId?: string;
+  validationStatus?: "needs_review" | "validated" | "failed";
 }
 
 export interface ImportAssetResult {
@@ -624,13 +628,20 @@ export class GoogleFlowAssetImportService {
         throw new Error(`Character not found: ${options.characterId}`);
       }
 
+      const ratio = width / height;
+      if (ratio < 0.25 || ratio > 4) {
+        throw new Error(
+          `Invalid character image aspect ratio (${width}x${height}px). Expected balanced character framing.`,
+        );
+      }
+
       const { url } = await this.storageService.saveFile(
         buffer,
         storageFilename,
         detected.mimeType,
       );
 
-      const view = options.view || "front";
+      const view = normalizeCharacterFacingDirection(options.view || "front");
       const isMaster = Boolean(
         options.isMasterReference || target === "character_reference",
       );
@@ -644,6 +655,23 @@ export class GoogleFlowAssetImportService {
           : provider === "gemini_api"
             ? "gemini-imagen"
             : "manual_upload");
+
+      const canonicalRefId =
+        options.sourceCanonicalReferenceId ||
+        (!isMaster
+          ? (character.canonicalAppearance as any)?.references?.mainUrl ||
+            character.referenceImageUrl ||
+            undefined
+          : undefined);
+
+      const validationStatus =
+        options.validationStatus || (isMaster ? "validated" : "needs_review");
+      const validationDetails =
+        width < 256 || height < 256
+          ? `Low resolution (${width}x${height}px); visual review recommended.`
+          : isMaster
+            ? "Canonical master reference saved."
+            : "Generated directional view awaiting visual orientation review.";
 
       const registered =
         await this.getCharacterReferenceService().saveAssetToCharacter(
@@ -661,6 +689,10 @@ export class GoogleFlowAssetImportService {
             model,
             url,
             isMasterReference: isMaster,
+            sourceCanonicalReferenceId: canonicalRefId,
+            jobId: options.jobId || options.sourceJobId,
+            validationStatus,
+            validationDetails,
             createdAt: new Date().toISOString(),
           },
         );

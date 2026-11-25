@@ -127,6 +127,10 @@ export interface CharacterAssetRecord {
   url: string;
   storagePath?: string;
   isMasterReference?: boolean;
+  sourceCanonicalReferenceId?: string;
+  jobId?: string;
+  validationStatus?: 'needs_review' | 'validated' | 'failed';
+  validationDetails?: string;
   createdAt: string;
 }
 

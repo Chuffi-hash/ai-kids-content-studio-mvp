@@ -72,6 +72,12 @@ type CharacterPreviewView = {
   direction: string;
   label: string;
   url: string;
+  assetId?: string;
+  jobId?: string | null;
+  sourceCanonicalReferenceId?: string | null;
+  validationStatus?: "needs_review" | "validated" | "failed" | "missing";
+  validationDetails?: string | null;
+  createdAt?: string | null;
 };
 
 const CHARACTER_TURNAROUND_DIRECTIONS = [
@@ -91,6 +97,7 @@ function getCharacterDirectionalPreviewViews(
   const canonical = character.canonicalAppearance || {};
   const references = (canonical.references || {}) as Record<string, any>;
   const directionalViews = (references.directionalViews || {}) as Record<string, any>;
+  const directionalMeta = (references.directionalViewMetadata || {}) as Record<string, any>;
   const assets = Array.isArray(canonical.assets) ? canonical.assets : [];
 
   const views = CHARACTER_TURNAROUND_DIRECTIONS.flatMap(({ direction, label }) => {
@@ -102,8 +109,25 @@ function getCharacterDirectionalPreviewViews(
         asset?.url &&
         asset?.assetType !== "main",
     );
+    const meta = directionalMeta[direction] || {};
     const url = mappedUrl || savedAsset?.url;
-    return url ? [{ direction, label, url: String(url) }] : [];
+    return url
+      ? [
+          {
+            direction,
+            label,
+            url: String(url),
+            assetId: meta.assetId || savedAsset?.id,
+            jobId: meta.jobId || savedAsset?.jobId || null,
+            sourceCanonicalReferenceId:
+              meta.sourceCanonicalReferenceId || savedAsset?.sourceCanonicalReferenceId || null,
+            validationStatus:
+              meta.validationStatus || savedAsset?.validationStatus || "needs_review",
+            validationDetails: meta.validationDetails || savedAsset?.validationDetails || null,
+            createdAt: meta.updatedAt || savedAsset?.createdAt || null,
+          },
+        ]
+      : [];
   });
 
   if (views.length > 0) return views;
@@ -113,6 +137,7 @@ function getCharacterDirectionalPreviewViews(
         direction: "master",
         label: "Master reference",
         url: character.referenceImageUrl,
+        validationStatus: "validated",
       },
     ];
   }
@@ -3631,7 +3656,7 @@ export default function GoogleFlowPage() {
                           setPreviewAsset({
                             url: activePreviewView.url,
                             title: ch.name,
-                            subtitle: `${ch.species || "Character"} • ${activePreviewView.label}`,
+                            subtitle: ch.species || "Character",
                             characterId: ch.id,
                             type: "character",
                             images: previewViews,
@@ -4048,10 +4073,10 @@ export default function GoogleFlowPage() {
             <div className="flow-lightbox-header">
               <div className="flow-lightbox-title-box">
                 <h3 className="flow-lightbox-title">{previewAsset.title}</h3>
-                {previewAsset.subtitle && (
+                {(previewAsset.subtitle || previewAsset.images?.[previewAsset.activeIndex || 0]) && (
                   <p className="flow-lightbox-subtitle">
                     {previewAsset.subtitle}
-                    {previewAsset.images && previewAsset.images.length > 1
+                    {previewAsset.images && previewAsset.images.length > 0
                       ? ` • ${previewAsset.images[previewAsset.activeIndex || 0]?.label || ""}`
                       : ""}
                   </p>
@@ -4159,67 +4184,108 @@ export default function GoogleFlowPage() {
             </div>
 
             {/* Footer with Metadata & Actions */}
-            <div className="flow-lightbox-footer">
-              <div className="flow-lightbox-meta">
-                <span className="flow-status-badge ready">
-                  {previewAsset.type === "background"
-                    ? "✓ Scene Environment Plate"
-                    : previewAsset.images && previewAsset.images.length > 1
-                      ? "✓ Directional Character View"
-                      : "✓ Master Character Reference"}
-                </span>
-                {previewAsset.aspectRatio && (
-                  <span className="flow-tag" style={{ margin: 0 }}>
-                    📐 {previewAsset.aspectRatio}
-                  </span>
-                )}
-              </div>
+            {(() => {
+              const activeLightboxView =
+                previewAsset.images?.[previewAsset.activeIndex || 0] || null;
+              const isMasterLightboxView =
+                !activeLightboxView || activeLightboxView.direction === "master";
+              const validationStatus = activeLightboxView?.validationStatus;
+              const badgeClass =
+                previewAsset.type === "background"
+                  ? "flow-status-badge ready"
+                  : isMasterLightboxView || validationStatus === "validated"
+                    ? "flow-status-badge ready"
+                    : validationStatus === "failed"
+                      ? "flow-status-badge error"
+                      : "flow-status-badge warning";
+              const badgeLabel =
+                previewAsset.type === "background"
+                  ? "✓ Scene Environment Plate"
+                  : isMasterLightboxView
+                    ? "✓ Canonical Master Reference"
+                    : validationStatus === "validated"
+                      ? `✓ Validated View (${activeLightboxView?.label})`
+                      : validationStatus === "failed"
+                        ? `✕ Validation Failed (${activeLightboxView?.label})`
+                        : `⚠ Generated View — Needs Review (${activeLightboxView?.label})`;
+              const activeImageUrl =
+                activeLightboxView?.url || previewAsset.url;
 
-              <div className="flow-lightbox-actions">
-                <a
-                  href={previewAsset.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flow-btn secondary sm"
-                >
-                  Open Full Image ↗
-                </a>
-                {previewAsset.type === "background" && previewAsset.sceneId && (
-                  <button
-                    type="button"
-                    className="flow-btn primary sm"
-                    onClick={() => {
-                      const scId = previewAsset.sceneId!;
-                      setPreviewAsset(null);
-                      handleGenerateSceneBackground(scId);
-                    }}
-                  >
-                    ↻ Regenerate Plate
-                  </button>
-                )}
-                {previewAsset.type === "character" &&
-                  previewAsset.characterId && (
+              return (
+                <div className="flow-lightbox-footer">
+                  <div className="flow-lightbox-meta">
+                    <span
+                      className={badgeClass}
+                      title={activeLightboxView?.validationDetails || undefined}
+                    >
+                      {badgeLabel}
+                    </span>
+                    {activeLightboxView?.direction && !isMasterLightboxView && (
+                      <span className="flow-tag" style={{ margin: 0 }}>
+                        🧭 {activeLightboxView.direction}
+                      </span>
+                    )}
+                    {previewAsset.aspectRatio && (
+                      <span className="flow-tag" style={{ margin: 0 }}>
+                        📐 {previewAsset.aspectRatio}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flow-lightbox-actions">
+                    <a
+                      href={activeImageUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flow-btn secondary sm"
+                    >
+                      Open Full Image ↗
+                    </a>
+                    {previewAsset.type === "background" && previewAsset.sceneId && (
+                      <button
+                        type="button"
+                        className="flow-btn primary sm"
+                        onClick={() => {
+                          const scId = previewAsset.sceneId!;
+                          setPreviewAsset(null);
+                          handleGenerateSceneBackground(scId);
+                        }}
+                      >
+                        ↻ Regenerate Plate
+                      </button>
+                    )}
+                    {previewAsset.type === "character" &&
+                      previewAsset.characterId && (
+                        <button
+                          type="button"
+                          className="flow-btn primary sm"
+                          onClick={() => {
+                            const cId = previewAsset.characterId!;
+                            const targetDir = activeLightboxView?.direction;
+                            setPreviewAsset(null);
+                            if (targetDir && targetDir !== "master") {
+                              handleGenerateCharacterAsset(cId, "turnaround", targetDir);
+                            } else {
+                              handleGenerateCharacterAsset(cId, "master_reference");
+                            }
+                          }}
+                        >
+                          {activeLightboxView && activeLightboxView.direction !== "master"
+                            ? `↻ Regenerate ${activeLightboxView.label}`
+                            : "↻ Regenerate Master Reference"}
+                        </button>
+                      )}
                     <button
                       type="button"
-                      className="flow-btn primary sm"
-                      onClick={() => {
-                        const cId = previewAsset.characterId!;
-                        setPreviewAsset(null);
-                        handleGenerateCharacterAsset(cId, "master_reference");
-                      }}
+                      className="flow-btn secondary sm"
+                      onClick={() => setPreviewAsset(null)}
                     >
-                      ↻ Regenerate Reference
+                      Close
                     </button>
-                  )}
-                <button
-                  type="button"
-                  className="flow-btn secondary sm"
-                  onClick={() => setPreviewAsset(null)}
-                >
-                  Close
-                </button>
-              </div>
-            </div>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         </div>
       )}
