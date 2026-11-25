@@ -984,9 +984,13 @@ export default function GoogleFlowPage() {
       return next;
     });
 
+    // A supplied direction means regenerate only that one slot. The
+    // Generate 8 Views action omits variation and runs the complete sequence.
     const viewsToGenerate =
       assetType === "turnaround"
-        ? CHARACTER_TURNAROUND_DIRECTIONS.map((item) => item.direction)
+        ? variation
+          ? [variation]
+          : CHARACTER_TURNAROUND_DIRECTIONS.map((item) => item.direction)
         : [variation || (assetType === "master_reference" ? "front" : "")];
 
     try {
@@ -1140,6 +1144,18 @@ export default function GoogleFlowPage() {
         ? characters.find((c) => c.id === selectedCharacterId) || null
         : null)
     : null;
+
+  const activeModalCharacterView =
+    previewAsset?.type === "character" && previewAsset.images?.length
+      ? previewAsset.images[
+          Math.min(
+            previewAsset.activeIndex ?? 0,
+            previewAsset.images.length - 1,
+          )
+        ]
+      : undefined;
+  const activeModalImageUrl =
+    activeModalCharacterView?.url || (!activeModalCharacterView ? previewAsset?.url : undefined);
 
   return (
     <div className="flow-page-container">
@@ -4075,8 +4091,8 @@ export default function GoogleFlowPage() {
                 {previewAsset.subtitle && (
                   <p className="flow-lightbox-subtitle">
                     {previewAsset.subtitle}
-                    {previewAsset.images && previewAsset.images.length > 1
-                      ? ` • ${previewAsset.images[previewAsset.activeIndex || 0]?.label || ""}`
+                    {activeModalCharacterView
+                      ? ` • ${activeModalCharacterView.label}`
                       : ""}
                   </p>
                 )}
@@ -4093,26 +4109,48 @@ export default function GoogleFlowPage() {
 
             {/* Viewing Canvas */}
             <div className="flow-lightbox-stage">
-              <img
-                src={
-                  previewAsset.images?.[previewAsset.activeIndex || 0]?.url ||
-                  previewAsset.url
-                }
-                alt={
-                  previewAsset.images?.[previewAsset.activeIndex || 0]
-                    ? `${previewAsset.title} • ${previewAsset.images[previewAsset.activeIndex || 0].label}`
-                    : previewAsset.title
-                }
-                className="flow-lightbox-image"
-                onError={(e) => {
-                  (e.target as HTMLElement).style.display = "none";
-                  const parent = (e.target as HTMLElement).parentElement;
-                  const errorBox = parent?.querySelector(
-                    ".flow-lightbox-error-box",
-                  ) as HTMLElement;
-                  if (errorBox) errorBox.style.display = "flex";
-                }}
-              />
+              {activeModalCharacterView && !activeModalCharacterView.url ? (
+                <div className="flow-lightbox-missing-view">
+                  <UsersIcon size={42} color="#8b5cf6" />
+                  <h4>{activeModalCharacterView.label} is not generated yet</h4>
+                  <p>
+                    This is one of the eight required camera angles. Generate this
+                    direction to complete the character turnaround.
+                  </p>
+                  {previewAsset.characterId && (
+                    <button
+                      type="button"
+                      className="flow-btn primary sm"
+                      onClick={() => {
+                        const characterId = previewAsset.characterId!;
+                        const direction = activeModalCharacterView.direction;
+                        setPreviewAsset(null);
+                        handleGenerateCharacterAsset(characterId, "turnaround", direction);
+                      }}
+                    >
+                      Generate {activeModalCharacterView.label}
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <img
+                  src={activeModalImageUrl || ""}
+                  alt={
+                    activeModalCharacterView
+                      ? `${previewAsset.title} • ${activeModalCharacterView.label}`
+                      : previewAsset.title
+                  }
+                  className="flow-lightbox-image"
+                  onError={(e) => {
+                    (e.target as HTMLElement).style.display = "none";
+                    const parent = (e.target as HTMLElement).parentElement;
+                    const errorBox = parent?.querySelector(
+                      ".flow-lightbox-error-box",
+                    ) as HTMLElement;
+                    if (errorBox) errorBox.style.display = "flex";
+                  }}
+                />
+              )}
               {previewAsset.type === "character" &&
                 previewAsset.images &&
                 previewAsset.images.length > 1 && (
@@ -4200,14 +4238,16 @@ export default function GoogleFlowPage() {
               </div>
 
               <div className="flow-lightbox-actions">
-                <a
-                  href={previewAsset.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flow-btn secondary sm"
-                >
-                  Open Full Image ↗
-                </a>
+                {activeModalImageUrl && (
+                  <a
+                    href={activeModalImageUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flow-btn secondary sm"
+                  >
+                    Open Full Image ↗
+                  </a>
+                )}
                 {previewAsset.type === "background" && previewAsset.sceneId && (
                   <button
                     type="button"
@@ -4228,11 +4268,18 @@ export default function GoogleFlowPage() {
                       className="flow-btn primary sm"
                       onClick={() => {
                         const cId = previewAsset.characterId!;
+                        const direction = activeModalCharacterView?.direction;
                         setPreviewAsset(null);
-                        handleGenerateCharacterAsset(cId, "master_reference");
+                        if (direction) {
+                          handleGenerateCharacterAsset(cId, "turnaround", direction);
+                        } else {
+                          handleGenerateCharacterAsset(cId, "master_reference");
+                        }
                       }}
                     >
-                      ↻ Regenerate Reference
+                      {activeModalCharacterView?.available
+                        ? `↻ Regenerate ${activeModalCharacterView.label}`
+                        : `✨ Generate ${activeModalCharacterView?.label || "Reference"}`}
                     </button>
                   )}
                 <button
