@@ -1038,17 +1038,30 @@ export class GenerationOrchestratorService {
       flowCharacterName = mapping.flowCharacterName;
     }
 
-    // 3. Compose canonical character prompt with @Character reference when applicable
-    const promptData = GenerationPromptService.buildCharacterPrompt(
-      { visualStyle: context.story.visualStyle },
-      character,
-      assetType,
-      { variation, promptOverride }
-    );
+    // 3. Compose a provider-specific prompt. Google Flow's saved Character
+    // editor already has the selected character image as visual context; do
+    // not insert a plain-text @name or send Gemini's long prompt structure.
+    const promptData =
+      provider === 'google_flow'
+        ? GenerationPromptService.buildGoogleFlowCharacterPrompt(
+            { visualStyle: context.story.visualStyle },
+            character,
+            assetType,
+            {
+              variation,
+              promptOverride,
+              isExistingFlowCharacter: Boolean(
+                mapping?.syncStatus === 'synced' && mapping.flowCharacterId,
+              ),
+            },
+          )
+        : GenerationPromptService.buildCharacterPrompt(
+            { visualStyle: context.story.visualStyle },
+            character,
+            assetType,
+            { variation, promptOverride },
+          );
 
-    // GenerationPromptService already embeds the saved @Character identity
-    // when a mapping is synced. Keep a single canonical prompt instruction
-    // rather than prepending a duplicate mention here.
     const finalPrompt = promptData.prompt;
 
     const jobId = `job-char-${Date.now()}-${randomUUID().slice(0, 6)}`;
