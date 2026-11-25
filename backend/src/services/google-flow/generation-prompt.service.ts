@@ -343,7 +343,7 @@ export class GenerationPromptService {
       'Final image: one character, one view, no text, no name, no labels, no captions, no watermark, no logo, no panels, no grid and no collage.',
     ].filter(Boolean);
 
-    const prompt = promptParts.join(' ').replace(/\\s+/g, ' ').trim();
+    const prompt = promptParts.join(' ').replace(/\s+/g, ' ').trim();
     return {
       prompt,
       negativePrompt: 'text, writing, letters, labels, captions, watermark, logo, extra characters, contact sheet, collage, multiple views, props, scenery, cropped body, altered outfit, different face, distorted anatomy',
