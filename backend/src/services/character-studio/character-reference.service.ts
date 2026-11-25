@@ -91,6 +91,9 @@ export class CharacterReferenceService {
     const fullAsset: CharacterAssetRecord = {
       ...asset,
       characterId,
+      // Saved files still need visual identity/orientation review unless a
+      // separate validator explicitly marked them as validated.
+      validationStatus: asset.validationStatus || 'needs_review',
     };
 
     // If marked as master reference, demote any previous master flag
@@ -117,7 +120,8 @@ export class CharacterReferenceService {
       ...existingRefs,
     };
 
-    if (asset.isMasterReference || asset.assetType === 'main') {
+    const isMasterAsset = Boolean(asset.isMasterReference || asset.assetType === 'main');
+    if (isMasterAsset) {
       updatedRefs.mainUrl = asset.url;
     } else if (asset.assetType === 'turnaround') {
       updatedRefs.turnaroundUrl = asset.url;
@@ -158,23 +162,68 @@ export class CharacterReferenceService {
       'back',
     ]);
     if (normalizedDirection && supportedDirections.has(normalizedDirection)) {
-      updatedRefs.directionalViews = {
+      const directionalViews = {
         ...(existingRefs.directionalViews || {}),
-        [normalizedDirection]: asset.url,
       };
-      updatedRefs.directionalViewMetadata = {
+      const directionalViewMetadata = {
         ...(existingRefs.directionalViewMetadata || {}),
-        [normalizedDirection]: {
+      };
+
+      if (!isMasterAsset) {
+        // Only non-master assets may occupy a directional slot. A canonical
+        // front reference is the identity anchor, not a generated turntable view.
+        directionalViews[normalizedDirection] = fullAsset.url;
+        directionalViewMetadata[normalizedDirection] = {
           assetId: fullAsset.id,
           direction: normalizedDirection,
           url: fullAsset.url,
           jobId: fullAsset.jobId || null,
           sourceCanonicalReferenceId: fullAsset.sourceCanonicalReferenceId || null,
-          validationStatus: fullAsset.validationStatus || (fullAsset.isMasterReference ? 'validated' : 'needs_review'),
+          validationStatus: fullAsset.validationStatus || 'needs_review',
           validationDetails: fullAsset.validationDetails || null,
           updatedAt: fullAsset.createdAt,
-        },
-      };
+        };
+      } else {
+        // Repair legacy data where a previous master image was accidentally
+        // recorded as the directional front view. Preserve a genuine separate
+        // front-turnaround asset if one already exists.
+        const existingUrl = directionalViews[normalizedDirection];
+        const existingMeta = directionalViewMetadata[normalizedDirection] || {};
+        const mappedAsset = existingAssets.find(
+          (candidate) =>
+            candidate.direction === normalizedDirection &&
+            ((existingMeta.assetId && candidate.id === existingMeta.assetId) ||
+              (existingUrl && candidate.url === existingUrl)),
+        );
+        if (mappedAsset && (mappedAsset.assetType === 'main' || mappedAsset.isMasterReference)) {
+          const replacement = existingAssets.find(
+            (candidate) =>
+              candidate.direction === normalizedDirection &&
+              candidate.url &&
+              candidate.assetType !== 'main' &&
+              !candidate.isMasterReference,
+          );
+          if (replacement) {
+            directionalViews[normalizedDirection] = replacement.url;
+            directionalViewMetadata[normalizedDirection] = {
+              assetId: replacement.id,
+              direction: normalizedDirection,
+              url: replacement.url,
+              jobId: replacement.jobId || null,
+              sourceCanonicalReferenceId: replacement.sourceCanonicalReferenceId || null,
+              validationStatus: replacement.validationStatus || 'needs_review',
+              validationDetails: replacement.validationDetails || null,
+              updatedAt: replacement.createdAt,
+            };
+          } else {
+            delete directionalViews[normalizedDirection];
+            delete directionalViewMetadata[normalizedDirection];
+          }
+        }
+      }
+
+      updatedRefs.directionalViews = directionalViews;
+      updatedRefs.directionalViewMetadata = directionalViewMetadata;
     }
 
     const updatedCanonical = {
@@ -303,7 +352,7 @@ export class CharacterReferenceService {
           url: replacement.url,
           jobId: replacement.jobId || null,
           sourceCanonicalReferenceId: replacement.sourceCanonicalReferenceId || null,
-          validationStatus: replacement.validationStatus || (replacement.isMasterReference ? 'validated' : 'needs_review'),
+          validationStatus: replacement.validationStatus || 'needs_review',
           validationDetails: replacement.validationDetails || null,
           updatedAt: replacement.createdAt,
         };
