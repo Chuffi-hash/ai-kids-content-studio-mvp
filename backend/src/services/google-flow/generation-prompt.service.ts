@@ -38,13 +38,13 @@ export const DIRECTIONAL_CAMERA_ORIENTATIONS: Record<
   'front-left': {
     label: 'Front three-quarter left',
     orientation:
-      'Front three-quarter view turned approximately 45 degrees toward the character’s left. Both eyes remain visible, with the left side slightly angled away.',
+      'A front three-quarter view turned approximately 45 degrees toward the character’s left. Both eyes remain visible, with the left side slightly angled away.',
     suppressFace: false,
   },
   'front-right': {
     label: 'Front three-quarter right',
     orientation:
-      'Front three-quarter view turned approximately 45 degrees toward the character’s right. Both eyes remain visible, with the right side slightly angled away.',
+      'A front three-quarter view turned approximately 45 degrees toward the character’s right. Both eyes remain visible, with the right side slightly angled away.',
     suppressFace: false,
   },
   left: {
@@ -74,7 +74,7 @@ export const DIRECTIONAL_CAMERA_ORIENTATIONS: Record<
   back: {
     label: 'Back',
     orientation:
-      'Full rear view (180 degrees). Back of the head, hair, shoulders, outfit, and heels facing directly toward the camera. Face, eyes, nose, and mouth must NOT be visible.',
+      'A full rear view (180 degrees). Back of the head, hair, shoulders, outfit, and heels facing directly toward the camera. Face, eyes, nose, and mouth must NOT be visible.',
     suppressFace: true,
   },
 };
@@ -363,18 +363,18 @@ export class GenerationPromptService {
       flowReferenceName
         ? `Use the saved Google Flow character identity @${flowReferenceName} as the exact subject. Match that saved character 100%.`
         : identity.canonicalReferenceUrl && assetType !== 'master_reference'
-          ? 'Preserve the exact same character from the supplied canonical character reference image.'
-          : 'Create the canonical character matching this exact specification:',
+          ? 'Preserve the exact same character from the supplied canonical character reference image. Use the following visual identity details as generation guidance only:'
+          : 'Use the following visual identity details as generation guidance only:',
       'Maintain the exact same facial structure, skin/fur tone, eye shape and colour, hairstyle, hair colour, body proportions, clothing, fabric details, footwear, accessories, distinctive features, illustration style, and colour palette.',
       'Canonical Specification (metadata only — never render words inside the image):\n' +
         identityDescription,
     ];
 
     const commonRestrictions = [
-      'POSE AND COMPOSITION:\nFull body visible from head to feet in a natural neutral standing pose.\nAnatomically correct body proportions with arms and legs clearly visible.\nCharacter centred in the frame with comfortable margin around head, hands, and feet.\nConsistent character scale across all references.',
+      'POSE AND COMPOSITION:\nFull body visible from head to feet in the same neutral standing pose.\nAnatomically correct body proportions with arms and legs clearly visible.\nCharacter centred in the frame with comfortable margin around head, hands, and feet.\nConsistent character scale across all references.',
       `VISUAL STYLE:\nPreserve the original illustration style: ${artStyle}.\nClean, polished, professional children's animation character design with consistent shading, line quality, and material details.`,
       'BACKGROUND:\nSimple plain white or uniform neutral studio background. No scenery, no furniture, no additional characters, no unnecessary props.',
-      'STRICT RESTRICTIONS:\nCreate exactly ONE image of ONE character.\nDo not redesign the character, change clothing, add accessories, change hairstyle, or change age or proportions.\nDo not introduce another character, generate a collage/model sheet/grid, or add text, labels, names, or watermarks.',
+      'STRICT RESTRICTIONS:\nCreate exactly ONE image of ONE character.\nThe character name is application metadata only. Never write the name inside the image.\nNo text, letters, numbers, typography, titles, labels, captions, logos, signatures, or watermarks.\nDo not redesign the character, change clothing, add accessories, change hairstyle, or change age or proportions.\nDo not introduce another character or generate multi-angle grids or split panels.',
     ];
 
     if (options?.promptOverride && options.promptOverride.trim().length > 0) {
@@ -416,7 +416,8 @@ export class GenerationPromptService {
     switch (assetType) {
       case 'master_reference':
         parts.push(
-          'CAMERA ORIENTATION:\nStraight-on front-facing view (0 degrees). Chest, hips, and face looking directly forward toward the camera.',
+          'Create one canonical full-body character reference illustration. This is a single portrait image, not a multi-view layout.',
+          'CAMERA ORIENTATION:\nView: straight-on front view (0 degrees). Chest, hips, and face looking directly forward toward the camera.',
           'PURPOSE:\nThis is the canonical master identity anchor. Make the face, hair, body proportions, outfit, colours, shoes, and distinctive accessories completely clear for reuse across all directional views and scenes.'
         );
         break;
@@ -424,7 +425,7 @@ export class GenerationPromptService {
       case 'turnaround': {
         const dirSpec = DIRECTIONAL_CAMERA_ORIENTATIONS[requestedDirection!];
         parts.push(
-          `CAMERA ORIENTATION:\nGenerate ONLY the requested [${dirSpec.label}] view.\n${dirSpec.orientation}\nDo NOT combine or mix this perspective with any other angle or panel.`
+          `CAMERA ORIENTATION:\nGenerate ONLY the requested [${dirSpec.label}] view. Generate only the requested camera angle in this image. Never place several angles together.\n${dirSpec.orientation}\nDo NOT combine or mix this perspective with any other angle or panel.`
         );
         break;
       }
@@ -472,6 +473,101 @@ export class GenerationPromptService {
       requestedDirection,
     };
   }
+  /**
+   * Builds short, natural-language prompts specifically for the Google Flow
+   * Character workspace. The saved-character editor already has the selected
+   * character image as visual context, so do not emit a plain-text @mention:
+   * it is not a verified Flow entity token and can confuse image editing.
+   *
+   * Gemini keeps using buildCharacterPrompt() and its separate negative prompt.
+   */
+  public static buildGoogleFlowCharacterPrompt(
+    story: { visualStyle?: string },
+    character: CharacterContextItem,
+    assetType: 'master_reference' | 'turnaround' | 'expression' | 'pose',
+    options?: {
+      variation?: string;
+      isExistingFlowCharacter?: boolean;
+      promptOverride?: string;
+    }
+  ): CharacterPromptResult {
+    const artStyle = (story.visualStyle || 'storybook illustration')
+      .replace(/[_-]+/g, ' ')
+      .trim();
+    const variation = String(options?.variation || '').trim().toLowerCase();
+    const dimensions = { width: 1024, height: 1024 };
+
+    // Describe the direction in screen-space terms. "Viewer left/right" is
+    // less ambiguous for an image model than "the character's left/right".
+    const directions: Record<string, string> = {
+      front: 'Front view: the character faces straight toward the viewer; face, chest, hips and feet point forward.',
+      'front-left': 'Front three-quarter LEFT view: rotate the whole character about 45 degrees so the nose and chest point toward the LEFT side of the image. Keep both eyes partly visible.',
+      'front-right': 'Front three-quarter RIGHT view: rotate the whole character about 45 degrees so the nose and chest point toward the RIGHT side of the image. Keep both eyes partly visible.',
+      left: 'LEFT side profile: rotate the whole character 90 degrees so the nose points directly to the LEFT side of the image. Show a true side silhouette, not a three-quarter view.',
+      right: 'RIGHT side profile: rotate the whole character 90 degrees so the nose points directly to the RIGHT side of the image. Show a true side silhouette, not a three-quarter view.',
+      'back-left': 'BACK three-quarter LEFT view: turn the whole character away from the viewer about 135 degrees, toward the LEFT side of the image. Show mostly the back with a small side edge of the face.',
+      'back-right': 'BACK three-quarter RIGHT view: turn the whole character away from the viewer about 135 degrees, toward the RIGHT side of the image. Show mostly the back with a small side edge of the face.',
+      back: 'Direct BACK view: the back of the head, hair and clothing face the viewer. The face must not be visible.',
+    };
+
+    const direction = directions[variation] || directions.front;
+    const appearance = [
+      character.species ? `Character type: ${character.species}.` : '',
+      character.visualDescription ? `Appearance: ${character.visualDescription}.` : '',
+      character.clothing ? `Clothing: ${character.clothing}.` : '',
+      character.distinctiveFeatures ? `Distinctive details: ${character.distinctiveFeatures}.` : '',
+    ].filter(Boolean).join(' ');
+
+    const isTurnaround = assetType === 'turnaround';
+    const fullBody = assetType !== 'expression';
+    const angleInstruction = isTurnaround
+      ? direction
+      : assetType === 'expression'
+        ? `Head-and-shoulders portrait with a ${variation || 'friendly neutral'} expression.`
+        : assetType === 'pose'
+          ? `Full-body view showing this pose: ${variation || 'a relaxed neutral standing pose'}.`
+          : directions.front;
+
+    const identityInstruction = options?.isExistingFlowCharacter
+      ? 'Use the character in the image currently selected in this Google Flow editor as the ONLY identity reference. Edit that same character; do not invent, replace or redesign the character.'
+      : `Create the character described here: ${appearance}`;
+
+    const customDetail = options?.promptOverride?.trim()
+      ? `Additional creative detail: ${options.promptOverride.trim()}.`
+      : '';
+
+    const promptParts = [
+      identityInstruction,
+      assetType === 'master_reference'
+        ? 'Create one clean canonical full-body character reference.'
+        : isTurnaround
+          ? 'Create ONE separate turnaround image for this single camera angle. This is one image only, not a turnaround sheet.'
+          : assetType === 'expression'
+            ? 'Create one expression variation of the same character.'
+            : 'Create one pose variation of the same character.',
+      angleInstruction,
+      'Preserve the exact same identity: face shape, age, skin or fur tone, eyes, hairstyle, body proportions, outfit, clothing patterns, footwear, accessories and colors. Do not add, remove or redesign any identifying feature.',
+      fullBody
+        ? 'Keep the same simple neutral standing pose for every turnaround view: arms relaxed slightly away from the body, hands visible, legs natural and both feet fully visible. Show the complete character from head to toe.'
+        : 'Keep the same face identity, hairstyle, colors and clothing; change only the facial expression.',
+      'Keep the camera at eye level, the character centered, and the full figure at a consistent scale and distance.',
+      `Match the original ${artStyle} illustration style, line quality, shading and color palette.`,
+      'Use the same plain warm off-white background as the reference. No scenery or props.',
+      customDetail,
+      'Final image: one character, one view, no text, no name, no labels, no captions, no watermark, no logo, no panels, no grid and no collage.',
+    ].filter(Boolean);
+
+    const prompt = promptParts.join(' ').replace(/\s+/g, ' ').trim();
+    return {
+      prompt,
+      negativePrompt: 'text, writing, letters, labels, captions, watermark, logo, extra characters, contact sheet, collage, multiple views, props, scenery, cropped body, altered outfit, different face, distorted anatomy',
+      aspectRatio: '1:1',
+      width: dimensions.width,
+      height: dimensions.height,
+      referenceImageUrl: character.referenceImageUrl,
+    };
+  }
+
 }
 
 function getDimensionsForRatio(ratio: string): { width: number; height: number } {

@@ -96,39 +96,52 @@ function getCharacterDirectionalPreviewViews(
 ): CharacterPreviewView[] {
   const canonical = character.canonicalAppearance || {};
   const references = (canonical.references || {}) as Record<string, any>;
-  const directionalViews = (references.directionalViews || {}) as Record<string, any>;
-  const directionalMeta = (references.directionalViewMetadata || {}) as Record<string, any>;
+  const directionalViews = (references.directionalViews || {}) as Record<
+    string,
+    any
+  >;
+  const directionalMeta = (references.directionalViewMetadata || {}) as Record<
+    string,
+    any
+  >;
   const assets = Array.isArray(canonical.assets) ? canonical.assets : [];
 
-  const views = CHARACTER_TURNAROUND_DIRECTIONS.flatMap(({ direction, label }) => {
-    const mapped = directionalViews[direction];
-    const mappedUrl = typeof mapped === "string" ? mapped : mapped?.url;
-    const savedAsset = assets.find(
-      (asset: any) =>
-        asset?.direction === direction &&
-        asset?.url &&
-        asset?.assetType !== "main",
-    );
-    const meta = directionalMeta[direction] || {};
-    const url = mappedUrl || savedAsset?.url;
-    return url
-      ? [
-          {
-            direction,
-            label,
-            url: String(url),
-            assetId: meta.assetId || savedAsset?.id,
-            jobId: meta.jobId || savedAsset?.jobId || null,
-            sourceCanonicalReferenceId:
-              meta.sourceCanonicalReferenceId || savedAsset?.sourceCanonicalReferenceId || null,
-            validationStatus:
-              meta.validationStatus || savedAsset?.validationStatus || "needs_review",
-            validationDetails: meta.validationDetails || savedAsset?.validationDetails || null,
-            createdAt: meta.updatedAt || savedAsset?.createdAt || null,
-          },
-        ]
-      : [];
-  });
+  const views = CHARACTER_TURNAROUND_DIRECTIONS.flatMap(
+    ({ direction, label }) => {
+      const mapped = directionalViews[direction];
+      const mappedUrl = typeof mapped === "string" ? mapped : mapped?.url;
+      const savedAsset = assets.find(
+        (asset: any) =>
+          asset?.direction === direction &&
+          asset?.url &&
+          asset?.assetType !== "main",
+      );
+      const meta = directionalMeta[direction] || {};
+      const url = mappedUrl || savedAsset?.url;
+      return url
+        ? [
+            {
+              direction,
+              label,
+              url: String(url),
+              assetId: meta.assetId || savedAsset?.id,
+              jobId: meta.jobId || savedAsset?.jobId || null,
+              sourceCanonicalReferenceId:
+                meta.sourceCanonicalReferenceId ||
+                savedAsset?.sourceCanonicalReferenceId ||
+                null,
+              validationStatus:
+                meta.validationStatus ||
+                savedAsset?.validationStatus ||
+                "needs_review",
+              validationDetails:
+                meta.validationDetails || savedAsset?.validationDetails || null,
+              createdAt: meta.updatedAt || savedAsset?.createdAt || null,
+            },
+          ]
+        : [];
+    },
+  );
 
   if (views.length > 0) return views;
   if (character.referenceImageUrl) {
@@ -357,9 +370,10 @@ export default function GoogleFlowPage() {
     "all",
   );
 
-  const [characterGenerationProgress, setCharacterGenerationProgress] = useState<
-    Record<string, { current: number; total: number; direction: string }>
-  >({});
+  const [characterGenerationProgress, setCharacterGenerationProgress] =
+    useState<
+      Record<string, { current: number; total: number; direction: string }>
+    >({});
   const [characterPreviewIndexes, setCharacterPreviewIndexes] = useState<
     Record<string, number>
   >({});
@@ -829,7 +843,10 @@ export default function GoogleFlowPage() {
   // ----------------------------------------------------
   // Direct Generation & Batch Production Studio Handlers
   // ----------------------------------------------------
-  const handleGenerateSceneBackground = async (sceneId: string, imageId?: string) => {
+  const handleGenerateSceneBackground = async (
+    sceneId: string,
+    imageId?: string,
+  ) => {
     if (!selectedStoryId) return;
     setGeneratingSceneIds((prev) => ({ ...prev, [sceneId]: true }));
     setSceneErrors((prev) => {
@@ -2991,7 +3008,13 @@ export default function GoogleFlowPage() {
                                   {sc.title || "Untitled"}
                                 </span>
                               </div>
-                              <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                              <div
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: "4px",
+                                }}
+                              >
                                 <span
                                   className={`flow-status-badge ${sc.hasBackground ? "ready" : "missing"}`}
                                 >
@@ -2999,7 +3022,8 @@ export default function GoogleFlowPage() {
                                     ? "✓ Plate Ready"
                                     : "● Missing Plate"}
                                 </span>
-                                {(sc.activeBackgroundVersion || sc.googleFlowVersion) ? (
+                                {sc.activeBackgroundVersion ||
+                                sc.googleFlowVersion ? (
                                   <span
                                     className="flow-status-badge version"
                                     style={{
@@ -3012,8 +3036,13 @@ export default function GoogleFlowPage() {
                                     }}
                                     title={`Background version: v${sc.activeBackgroundVersion || sc.googleFlowVersion}${sc.totalBackgroundVersions ? ` of ${sc.totalBackgroundVersions}` : ""}`}
                                   >
-                                    v{sc.activeBackgroundVersion || sc.googleFlowVersion}
-                                    {sc.totalBackgroundVersions && sc.totalBackgroundVersions > 1 ? ` (${sc.totalBackgroundVersions})` : ""}
+                                    v
+                                    {sc.activeBackgroundVersion ||
+                                      sc.googleFlowVersion}
+                                    {sc.totalBackgroundVersions &&
+                                    sc.totalBackgroundVersions > 1
+                                      ? ` (${sc.totalBackgroundVersions})`
+                                      : ""}
                                   </span>
                                 ) : null}
                                 {sc.googleFlowEditUrl ? (
@@ -3030,7 +3059,10 @@ export default function GoogleFlowPage() {
                                     }}
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      window.open(sc.googleFlowEditUrl!, "_blank");
+                                      window.open(
+                                        sc.googleFlowEditUrl!,
+                                        "_blank",
+                                      );
                                     }}
                                     title={`Open Google Flow Image Editor: ${sc.googleFlowEditUrl}`}
                                   >
@@ -3634,10 +3666,15 @@ export default function GoogleFlowPage() {
                       {filteredCharacters.map((ch) => {
                         const isGenerating = Boolean(generatingCharIds[ch.id]);
                         const error = charErrors[ch.id];
-                        const generationProgress = characterGenerationProgress[ch.id];
-                        const previewViews = getCharacterDirectionalPreviewViews(ch);
+                        const generationProgress =
+                          characterGenerationProgress[ch.id];
+                        const previewViews =
+                          getCharacterDirectionalPreviewViews(ch);
                         const previewIndex = previewViews.length
-                          ? Math.min(characterPreviewIndexes[ch.id] || 0, previewViews.length - 1)
+                          ? Math.min(
+                              characterPreviewIndexes[ch.id] || 0,
+                              previewViews.length - 1,
+                            )
                           : 0;
                         const activePreviewView = previewViews[previewIndex];
 
@@ -3698,12 +3735,16 @@ export default function GoogleFlowPage() {
                                       src={activePreviewView.url}
                                       alt={`${ch.name} • ${activePreviewView.label}`}
                                       onError={(e) => {
-                                        (e.target as HTMLElement).style.display = "none";
-                                        const parent = (e.target as HTMLElement).parentElement;
+                                        (
+                                          e.target as HTMLElement
+                                        ).style.display = "none";
+                                        const parent = (e.target as HTMLElement)
+                                          .parentElement;
                                         const fallback = parent?.querySelector(
                                           ".flow-thumb-fallback",
                                         ) as HTMLElement;
-                                        if (fallback) fallback.style.display = "flex";
+                                        if (fallback)
+                                          fallback.style.display = "flex";
                                       }}
                                     />
                                     <div
@@ -3711,7 +3752,9 @@ export default function GoogleFlowPage() {
                                       style={{ display: "none" }}
                                     >
                                       <UsersIcon size={18} color="#f59e0b" />
-                                      <small style={{ fontSize: "8px" }}>Load Error</small>
+                                      <small style={{ fontSize: "8px" }}>
+                                        Load Error
+                                      </small>
                                     </div>
                                     <div className="flow-thumb-hover-overlay">
                                       <span>🔍 Preview views</span>
@@ -3729,7 +3772,9 @@ export default function GoogleFlowPage() {
                                           ‹
                                         </button>
                                         <span>
-                                          {activePreviewView.label} · {previewIndex + 1}/{previewViews.length}
+                                          {activePreviewView.label} ·{" "}
+                                          {previewIndex + 1}/
+                                          {previewViews.length}
                                         </span>
                                         <button
                                           type="button"
@@ -4073,7 +4118,8 @@ export default function GoogleFlowPage() {
             <div className="flow-lightbox-header">
               <div className="flow-lightbox-title-box">
                 <h3 className="flow-lightbox-title">{previewAsset.title}</h3>
-                {(previewAsset.subtitle || previewAsset.images?.[previewAsset.activeIndex || 0]) && (
+                {(previewAsset.subtitle ||
+                  previewAsset.images?.[previewAsset.activeIndex || 0]) && (
                   <p className="flow-lightbox-subtitle">
                     {previewAsset.subtitle}
                     {previewAsset.images && previewAsset.images.length > 0
@@ -4136,7 +4182,8 @@ export default function GoogleFlowPage() {
                       ‹
                     </button>
                     <span>
-                      {(previewAsset.activeIndex || 0) + 1} / {previewAsset.images.length}
+                      {(previewAsset.activeIndex || 0) + 1} /{" "}
+                      {previewAsset.images.length}
                     </span>
                     <button
                       type="button"
@@ -4188,7 +4235,8 @@ export default function GoogleFlowPage() {
               const activeLightboxView =
                 previewAsset.images?.[previewAsset.activeIndex || 0] || null;
               const isMasterLightboxView =
-                !activeLightboxView || activeLightboxView.direction === "master";
+                !activeLightboxView ||
+                activeLightboxView.direction === "master";
               const validationStatus = activeLightboxView?.validationStatus;
               const badgeClass =
                 previewAsset.type === "background"
@@ -4241,19 +4289,20 @@ export default function GoogleFlowPage() {
                     >
                       Open Full Image ↗
                     </a>
-                    {previewAsset.type === "background" && previewAsset.sceneId && (
-                      <button
-                        type="button"
-                        className="flow-btn primary sm"
-                        onClick={() => {
-                          const scId = previewAsset.sceneId!;
-                          setPreviewAsset(null);
-                          handleGenerateSceneBackground(scId);
-                        }}
-                      >
-                        ↻ Regenerate Plate
-                      </button>
-                    )}
+                    {previewAsset.type === "background" &&
+                      previewAsset.sceneId && (
+                        <button
+                          type="button"
+                          className="flow-btn primary sm"
+                          onClick={() => {
+                            const scId = previewAsset.sceneId!;
+                            setPreviewAsset(null);
+                            handleGenerateSceneBackground(scId);
+                          }}
+                        >
+                          ↻ Regenerate Plate
+                        </button>
+                      )}
                     {previewAsset.type === "character" &&
                       previewAsset.characterId && (
                         <button
@@ -4264,13 +4313,21 @@ export default function GoogleFlowPage() {
                             const targetDir = activeLightboxView?.direction;
                             setPreviewAsset(null);
                             if (targetDir && targetDir !== "master") {
-                              handleGenerateCharacterAsset(cId, "turnaround", targetDir);
+                              handleGenerateCharacterAsset(
+                                cId,
+                                "turnaround",
+                                targetDir,
+                              );
                             } else {
-                              handleGenerateCharacterAsset(cId, "master_reference");
+                              handleGenerateCharacterAsset(
+                                cId,
+                                "master_reference",
+                              );
                             }
                           }}
                         >
-                          {activeLightboxView && activeLightboxView.direction !== "master"
+                          {activeLightboxView &&
+                          activeLightboxView.direction !== "master"
                             ? `↻ Regenerate ${activeLightboxView.label}`
                             : "↻ Regenerate Master Reference"}
                         </button>

@@ -2764,3 +2764,63 @@ html[data-theme="light"] .flow-select option {
   }
 }
 
+.flow-char-preview-image.is-missing {
+  background: linear-gradient(145deg, #f8f7ff, #eeecfb);
+  border: 1px dashed rgba(139, 92, 246, 0.55);
+}
+
+.flow-char-missing-view {
+  width: 100%;
+  height: 100%;
+  min-height: 90px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 8px;
+  color: #6d28d9;
+  text-align: center;
+}
+
+.flow-char-missing-view small {
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.flow-char-missing-view span {
+  color: #7c7a8e;
+  font-size: 8px;
+}
+
+.flow-lightbox-missing-view {
+  width: 100%;
+  min-height: 320px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 32px;
+  border: 1px dashed rgba(139, 92, 246, 0.45);
+  border-radius: 12px;
+  background: linear-gradient(145deg, #faf9ff, #f1effb);
+  color: #27233a;
+  text-align: center;
+}
+
+.flow-lightbox-missing-view h4 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.flow-lightbox-missing-view p {
+  max-width: 380px;
+  margin: 0 0 6px;
+  color: #656174;
+  font-size: 12px;
+  line-height: 1.5;
+}

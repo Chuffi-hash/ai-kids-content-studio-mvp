@@ -1,11 +1,22 @@
-import { randomUUID } from 'crypto';
-import fs from 'fs';
-import path from 'path';
-import { StoryContextService, SceneContextItem, CharacterContextItem } from '../google-flow/story-context.service.js';
-import { GenerationPromptService, normalizeCharacterFacingDirection } from '../google-flow/generation-prompt.service.js';
-import { GeminiImageProvider } from '../image-generation/providers/gemini-image.provider.js';
-import { GoogleFlowAssetImportService, ImportAssetResult, resolveGoogleFlowBackgroundVersionReferences } from '../google-flow/google-flow-asset-import.service.js';
-import { GoogleFlowCredentialService } from '../google-flow/google-flow-credential.service.js';
+import { randomUUID } from "crypto";
+import fs from "fs";
+import path from "path";
+import {
+  StoryContextService,
+  SceneContextItem,
+  CharacterContextItem,
+} from "../google-flow/story-context.service.js";
+import {
+  GenerationPromptService,
+  normalizeCharacterFacingDirection,
+} from "../google-flow/generation-prompt.service.js";
+import { GeminiImageProvider } from "../image-generation/providers/gemini-image.provider.js";
+import {
+  GoogleFlowAssetImportService,
+  ImportAssetResult,
+  resolveGoogleFlowBackgroundVersionReferences,
+} from "../google-flow/google-flow-asset-import.service.js";
+import { GoogleFlowCredentialService } from "../google-flow/google-flow-credential.service.js";
 import {
   prisma,
   getSceneBySceneId,
@@ -20,36 +31,41 @@ import {
   getFlowCharacterMapping,
   upsertFlowCharacterMapping,
   listFlowCharacterMappings,
-} from '../database/database.service.js';
+} from "../database/database.service.js";
 
-export type GenerationProviderType = 'gemini_api' | 'google_flow';
+export type GenerationProviderType = "gemini_api" | "google_flow";
 
 export interface GenerationJobRecord {
   id: string;
   storyId: string;
-  targetType: 'background' | 'character';
+  targetType: "background" | "character";
   sceneId?: string;
   characterId?: string;
-  assetType?: 'scene_background' | 'master_reference' | 'turnaround' | 'expression' | 'pose';
+  assetType?:
+    | "scene_background"
+    | "master_reference"
+    | "turnaround"
+    | "expression"
+    | "pose";
   variation?: string;
   provider: GenerationProviderType;
   prompt: string;
   status:
-    | 'queued'
-    | 'preparing'
-    | 'prompt_filled'
-    | 'agent_prompt_submitted'
-    | 'awaiting_agent_confirmation'
-    | 'generation_submitted'
-    | 'generating'
-    | 'output_detected'
-    | 'downloading'
-    | 'importing'
-    | 'completed'
-    | 'failed'
-    | 'cancelled'
-    | 'awaiting_download'
-    | 'awaiting_manual_action';
+    | "queued"
+    | "preparing"
+    | "prompt_filled"
+    | "agent_prompt_submitted"
+    | "awaiting_agent_confirmation"
+    | "generation_submitted"
+    | "generating"
+    | "output_detected"
+    | "downloading"
+    | "importing"
+    | "completed"
+    | "failed"
+    | "cancelled"
+    | "awaiting_download"
+    | "awaiting_manual_action";
   progress: number;
   result?: ImportAssetResult;
   error?: string;
@@ -64,20 +80,26 @@ export class GenerationOrchestratorService {
   /**
    * Retrieves active or completed jobs from PostgreSQL with in-memory caching.
    */
-  public static async listJobs(storyId?: string): Promise<GenerationJobRecord[]> {
+  public static async listJobs(
+    storyId?: string,
+  ): Promise<GenerationJobRecord[]> {
     try {
-      const dbJobs = await listGenerationJobs(storyId ? { storyId } : undefined);
+      const dbJobs = await listGenerationJobs(
+        storyId ? { storyId } : undefined,
+      );
       if (dbJobs.length > 0) {
         return dbJobs.map((j) => ({
           id: j.id,
-          storyId: j.storyId || '',
-          targetType: j.targetType.includes('character') ? 'character' : 'background',
+          storyId: j.storyId || "",
+          targetType: j.targetType.includes("character")
+            ? "character"
+            : "background",
           sceneId: j.sceneId || undefined,
           characterId: j.characterId || undefined,
           assetType: (j.assetType as any) || undefined,
           provider: j.provider as any,
           prompt: j.prompt,
-          status: (j.status as any) || 'queued',
+          status: (j.status as any) || "queued",
           progress: j.progress,
           workerJobId: j.workerJobId || undefined,
           result: j.resultUrl
@@ -86,7 +108,7 @@ export class GenerationOrchestratorService {
                 target: j.targetType,
                 assetId: j.resultAssetId || j.id,
                 imageUrl: j.resultUrl,
-                message: 'Completed',
+                message: "Completed",
               }
             : undefined,
           error: j.error || undefined,
@@ -99,7 +121,8 @@ export class GenerationOrchestratorService {
     }
 
     const all = Array.from(this.jobs.values()).sort(
-      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     );
     if (storyId) {
       return all.filter((j) => j.storyId === storyId);
@@ -110,19 +133,26 @@ export class GenerationOrchestratorService {
   /**
    * Retrieves job status and reconciles active jobs with Flow Worker.
    */
-  public static async getJob(jobId: string): Promise<GenerationJobRecord | undefined> {
+  public static async getJob(
+    jobId: string,
+  ): Promise<GenerationJobRecord | undefined> {
     try {
       const j = await getGenerationJob(jobId);
       if (j) {
         // Reconcile with worker if job is in progress
         if (
-          j.provider === 'google_flow' &&
+          j.provider === "google_flow" &&
           j.workerJobId &&
-          !['completed', 'failed', 'cancelled'].includes(j.status)
+          !["completed", "failed", "cancelled"].includes(j.status)
         ) {
           try {
-            const { token, metadata } = await GoogleFlowCredentialService.getOrCreateWorkerCredential();
-            const workerUrl = (metadata?.workerUrl || process.env.FLOW_WORKER_URL || 'http://127.0.0.1:4177').replace(/\/+$/, '');
+            const { token, metadata } =
+              await GoogleFlowCredentialService.getOrCreateWorkerCredential();
+            const workerUrl = (
+              metadata?.workerUrl ||
+              process.env.FLOW_WORKER_URL ||
+              "http://127.0.0.1:4177"
+            ).replace(/\/+$/, "");
             const res = await fetch(`${workerUrl}/jobs/${j.workerJobId}`, {
               headers: token ? { Authorization: `Bearer ${token}` } : {},
             });
@@ -135,42 +165,43 @@ export class GenerationOrchestratorService {
                 let resultUrl = j.resultUrl;
                 let resultAssetId = j.resultAssetId;
 
-                if (wJob.status === 'completed' && wJob.importResult) {
-                  nextStatus = 'completed';
+                if (wJob.status === "completed" && wJob.importResult) {
+                  nextStatus = "completed";
                   nextProgress = 100;
-                  resultUrl = wJob.importResult.imageUrl || wJob.importResult.url;
+                  resultUrl =
+                    wJob.importResult.imageUrl || wJob.importResult.url;
                   resultAssetId = wJob.importResult.assetId;
-                } else if (wJob.status === 'failed') {
-                  nextStatus = 'failed';
-                } else if (wJob.status === 'prompt_filled') {
-                  nextStatus = 'prompt_filled';
+                } else if (wJob.status === "failed") {
+                  nextStatus = "failed";
+                } else if (wJob.status === "prompt_filled") {
+                  nextStatus = "prompt_filled";
                   nextProgress = 25;
-                } else if (wJob.status === 'agent_prompt_submitted') {
-                  nextStatus = 'agent_prompt_submitted';
+                } else if (wJob.status === "agent_prompt_submitted") {
+                  nextStatus = "agent_prompt_submitted";
                   nextProgress = 35;
-                } else if (wJob.status === 'awaiting_agent_confirmation') {
-                  nextStatus = 'awaiting_agent_confirmation';
+                } else if (wJob.status === "awaiting_agent_confirmation") {
+                  nextStatus = "awaiting_agent_confirmation";
                   nextProgress = 40;
-                } else if (wJob.status === 'generation_submitted') {
-                  nextStatus = 'generation_submitted';
+                } else if (wJob.status === "generation_submitted") {
+                  nextStatus = "generation_submitted";
                   nextProgress = 45;
-                } else if (wJob.status === 'generating') {
-                  nextStatus = 'generating';
+                } else if (wJob.status === "generating") {
+                  nextStatus = "generating";
                   nextProgress = 60;
-                } else if (wJob.status === 'output_detected') {
-                  nextStatus = 'output_detected';
+                } else if (wJob.status === "output_detected") {
+                  nextStatus = "output_detected";
                   nextProgress = 75;
-                } else if (wJob.status === 'downloading') {
-                  nextStatus = 'downloading';
+                } else if (wJob.status === "downloading") {
+                  nextStatus = "downloading";
                   nextProgress = 85;
-                } else if (wJob.status === 'importing') {
-                  nextStatus = 'importing';
+                } else if (wJob.status === "importing") {
+                  nextStatus = "importing";
                   nextProgress = 95;
-                } else if (wJob.status === 'awaiting_download') {
-                  nextStatus = 'awaiting_download';
+                } else if (wJob.status === "awaiting_download") {
+                  nextStatus = "awaiting_download";
                   nextProgress = 70;
-                } else if (wJob.status === 'awaiting_manual_generate') {
-                  nextStatus = 'awaiting_manual_action';
+                } else if (wJob.status === "awaiting_manual_generate") {
+                  nextStatus = "awaiting_manual_action";
                 }
 
                 if (nextStatus !== j.status || resultUrl !== j.resultUrl) {
@@ -180,7 +211,8 @@ export class GenerationOrchestratorService {
                     resultUrl: resultUrl || undefined,
                     resultAssetId: resultAssetId || undefined,
                     error: wJob.error || undefined,
-                    completedAt: nextStatus === 'completed' ? new Date() : undefined,
+                    completedAt:
+                      nextStatus === "completed" ? new Date() : undefined,
                   });
                   j.status = nextStatus;
                   j.progress = nextProgress;
@@ -195,14 +227,16 @@ export class GenerationOrchestratorService {
 
         return {
           id: j.id,
-          storyId: j.storyId || '',
-          targetType: j.targetType.includes('character') ? 'character' : 'background',
+          storyId: j.storyId || "",
+          targetType: j.targetType.includes("character")
+            ? "character"
+            : "background",
           sceneId: j.sceneId || undefined,
           characterId: j.characterId || undefined,
           assetType: (j.assetType as any) || undefined,
           provider: j.provider as any,
           prompt: j.prompt,
-          status: (j.status as any) || 'queued',
+          status: (j.status as any) || "queued",
           progress: j.progress,
           workerJobId: j.workerJobId || undefined,
           result: j.resultUrl
@@ -211,7 +245,7 @@ export class GenerationOrchestratorService {
                 target: j.targetType,
                 assetId: j.resultAssetId || j.id,
                 imageUrl: j.resultUrl,
-                message: 'Completed',
+                message: "Completed",
               }
             : undefined,
           error: j.error || undefined,
@@ -229,66 +263,94 @@ export class GenerationOrchestratorService {
   /**
    * Explicitly cancels the active Flow job on worker and reconciles database state.
    */
-  public static async cancelActiveFlowJob(): Promise<{ success: boolean; message: string }> {
+  public static async cancelActiveFlowJob(): Promise<{
+    success: boolean;
+    message: string;
+  }> {
     try {
-      const { token, metadata } = await GoogleFlowCredentialService.getOrCreateWorkerCredential();
-      const workerUrl = (metadata?.workerUrl || process.env.FLOW_WORKER_URL || 'http://127.0.0.1:4177').replace(/\/+$/, '');
+      const { token, metadata } =
+        await GoogleFlowCredentialService.getOrCreateWorkerCredential();
+      const workerUrl = (
+        metadata?.workerUrl ||
+        process.env.FLOW_WORKER_URL ||
+        "http://127.0.0.1:4177"
+      ).replace(/\/+$/, "");
       const res = await fetch(`${workerUrl}/jobs/cancel-active`, {
-        method: 'POST',
+        method: "POST",
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       }).catch(() => null);
 
       // Reconcile any in-memory or PostgreSQL jobs that are active
       for (const [id, j] of this.jobs.entries()) {
-        if (!['completed', 'cancelled', 'failed'].includes(j.status)) {
-          j.status = 'cancelled';
-          j.error = 'Cancelled by user request.';
+        if (!["completed", "cancelled", "failed"].includes(j.status)) {
+          j.status = "cancelled";
+          j.error = "Cancelled by user request.";
           j.updatedAt = new Date().toISOString();
           try {
-            await updateGenerationJob(id, { status: 'cancelled', error: 'Cancelled by user request.' });
+            await updateGenerationJob(id, {
+              status: "cancelled",
+              error: "Cancelled by user request.",
+            });
           } catch {}
         }
       }
       try {
         await prisma.generationJob.updateMany({
-          where: { status: { notIn: ['completed', 'cancelled', 'failed'] } },
-          data: { status: 'cancelled', error: 'Cancelled by user request.' },
+          where: { status: { notIn: ["completed", "cancelled", "failed"] } },
+          data: { status: "cancelled", error: "Cancelled by user request." },
         });
       } catch {}
 
       if (res && res.ok) {
         const data = await res.json().catch(() => ({}));
-        return { success: true, message: data.message || 'Active Google Flow job cancelled successfully.' };
+        return {
+          success: true,
+          message:
+            data.message || "Active Google Flow job cancelled successfully.",
+        };
       }
-      return { success: true, message: 'Active Google Flow jobs cleared.' };
+      return { success: true, message: "Active Google Flow jobs cleared." };
     } catch (err: any) {
-      return { success: false, message: err.message || 'Failed to cancel active Flow job.' };
+      return {
+        success: false,
+        message: err.message || "Failed to cancel active Flow job.",
+      };
     }
   }
 
   /**
    * Cancels a specific generation job by ID.
    */
-  public static async cancelJob(jobId: string): Promise<{ success: boolean; message: string }> {
+  public static async cancelJob(
+    jobId: string,
+  ): Promise<{ success: boolean; message: string }> {
     const job = await this.getJob(jobId);
     if (!job) {
-      return { success: false, message: 'Job not found.' };
+      return { success: false, message: "Job not found." };
     }
     if (job.workerJobId) {
       try {
-        const { token, metadata } = await GoogleFlowCredentialService.getOrCreateWorkerCredential();
-        const workerUrl = (metadata?.workerUrl || process.env.FLOW_WORKER_URL || 'http://127.0.0.1:4177').replace(/\/+$/, '');
+        const { token, metadata } =
+          await GoogleFlowCredentialService.getOrCreateWorkerCredential();
+        const workerUrl = (
+          metadata?.workerUrl ||
+          process.env.FLOW_WORKER_URL ||
+          "http://127.0.0.1:4177"
+        ).replace(/\/+$/, "");
         await fetch(`${workerUrl}/jobs/${job.workerJobId}`, {
-          method: 'DELETE',
+          method: "DELETE",
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         }).catch(() => {});
       } catch {}
     }
-    job.status = 'cancelled';
-    job.error = 'Job cancelled by user request.';
+    job.status = "cancelled";
+    job.error = "Job cancelled by user request.";
     job.updatedAt = new Date().toISOString();
     try {
-      await updateGenerationJob(jobId, { status: 'cancelled', error: 'Job cancelled by user request.' });
+      await updateGenerationJob(jobId, {
+        status: "cancelled",
+        error: "Job cancelled by user request.",
+      });
     } catch {}
     return { success: true, message: `Job ${jobId} was cancelled.` };
   }
@@ -298,23 +360,35 @@ export class GenerationOrchestratorService {
    */
   public static async getProviderStatus(): Promise<{
     gemini_api: { available: boolean; model: string; message: string };
-    google_flow: { available: boolean; browserRunning: boolean; authenticated: boolean; message: string };
+    google_flow: {
+      available: boolean;
+      browserRunning: boolean;
+      authenticated: boolean;
+      message: string;
+    };
   }> {
     // 1. Check Gemini Image API
-    const geminiKey = process.env.GOOGLE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
-    const geminiModel = process.env.GEMINI_IMAGE_MODEL || 'gemini-2.5-flash-image';
+    const geminiKey =
+      process.env.GOOGLE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
+    const geminiModel =
+      process.env.GEMINI_IMAGE_MODEL || "gemini-2.5-flash-image";
     const geminiAvailable = Boolean(geminiKey && geminiKey.trim().length > 0);
 
     // 2. Check Google Flow worker using PostgreSQL persisted configuration
     let flowAvailable = false;
     let flowBrowserRunning = false;
     let flowAuthenticated = false;
-    let flowMessage = 'Worker offline';
+    let flowMessage = "Worker offline";
 
     try {
-      const cred = await GoogleFlowCredentialService.getOrCreateWorkerCredential();
+      const cred =
+        await GoogleFlowCredentialService.getOrCreateWorkerCredential();
       const token = cred.token;
-      const workerUrl = (cred.metadata?.workerUrl || process.env.FLOW_WORKER_URL || 'http://127.0.0.1:4177').replace(/\/+$/, '');
+      const workerUrl = (
+        cred.metadata?.workerUrl ||
+        process.env.FLOW_WORKER_URL ||
+        "http://127.0.0.1:4177"
+      ).replace(/\/+$/, "");
 
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 2000);
@@ -330,17 +404,20 @@ export class GenerationOrchestratorService {
         flowAvailable = true;
         flowBrowserRunning = Boolean(payload.session?.browserRunning);
         flowAuthenticated = Boolean(payload.session?.googleAuthenticated);
-        flowMessage = payload.session?.message || 'Worker online';
+        flowMessage = payload.session?.message || "Worker online";
       }
     } catch {
-      flowMessage = 'Could not connect to loopback Google Flow worker at configured endpoint';
+      flowMessage =
+        "Could not connect to loopback Google Flow worker at configured endpoint";
     }
 
     return {
       gemini_api: {
         available: geminiAvailable,
         model: geminiModel,
-        message: geminiAvailable ? 'Ready for direct background and character generation' : 'GEMINI_API_KEY is not configured',
+        message: geminiAvailable
+          ? "Ready for direct background and character generation"
+          : "GEMINI_API_KEY is not configured",
       },
       google_flow: {
         available: flowAvailable,
@@ -362,11 +439,22 @@ export class GenerationOrchestratorService {
     aspectRatio?: string;
     testMockBuffer?: Buffer;
   }): Promise<ImportAssetResult> {
-    const { storyId, sceneId, provider = 'gemini_api', promptOverride, aspectRatio, testMockBuffer } = params;
+    const {
+      storyId,
+      sceneId,
+      provider = "gemini_api",
+      promptOverride,
+      aspectRatio,
+      testMockBuffer,
+    } = params;
 
     // 1. Resolve Story & Scene Context
-    const context = await StoryContextService.resolveStoryContext(storyId, { sceneId });
-    const scene = context.scenes.find((s) => s.sceneId === sceneId || s.id === sceneId);
+    const context = await StoryContextService.resolveStoryContext(storyId, {
+      sceneId,
+    });
+    const scene = context.scenes.find(
+      (s) => s.sceneId === sceneId || s.id === sceneId,
+    );
 
     if (!scene) {
       throw new Error(`Scene ${sceneId} not found in story ${storyId}`);
@@ -374,9 +462,12 @@ export class GenerationOrchestratorService {
 
     // 2. Compose strict environment-only prompt
     const promptData = GenerationPromptService.buildSceneBackgroundPrompt(
-      { visualStyle: context.story.visualStyle, aspectRatio: aspectRatio || scene.aspectRatio },
+      {
+        visualStyle: context.story.visualStyle,
+        aspectRatio: aspectRatio || scene.aspectRatio,
+      },
       scene,
-      promptOverride
+      promptOverride,
     );
 
     const jobId = `job-bg-${Date.now()}-${randomUUID().slice(0, 6)}`;
@@ -384,11 +475,11 @@ export class GenerationOrchestratorService {
       id: jobId,
       storyId,
       sceneId: scene.sceneId,
-      targetType: 'background',
-      assetType: 'scene_background',
+      targetType: "background",
+      assetType: "scene_background",
       provider,
       prompt: promptData.prompt,
-      status: 'preparing',
+      status: "preparing",
       progress: 10,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -402,11 +493,11 @@ export class GenerationOrchestratorService {
         storyId,
         sceneId: scene.sceneId,
         provider,
-        targetType: 'scene_background',
-        assetType: 'scene_background',
+        targetType: "scene_background",
+        assetType: "scene_background",
         prompt: promptData.prompt,
         flowProjectId: context.story.flowProjectId || undefined,
-        status: 'preparing',
+        status: "preparing",
         progress: 10,
         metadata: {
           aspectRatio: promptData.aspectRatio,
@@ -420,8 +511,8 @@ export class GenerationOrchestratorService {
       // -------------------------------------------------------------
       // Provider A: Direct Gemini Image API
       // -------------------------------------------------------------
-      if (provider === 'gemini_api') {
-        jobRecord.status = 'generating';
+      if (provider === "gemini_api") {
+        jobRecord.status = "generating";
         jobRecord.progress = 40;
         jobRecord.updatedAt = new Date().toISOString();
 
@@ -433,7 +524,7 @@ export class GenerationOrchestratorService {
 
           if (!geminiProvider.isConfigured()) {
             throw new Error(
-              'GEMINI_API_KEY is not configured in your environment or settings. Please provide a valid Gemini API key or switch Generation Engine to Google Flow.'
+              "GEMINI_API_KEY is not configured in your environment or settings. Please provide a valid Gemini API key or switch Generation Engine to Google Flow.",
             );
           }
 
@@ -447,32 +538,32 @@ export class GenerationOrchestratorService {
           imageBuffer = generated.imageBuffer;
         }
 
-        jobRecord.status = 'importing';
+        jobRecord.status = "importing";
         jobRecord.progress = 80;
         jobRecord.updatedAt = new Date().toISOString();
 
         // Persist directly to Scene & Image asset storage
         const importResult = await GoogleFlowAssetImportService.importAsset({
-          target: 'scene_background',
+          target: "scene_background",
           sceneId: scene.sceneId,
           storyId,
           imageData: imageBuffer,
           aspectRatio: promptData.aspectRatio,
           prompt: promptData.prompt,
-          provider: 'gemini_api',
-          model: 'imagen-3',
+          provider: "gemini_api",
+          model: "imagen-3",
           sourceJobId: jobId,
           filename: `gemini-${scene.sceneId}-${Date.now()}.png`,
         });
 
-        jobRecord.status = 'completed';
+        jobRecord.status = "completed";
         jobRecord.progress = 100;
         jobRecord.result = importResult;
         jobRecord.updatedAt = new Date().toISOString();
 
         try {
           await updateGenerationJob(jobId, {
-            status: 'completed',
+            status: "completed",
             progress: 100,
             resultAssetId: importResult.assetId,
             resultUrl: importResult.imageUrl,
@@ -486,18 +577,25 @@ export class GenerationOrchestratorService {
       // -------------------------------------------------------------
       // Provider B: Google Flow (Playwright loopback worker)
       // -------------------------------------------------------------
-      if (provider === 'google_flow') {
+      if (provider === "google_flow") {
         const flowProjectId = context.story.flowProjectId;
         if (!flowProjectId) {
-          throw new Error('This story is not connected to a Google Flow project. Please connect a Google Flow project first.');
+          throw new Error(
+            "This story is not connected to a Google Flow project. Please connect a Google Flow project first.",
+          );
         }
 
-        jobRecord.status = 'generating';
+        jobRecord.status = "generating";
         jobRecord.progress = 30;
         jobRecord.updatedAt = new Date().toISOString();
 
-        const { token, metadata } = await GoogleFlowCredentialService.getOrCreateWorkerCredential();
-        const workerUrl = (metadata?.workerUrl || process.env.FLOW_WORKER_URL || 'http://127.0.0.1:4177').replace(/\/+$/, '');
+        const { token, metadata } =
+          await GoogleFlowCredentialService.getOrCreateWorkerCredential();
+        const workerUrl = (
+          metadata?.workerUrl ||
+          process.env.FLOW_WORKER_URL ||
+          "http://127.0.0.1:4177"
+        ).replace(/\/+$/, "");
 
         // Ensure worker token is synchronized to local disk
         GoogleFlowCredentialService.syncLocalWorkerTokenFile(token);
@@ -506,13 +604,13 @@ export class GenerationOrchestratorService {
 
         // 1. Submit Job to Worker
         let submitRes = await fetch(`${workerUrl}/jobs`, {
-          method: 'POST',
+          method: "POST",
           headers: {
-            'Content-Type': 'application/json',
+            "Content-Type": "application/json",
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
           body: JSON.stringify({
-            targetType: 'background',
+            targetType: "background",
             storyId,
             sceneId: scene.sceneId,
             prompt: promptData.prompt,
@@ -526,13 +624,13 @@ export class GenerationOrchestratorService {
           try {
             await GoogleFlowCredentialService.provisionWorker(workerUrl);
             submitRes = await fetch(`${workerUrl}/jobs`, {
-              method: 'POST',
+              method: "POST",
               headers: {
-                'Content-Type': 'application/json',
+                "Content-Type": "application/json",
                 Authorization: `Bearer ${token}`,
               },
               body: JSON.stringify({
-                targetType: 'background',
+                targetType: "background",
                 storyId,
                 sceneId: scene.sceneId,
                 prompt: promptData.prompt,
@@ -546,24 +644,31 @@ export class GenerationOrchestratorService {
         if (!submitRes.ok) {
           const errData = (await submitRes.json().catch(() => ({}))) as any;
           if (submitRes.status === 409) {
-            if (errData.message?.includes("browser session") || errData.message?.includes("browser is not open")) {
-              throw new Error("Google Flow browser is not open. Please click 'Open Flow Browser' in the top bar to launch the companion browser.");
+            if (
+              errData.message?.includes("browser session") ||
+              errData.message?.includes("browser is not open")
+            ) {
+              throw new Error(
+                "Google Flow browser is not open. Please click 'Open Flow Browser' in the top bar to launch the companion browser.",
+              );
             }
             if (errData.message?.includes("Another Flow job is active")) {
-              console.warn('[GenerationOrchestrator] Another Flow job was active. Auto-recovering lock and retrying with cancelPrevious...');
+              console.warn(
+                "[GenerationOrchestrator] Another Flow job was active. Auto-recovering lock and retrying with cancelPrevious...",
+              );
               try {
                 await fetch(`${workerUrl}/jobs/cancel-active`, {
-                  method: 'POST',
+                  method: "POST",
                   headers: token ? { Authorization: `Bearer ${token}` } : {},
                 });
                 submitRes = await fetch(`${workerUrl}/jobs`, {
-                  method: 'POST',
+                  method: "POST",
                   headers: {
-                    'Content-Type': 'application/json',
+                    "Content-Type": "application/json",
                     ...(token ? { Authorization: `Bearer ${token}` } : {}),
                   },
                   body: JSON.stringify({
-                    targetType: 'background',
+                    targetType: "background",
                     storyId,
                     sceneId: scene.sceneId,
                     prompt: promptData.prompt,
@@ -577,10 +682,16 @@ export class GenerationOrchestratorService {
           }
           if (!submitRes.ok) {
             if (submitRes.status === 401) {
-              throw new Error("Flow worker authentication out of sync. Please retry or click 'Verify / Reconnect' in Integration Studio.");
+              throw new Error(
+                "Flow worker authentication out of sync. Please retry or click 'Verify / Reconnect' in Integration Studio.",
+              );
             }
             const retryErr = (await submitRes.json().catch(() => ({}))) as any;
-            throw new Error(retryErr.message || errData.message || `Flow worker returned HTTP ${submitRes.status}`);
+            throw new Error(
+              retryErr.message ||
+                errData.message ||
+                `Flow worker returned HTTP ${submitRes.status}`,
+            );
           }
         }
 
@@ -594,16 +705,16 @@ export class GenerationOrchestratorService {
         try {
           await updateGenerationJob(jobId, {
             workerJobId,
-            status: 'generating',
+            status: "generating",
             progress: 50,
           });
         } catch {}
 
         // 2. Trigger Generation on Worker
         let genRes = await fetch(`${workerUrl}/jobs/${workerJobId}/generate`, {
-          method: 'POST',
+          method: "POST",
           headers: {
-            'Content-Type': 'application/json',
+            "Content-Type": "application/json",
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
           body: JSON.stringify({
@@ -617,9 +728,9 @@ export class GenerationOrchestratorService {
             GoogleFlowCredentialService.syncLocalWorkerTokenFile(token);
             await GoogleFlowCredentialService.provisionWorker(workerUrl);
             genRes = await fetch(`${workerUrl}/jobs/${workerJobId}/generate`, {
-              method: 'POST',
+              method: "POST",
               headers: {
-                'Content-Type': 'application/json',
+                "Content-Type": "application/json",
                 Authorization: `Bearer ${token}`,
               },
               body: JSON.stringify({
@@ -632,10 +743,14 @@ export class GenerationOrchestratorService {
 
         if (!genRes.ok) {
           if (genRes.status === 401) {
-            throw new Error("Flow worker authentication out of sync. Please retry or click 'Verify / Reconnect' in Integration Studio.");
+            throw new Error(
+              "Flow worker authentication out of sync. Please retry or click 'Verify / Reconnect' in Integration Studio.",
+            );
           }
           const errData = (await genRes.json().catch(() => ({}))) as any;
-          throw new Error(errData.message || 'Flow worker generation trigger failed');
+          throw new Error(
+            errData.message || "Flow worker generation trigger failed",
+          );
         }
 
         // 3. Await generation settlement if fast (e.g. in tests/mocked worker), up to 10 seconds
@@ -647,48 +762,54 @@ export class GenerationOrchestratorService {
           }).catch(() => null);
 
           if (statusRes && statusRes.ok) {
-            const workerStatus = (await statusRes.json().catch(() => ({}))) as any;
+            const workerStatus = (await statusRes
+              .json()
+              .catch(() => ({}))) as any;
             const wJob = workerStatus.job;
-            if (wJob?.status === 'completed' && wJob?.importResult) {
+            if (wJob?.status === "completed" && wJob?.importResult) {
               completedResult = wJob.importResult;
               break;
             }
-            if (wJob?.status === 'failed') {
-              throw new Error(wJob.error || 'Flow worker generation failed');
+            if (wJob?.status === "failed") {
+              throw new Error(wJob.error || "Flow worker generation failed");
             }
           }
           await new Promise((r) => setTimeout(r, 1000));
         }
 
         if (completedResult) {
-          jobRecord.status = 'completed';
+          jobRecord.status = "completed";
           jobRecord.progress = 100;
           jobRecord.result = completedResult;
           jobRecord.updatedAt = new Date().toISOString();
 
           try {
             await updateGenerationJob(jobId, {
-              status: 'completed',
+              status: "completed",
               progress: 100,
               resultAssetId: completedResult.assetId,
               resultUrl: completedResult.imageUrl || completedResult.url,
               completedAt: new Date(),
             });
           } catch (dbErr: any) {
-            console.warn('[GenerationOrchestrator] Could not persist job completion to database:', dbErr.message);
+            console.warn(
+              "[GenerationOrchestrator] Could not persist job completion to database:",
+              dbErr.message,
+            );
           }
 
           return {
             success: true,
             jobId: jobRecord.id,
             workerJobId,
-            status: 'completed',
-            target: 'scene_background',
+            status: "completed",
+            target: "scene_background",
             assetId: scene.sceneId,
             sceneId: scene.sceneId,
             imageUrl: completedResult.imageUrl || completedResult.url,
             aspectRatio: promptData.aspectRatio,
-            message: 'Google Flow background generation completed and imported successfully.',
+            message:
+              "Google Flow background generation completed and imported successfully.",
           };
         }
 
@@ -697,26 +818,26 @@ export class GenerationOrchestratorService {
           success: true,
           jobId: jobRecord.id,
           workerJobId,
-          status: 'generating',
-          target: 'scene_background',
+          status: "generating",
+          target: "scene_background",
           sceneId: scene.sceneId,
           assetId: scene.sceneId,
           imageUrl: null,
           aspectRatio: promptData.aspectRatio,
-          message: 'Google Flow generation started.',
+          message: "Google Flow generation started.",
         };
       }
 
       throw new Error(`Unsupported generation provider: ${provider}`);
     } catch (err: any) {
-      jobRecord.status = 'failed';
-      jobRecord.error = err.message || 'Generation failed';
+      jobRecord.status = "failed";
+      jobRecord.error = err.message || "Generation failed";
       jobRecord.updatedAt = new Date().toISOString();
 
       try {
         await updateGenerationJob(jobId, {
-          status: 'failed',
-          error: err.message || 'Generation failed',
+          status: "failed",
+          error: err.message || "Generation failed",
         });
       } catch {}
 
@@ -788,7 +909,8 @@ export class GenerationOrchestratorService {
         googleFlowEditId: imageRecord.googleFlowEditId ?? undefined,
         googleFlowEditUrl: imageRecord.googleFlowEditUrl ?? undefined,
         googleFlowPrompt: imageRecord.googleFlowPrompt ?? undefined,
-        googleFlowParentAssetId: imageRecord.googleFlowParentAssetId ?? undefined,
+        googleFlowParentAssetId:
+          imageRecord.googleFlowParentAssetId ?? undefined,
         googleFlowVersion: imageRecord.googleFlowVersion ?? undefined,
         googleFlowImageId: imageRecord.googleFlowImageId ?? undefined,
         googleFlowImageRef: imageRecord.googleFlowImageRef ?? undefined,
@@ -799,26 +921,35 @@ export class GenerationOrchestratorService {
 
     if (!editUrl) {
       throw new Error(
-        `Image ${imageId} does not have a Google Flow editor URL or editor reference.`
+        `Image ${imageId} does not have a Google Flow editor URL or editor reference.`,
       );
     }
 
     const storyId = params.storyId || imageRecord.scene?.storyId;
     if (!storyId) {
-      throw new Error(`Story context could not be resolved for image ${imageId}.`);
+      throw new Error(
+        `Story context could not be resolved for image ${imageId}.`,
+      );
     }
 
     // 2. Resolve Story Context & Prompt
-    const context = await StoryContextService.resolveStoryContext(storyId, { sceneId });
-    const scene = context.scenes.find((s) => s.sceneId === sceneId || s.id === sceneId);
+    const context = await StoryContextService.resolveStoryContext(storyId, {
+      sceneId,
+    });
+    const scene = context.scenes.find(
+      (s) => s.sceneId === sceneId || s.id === sceneId,
+    );
     if (!scene) {
       throw new Error(`Scene ${sceneId} not found in story ${storyId}`);
     }
 
     const promptData = GenerationPromptService.buildSceneBackgroundPrompt(
-      { visualStyle: context.story.visualStyle, aspectRatio: scene.aspectRatio },
+      {
+        visualStyle: context.story.visualStyle,
+        aspectRatio: scene.aspectRatio,
+      },
       scene,
-      promptOverride || flowReferences.googleFlowPrompt || imageRecord.prompt
+      promptOverride || flowReferences.googleFlowPrompt || imageRecord.prompt,
     );
 
     const jobId = `job-bg-regen-${Date.now()}-${randomUUID().slice(0, 6)}`;
@@ -826,11 +957,11 @@ export class GenerationOrchestratorService {
       id: jobId,
       storyId,
       sceneId: scene.sceneId,
-      targetType: 'background',
-      assetType: 'scene_background',
-      provider: 'google_flow',
+      targetType: "background",
+      assetType: "scene_background",
+      provider: "google_flow",
       prompt: promptData.prompt,
-      status: 'preparing',
+      status: "preparing",
       progress: 10,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -842,12 +973,15 @@ export class GenerationOrchestratorService {
         id: jobId,
         storyId,
         sceneId: scene.sceneId,
-        provider: 'google_flow',
-        targetType: 'scene_background',
-        assetType: 'scene_background',
+        provider: "google_flow",
+        targetType: "scene_background",
+        assetType: "scene_background",
         prompt: promptData.prompt,
-        flowProjectId: flowReferences.googleFlowProjectId || context.story.flowProjectId || undefined,
-        status: 'preparing',
+        flowProjectId:
+          flowReferences.googleFlowProjectId ||
+          context.story.flowProjectId ||
+          undefined,
+        status: "preparing",
         progress: 10,
         metadata: {
           aspectRatio: promptData.aspectRatio,
@@ -861,23 +995,28 @@ export class GenerationOrchestratorService {
     } catch {}
 
     try {
-      const { token, metadata } = await GoogleFlowCredentialService.getOrCreateWorkerCredential();
-      const workerUrl = (metadata?.workerUrl || process.env.FLOW_WORKER_URL || 'http://127.0.0.1:4177').replace(/\/+$/, '');
+      const { token, metadata } =
+        await GoogleFlowCredentialService.getOrCreateWorkerCredential();
+      const workerUrl = (
+        metadata?.workerUrl ||
+        process.env.FLOW_WORKER_URL ||
+        "http://127.0.0.1:4177"
+      ).replace(/\/+$/, "");
       GoogleFlowCredentialService.syncLocalWorkerTokenFile(token);
 
-      jobRecord.status = 'generating';
+      jobRecord.status = "generating";
       jobRecord.progress = 30;
       jobRecord.updatedAt = new Date().toISOString();
 
       // Submit regeneration job to worker
       let submitRes = await fetch(`${workerUrl}/jobs`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
-          targetType: 'background',
+          targetType: "background",
           isRegeneration: true,
           storyId,
           sceneId: scene.sceneId,
@@ -885,7 +1024,8 @@ export class GenerationOrchestratorService {
           aspectRatio: promptData.aspectRatio,
           editUrl,
           googleFlowEditUrl: editUrl,
-          googleFlowProjectId: flowReferences.googleFlowProjectId || context.story.flowProjectId,
+          googleFlowProjectId:
+            flowReferences.googleFlowProjectId || context.story.flowProjectId,
           googleFlowEditId: flowReferences.googleFlowEditId,
           googleFlowParentAssetId: imageRecord.id,
           googleFlowVersion: (flowReferences.googleFlowVersion || 1) + 1,
@@ -894,7 +1034,9 @@ export class GenerationOrchestratorService {
 
       if (!submitRes.ok) {
         const errData = (await submitRes.json().catch(() => ({}))) as any;
-        throw new Error(errData.message || `Flow worker returned HTTP ${submitRes.status}`);
+        throw new Error(
+          errData.message || `Flow worker returned HTTP ${submitRes.status}`,
+        );
       }
 
       const submitPayload = (await submitRes.json()) as any;
@@ -907,16 +1049,16 @@ export class GenerationOrchestratorService {
       try {
         await updateGenerationJob(jobId, {
           workerJobId,
-          status: 'generating',
+          status: "generating",
           progress: 50,
         });
       } catch {}
 
       // Trigger generation on worker
       let genRes = await fetch(`${workerUrl}/jobs/${workerJobId}/generate`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
@@ -927,7 +1069,9 @@ export class GenerationOrchestratorService {
 
       if (!genRes.ok) {
         const errData = (await genRes.json().catch(() => ({}))) as any;
-        throw new Error(errData.message || 'Flow worker regeneration trigger failed');
+        throw new Error(
+          errData.message || "Flow worker regeneration trigger failed",
+        );
       }
 
       // Poll briefly for completion
@@ -939,28 +1083,30 @@ export class GenerationOrchestratorService {
         }).catch(() => null);
 
         if (statusRes && statusRes.ok) {
-          const workerStatus = (await statusRes.json().catch(() => ({}))) as any;
+          const workerStatus = (await statusRes
+            .json()
+            .catch(() => ({}))) as any;
           const wJob = workerStatus.job;
-          if (wJob?.status === 'completed' && wJob?.importResult) {
+          if (wJob?.status === "completed" && wJob?.importResult) {
             completedResult = wJob.importResult;
             break;
           }
-          if (wJob?.status === 'failed') {
-            throw new Error(wJob.error || 'Flow worker regeneration failed');
+          if (wJob?.status === "failed") {
+            throw new Error(wJob.error || "Flow worker regeneration failed");
           }
         }
         await new Promise((r) => setTimeout(r, 1000));
       }
 
       if (completedResult) {
-        jobRecord.status = 'completed';
+        jobRecord.status = "completed";
         jobRecord.progress = 100;
         jobRecord.result = completedResult;
         jobRecord.updatedAt = new Date().toISOString();
 
         try {
           await updateGenerationJob(jobId, {
-            status: 'completed',
+            status: "completed",
             progress: 100,
             resultAssetId: completedResult.assetId,
             resultUrl: completedResult.imageUrl || completedResult.url,
@@ -972,13 +1118,14 @@ export class GenerationOrchestratorService {
           success: true,
           jobId: jobRecord.id,
           workerJobId,
-          status: 'completed',
-          target: 'scene_background',
+          status: "completed",
+          target: "scene_background",
           assetId: completedResult.assetId || scene.sceneId,
           sceneId: scene.sceneId,
           imageUrl: completedResult.imageUrl || completedResult.url,
           aspectRatio: promptData.aspectRatio,
-          message: 'Google Flow background regeneration completed and imported successfully.',
+          message:
+            "Google Flow background regeneration completed and imported successfully.",
         };
       }
 
@@ -986,22 +1133,22 @@ export class GenerationOrchestratorService {
         success: true,
         jobId: jobRecord.id,
         workerJobId,
-        status: 'generating',
-        target: 'scene_background',
+        status: "generating",
+        target: "scene_background",
         sceneId: scene.sceneId,
         assetId: scene.sceneId,
         imageUrl: null,
         aspectRatio: promptData.aspectRatio,
-        message: 'Google Flow regeneration started.',
+        message: "Google Flow regeneration started.",
       };
     } catch (err: any) {
-      jobRecord.status = 'failed';
-      jobRecord.error = err.message || 'Regeneration failed';
+      jobRecord.status = "failed";
+      jobRecord.error = err.message || "Regeneration failed";
       jobRecord.updatedAt = new Date().toISOString();
       try {
         await updateGenerationJob(jobId, {
-          status: 'failed',
-          error: err.message || 'Regeneration failed',
+          status: "failed",
+          error: err.message || "Regeneration failed",
         });
       } catch {}
       throw err;
@@ -1011,15 +1158,19 @@ export class GenerationOrchestratorService {
   /**
    * Generates a character asset (Master Reference, Turnaround, Expression, or Pose).
    */
-  private static resolveLocalReferencePath(referenceUrl?: string | null): string | null {
-    if (!referenceUrl || typeof referenceUrl !== 'string') return null;
-    const cleanUrl = referenceUrl.trim().replace(/\\/g, '/');
-    const storageMatch = cleanUrl.match(/(?:^|https?:\/\/[^/]+)(\/storage\/.+)$/i);
+  private static resolveLocalReferencePath(
+    referenceUrl?: string | null,
+  ): string | null {
+    if (!referenceUrl || typeof referenceUrl !== "string") return null;
+    const cleanUrl = referenceUrl.trim().replace(/\\/g, "/");
+    const storageMatch = cleanUrl.match(
+      /(?:^|https?:\/\/[^/]+)(\/storage\/.+)$/i,
+    );
     if (!storageMatch) return null;
-    const relFromRoot = storageMatch[1].replace(/^\/+/, '');
+    const relFromRoot = storageMatch[1].replace(/^\/+/, "");
     const candidates = [
       path.resolve(process.cwd(), relFromRoot),
-      path.resolve(process.cwd(), 'backend', relFromRoot),
+      path.resolve(process.cwd(), "backend", relFromRoot),
     ];
     for (const candidate of candidates) {
       if (fs.existsSync(candidate)) {
@@ -1033,7 +1184,7 @@ export class GenerationOrchestratorService {
     storyId: string;
     characterId: string;
     provider?: GenerationProviderType;
-    assetType?: 'master_reference' | 'turnaround' | 'expression' | 'pose';
+    assetType?: "master_reference" | "turnaround" | "expression" | "pose";
     variation?: string;
     promptOverride?: string;
     testMockBuffer?: Buffer;
@@ -1041,20 +1192,22 @@ export class GenerationOrchestratorService {
     const {
       storyId,
       characterId,
-      provider = 'gemini_api',
-      assetType = 'master_reference',
+      provider = "gemini_api",
+      assetType = "master_reference",
       variation,
       promptOverride,
       testMockBuffer,
     } = params;
 
     const normalizedVariation =
-      assetType === 'turnaround'
-        ? normalizeCharacterFacingDirection(variation || 'front')
+      assetType === "turnaround"
+        ? normalizeCharacterFacingDirection(variation || "front")
         : variation;
 
     // 1. Resolve Story and Character Context
-    const context = await StoryContextService.resolveStoryContext(storyId, { characterId });
+    const context = await StoryContextService.resolveStoryContext(storyId, {
+      characterId,
+    });
     const character = context.characters.find((c) => c.id === characterId);
 
     if (!character) {
@@ -1062,12 +1215,19 @@ export class GenerationOrchestratorService {
     }
 
     // Prevent duplicate active jobs for the same character + assetType + direction
-    const activeStatuses = new Set(['preparing', 'generating', 'importing', 'generation_submitted', 'output_detected', 'downloading']);
+    const activeStatuses = new Set([
+      "preparing",
+      "generating",
+      "importing",
+      "generation_submitted",
+      "output_detected",
+      "downloading",
+    ]);
     for (const existing of this.jobs.values()) {
       if (
         existing.characterId === character.id &&
         existing.assetType === assetType &&
-        (existing.variation || '') === (normalizedVariation || '') &&
+        (existing.variation || "") === (normalizedVariation || "") &&
         activeStatuses.has(existing.status)
       ) {
         return {
@@ -1075,7 +1235,10 @@ export class GenerationOrchestratorService {
           jobId: existing.id,
           workerJobId: existing.workerJobId,
           status: existing.status,
-          target: assetType === 'master_reference' ? 'character_reference' : 'character_view',
+          target:
+            assetType === "master_reference"
+              ? "character_reference"
+              : "character_view",
           assetId: character.id,
           characterId: character.id,
           imageUrl: null,
@@ -1087,40 +1250,58 @@ export class GenerationOrchestratorService {
     // 2. Check for existing Flow Character Mapping
     let flowCharacterName = character.name;
     const mapping = await getFlowCharacterMapping(storyId, character.id);
-    if (mapping && mapping.syncStatus === 'synced' && mapping.flowCharacterName) {
+    if (
+      mapping &&
+      mapping.syncStatus === "synced" &&
+      mapping.flowCharacterName
+    ) {
       flowCharacterName = mapping.flowCharacterName;
     }
 
-    // 3. Compose canonical character prompt with @Character reference when applicable
-    const promptData = GenerationPromptService.buildCharacterPrompt(
-      { visualStyle: context.story.visualStyle },
-      character,
-      assetType,
-      { variation: normalizedVariation, promptOverride }
-    );
+    // 3. Compose a provider-specific prompt. Google Flow's saved Character
+    // editor already has the selected character image as visual context; do
+    // not insert a plain-text @name or send Gemini's long prompt structure.
+    const promptData =
+      provider === "google_flow"
+        ? GenerationPromptService.buildGoogleFlowCharacterPrompt(
+            { visualStyle: context.story.visualStyle },
+            character,
+            assetType,
+            {
+              variation: normalizedVariation,
+              promptOverride,
+              isExistingFlowCharacter: Boolean(
+                mapping?.syncStatus === "synced" && mapping.flowCharacterId,
+              ),
+            },
+          )
+        : GenerationPromptService.buildCharacterPrompt(
+            { visualStyle: context.story.visualStyle },
+            character,
+            assetType,
+            { variation: normalizedVariation, promptOverride },
+          );
 
-    // GenerationPromptService already embeds the saved @Character identity
-    // when a mapping is synced. Keep a single canonical prompt instruction
-    // rather than prepending a duplicate mention here.
     const finalPrompt = promptData.prompt;
 
     const canonicalRefUrl =
       character.referenceImageUrl ||
       (character.canonicalAppearance as any)?.references?.mainUrl ||
       null;
-    const localCanonicalRefPath = this.resolveLocalReferencePath(canonicalRefUrl);
+    const localCanonicalRefPath =
+      this.resolveLocalReferencePath(canonicalRefUrl);
 
     const jobId = `job-char-${Date.now()}-${randomUUID().slice(0, 6)}`;
     const jobRecord: GenerationJobRecord & { variation?: string } = {
       id: jobId,
       storyId,
       characterId: character.id,
-      targetType: 'character',
+      targetType: "character",
       assetType,
       variation: normalizedVariation,
       provider,
       prompt: finalPrompt,
-      status: 'preparing',
+      status: "preparing",
       progress: 10,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -1137,7 +1318,7 @@ export class GenerationOrchestratorService {
         assetType,
         prompt: finalPrompt,
         flowProjectId: context.story.flowProjectId || undefined,
-        status: 'preparing',
+        status: "preparing",
         progress: 10,
         metadata: {
           variation: normalizedVariation || null,
@@ -1147,8 +1328,8 @@ export class GenerationOrchestratorService {
     } catch {}
 
     try {
-      if (provider === 'gemini_api') {
-        jobRecord.status = 'generating';
+      if (provider === "gemini_api") {
+        jobRecord.status = "generating";
         jobRecord.progress = 40;
         jobRecord.updatedAt = new Date().toISOString();
 
@@ -1160,28 +1341,33 @@ export class GenerationOrchestratorService {
 
           if (!geminiProvider.isConfigured()) {
             throw new Error(
-              'GEMINI_API_KEY is not configured in your environment or settings. Please provide a valid Gemini API key or switch Generation Engine to Google Flow.'
+              "GEMINI_API_KEY is not configured in your environment or settings. Please provide a valid Gemini API key or switch Generation Engine to Google Flow.",
             );
           }
 
           let referenceBuffer: Buffer | undefined;
           let referenceMime: string | undefined;
 
-          if (assetType !== 'master_reference' && canonicalRefUrl) {
+          if (assetType !== "master_reference" && canonicalRefUrl) {
             try {
               if (localCanonicalRefPath) {
-                referenceBuffer = await fs.promises.readFile(localCanonicalRefPath);
+                referenceBuffer = await fs.promises.readFile(
+                  localCanonicalRefPath,
+                );
                 referenceMime =
-                  localCanonicalRefPath.endsWith('.jpg') || localCanonicalRefPath.endsWith('.jpeg')
-                    ? 'image/jpeg'
-                    : localCanonicalRefPath.endsWith('.webp')
-                      ? 'image/webp'
-                      : 'image/png';
-              } else if (canonicalRefUrl.startsWith('data:image/')) {
-                const match = canonicalRefUrl.match(/^data:(image\/[a-zA-Z0-9.+_-]+);base64,(.+)$/);
+                  localCanonicalRefPath.endsWith(".jpg") ||
+                  localCanonicalRefPath.endsWith(".jpeg")
+                    ? "image/jpeg"
+                    : localCanonicalRefPath.endsWith(".webp")
+                      ? "image/webp"
+                      : "image/png";
+              } else if (canonicalRefUrl.startsWith("data:image/")) {
+                const match = canonicalRefUrl.match(
+                  /^data:(image\/[a-zA-Z0-9.+_-]+);base64,(.+)$/,
+                );
                 if (match) {
                   referenceMime = match[1];
-                  referenceBuffer = Buffer.from(match[2], 'base64');
+                  referenceBuffer = Buffer.from(match[2], "base64");
                 }
               }
             } catch {}
@@ -1192,44 +1378,52 @@ export class GenerationOrchestratorService {
             negativePrompt: promptData.negativePrompt,
             width: promptData.width,
             height: promptData.height,
-            aspectRatio: '1:1',
+            aspectRatio: "1:1",
             referenceImageBuffer: referenceBuffer,
             referenceImageMimeType: referenceMime,
           });
           imageBuffer = generated.imageBuffer;
         }
 
-        jobRecord.status = 'importing';
+        jobRecord.status = "importing";
         jobRecord.progress = 80;
         jobRecord.updatedAt = new Date().toISOString();
 
-        const targetKind = assetType === 'master_reference' ? 'character_reference' : 'character_view';
-        const geminiModel = process.env.GEMINI_IMAGE_MODEL || 'gemini-2.5-flash-image';
+        const targetKind =
+          assetType === "master_reference"
+            ? "character_reference"
+            : "character_view";
+        const geminiModel =
+          process.env.GEMINI_IMAGE_MODEL || "gemini-2.5-flash-image";
         const importResult = await GoogleFlowAssetImportService.importAsset({
           target: targetKind,
           characterId: character.id,
           storyId,
-          isMasterReference: assetType === 'master_reference',
-          view: normalizedVariation || (assetType === 'master_reference' ? 'front' : assetType),
+          isMasterReference: assetType === "master_reference",
+          view:
+            normalizedVariation ||
+            (assetType === "master_reference" ? "front" : assetType),
           imageData: imageBuffer,
           prompt: finalPrompt,
-          provider: 'gemini_api',
+          provider: "gemini_api",
           model: geminiModel,
           sourceJobId: jobId,
           jobId,
           sourceCanonicalReferenceId:
-            assetType !== 'master_reference' ? canonicalRefUrl || undefined : undefined,
+            assetType !== "master_reference"
+              ? canonicalRefUrl || undefined
+              : undefined,
           filename: `gemini-${character.id}-${assetType}-${Date.now()}.png`,
         });
 
-        jobRecord.status = 'completed';
+        jobRecord.status = "completed";
         jobRecord.progress = 100;
         jobRecord.result = importResult;
         jobRecord.updatedAt = new Date().toISOString();
 
         try {
           await updateGenerationJob(jobId, {
-            status: 'completed',
+            status: "completed",
             progress: 100,
             resultAssetId: importResult.assetId,
             resultUrl: importResult.imageUrl,
@@ -1240,50 +1434,63 @@ export class GenerationOrchestratorService {
         return importResult;
       }
 
-      if (provider === 'google_flow') {
+      if (provider === "google_flow") {
         const flowProjectId = context.story.flowProjectId;
         if (!flowProjectId) {
-          throw new Error('This story is not connected to a Google Flow project. Please connect a Google Flow project first.');
+          throw new Error(
+            "This story is not connected to a Google Flow project. Please connect a Google Flow project first.",
+          );
         }
 
-        jobRecord.status = 'generating';
+        jobRecord.status = "generating";
         jobRecord.progress = 30;
         jobRecord.updatedAt = new Date().toISOString();
 
-        const { token, metadata } = await GoogleFlowCredentialService.getOrCreateWorkerCredential();
-        const workerUrl = (metadata?.workerUrl || process.env.FLOW_WORKER_URL || 'http://127.0.0.1:4177').replace(/\/+$/, '');
+        const { token, metadata } =
+          await GoogleFlowCredentialService.getOrCreateWorkerCredential();
+        const workerUrl = (
+          metadata?.workerUrl ||
+          process.env.FLOW_WORKER_URL ||
+          "http://127.0.0.1:4177"
+        ).replace(/\/+$/, "");
 
         // Ensure worker token is synchronized to local disk
         GoogleFlowCredentialService.syncLocalWorkerTokenFile(token);
 
         const projectUrl = `https://flow.google.com/project/${flowProjectId}`;
         const workerJobPayload = {
-          targetType: 'character',
+          targetType: "character",
           backendJobId: jobId,
           characterId: character.id,
           characterName: flowCharacterName,
           googleFlowCharacterId:
-            mapping?.syncStatus === 'synced' ? mapping.flowCharacterId || undefined : undefined,
+            mapping?.syncStatus === "synced"
+              ? mapping.flowCharacterId || undefined
+              : undefined,
           googleFlowCharacterUrl:
-            mapping?.syncStatus === 'synced' ? mapping.flowCharacterUrl || undefined : undefined,
-          assetType: assetType === 'master_reference' ? 'main' : 'turnaround',
-          isMasterReference: assetType === 'master_reference',
-          view: normalizedVariation || 'front',
+            mapping?.syncStatus === "synced"
+              ? mapping.flowCharacterUrl || undefined
+              : undefined,
+          assetType: assetType === "master_reference" ? "main" : "turnaround",
+          isMasterReference: assetType === "master_reference",
+          view: normalizedVariation || "front",
           uploadedReferences:
-            assetType !== 'master_reference' && localCanonicalRefPath
+            assetType !== "master_reference" && localCanonicalRefPath
               ? [localCanonicalRefPath]
               : undefined,
           sourceCanonicalReferenceId:
-            assetType !== 'master_reference' ? canonicalRefUrl || undefined : undefined,
+            assetType !== "master_reference"
+              ? canonicalRefUrl || undefined
+              : undefined,
           prompt: finalPrompt,
           projectUrl,
           storyId,
         };
 
         let submitRes = await fetch(`${workerUrl}/jobs`, {
-          method: 'POST',
+          method: "POST",
           headers: {
-            'Content-Type': 'application/json',
+            "Content-Type": "application/json",
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
           body: JSON.stringify(workerJobPayload),
@@ -1293,9 +1500,9 @@ export class GenerationOrchestratorService {
           try {
             await GoogleFlowCredentialService.provisionWorker(workerUrl);
             submitRes = await fetch(`${workerUrl}/jobs`, {
-              method: 'POST',
+              method: "POST",
               headers: {
-                'Content-Type': 'application/json',
+                "Content-Type": "application/json",
                 Authorization: `Bearer ${token}`,
               },
               body: JSON.stringify(workerJobPayload),
@@ -1306,20 +1513,27 @@ export class GenerationOrchestratorService {
         if (!submitRes.ok) {
           const errData = (await submitRes.json().catch(() => ({}))) as any;
           if (submitRes.status === 409) {
-            if (errData.message?.includes("browser session") || errData.message?.includes("browser is not open")) {
-              throw new Error("Google Flow browser is not open. Please click 'Open Flow Browser' in the top bar to launch the companion browser.");
+            if (
+              errData.message?.includes("browser session") ||
+              errData.message?.includes("browser is not open")
+            ) {
+              throw new Error(
+                "Google Flow browser is not open. Please click 'Open Flow Browser' in the top bar to launch the companion browser.",
+              );
             }
             if (errData.message?.includes("Another Flow job is active")) {
-              console.warn('[GenerationOrchestrator] Another Flow job was active. Auto-recovering lock and retrying with cancelPrevious...');
+              console.warn(
+                "[GenerationOrchestrator] Another Flow job was active. Auto-recovering lock and retrying with cancelPrevious...",
+              );
               try {
                 await fetch(`${workerUrl}/jobs/cancel-active`, {
-                  method: 'POST',
+                  method: "POST",
                   headers: token ? { Authorization: `Bearer ${token}` } : {},
                 });
                 submitRes = await fetch(`${workerUrl}/jobs`, {
-                  method: 'POST',
+                  method: "POST",
                   headers: {
-                    'Content-Type': 'application/json',
+                    "Content-Type": "application/json",
                     ...(token ? { Authorization: `Bearer ${token}` } : {}),
                   },
                   body: JSON.stringify({
@@ -1332,10 +1546,16 @@ export class GenerationOrchestratorService {
           }
           if (!submitRes.ok) {
             if (submitRes.status === 401) {
-              throw new Error("Flow worker authentication out of sync. Please retry or click 'Verify / Reconnect' in Integration Studio.");
+              throw new Error(
+                "Flow worker authentication out of sync. Please retry or click 'Verify / Reconnect' in Integration Studio.",
+              );
             }
             const retryErr = (await submitRes.json().catch(() => ({}))) as any;
-            throw new Error(retryErr.message || errData.message || `Flow worker returned HTTP ${submitRes.status}`);
+            throw new Error(
+              retryErr.message ||
+                errData.message ||
+                `Flow worker returned HTTP ${submitRes.status}`,
+            );
           }
         }
 
@@ -1349,15 +1569,15 @@ export class GenerationOrchestratorService {
         try {
           await updateGenerationJob(jobId, {
             workerJobId,
-            status: 'generating',
+            status: "generating",
             progress: 50,
           });
         } catch {}
 
         let genRes = await fetch(`${workerUrl}/jobs/${workerJobId}/generate`, {
-          method: 'POST',
+          method: "POST",
           headers: {
-            'Content-Type': 'application/json',
+            "Content-Type": "application/json",
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
           body: JSON.stringify({
@@ -1371,9 +1591,9 @@ export class GenerationOrchestratorService {
             GoogleFlowCredentialService.syncLocalWorkerTokenFile(token);
             await GoogleFlowCredentialService.provisionWorker(workerUrl);
             genRes = await fetch(`${workerUrl}/jobs/${workerJobId}/generate`, {
-              method: 'POST',
+              method: "POST",
               headers: {
-                'Content-Type': 'application/json',
+                "Content-Type": "application/json",
                 Authorization: `Bearer ${token}`,
               },
               body: JSON.stringify({
@@ -1386,10 +1606,15 @@ export class GenerationOrchestratorService {
 
         if (!genRes.ok) {
           if (genRes.status === 401) {
-            throw new Error("Flow worker authentication out of sync. Please retry or click 'Verify / Reconnect' in Integration Studio.");
+            throw new Error(
+              "Flow worker authentication out of sync. Please retry or click 'Verify / Reconnect' in Integration Studio.",
+            );
           }
           const errData = (await genRes.json().catch(() => ({}))) as any;
-          throw new Error(errData.message || 'Flow worker character generation trigger failed');
+          throw new Error(
+            errData.message ||
+              "Flow worker character generation trigger failed",
+          );
         }
 
         // Await generation settlement if fast (up to 10 seconds)
@@ -1401,28 +1626,30 @@ export class GenerationOrchestratorService {
           }).catch(() => null);
 
           if (statusRes && statusRes.ok) {
-            const workerStatus = (await statusRes.json().catch(() => ({}))) as any;
+            const workerStatus = (await statusRes
+              .json()
+              .catch(() => ({}))) as any;
             const wJob = workerStatus.job;
-            if (wJob?.status === 'completed' && wJob?.importResult) {
+            if (wJob?.status === "completed" && wJob?.importResult) {
               completedResult = wJob.importResult;
               break;
             }
-            if (wJob?.status === 'failed') {
-              throw new Error(wJob.error || 'Flow worker generation failed');
+            if (wJob?.status === "failed") {
+              throw new Error(wJob.error || "Flow worker generation failed");
             }
           }
           await new Promise((r) => setTimeout(r, 1000));
         }
 
         if (completedResult) {
-          jobRecord.status = 'completed';
+          jobRecord.status = "completed";
           jobRecord.progress = 100;
           jobRecord.result = completedResult;
           jobRecord.updatedAt = new Date().toISOString();
 
           try {
             await updateGenerationJob(jobId, {
-              status: 'completed',
+              status: "completed",
               progress: 100,
               resultAssetId: completedResult.assetId,
               resultUrl: completedResult.imageUrl || completedResult.url,
@@ -1434,12 +1661,16 @@ export class GenerationOrchestratorService {
             success: true,
             jobId: jobRecord.id,
             workerJobId,
-            status: 'completed',
-            target: assetType === 'master_reference' ? 'character_reference' : 'character_view',
+            status: "completed",
+            target:
+              assetType === "master_reference"
+                ? "character_reference"
+                : "character_view",
             assetId: completedResult.assetId,
             characterId: character.id,
             imageUrl: completedResult.imageUrl || completedResult.url,
-            message: 'Google Flow character view generation completed and imported successfully.',
+            message:
+              "Google Flow character view generation completed and imported successfully.",
           };
         }
 
@@ -1447,25 +1678,28 @@ export class GenerationOrchestratorService {
           success: true,
           jobId: jobRecord.id,
           workerJobId,
-          status: 'generating',
-          target: assetType === 'master_reference' ? 'character_reference' : 'character_view',
+          status: "generating",
+          target:
+            assetType === "master_reference"
+              ? "character_reference"
+              : "character_view",
           assetId: character.id,
           characterId: character.id,
           imageUrl: null,
-          message: 'Google Flow generation started.',
+          message: "Google Flow generation started.",
         };
       }
 
       throw new Error(`Unsupported generation provider: ${provider}`);
     } catch (err: any) {
-      jobRecord.status = 'failed';
-      jobRecord.error = err.message || 'Generation failed';
+      jobRecord.status = "failed";
+      jobRecord.error = err.message || "Generation failed";
       jobRecord.updatedAt = new Date().toISOString();
 
       try {
         await updateGenerationJob(jobId, {
-          status: 'failed',
-          error: err.message || 'Generation failed',
+          status: "failed",
+          error: err.message || "Generation failed",
         });
       } catch {}
 
@@ -1479,7 +1713,7 @@ export class GenerationOrchestratorService {
   public static async syncCharacterToGoogleFlow(
     storyId: string,
     characterId: string,
-    options?: { force?: boolean; workerUrl?: string }
+    options?: { force?: boolean; workerUrl?: string },
   ): Promise<{
     success: boolean;
     mapping: any;
@@ -1488,7 +1722,9 @@ export class GenerationOrchestratorService {
     const context = await StoryContextService.resolveStoryContext(storyId);
     const flowProjectId = context.story.flowProjectId;
     if (!flowProjectId) {
-      throw new Error('This story is not connected to a Google Flow project. Please connect a Flow project first.');
+      throw new Error(
+        "This story is not connected to a Google Flow project. Please connect a Flow project first.",
+      );
     }
 
     const character = await getCharacterById(characterId);
@@ -1506,8 +1742,15 @@ export class GenerationOrchestratorService {
     const localImagePath = this.resolveLocalReferencePath(referenceUrl);
 
     // Idempotent: If already synced and reference has not changed
-    if (!options?.force && existingMapping && existingMapping.syncStatus === 'synced') {
-      if (!referenceUrl || existingMapping.sourceReferenceUrl === referenceUrl) {
+    if (
+      !options?.force &&
+      existingMapping &&
+      existingMapping.syncStatus === "synced"
+    ) {
+      if (
+        !referenceUrl ||
+        existingMapping.sourceReferenceUrl === referenceUrl
+      ) {
         return {
           success: true,
           mapping: existingMapping,
@@ -1517,14 +1760,20 @@ export class GenerationOrchestratorService {
     }
 
     // Submit sync request to Flow worker
-    const { token, metadata } = await GoogleFlowCredentialService.getOrCreateWorkerCredential();
-    const workerUrl = (options?.workerUrl || metadata?.workerUrl || process.env.FLOW_WORKER_URL || 'http://127.0.0.1:4177').replace(/\/+$/, '');
+    const { token, metadata } =
+      await GoogleFlowCredentialService.getOrCreateWorkerCredential();
+    const workerUrl = (
+      options?.workerUrl ||
+      metadata?.workerUrl ||
+      process.env.FLOW_WORKER_URL ||
+      "http://127.0.0.1:4177"
+    ).replace(/\/+$/, "");
     const projectUrl = `https://flow.google.com/project/${flowProjectId}`;
 
     const syncRes = await fetch(`${workerUrl}/characters/sync`, {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       body: JSON.stringify({
@@ -1539,13 +1788,14 @@ export class GenerationOrchestratorService {
 
     if (!syncRes.ok) {
       const errData = await syncRes.json().catch(() => ({}));
-      const errMsg = errData.message || `Flow worker returned HTTP ${syncRes.status}`;
+      const errMsg =
+        errData.message || `Flow worker returned HTTP ${syncRes.status}`;
       await upsertFlowCharacterMapping({
         storyId,
         characterId,
         flowProjectId,
         flowCharacterName: character.name,
-        syncStatus: 'failed',
+        syncStatus: "failed",
         lastError: errMsg,
       });
       throw new Error(errMsg);
@@ -1561,7 +1811,7 @@ export class GenerationOrchestratorService {
       flowCharacterName: flowCharName,
       flowCharacterId: syncPayload.flowCharacterId || undefined,
       flowCharacterUrl: syncPayload.flowCharacterUrl || undefined,
-      syncStatus: 'synced',
+      syncStatus: "synced",
       sourceReferenceUrl: referenceUrl,
       lastSyncedAt: new Date(),
       lastError: null,
@@ -1570,7 +1820,9 @@ export class GenerationOrchestratorService {
     return {
       success: true,
       mapping: savedMapping,
-      message: syncPayload.message || `Character "${character.name}" successfully synchronized to Google Flow as @${flowCharName}.`,
+      message:
+        syncPayload.message ||
+        `Character "${character.name}" successfully synchronized to Google Flow as @${flowCharName}.`,
     };
   }
 
@@ -1586,18 +1838,28 @@ export class GenerationOrchestratorService {
    */
   public static async generateAllMissingBackgrounds(
     storyId: string,
-    provider: GenerationProviderType = 'gemini_api',
-    options?: { testMockBuffer?: Buffer }
+    provider: GenerationProviderType = "gemini_api",
+    options?: { testMockBuffer?: Buffer },
   ): Promise<{
     total: number;
     generated: number;
     failed: number;
-    results: Array<{ sceneId: string; success: boolean; imageUrl?: string; error?: string }>;
+    results: Array<{
+      sceneId: string;
+      success: boolean;
+      imageUrl?: string;
+      error?: string;
+    }>;
   }> {
     const context = await StoryContextService.resolveStoryContext(storyId);
     const missingScenes = context.scenes.filter((s) => !s.hasBackground);
 
-    const results: Array<{ sceneId: string; success: boolean; imageUrl?: string; error?: string }> = [];
+    const results: Array<{
+      sceneId: string;
+      success: boolean;
+      imageUrl?: string;
+      error?: string;
+    }> = [];
     let generated = 0;
     let failed = 0;
 
@@ -1638,18 +1900,32 @@ export class GenerationOrchestratorService {
    */
   public static async generateAllMissingCharacterReferences(
     storyId: string,
-    provider: GenerationProviderType = 'gemini_api',
-    options?: { testMockBuffer?: Buffer }
+    provider: GenerationProviderType = "gemini_api",
+    options?: { testMockBuffer?: Buffer },
   ): Promise<{
     total: number;
     generated: number;
     failed: number;
-    results: Array<{ characterId: string; name: string; success: boolean; imageUrl?: string; error?: string }>;
+    results: Array<{
+      characterId: string;
+      name: string;
+      success: boolean;
+      imageUrl?: string;
+      error?: string;
+    }>;
   }> {
     const context = await StoryContextService.resolveStoryContext(storyId);
-    const missingChars = context.characters.filter((c) => !c.hasMasterReference);
+    const missingChars = context.characters.filter(
+      (c) => !c.hasMasterReference,
+    );
 
-    const results: Array<{ characterId: string; name: string; success: boolean; imageUrl?: string; error?: string }> = [];
+    const results: Array<{
+      characterId: string;
+      name: string;
+      success: boolean;
+      imageUrl?: string;
+      error?: string;
+    }> = [];
     let generated = 0;
     let failed = 0;
 
@@ -1659,7 +1935,7 @@ export class GenerationOrchestratorService {
           storyId,
           characterId: char.id,
           provider,
-          assetType: 'master_reference',
+          assetType: "master_reference",
           testMockBuffer: options?.testMockBuffer,
         });
         results.push({
