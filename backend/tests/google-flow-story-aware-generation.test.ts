@@ -268,14 +268,14 @@ describe('Story-Aware Direct Generation & Context Resolver Test Suite', () => {
     } as any;
 
     const expectedFlowDirections: Record<string, string> = {
-      front: 'front view',
-      'front-left': 'front three-quarter view',
-      'front-right': 'front three-quarter view',
-      left: 'left side profile',
-      right: 'right side profile',
-      'back-left': 'rear three-quarter view',
-      'back-right': 'rear three-quarter view',
-      back: 'full back view',
+      front: 'Front view:',
+      'front-left': 'Front three-quarter LEFT view:',
+      'front-right': 'Front three-quarter RIGHT view:',
+      left: 'LEFT side profile:',
+      right: 'RIGHT side profile:',
+      'back-left': 'BACK three-quarter LEFT view:',
+      'back-right': 'BACK three-quarter RIGHT view:',
+      back: 'Direct BACK view:',
     };
 
     for (const [view, expectedText] of Object.entries(expectedFlowDirections)) {
@@ -286,12 +286,12 @@ describe('Story-Aware Direct Generation & Context Resolver Test Suite', () => {
         { variation: view, isExistingFlowCharacter: true },
       );
 
-      assert.ok(flowPrompt.prompt.includes('image currently open in this editor'), view);
+      assert.ok(flowPrompt.prompt.includes('image currently selected in this Google Flow editor'), view);
       assert.ok(flowPrompt.prompt.includes(expectedText), view);
-      assert.ok(flowPrompt.prompt.length < 750, `${view} prompt should stay concise`);
+      assert.ok(flowPrompt.prompt.length < 1600, `${view} prompt should stay concise`);
       assert.ok(!flowPrompt.prompt.includes('@'), `${view} prompt must not use plain-text @mentions`);
       assert.ok(!flowPrompt.prompt.includes('भोलू'), `${view} prompt must not use the character name as a token`);
-      assert.ok(!/character reference sheet|contact sheet|reference sheet/i.test(flowPrompt.prompt), view);
+      assert.ok(!/character reference sheet|contact sheet|reference sheet/i.test(flowPrompt.prompt), view);\n      assert.ok(flowPrompt.prompt.includes('one image only'), view);\n      assert.ok(flowPrompt.prompt.includes('Show the complete character from head to toe'), view);
     }
 
     const unlinkedFlowMasterPrompt = GenerationPromptService.buildGoogleFlowCharacterPrompt(
@@ -300,9 +300,9 @@ describe('Story-Aware Direct Generation & Context Resolver Test Suite', () => {
       'master_reference',
       { isExistingFlowCharacter: false },
     );
-    assert.ok(unlinkedFlowMasterPrompt.prompt.includes('Create one full-body front-view character reference'));
-    assert.ok(unlinkedFlowMasterPrompt.prompt.includes('Appearance:'));
-    assert.ok(unlinkedFlowMasterPrompt.prompt.length < 750);
+    assert.ok(unlinkedFlowMasterPrompt.prompt.includes('Create one clean canonical full-body character reference'));
+    assert.ok(unlinkedFlowMasterPrompt.prompt.includes('Create the character described here:'));
+    assert.ok(unlinkedFlowMasterPrompt.prompt.length < 1600);
 
     // Expression
     const exprPrompt = GenerationPromptService.buildCharacterPrompt(context.story, luna, 'expression', {
