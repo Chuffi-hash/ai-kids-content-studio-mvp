@@ -277,73 +277,76 @@ export class GenerationPromptService {
       promptOverride?: string;
     }
   ): CharacterPromptResult {
-    const artStyle = (story.visualStyle || 'storybook illustration').trim();
+    const artStyle = (story.visualStyle || 'storybook illustration')
+      .replace(/[_-]+/g, ' ')
+      .trim();
     const variation = String(options?.variation || '').trim().toLowerCase();
     const dimensions = { width: 1024, height: 1024 };
 
+    // Describe the direction in screen-space terms. "Viewer left/right" is
+    // less ambiguous for an image model than "the character's left/right".
     const directions: Record<string, string> = {
-      front: 'front view, facing the camera',
-      'front-left': 'front three-quarter view, turned slightly toward the character’s left',
-      'front-right': 'front three-quarter view, turned slightly toward the character’s right',
-      left: 'left side profile, facing left',
-      right: 'right side profile, facing right',
-      'back-left': 'rear three-quarter view, turned toward the character’s left',
-      'back-right': 'rear three-quarter view, turned toward the character’s right',
-      back: 'full back view, showing the back of the outfit and hairstyle',
+      front: 'Front view: the character faces straight toward the viewer; face, chest, hips and feet point forward.',
+      'front-left': 'Front three-quarter LEFT view: rotate the whole character about 45 degrees so the nose and chest point toward the LEFT side of the image. Keep both eyes partly visible.',
+      'front-right': 'Front three-quarter RIGHT view: rotate the whole character about 45 degrees so the nose and chest point toward the RIGHT side of the image. Keep both eyes partly visible.',
+      left: 'LEFT side profile: rotate the whole character 90 degrees so the nose points directly to the LEFT side of the image. Show a true side silhouette, not a three-quarter view.',
+      right: 'RIGHT side profile: rotate the whole character 90 degrees so the nose points directly to the RIGHT side of the image. Show a true side silhouette, not a three-quarter view.',
+      'back-left': 'BACK three-quarter LEFT view: turn the whole character away from the viewer about 135 degrees, toward the LEFT side of the image. Show mostly the back with a small side edge of the face.',
+      'back-right': 'BACK three-quarter RIGHT view: turn the whole character away from the viewer about 135 degrees, toward the RIGHT side of the image. Show mostly the back with a small side edge of the face.',
+      back: 'Direct BACK view: the back of the head, hair and clothing face the viewer. The face must not be visible.',
     };
 
-    const direction = directions[variation] || 'front view, facing the camera';
+    const direction = directions[variation] || directions.front;
     const appearance = [
-      character.species ? `Character: ${character.species}.` : '',
+      character.species ? `Character type: ${character.species}.` : '',
       character.visualDescription ? `Appearance: ${character.visualDescription}.` : '',
       character.clothing ? `Clothing: ${character.clothing}.` : '',
-      character.distinctiveFeatures ? `Distinctive features: ${character.distinctiveFeatures}.` : '',
+      character.distinctiveFeatures ? `Distinctive details: ${character.distinctiveFeatures}.` : '',
     ].filter(Boolean).join(' ');
 
-    let prompt: string;
-    if (options?.promptOverride?.trim()) {
-      // Keep user-provided overrides, but still apply the one-image requirement.
-      prompt = `${options.promptOverride.trim()} Show one character only, with no text or labels.`;
-    } else if (options?.isExistingFlowCharacter) {
-      const subjectInstruction =
-        assetType === 'master_reference'
-          ? 'Create a clean full-body front reference of this same character.'
-          : assetType === 'turnaround'
-            ? `Show this same character from a ${direction}.`
-            : assetType === 'expression'
-              ? `Keep this same character and change only the facial expression to ${variation || 'happy and smiling'}.`
-              : `Keep this same character and change only the body pose to ${variation || 'a natural standing pose'}.`;
+    const isTurnaround = assetType === 'turnaround';
+    const fullBody = assetType !== 'expression';
+    const angleInstruction = isTurnaround
+      ? direction
+      : assetType === 'expression'
+        ? `Head-and-shoulders portrait with a ${variation || 'friendly neutral'} expression.`
+        : assetType === 'pose'
+          ? `Full-body view showing this pose: ${variation || 'a relaxed neutral standing pose'}.`
+          : directions.front;
 
-      prompt = [
-        'Use the character in the image currently open in this editor as the visual reference.',
-        subjectInstruction,
-        'Keep the character’s face, hairstyle, colors, body proportions, outfit, patterns, shoes and accessories unchanged. Do not redesign the character.',
-        'Keep a simple neutral standing pose and show the complete character from head to toe, centered in the frame.',
-        `Keep the existing ${artStyle} illustration style and use a plain light neutral background.`,
-        'Show one character only. Do not add words, labels, symbols, borders or extra characters.',
-      ].join(' ');
-    } else {
-      const subjectInstruction =
-        assetType === 'master_reference'
-          ? 'Create one full-body front-view character reference.'
-          : assetType === 'turnaround'
-            ? `Create one full-body character image in a ${direction}.`
-            : assetType === 'expression'
-              ? `Create one head-and-shoulders character portrait with a ${variation || 'happy and smiling'} expression.`
-              : `Create one full-body character image with this pose: ${variation || 'standing naturally'}.`;
+    const identityInstruction = options?.isExistingFlowCharacter
+      ? 'Use the character in the image currently selected in this Google Flow editor as the ONLY identity reference. Edit that same character; do not invent, replace or redesign the character.'
+      : `Create the character described here: ${appearance}`;
 
-      prompt = [
-        subjectInstruction,
-        appearance,
-        `Illustration style: ${artStyle}.`,
-        'Use a clear, simple, light neutral background. Keep the entire character visible when showing a full-body view.',
-        'Show one character only. Do not include the character’s name, text, labels, symbols, borders or extra characters.',
-      ].filter(Boolean).join(' ');
-    }
+    const customDetail = options?.promptOverride?.trim()
+      ? `Additional creative detail: ${options.promptOverride.trim()}.`
+      : '';
 
+    const promptParts = [
+      identityInstruction,
+      assetType === 'master_reference'
+        ? 'Create one clean canonical full-body character reference.'
+        : isTurnaround
+          ? 'Create ONE separate turnaround image for this single camera angle. This is one image only, not a turnaround sheet.'
+          : assetType === 'expression'
+            ? 'Create one expression variation of the same character.'
+            : 'Create one pose variation of the same character.',
+      angleInstruction,
+      'Preserve the exact same identity: face shape, age, skin or fur tone, eyes, hairstyle, body proportions, outfit, clothing patterns, footwear, accessories and colors. Do not add, remove or redesign any identifying feature.',
+      fullBody
+        ? 'Keep the same simple neutral standing pose for every turnaround view: arms relaxed slightly away from the body, hands visible, legs natural and both feet fully visible. Show the complete character from head to toe.'
+        : 'Keep the same face identity, hairstyle, colors and clothing; change only the facial expression.',
+      'Keep the camera at eye level, the character centered, and the full figure at a consistent scale and distance.',
+      `Match the original ${artStyle} illustration style, line quality, shading and color palette.`,
+      'Use the same plain warm off-white background as the reference. No scenery or props.',
+      customDetail,
+      'Final image: one character, one view, no text, no name, no labels, no captions, no watermark, no logo, no panels, no grid and no collage.',
+    ].filter(Boolean);
+
+    const prompt = promptParts.join(' ').replace(/\\s+/g, ' ').trim();
     return {
-      prompt: prompt.replace(/\s+/g, ' ').trim(),
-      negativePrompt: 'text, letters, labels, watermark, logo, extra characters, collage, multiple views, cropped body, distorted anatomy',
+      prompt,
+      negativePrompt: 'text, writing, letters, labels, captions, watermark, logo, extra characters, contact sheet, collage, multiple views, props, scenery, cropped body, altered outfit, different face, distorted anatomy',
       aspectRatio: '1:1',
       width: dimensions.width,
       height: dimensions.height,
