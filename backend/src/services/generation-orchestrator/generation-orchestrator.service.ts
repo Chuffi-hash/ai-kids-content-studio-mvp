@@ -659,31 +659,9 @@ export class GenerationOrchestratorService {
               );
             }
             if (errData.message?.includes("Another Flow job is active")) {
-              console.warn(
-                "[GenerationOrchestrator] Another Flow job was active. Auto-recovering lock and retrying with cancelPrevious...",
+              throw new Error(
+                "Another Google Flow generation is active. Wait for it to finish or cancel that specific job before starting this background generation.",
               );
-              try {
-                await fetch(`${workerUrl}/jobs/cancel-active`, {
-                  method: "POST",
-                  headers: token ? { Authorization: `Bearer ${token}` } : {},
-                });
-                submitRes = await fetch(`${workerUrl}/jobs`, {
-                  method: "POST",
-                  headers: {
-                    "Content-Type": "application/json",
-                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-                  },
-                  body: JSON.stringify({
-                    targetType: "background",
-                    storyId,
-                    sceneId: scene.sceneId,
-                    prompt: promptData.prompt,
-                    aspectRatio: promptData.aspectRatio,
-                    projectUrl,
-                    cancelPrevious: true,
-                  }),
-                });
-              } catch {}
             }
           }
           if (!submitRes.ok) {
