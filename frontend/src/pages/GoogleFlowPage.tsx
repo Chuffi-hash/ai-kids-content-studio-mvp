@@ -1113,6 +1113,14 @@ export default function GoogleFlowPage() {
               }
               if (job.status === "completed") {
                 completed = true;
+              } else if (job.status === "awaiting_manual_action") {
+                setBatchCharSummary(
+                  `Google Flow needs a manual step for ${directionLabel}. Switch to the visible Flow browser, click Generate Image when the prompt is ready, then return here; this job will continue polling.`,
+                );
+              } else if (job.status === "awaiting_download") {
+                setBatchCharSummary(
+                  `Google Flow has generated ${directionLabel}. Use Flow's normal Download action in the visible browser; the worker will import the image when the download completes.`,
+                );
               } else if (job.status === "failed") {
                 throw new Error(
                   job.error ||
@@ -1152,7 +1160,13 @@ export default function GoogleFlowPage() {
         }
       }
 
-      setCharacterPreviewIndexes((prev) => ({ ...prev, [characterId]: 0 }));
+      // Let the preview helper select the first generated direction. This
+      // avoids landing on an empty Front slot after regenerating only e.g. Right.
+      setCharacterPreviewIndexes((prev) => {
+        const next = { ...prev };
+        delete next[characterId];
+        return next;
+      });
       await loadStoryContext(selectedStoryId);
       getAllCharacters().then(setCharacters);
 
@@ -3744,9 +3758,15 @@ export default function GoogleFlowPage() {
                           characterGenerationProgress[ch.id];
                         const previewViews =
                           getCharacterDirectionalPreviewViews(ch);
+                        const firstAvailablePreviewIndex = previewViews.findIndex(
+                          (view) => !view.isMissing,
+                        );
+                        const preferredPreviewIndex =
+                          characterPreviewIndexes[ch.id] ??
+                          Math.max(firstAvailablePreviewIndex, 0);
                         const previewIndex = previewViews.length
                           ? Math.min(
-                              characterPreviewIndexes[ch.id] || 0,
+                              preferredPreviewIndex,
                               previewViews.length - 1,
                             )
                           : 0;
