@@ -1,6 +1,5 @@
 import {
   VisualStyleId,
-  CanonicalVisualStyleId,
   VisualStylePreset,
   StyleCompatibilityResult,
   StyleIntensity,
@@ -305,16 +304,17 @@ export const VISUAL_STYLE_PRESETS: Record<string, VisualStylePreset> = {
   },
 };
 
-export const CANONICAL_STYLE_KEYS: CanonicalVisualStyleId[] = [
+export const CANONICAL_STYLE_KEYS: VisualStyleId[] = [
+  '2d_cartoon',
+  'storybook_illustrated',
+  '3d_animated',
+  '3d_pixar',
+  'photorealistic',
   'cinematic',
-  'cartoon',
   'anime',
-  '3d_animation',
-  'storybook_illustration',
-  'stylized_realism',
-  'fantasy_illustration',
   'watercolor',
-  'pixel_art',
+  'claymation',
+  'fantasy_illustration',
   'custom',
 ];
 
@@ -638,6 +638,25 @@ export class VisualStylesService {
         title: 'Perfect Style Harmony',
         advice: `Both background and character share the ${bg.name} visual style, producing a cohesive unified story aesthetic.`,
         suggestedAdjustments: [],
+      };
+    }
+
+    const claymationAnimeMismatch =
+      (bg.id === 'claymation' && char.id === 'anime') ||
+      (bg.id === 'anime' && char.id === 'claymation');
+    if (claymationAnimeMismatch) {
+      return {
+        backgroundStyle: bg.name,
+        characterStyle: char.name,
+        matchLevel: 'clashing',
+        compatible: true,
+        title: 'Distinct Stop-Motion and Anime Styles',
+        advice: 'Tactile clay-like stop-motion materials and painted anime rendering use different surface, shape, and lighting languages. They can be combined intentionally, but need deliberate integration to avoid a visually inconsistent result.',
+        warning: 'This pairing may look visually disjointed. This is advisory only; your style selection is not blocked.',
+        suggestedAdjustments: [
+          'Choose a shared lighting direction and shadow softness for both layers.',
+          'Unify the palette and texture intensity so the character and environment feel part of one world.',
+        ],
       };
     }
 
