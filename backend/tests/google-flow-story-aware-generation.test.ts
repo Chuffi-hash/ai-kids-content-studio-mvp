@@ -3,7 +3,10 @@ import assert from 'node:assert';
 import { randomUUID } from 'node:crypto';
 import { prisma } from '../src/services/database/database.service.js';
 import { StoryContextService } from '../src/services/google-flow/story-context.service.js';
-import { GenerationPromptService } from '../src/services/google-flow/generation-prompt.service.js';
+import {
+  GenerationPromptService,
+  normalizeCharacterFacingDirection,
+} from '../src/services/google-flow/generation-prompt.service.js';
 import { GenerationOrchestratorService } from '../src/services/generation-orchestrator/generation-orchestrator.service.js';
 
 describe('Story-Aware Direct Generation & Context Resolver Test Suite', () => {
@@ -267,6 +270,13 @@ describe('Story-Aware Direct Generation & Context Resolver Test Suite', () => {
       },
     } as any;
 
+    assert.throws(
+      () => normalizeCharacterFacingDirection("diagonal"),
+      /Unsupported character facing direction/,
+    );
+    assert.strictEqual(normalizeCharacterFacingDirection("front-left"), "front-left");
+    assert.strictEqual(normalizeCharacterFacingDirection("right"), "right");
+
     const expectedFlowDirections: Record<string, string> = {
       front: 'Front view:',
       'front-left': 'Front three-quarter LEFT view:',
@@ -294,6 +304,7 @@ describe('Story-Aware Direct Generation & Context Resolver Test Suite', () => {
       assert.ok(!/character reference sheet|contact sheet|reference sheet/i.test(flowPrompt.prompt), view);
       assert.ok(flowPrompt.prompt.includes('one image only'), view);
       assert.ok(flowPrompt.prompt.includes('Show the complete character from head to toe'), view);
+      assert.strictEqual(flowPrompt.requestedDirection, view);
     }
 
     const unlinkedFlowMasterPrompt = GenerationPromptService.buildGoogleFlowCharacterPrompt(
