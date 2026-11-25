@@ -134,7 +134,10 @@ test("Character Canonical Identity & Directional Prompt Consistency Suite", asyn
     assert.equal(normalizeCharacterFacingDirection("right_profile"), "right");
     assert.equal(normalizeCharacterFacingDirection("back_three_quarter_left"), "back-left");
     assert.equal(normalizeCharacterFacingDirection("back_three_quarter_right"), "back-right");
-    assert.equal(normalizeCharacterFacingDirection("unknown_angle"), "front");
+    assert.throws(
+      () => normalizeCharacterFacingDirection("unknown_angle"),
+      /Unsupported character facing direction/,
+    );
   });
 
   await t.test("5. Invalid image responses (empty, invalid MIME, tiny dimensions, extreme aspect ratio) are rejected", async () => {
