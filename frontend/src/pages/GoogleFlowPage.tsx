@@ -150,7 +150,7 @@ function getCharacterDirectionalPreviewViews(
         direction: "master",
         label: "Master reference",
         url: character.referenceImageUrl,
-        validationStatus: "validated",
+        validationStatus: "needs_review",
       },
     ];
   }
@@ -1011,6 +1011,24 @@ export default function GoogleFlowPage() {
     variation?: string,
   ) => {
     if (!selectedStoryId) return;
+
+    const requestedDirection = variation?.trim();
+    const isSingleDirectionalRegeneration =
+      assetType === "turnaround" && Boolean(requestedDirection);
+
+    if (
+      isSingleDirectionalRegeneration &&
+      !CHARACTER_TURNAROUND_DIRECTIONS.some(
+        (item) => item.direction === requestedDirection,
+      )
+    ) {
+      setCharErrors((prev) => ({
+        ...prev,
+        [characterId]: `Unsupported character direction: ${requestedDirection}`,
+      }));
+      return;
+    }
+
     setGeneratingCharIds((prev) => ({ ...prev, [characterId]: true }));
     setCharErrors((prev) => {
       const next = { ...prev };
@@ -1018,10 +1036,17 @@ export default function GoogleFlowPage() {
       return next;
     });
 
+    // A supplied direction regenerates exactly that slot. No direction means
+    // the user explicitly requested the complete eight-view batch.
     const viewsToGenerate =
       assetType === "turnaround"
-        ? CHARACTER_TURNAROUND_DIRECTIONS.map((item) => item.direction)
+        ? requestedDirection
+          ? [requestedDirection]
+          : CHARACTER_TURNAROUND_DIRECTIONS.map((item) => item.direction)
         : [variation || (assetType === "master_reference" ? "front" : "")];
+
+    let successfulCount = 0;
+    const failedViews: Array<{ direction: string; message: string }> = [];
 
     try {
       for (let index = 0; index < viewsToGenerate.length; index += 1) {
@@ -1046,48 +1071,82 @@ export default function GoogleFlowPage() {
           },
         }));
 
-        const res = await generateCharacterAssetDirect({
-          storyId: selectedStoryId,
-          characterId,
-          provider: generationProvider,
-          assetType,
-          variation: currentDirection || undefined,
-        });
+        try {
+          const res = await generateCharacterAssetDirect({
+            storyId: selectedStoryId,
+            characterId,
+            provider: generationProvider,
+            assetType,
+            variation: currentDirection || undefined,
+          });
 
-        if (res?.jobId && res?.status === "generating") {
-          let completed = false;
-          const timeoutMs = 120000;
-          const pollStart = Date.now();
+          if (!res) {
+            throw new Error(`No response received for ${directionLabel}.`);
+          }
+          if ((res as any).success === false || res.status === "failed") {
+            throw new Error(
+              (res as any).message ||
+                `Could not generate the ${directionLabel} view.`,
+            );
+          }
 
-          while (!completed) {
-            if (Date.now() - pollStart > timeoutMs) {
-              throw new Error(
-                `Timed out while generating the ${directionLabel} view. Previously completed views have been saved.`,
-              );
-            }
+          // Poll every trackable non-terminal job, not only those whose first
+          // response happens to say "generating".
+          if (res.jobId && res.status !== "completed") {
+            const timeoutMs = 180000;
+            const pollStart = Date.now();
+            let completed = false;
 
-            const job = await fetchGenerationJob(res.jobId);
-            switch (job?.status) {
-              case "completed":
-                completed = true;
-                break;
-              case "failed":
+            while (!completed) {
+              if (Date.now() - pollStart > timeoutMs) {
                 throw new Error(
-                  job?.error ||
+                  `Timed out while generating the ${directionLabel} view. Previously completed views remain saved.`,
+                );
+              }
+
+              const job = await fetchGenerationJob(res.jobId);
+              if (!job) {
+                await new Promise((resolve) => setTimeout(resolve, 2000));
+                continue;
+              }
+              if (job.status === "completed") {
+                completed = true;
+              } else if (job.status === "failed") {
+                throw new Error(
+                  job.error ||
                     `Google Flow failed to generate the ${directionLabel} view.`,
                 );
-              case "cancelled":
+              } else if (job.status === "cancelled") {
                 throw new Error(
                   `Generation of the ${directionLabel} view was cancelled.`,
                 );
-              default:
+              } else {
                 await new Promise((resolve) => setTimeout(resolve, 2000));
+              }
             }
+          } else if (
+            !res.jobId &&
+            res.status &&
+            res.status !== "completed" &&
+            res.status !== "failed" &&
+            res.status !== "cancelled"
+          ) {
+            throw new Error(
+              `Generation of ${directionLabel} returned status "${res.status}" without a trackable job ID.`,
+            );
           }
-        } else if (res?.status === "failed") {
-          throw new Error(
-            res.message || `Could not generate the ${directionLabel} view.`,
-          );
+
+          successfulCount += 1;
+        } catch (err: any) {
+          failedViews.push({
+            direction: directionLabel,
+            message: err?.message || "Generation failed.",
+          });
+          // Full batches continue after a failed angle; a single-view action
+          // stops after the one requested direction fails.
+          if (assetType !== "turnaround" || isSingleDirectionalRegeneration) {
+            break;
+          }
         }
       }
 
@@ -1095,18 +1154,32 @@ export default function GoogleFlowPage() {
       await loadStoryContext(selectedStoryId);
       getAllCharacters().then(setCharacters);
 
-      if (assetType === "turnaround") {
+      if (failedViews.length > 0) {
+        const failureMessage = failedViews
+          .map((item) => `${item.direction}: ${item.message}`)
+          .join(" | ");
+        setCharErrors((prev) => ({ ...prev, [characterId]: failureMessage }));
+
+        if (assetType === "turnaround" && !isSingleDirectionalRegeneration) {
+          setBatchCharSummary(
+            `Directional batch finished: ${successfulCount}/${viewsToGenerate.length} generated; ${failedViews.length} failed. Successful references were preserved.`,
+          );
+          setTimeout(() => setBatchCharSummary(null), 9000);
+        }
+      } else if (assetType === "turnaround" && !isSingleDirectionalRegeneration) {
         setBatchCharSummary(
-          "All 8 directional character images were generated and saved separately. Use the preview arrows to inspect each view.",
+          `All ${successfulCount} directional character images were generated and saved separately. Use the preview arrows to inspect each view.`,
         );
         setTimeout(() => setBatchCharSummary(null), 7000);
+      } else if (isSingleDirectionalRegeneration) {
+        setBatchCharSummary(`${viewsToGenerate[0]} reference regenerated successfully.`);
+        setTimeout(() => setBatchCharSummary(null), 5000);
       }
     } catch (err: any) {
       setCharErrors((prev) => ({
         ...prev,
         [characterId]: err.message || "Character generation failed.",
       }));
-      // Reload successful earlier views even if a later direction failed.
       await loadStoryContext(selectedStoryId).catch(() => {});
       getAllCharacters().then(setCharacters);
     } finally {
@@ -1118,7 +1191,6 @@ export default function GoogleFlowPage() {
       });
     }
   };
-
   const handleBatchGenerateMissingCharacters = async () => {
     if (!selectedStoryId) return;
     setIsBatchCharRunning(true);
@@ -4237,11 +4309,12 @@ export default function GoogleFlowPage() {
               const isMasterLightboxView =
                 !activeLightboxView ||
                 activeLightboxView.direction === "master";
-              const validationStatus = activeLightboxView?.validationStatus;
+              const validationStatus =
+                activeLightboxView?.validationStatus || "needs_review";
               const badgeClass =
                 previewAsset.type === "background"
                   ? "flow-status-badge ready"
-                  : isMasterLightboxView || validationStatus === "validated"
+                  : validationStatus === "validated"
                     ? "flow-status-badge ready"
                     : validationStatus === "failed"
                       ? "flow-status-badge error"
@@ -4249,12 +4322,16 @@ export default function GoogleFlowPage() {
               const badgeLabel =
                 previewAsset.type === "background"
                   ? "✓ Scene Environment Plate"
-                  : isMasterLightboxView
-                    ? "✓ Canonical Master Reference"
-                    : validationStatus === "validated"
-                      ? `✓ Validated View (${activeLightboxView?.label})`
-                      : validationStatus === "failed"
-                        ? `✕ Validation Failed (${activeLightboxView?.label})`
+                  : validationStatus === "validated"
+                    ? isMasterLightboxView
+                      ? "✓ Validated Canonical Master"
+                      : `✓ Validated View (${activeLightboxView?.label})`
+                    : validationStatus === "failed"
+                      ? isMasterLightboxView
+                        ? "✕ Master Reference Validation Failed"
+                        : `✕ Validation Failed (${activeLightboxView?.label})`
+                      : isMasterLightboxView
+                        ? "⚠ Canonical Master — Needs Review"
                         : `⚠ Generated View — Needs Review (${activeLightboxView?.label})`;
               const activeImageUrl =
                 activeLightboxView?.url || previewAsset.url;
