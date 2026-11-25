@@ -259,6 +259,98 @@ export class GenerationPromptService {
       referenceImageUrl: character.referenceImageUrl,
     };
   }
+  /**
+   * Builds short, natural-language prompts specifically for the Google Flow
+   * Character workspace. The saved-character editor already has the selected
+   * character image as visual context, so do not emit a plain-text @mention:
+   * it is not a verified Flow entity token and can confuse image editing.
+   *
+   * Gemini keeps using buildCharacterPrompt() and its separate negative prompt.
+   */
+  public static buildGoogleFlowCharacterPrompt(
+    story: { visualStyle?: string },
+    character: CharacterContextItem,
+    assetType: 'master_reference' | 'turnaround' | 'expression' | 'pose',
+    options?: {
+      variation?: string;
+      isExistingFlowCharacter?: boolean;
+      promptOverride?: string;
+    }
+  ): CharacterPromptResult {
+    const artStyle = (story.visualStyle || 'storybook illustration').trim();
+    const variation = String(options?.variation || '').trim().toLowerCase();
+    const dimensions = { width: 1024, height: 1024 };
+
+    const directions: Record<string, string> = {
+      front: 'front view, facing the camera',
+      'front-left': 'front three-quarter view, turned slightly toward the character’s left',
+      'front-right': 'front three-quarter view, turned slightly toward the character’s right',
+      left: 'left side profile, facing left',
+      right: 'right side profile, facing right',
+      'back-left': 'rear three-quarter view, turned toward the character’s left',
+      'back-right': 'rear three-quarter view, turned toward the character’s right',
+      back: 'full back view, showing the back of the outfit and hairstyle',
+    };
+
+    const direction = directions[variation] || 'front view, facing the camera';
+    const appearance = [
+      character.species ? `Character: ${character.species}.` : '',
+      character.visualDescription ? `Appearance: ${character.visualDescription}.` : '',
+      character.clothing ? `Clothing: ${character.clothing}.` : '',
+      character.distinctiveFeatures ? `Distinctive features: ${character.distinctiveFeatures}.` : '',
+    ].filter(Boolean).join(' ');
+
+    let prompt: string;
+    if (options?.promptOverride?.trim()) {
+      // Keep user-provided overrides, but still apply the one-image requirement.
+      prompt = `${options.promptOverride.trim()} Show one character only, with no text or labels.`;
+    } else if (options?.isExistingFlowCharacter) {
+      const subjectInstruction =
+        assetType === 'master_reference'
+          ? 'Create a clean full-body front reference of this same character.'
+          : assetType === 'turnaround'
+            ? `Show this same character from a ${direction}.`
+            : assetType === 'expression'
+              ? `Keep this same character and change only the facial expression to ${variation || 'happy and smiling'}.`
+              : `Keep this same character and change only the body pose to ${variation || 'a natural standing pose'}.`;
+
+      prompt = [
+        'Use the character in the image currently open in this editor as the visual reference.',
+        subjectInstruction,
+        'Keep the character’s face, hairstyle, colors, body proportions, outfit, patterns, shoes and accessories unchanged. Do not redesign the character.',
+        'Keep a simple neutral standing pose and show the complete character from head to toe, centered in the frame.',
+        `Keep the existing ${artStyle} illustration style and use a plain light neutral background.`,
+        'Show one character only. Do not add words, labels, symbols, borders or extra characters.',
+      ].join(' ');
+    } else {
+      const subjectInstruction =
+        assetType === 'master_reference'
+          ? 'Create one full-body front-view character reference.'
+          : assetType === 'turnaround'
+            ? `Create one full-body character image in a ${direction}.`
+            : assetType === 'expression'
+              ? `Create one head-and-shoulders character portrait with a ${variation || 'happy and smiling'} expression.`
+              : `Create one full-body character image with this pose: ${variation || 'standing naturally'}.`;
+
+      prompt = [
+        subjectInstruction,
+        appearance,
+        `Illustration style: ${artStyle}.`,
+        'Use a clear, simple, light neutral background. Keep the entire character visible when showing a full-body view.',
+        'Show one character only. Do not include the character’s name, text, labels, symbols, borders or extra characters.',
+      ].filter(Boolean).join(' ');
+    }
+
+    return {
+      prompt: prompt.replace(/\\s+/g, ' ').trim(),
+      negativePrompt: 'text, letters, labels, watermark, logo, extra characters, collage, multiple views, cropped body, distorted anatomy',
+      aspectRatio: '1:1',
+      width: dimensions.width,
+      height: dimensions.height,
+      referenceImageUrl: character.referenceImageUrl,
+    };
+  }
+
 }
 
 function getDimensionsForRatio(ratio: string): { width: number; height: number } {
