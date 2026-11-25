@@ -664,14 +664,15 @@ export class GoogleFlowAssetImportService {
             undefined
           : undefined);
 
+      // Saving an image is not the same as validating its identity or angle.
       const validationStatus =
-        options.validationStatus || (isMaster ? "validated" : "needs_review");
+        options.validationStatus || "needs_review";
       const validationDetails =
         width < 256 || height < 256
           ? `Low resolution (${width}x${height}px); visual review recommended.`
           : isMaster
-            ? "Canonical master reference saved."
-            : "Generated directional view awaiting visual orientation review.";
+            ? "Canonical master reference saved; visual identity and anatomy have not been validated."
+            : "Generated directional view awaiting visual orientation and identity review.";
 
       const registered =
         await this.getCharacterReferenceService().saveAssetToCharacter(
