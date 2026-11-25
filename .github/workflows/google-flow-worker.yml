@@ -124,3 +124,16 @@ jobs:
           IMAGE_PROVIDER: mock
           TTS_PROVIDER: mock
           STORY_PROVIDER: deterministic
+      - name: Install Remotion renderer dependencies
+        run: npm --prefix ../remotion install
+      - name: Ensure Remotion browser
+        run: npm --prefix ../remotion run ensure-browser
+      - name: Run Remotion video rendering and export integration tests
+        run: npm run test:remotion
+        env:
+          NODE_ENV: test
+          STORAGE_DIR: ./storage
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db?schema=public
+          IMAGE_PROVIDER: mock
+          TTS_PROVIDER: mock
+          STORY_PROVIDER: deterministic
