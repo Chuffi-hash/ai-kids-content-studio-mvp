@@ -282,7 +282,10 @@ export class GenerationOrchestratorService {
 
       // Reconcile any in-memory or PostgreSQL jobs that are active
       for (const [id, j] of this.jobs.entries()) {
-        if (!["completed", "cancelled", "failed"].includes(j.status)) {
+        if (
+          j.provider === "google_flow" &&
+          !["completed", "cancelled", "failed"].includes(j.status)
+        ) {
           j.status = "cancelled";
           j.error = "Cancelled by user request.";
           j.updatedAt = new Date().toISOString();
@@ -296,7 +299,10 @@ export class GenerationOrchestratorService {
       }
       try {
         await prisma.generationJob.updateMany({
-          where: { status: { notIn: ["completed", "cancelled", "failed"] } },
+          where: {
+            provider: "google_flow",
+            status: { notIn: ["completed", "cancelled", "failed"] },
+          },
           data: { status: "cancelled", error: "Cancelled by user request." },
         });
       } catch {}
@@ -1214,37 +1220,66 @@ export class GenerationOrchestratorService {
       throw new Error(`Character ${characterId} not found in story ${storyId}`);
     }
 
-    // Prevent duplicate active jobs for the same character + assetType + direction
+    // Prevent duplicate jobs across the in-memory cache and persisted job
+    // history. Existing jobs can be in any non-terminal lifecycle state.
     const activeStatuses = new Set([
+      "queued",
       "preparing",
-      "generating",
-      "importing",
+      "prompt_filled",
+      "agent_prompt_submitted",
+      "awaiting_agent_confirmation",
       "generation_submitted",
+      "generating",
       "output_detected",
       "downloading",
+      "importing",
+      "awaiting_download",
+      "awaiting_manual_action",
     ]);
-    for (const existing of this.jobs.values()) {
-      if (
-        existing.characterId === character.id &&
-        existing.assetType === assetType &&
-        (existing.variation || "") === (normalizedVariation || "") &&
-        activeStatuses.has(existing.status)
-      ) {
-        return {
-          success: true,
-          jobId: existing.id,
-          workerJobId: existing.workerJobId,
-          status: existing.status,
-          target:
-            assetType === "master_reference"
-              ? "character_reference"
-              : "character_view",
-          assetId: character.id,
+    const matchingJob = (candidate: any) => {
+      const candidateVariation =
+        candidate.variation ?? candidate.metadata?.variation ?? "";
+      return (
+        candidate.storyId === storyId &&
+        candidate.characterId === character.id &&
+        candidate.provider === provider &&
+        candidate.assetType === assetType &&
+        String(candidateVariation || "") === String(normalizedVariation || "") &&
+        activeStatuses.has(candidate.status)
+      );
+    };
+
+    let existingJob: any = Array.from(this.jobs.values()).find(matchingJob);
+    if (!existingJob) {
+      try {
+        const persistedJobs = await listGenerationJobs({
+          storyId,
           characterId: character.id,
-          imageUrl: null,
-          message: `Generation for ${normalizedVariation || assetType} is already in progress.`,
-        };
+        });
+        existingJob = persistedJobs.find(matchingJob);
+      } catch (error) {
+        console.warn(
+          "[GenerationOrchestrator] Could not inspect persisted character jobs for duplicate prevention:",
+          (error as Error).message,
+        );
       }
+    }
+
+    if (existingJob) {
+      return {
+        success: true,
+        jobId: existingJob.id,
+        workerJobId: existingJob.workerJobId || undefined,
+        status: existingJob.status,
+        target:
+          assetType === "master_reference"
+            ? "character_reference"
+            : "character_view",
+        assetId: character.id,
+        characterId: character.id,
+        imageUrl: null,
+        message: `Generation for ${normalizedVariation || assetType} is already in progress.`,
+      };
     }
 
     // 2. Check for existing Flow Character Mapping
@@ -1522,26 +1557,9 @@ export class GenerationOrchestratorService {
               );
             }
             if (errData.message?.includes("Another Flow job is active")) {
-              console.warn(
-                "[GenerationOrchestrator] Another Flow job was active. Auto-recovering lock and retrying with cancelPrevious...",
+              throw new Error(
+                "Another Google Flow generation is active. Wait for it to finish or cancel that specific job before starting this one.",
               );
-              try {
-                await fetch(`${workerUrl}/jobs/cancel-active`, {
-                  method: "POST",
-                  headers: token ? { Authorization: `Bearer ${token}` } : {},
-                });
-                submitRes = await fetch(`${workerUrl}/jobs`, {
-                  method: "POST",
-                  headers: {
-                    "Content-Type": "application/json",
-                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-                  },
-                  body: JSON.stringify({
-                    ...workerJobPayload,
-                    cancelPrevious: true,
-                  }),
-                });
-              } catch {}
             }
           }
           if (!submitRes.ok) {
