@@ -54,6 +54,8 @@ jobs:
         run: npm install
       - name: Run Remotion typecheck
         run: npm run typecheck
+      - name: Run Remotion manifest and animation tests
+        run: npm test
 
   frontend-build:
     runs-on: ubuntu-latest
