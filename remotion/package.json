@@ -6,7 +6,7 @@
     "render": "tsx src/render.ts",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test src/manifest.test.ts",
-    "ensure-browser": "remotion browser ensure"
+    "ensure-browser": "npx --yes @remotion/cli@4.0.541 browser ensure"
   },
   "dependencies": {
     "@remotion/bundler": "4.0.541",
