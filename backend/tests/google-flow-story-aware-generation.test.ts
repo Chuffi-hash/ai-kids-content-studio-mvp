@@ -392,6 +392,14 @@ describe('Story-Aware Direct Generation & Context Resolver Test Suite', () => {
     const updatedChar = await prisma.character.findUnique({ where: { id: char2Id } });
     assert.ok(updatedChar);
     assert.strictEqual(updatedChar.referenceImageUrl, res.imageUrl);
+
+    const canonical = updatedChar.canonicalAppearance as any;
+    assert.strictEqual(canonical?.references?.mainUrl, res.imageUrl);
+    assert.strictEqual(
+      canonical?.references?.directionalViews?.front,
+      undefined,
+      "The canonical master reference must not occupy the directional Front slot.",
+    );
   });
 
   test('5b. A front directional view is saved separately and never replaces the master reference', async () => {
