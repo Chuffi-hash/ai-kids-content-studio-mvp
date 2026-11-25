@@ -72,6 +72,7 @@ type CharacterPreviewView = {
   direction: string;
   label: string;
   url: string;
+  isMissing?: boolean;
   assetId?: string;
   jobId?: string | null;
   sourceCanonicalReferenceId?: string | null;
@@ -106,7 +107,7 @@ function getCharacterDirectionalPreviewViews(
   >;
   const assets = Array.isArray(canonical.assets) ? canonical.assets : [];
 
-  const views = CHARACTER_TURNAROUND_DIRECTIONS.flatMap(
+  const resolved = CHARACTER_TURNAROUND_DIRECTIONS.map(
     ({ direction, label }) => {
       const mapped = directionalViews[direction];
       const mappedUrl = typeof mapped === "string" ? mapped : mapped?.url;
@@ -118,32 +119,33 @@ function getCharacterDirectionalPreviewViews(
       );
       const meta = directionalMeta[direction] || {};
       const url = mappedUrl || savedAsset?.url;
-      return url
-        ? [
-            {
-              direction,
-              label,
-              url: String(url),
-              assetId: meta.assetId || savedAsset?.id,
-              jobId: meta.jobId || savedAsset?.jobId || null,
-              sourceCanonicalReferenceId:
-                meta.sourceCanonicalReferenceId ||
-                savedAsset?.sourceCanonicalReferenceId ||
-                null,
-              validationStatus:
-                meta.validationStatus ||
-                savedAsset?.validationStatus ||
-                "needs_review",
-              validationDetails:
-                meta.validationDetails || savedAsset?.validationDetails || null,
-              createdAt: meta.updatedAt || savedAsset?.createdAt || null,
-            },
-          ]
-        : [];
+
+      return {
+        direction,
+        label,
+        url: url ? String(url) : "",
+        isMissing: !url,
+        assetId: meta.assetId || savedAsset?.id,
+        jobId: meta.jobId || savedAsset?.jobId || null,
+        sourceCanonicalReferenceId:
+          meta.sourceCanonicalReferenceId ||
+          savedAsset?.sourceCanonicalReferenceId ||
+          null,
+        validationStatus: url
+          ? meta.validationStatus || savedAsset?.validationStatus || "needs_review"
+          : "missing" as const,
+        validationDetails:
+          meta.validationDetails || savedAsset?.validationDetails || null,
+        createdAt: meta.updatedAt || savedAsset?.createdAt || null,
+      };
     },
   );
 
-  if (views.length > 0) return views;
+  // Once at least one directional asset exists, keep all eight named slots
+  // visible. Missing directions must not silently disappear from the index.
+  const hasDirectionalAssets = resolved.some((view) => !view.isMissing);
+  if (hasDirectionalAssets) return resolved;
+
   if (character.referenceImageUrl) {
     return [
       {
@@ -3799,37 +3801,55 @@ export default function GoogleFlowPage() {
                                   </div>
                                 ) : activePreviewView ? (
                                   <div
-                                    className="flow-char-preview-image"
+                                    className={`flow-char-preview-image${activePreviewView.isMissing ? " is-missing" : ""}`}
                                     onClick={openCharacterPreview}
-                                    title={`Preview ${activePreviewView.label} character view`}
+                                    title={
+                                      activePreviewView.isMissing
+                                        ? `Missing ${activePreviewView.label} view — open to generate it`
+                                        : `Preview ${activePreviewView.label} character view`
+                                    }
                                   >
-                                    <img
-                                      src={activePreviewView.url}
-                                      alt={`${ch.name} • ${activePreviewView.label}`}
-                                      onError={(e) => {
-                                        (
-                                          e.target as HTMLElement
-                                        ).style.display = "none";
-                                        const parent = (e.target as HTMLElement)
-                                          .parentElement;
-                                        const fallback = parent?.querySelector(
-                                          ".flow-thumb-fallback",
-                                        ) as HTMLElement;
-                                        if (fallback)
-                                          fallback.style.display = "flex";
-                                      }}
-                                    />
-                                    <div
-                                      className="flow-thumb-fallback"
-                                      style={{ display: "none" }}
-                                    >
-                                      <UsersIcon size={18} color="#f59e0b" />
-                                      <small style={{ fontSize: "8px" }}>
-                                        Load Error
-                                      </small>
-                                    </div>
+                                    {activePreviewView.isMissing ? (
+                                      <div className="flow-char-missing-view">
+                                        <UsersIcon size={18} color="#7c3aed" />
+                                        <small>{activePreviewView.label} missing</small>
+                                        <span>Open to generate this view</span>
+                                      </div>
+                                    ) : (
+                                      <>
+                                        <img
+                                          src={activePreviewView.url}
+                                          alt={`${ch.name} • ${activePreviewView.label}`}
+                                          onError={(e) => {
+                                            (
+                                              e.target as HTMLElement
+                                            ).style.display = "none";
+                                            const parent = (e.target as HTMLElement)
+                                              .parentElement;
+                                            const fallback = parent?.querySelector(
+                                              ".flow-thumb-fallback",
+                                            ) as HTMLElement;
+                                            if (fallback)
+                                              fallback.style.display = "flex";
+                                          }}
+                                        />
+                                        <div
+                                          className="flow-thumb-fallback"
+                                          style={{ display: "none" }}
+                                        >
+                                          <UsersIcon size={18} color="#f59e0b" />
+                                          <small style={{ fontSize: "8px" }}>
+                                            Load Error
+                                          </small>
+                                        </div>
+                                      </>
+                                    )}
                                     <div className="flow-thumb-hover-overlay">
-                                      <span>🔍 Preview views</span>
+                                      <span>
+                                        {activePreviewView.isMissing
+                                          ? "＋ Generate missing view"
+                                          : "🔍 Preview views"}
+                                      </span>
                                     </div>
                                     {previewViews.length > 1 && (
                                       <div className="flow-turnaround-card-controls">
@@ -4212,26 +4232,40 @@ export default function GoogleFlowPage() {
 
             {/* Viewing Canvas */}
             <div className="flow-lightbox-stage">
-              <img
-                src={
-                  previewAsset.images?.[previewAsset.activeIndex || 0]?.url ||
-                  previewAsset.url
-                }
-                alt={
-                  previewAsset.images?.[previewAsset.activeIndex || 0]
-                    ? `${previewAsset.title} • ${previewAsset.images[previewAsset.activeIndex || 0].label}`
-                    : previewAsset.title
-                }
-                className="flow-lightbox-image"
-                onError={(e) => {
-                  (e.target as HTMLElement).style.display = "none";
-                  const parent = (e.target as HTMLElement).parentElement;
-                  const errorBox = parent?.querySelector(
-                    ".flow-lightbox-error-box",
-                  ) as HTMLElement;
-                  if (errorBox) errorBox.style.display = "flex";
-                }}
-              />
+              {previewAsset.type === "character" &&
+              previewAsset.images?.[previewAsset.activeIndex || 0]?.isMissing ? (
+                <div className="flow-lightbox-missing-view">
+                  <UsersIcon size={34} color="#7c3aed" />
+                  <h4>
+                    {previewAsset.images[previewAsset.activeIndex || 0].label} view not generated
+                  </h4>
+                  <p>
+                    This directional slot is reserved for this character but has no saved image yet.
+                    Use the regenerate action below to generate only this view.
+                  </p>
+                </div>
+              ) : (
+                <img
+                  src={
+                    previewAsset.images?.[previewAsset.activeIndex || 0]?.url ||
+                    previewAsset.url
+                  }
+                  alt={
+                    previewAsset.images?.[previewAsset.activeIndex || 0]
+                      ? `${previewAsset.title} • ${previewAsset.images[previewAsset.activeIndex || 0].label}`
+                      : previewAsset.title
+                  }
+                  className="flow-lightbox-image"
+                  onError={(e) => {
+                    (e.target as HTMLElement).style.display = "none";
+                    const parent = (e.target as HTMLElement).parentElement;
+                    const errorBox = parent?.querySelector(
+                      ".flow-lightbox-error-box",
+                    ) as HTMLElement;
+                    if (errorBox) errorBox.style.display = "flex";
+                  }}
+                />
+              )}
               {previewAsset.type === "character" &&
                 previewAsset.images &&
                 previewAsset.images.length > 1 && (
@@ -4322,17 +4356,19 @@ export default function GoogleFlowPage() {
               const badgeLabel =
                 previewAsset.type === "background"
                   ? "✓ Scene Environment Plate"
-                  : validationStatus === "validated"
-                    ? isMasterLightboxView
-                      ? "✓ Validated Canonical Master"
-                      : `✓ Validated View (${activeLightboxView?.label})`
-                    : validationStatus === "failed"
+                  : activeLightboxView?.isMissing
+                    ? `＋ Missing View (${activeLightboxView.label})`
+                    : validationStatus === "validated"
                       ? isMasterLightboxView
-                        ? "✕ Master Reference Validation Failed"
-                        : `✕ Validation Failed (${activeLightboxView?.label})`
-                      : isMasterLightboxView
-                        ? "⚠ Canonical Master — Needs Review"
-                        : `⚠ Generated View — Needs Review (${activeLightboxView?.label})`;
+                        ? "✓ Validated Canonical Master"
+                        : `✓ Validated View (${activeLightboxView?.label})`
+                      : validationStatus === "failed"
+                        ? isMasterLightboxView
+                          ? "✕ Master Reference Validation Failed"
+                          : `✕ Validation Failed (${activeLightboxView?.label})`
+                        : isMasterLightboxView
+                          ? "⚠ Canonical Master — Needs Review"
+                          : `⚠ Generated View — Needs Review (${activeLightboxView?.label})`;
               const activeImageUrl =
                 activeLightboxView?.url || previewAsset.url;
 
@@ -4345,11 +4381,13 @@ export default function GoogleFlowPage() {
                     >
                       {badgeLabel}
                     </span>
-                    {activeLightboxView?.direction && !isMasterLightboxView && (
-                      <span className="flow-tag" style={{ margin: 0 }}>
-                        🧭 {activeLightboxView.direction}
-                      </span>
-                    )}
+                    {activeLightboxView?.direction &&
+                      !isMasterLightboxView &&
+                      !activeLightboxView.isMissing && (
+                        <span className="flow-tag" style={{ margin: 0 }}>
+                          🧭 {activeLightboxView.direction}
+                        </span>
+                      )}
                     {previewAsset.aspectRatio && (
                       <span className="flow-tag" style={{ margin: 0 }}>
                         📐 {previewAsset.aspectRatio}
@@ -4358,14 +4396,16 @@ export default function GoogleFlowPage() {
                   </div>
 
                   <div className="flow-lightbox-actions">
-                    <a
-                      href={activeImageUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flow-btn secondary sm"
-                    >
-                      Open Full Image ↗
-                    </a>
+                    {activeImageUrl && (
+                      <a
+                        href={activeImageUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flow-btn secondary sm"
+                      >
+                        Open Full Image ↗
+                      </a>
+                    )}
                     {previewAsset.type === "background" &&
                       previewAsset.sceneId && (
                         <button
