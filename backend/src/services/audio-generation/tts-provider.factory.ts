@@ -72,15 +72,8 @@ export class TTSProviderFactory {
     effects: Array<{ id: string; name: string; description: string }>;
     providers: Array<{ id: string; name: string; available: boolean; model?: string; isFree?: boolean }>;
   }> {
-    const mockMode =
-      (providerName || process.env.TTS_PROVIDER || '').toLowerCase() === 'mock' &&
-      process.env.NODE_ENV === 'test';
-    const isKokoroAvailable = mockMode
-      ? false
-      : await this.kokoroProvider.isAvailable();
-    const isFishAudioAvailable = mockMode
-      ? false
-      : await this.fishAudioProvider.isAvailable();
+    const isKokoroAvailable = await this.kokoroProvider.isAvailable();
+    const isFishAudioAvailable = await this.fishAudioProvider.isAvailable();
 
     const effects = [
       { id: 'normal', name: 'Normal', description: 'Natural generated voice without post-processing' },
@@ -89,37 +82,16 @@ export class TTSProviderFactory {
     ];
 
     const providers = [
-      ...(mockMode
-        ? [{ id: 'mock', name: 'Mock TTS (Tests only)', available: true, isFree: true }]
-        : []),
       { id: 'kokoro', name: 'Kokoro-82M (Local ONNX)', available: isKokoroAvailable, model: 'kokoro-v0_19', isFree: true },
       { id: 'fish_audio', name: 'Fish Audio (Cloud - s2.1-pro-free)', available: isFishAudioAvailable, model: 's2.1-pro-free', isFree: true },
       { id: 'google', name: 'Google TTS (Fallback)', available: true, isFree: true },
     ];
 
     const kokoroVoices = await this.kokoroProvider.getSupportedVoices();
-    const googleVoices = mockMode
-      ? []
-      : await this.googleProvider.getSupportedVoices();
-    const fishAudioVoices = mockMode
-      ? []
-      : await this.fishAudioProvider.getSupportedVoices();
+    const googleVoices = await this.googleProvider.getSupportedVoices();
+    const fishAudioVoices = await this.fishAudioProvider.getSupportedVoices();
 
-    const normalizedReq = (providerName || process.env.TTS_PROVIDER || '').toLowerCase();
-    if (normalizedReq === 'mock' && mockMode) {
-      return {
-        activeProvider: 'mock',
-        isKokoroAvailable,
-        isFishAudioAvailable,
-        voices: await this.mockProvider.getSupportedVoices(),
-        kokoroVoices,
-        googleVoices,
-        fishAudioVoices,
-        effects,
-        providers,
-      };
-    }
-
+    const normalizedReq = (providerName || '').toLowerCase();
     if (normalizedReq === 'fish_audio' || normalizedReq === 'fish' || normalizedReq === 'fishaudio') {
       return {
         activeProvider: 'fish_audio',
