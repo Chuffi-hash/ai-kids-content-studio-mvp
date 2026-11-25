@@ -507,6 +507,16 @@ export class GenerationPromptService {
     const dimensions = { width: 1024, height: 1024 };
     const appearance = formatCanonicalIdentitySection(identity);
     const directionSpec = DIRECTIONAL_CAMERA_ORIENTATIONS[normalizedDirection];
+    const flowDirectionInstructions: Record<CharacterFacingDirection, string> = {
+      front: 'Front view: the character faces straight toward the viewer; face, chest, hips and feet point forward.',
+      'front-left': 'Front three-quarter LEFT view: rotate the whole character about 45 degrees so the nose and chest point toward the LEFT side of the image. Keep both eyes partly visible.',
+      'front-right': 'Front three-quarter RIGHT view: rotate the whole character about 45 degrees so the nose and chest point toward the RIGHT side of the image. Keep both eyes partly visible.',
+      left: 'LEFT side profile: rotate the whole character 90 degrees so the nose points directly to the LEFT side of the image. Show a true side silhouette, not a three-quarter view.',
+      right: 'RIGHT side profile: rotate the whole character 90 degrees so the nose points directly to the RIGHT side of the image. Show a true side silhouette, not a three-quarter view.',
+      'back-left': 'BACK three-quarter LEFT view: turn the whole character away from the viewer about 135 degrees, toward the LEFT side of the image. Show mostly the back with a small side edge of the face.',
+      'back-right': 'BACK three-quarter RIGHT view: turn the whole character away from the viewer about 135 degrees, toward the RIGHT side of the image. Show mostly the back with a small side edge of the face.',
+      back: 'Direct BACK view: the back of the head, hair and clothing face the viewer. The face must not be visible.',
+    };
 
     const identityInstruction = options?.isExistingFlowCharacter
       ? 'Use the character in the image currently selected in this Google Flow editor as the ONLY identity reference. Edit that same character; do not invent, replace or redesign the character.'
@@ -517,7 +527,7 @@ export class GenerationPromptService {
       : '';
 
     const angleInstruction = isTurnaround
-      ? `Requested camera angle — ${directionSpec.label}: ${directionSpec.orientation} Generate only this one camera angle; do not combine it with another angle.`
+      ? `${flowDirectionInstructions[normalizedDirection]} Generate only this one camera angle; do not combine it with another angle.`
       : assetType === 'expression'
         ? `Head-and-shoulders portrait with a ${variation || 'friendly neutral'} expression.`
         : assetType === 'pose'
