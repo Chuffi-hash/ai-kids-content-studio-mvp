@@ -71,7 +71,9 @@ type ActiveTab =
 type CharacterPreviewView = {
   direction: string;
   label: string;
-  url: string;
+  url?: string;
+  available: boolean;
+  isMasterFallback?: boolean;
 };
 
 const CHARACTER_TURNAROUND_DIRECTIONS = [
@@ -93,30 +95,36 @@ function getCharacterDirectionalPreviewViews(
   const directionalViews = (references.directionalViews || {}) as Record<string, any>;
   const assets = Array.isArray(canonical.assets) ? canonical.assets : [];
 
-  const views = CHARACTER_TURNAROUND_DIRECTIONS.flatMap(({ direction, label }) => {
+  // Always return the same eight positions. Missing directions must remain
+  // visible as missing slots rather than silently changing the carousel count.
+  return CHARACTER_TURNAROUND_DIRECTIONS.map(({ direction, label }) => {
     const mapped = directionalViews[direction];
     const mappedUrl = typeof mapped === "string" ? mapped : mapped?.url;
     const savedAsset = assets.find(
       (asset: any) =>
         asset?.direction === direction &&
         asset?.url &&
-        asset?.assetType !== "main",
+        (asset?.assetType === "turnaround" || asset?.assetType === "main"),
     );
-    const url = mappedUrl || savedAsset?.url;
-    return url ? [{ direction, label, url: String(url) }] : [];
-  });
 
-  if (views.length > 0) return views;
-  if (character.referenceImageUrl) {
-    return [
-      {
-        direction: "master",
-        label: "Master reference",
-        url: character.referenceImageUrl,
-      },
-    ];
-  }
-  return [];
+    // The master reference is the canonical front-facing identity anchor.
+    // Reuse it for Front until a dedicated front turnaround is generated.
+    const useMasterFallback =
+      direction === "front" &&
+      !mappedUrl &&
+      !savedAsset?.url &&
+      Boolean(character.referenceImageUrl);
+    const url = mappedUrl || savedAsset?.url ||
+      (useMasterFallback ? character.referenceImageUrl : undefined);
+
+    return {
+      direction,
+      label,
+      url: url ? String(url) : undefined,
+      available: Boolean(url),
+      isMasterFallback: useMasterFallback,
+    };
+  });
 }
 
 function cleanScriptText(text?: string): string {
@@ -3629,9 +3637,11 @@ export default function GoogleFlowPage() {
                         const openCharacterPreview = () => {
                           if (!activePreviewView) return;
                           setPreviewAsset({
-                            url: activePreviewView.url,
+                            url: activePreviewView.url || ch.referenceImageUrl || "",
                             title: ch.name,
-                            subtitle: `${ch.species || "Character"} • ${activePreviewView.label}`,
+                            // The active direction is rendered from images[activeIndex]
+                            // below; do not duplicate a stale direction in subtitle.
+                            subtitle: ch.species || "Character",
                             characterId: ch.id,
                             type: "character",
                             images: previewViews,
@@ -3665,31 +3675,45 @@ export default function GoogleFlowPage() {
                                   </div>
                                 ) : activePreviewView ? (
                                   <div
-                                    className="flow-char-preview-image"
+                                    className={`flow-char-preview-image ${activePreviewView.available ? "" : "is-missing"}`}
                                     onClick={openCharacterPreview}
-                                    title={`Preview ${activePreviewView.label} character view`}
+                                    title={
+                                      activePreviewView.available
+                                        ? `Preview ${activePreviewView.label} character view`
+                                        : `${activePreviewView.label} has not been generated yet`
+                                    }
                                   >
-                                    <img
-                                      src={activePreviewView.url}
-                                      alt={`${ch.name} • ${activePreviewView.label}`}
-                                      onError={(e) => {
-                                        (e.target as HTMLElement).style.display = "none";
-                                        const parent = (e.target as HTMLElement).parentElement;
-                                        const fallback = parent?.querySelector(
-                                          ".flow-thumb-fallback",
-                                        ) as HTMLElement;
-                                        if (fallback) fallback.style.display = "flex";
-                                      }}
-                                    />
-                                    <div
-                                      className="flow-thumb-fallback"
-                                      style={{ display: "none" }}
-                                    >
-                                      <UsersIcon size={18} color="#f59e0b" />
-                                      <small style={{ fontSize: "8px" }}>Load Error</small>
-                                    </div>
+                                    {activePreviewView.url ? (
+                                      <>
+                                        <img
+                                          src={activePreviewView.url}
+                                          alt={`${ch.name} • ${activePreviewView.label}`}
+                                          onError={(e) => {
+                                            (e.target as HTMLElement).style.display = "none";
+                                            const parent = (e.target as HTMLElement).parentElement;
+                                            const fallback = parent?.querySelector(
+                                              ".flow-thumb-fallback",
+                                            ) as HTMLElement;
+                                            if (fallback) fallback.style.display = "flex";
+                                          }}
+                                        />
+                                        <div
+                                          className="flow-thumb-fallback"
+                                          style={{ display: "none" }}
+                                        >
+                                          <UsersIcon size={18} color="#f59e0b" />
+                                          <small style={{ fontSize: "8px" }}>Load Error</small>
+                                        </div>
+                                      </>
+                                    ) : (
+                                      <div className="flow-char-missing-view">
+                                        <UsersIcon size={18} color="#a78bfa" />
+                                        <small>{activePreviewView.label}</small>
+                                        <span>Not generated</span>
+                                      </div>
+                                    )}
                                     <div className="flow-thumb-hover-overlay">
-                                      <span>🔍 Preview views</span>
+                                      <span>{activePreviewView.available ? "🔍 Preview view" : "＋ Generate this view"}</span>
                                     </div>
                                     {previewViews.length > 1 && (
                                       <div className="flow-turnaround-card-controls">
