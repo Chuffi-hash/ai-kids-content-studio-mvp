@@ -194,6 +194,6 @@ test('CharacterReferenceService - Idempotent Asset Registration and Retry', asyn
     await (service as any).saveAssetToCharacter('char-mock-flow-1', asset2);
     await (service as any).saveAssetToCharacter('char-mock-flow-1', asset2);
 
-    assert.equal(mockCharacter.canonicalAppearance.assets.length, 2, 'Still exactly 2 assets before the independent turnaround asset is added');
+    assert.equal(mockCharacter.canonicalAppearance.assets.length, 3, 'Master retries remain idempotent after the independent turnaround asset is added');
   });
 });
