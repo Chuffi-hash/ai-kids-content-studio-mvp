@@ -208,7 +208,7 @@ test('Audio Generation Service - Voice Preview and Narration Generation with Per
   const updatedScene = await audioGen.generateNarrationAudio({
     sceneId,
     narration: 'A little blue robot danced through the sunflower valley.',
-    provider: 'kokoro',
+    provider: 'mock',
     voice: 'bm_daniel',
     speed: 1.0,
     effect: 'robot'
