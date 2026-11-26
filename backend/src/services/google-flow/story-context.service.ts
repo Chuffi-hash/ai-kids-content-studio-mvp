@@ -1,6 +1,54 @@
 import { prisma } from '../database/database.service.js';
 import { isReservedMetadataKey, cleanSpeakerName } from '../story-generation/story-importer.service.js';
 
+function resolveCharacterIdentityForContext(
+  name: string,
+  storedSpecies: string | null | undefined,
+  visualDescription: string | null | undefined,
+  distinctiveFeatures: string | null | undefined,
+  canonicalValue: unknown,
+): { species: string; canonicalAppearance: Record<string, any> } {
+  const canonical =
+    canonicalValue && typeof canonicalValue === "object" && !Array.isArray(canonicalValue)
+      ? { ...(canonicalValue as Record<string, any>) }
+      : {};
+  const identityText = [
+    name,
+    visualDescription,
+    distinctiveFeatures,
+    canonical.species,
+    canonical.visualDescription,
+    canonical.distinctiveFeatures,
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const isOwl = /(?:\bowl\b|उल्लू)/iu.test(identityText);
+  const isGrandfather =
+    /(?:grandfather|grandpa|granddad|dadaji|दादाजी|दादा)/iu.test(identityText);
+  const isGrandmother =
+    /(?:grandmother|grandma|granny|dadi|दादीजी|दादी)/iu.test(identityText);
+  const currentAge = canonical.age;
+  const currentAgeIsElderly =
+    currentAge !== undefined &&
+    /elderly|senior|older adult|\b(?:6[5-9]|7\d|8\d|9\d)\b/i.test(String(currentAge));
+
+  if (isOwl) canonical.species = "owl (anthropomorphic owl character)";
+  if (isGrandfather || isGrandmother) {
+    if (!currentAgeIsElderly) {
+      canonical.age =
+        "elderly, approximately 70–80 years old; clearly an older adult, never childlike";
+    }
+    canonical.gender = isGrandfather ? "male" : "female";
+  }
+
+  return {
+    species: isOwl
+      ? "owl"
+      : String(storedSpecies || canonical.species || "Unknown"),
+    canonicalAppearance: canonical,
+  };
+}
+
 export interface GoogleFlowVersionMetadata {
   projectId: string | null;
   editId: string | null;
@@ -398,16 +446,23 @@ export class StoryContextService {
       const visualDesc = char.visualDescription || '';
       const clothing = char.distinctiveFeatures || '';
       const mapping = mappingsMap.get(char.id);
+      const resolvedIdentity = resolveCharacterIdentityForContext(
+        cleanName,
+        char.species,
+        visualDesc,
+        clothing,
+        char.canonicalAppearance,
+      );
 
       charactersMap.set(char.id, {
         id: char.id,
         name: cleanName,
-        species: char.species || 'Unknown',
+        species: resolvedIdentity.species,
         personality: char.personality || 'Friendly',
         visualDescription: visualDesc,
         clothing,
         distinctiveFeatures: char.distinctiveFeatures || '',
-        canonicalAppearance: (char.canonicalAppearance || null) as Record<string, any> | null,
+        canonicalAppearance: resolvedIdentity.canonicalAppearance,
         referenceImageUrl: char.referenceImageUrl || null,
         referenceImagePrompt: char.referenceImagePrompt || null,
         hasMasterReference: Boolean(char.referenceImageUrl && char.referenceImageUrl.trim().length > 0),
@@ -572,15 +627,22 @@ export class StoryContextService {
             if (extraChar && !isReservedMetadataKey(extraChar.name)) {
               const cleanExtraName = cleanSpeakerName(extraChar.name) || extraChar.name.replace(/^[-–—•*_#\s]+|[-–—•*_#:\s]+$/g, '').trim();
               if (cleanExtraName && !isReservedMetadataKey(cleanExtraName)) {
+                const resolvedIdentity = resolveCharacterIdentityForContext(
+                  cleanExtraName,
+                  extraChar.species,
+                  extraChar.visualDescription,
+                  extraChar.distinctiveFeatures,
+                  extraChar.canonicalAppearance,
+                );
                 charContext = {
                   id: extraChar.id,
                   name: cleanExtraName,
-                species: extraChar.species || 'Unknown',
+                species: resolvedIdentity.species,
                 personality: extraChar.personality || 'Friendly',
                 visualDescription: extraChar.visualDescription || '',
                 clothing: extraChar.distinctiveFeatures || '',
                 distinctiveFeatures: extraChar.distinctiveFeatures || '',
-                canonicalAppearance: (extraChar.canonicalAppearance || null) as Record<string, any> | null,
+                canonicalAppearance: resolvedIdentity.canonicalAppearance,
                 referenceImageUrl: extraChar.referenceImageUrl || null,
                 referenceImagePrompt: extraChar.referenceImagePrompt || null,
                 hasMasterReference: Boolean(extraChar.referenceImageUrl && extraChar.referenceImageUrl.trim().length > 0),
