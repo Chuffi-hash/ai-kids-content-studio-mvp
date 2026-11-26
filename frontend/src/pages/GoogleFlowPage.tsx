@@ -148,12 +148,14 @@ function getCharacterDirectionalPreviewViews(
   const hasDirectionalAssets = resolved.some((view) => !view.isMissing);
   if (hasDirectionalAssets) return resolved;
 
-  if (character.referenceImageUrl) {
+  const masterReferenceUrl =
+    character.referenceImageUrl || references.mainUrl || "";
+  if (masterReferenceUrl) {
     return [
       {
         direction: "master",
         label: "Master reference",
-        url: character.referenceImageUrl,
+        url: masterReferenceUrl,
         validationStatus: "needs_review",
       },
     ];
