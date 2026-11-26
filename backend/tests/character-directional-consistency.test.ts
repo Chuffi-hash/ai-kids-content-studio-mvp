@@ -78,6 +78,65 @@ test("Character Canonical Identity & Directional Prompt Consistency Suite", asyn
     }
   });
 
+  await t.test("1b. Owl Dadaji identity overrides stale human/child metadata", () => {
+    const owlDadaji = {
+      ...SAMPLE_CHARACTER,
+      name: "उल्लू दादाजी",
+      species: "human",
+      visualDescription:
+        "A wise elderly anthropomorphic owl grandfather with a hooked beak, round spectacles and soft brown feathers",
+      distinctiveFeatures: "elderly owl grandfather, kind eyes and white facial feathers",
+      clothing: "deep maroon kurta, beige dhoti and a cream wool shawl",
+      canonicalAppearance: {
+        ...SAMPLE_CHARACTER.canonicalAppearance,
+        species: "human",
+        age: "8 years old",
+        gender: "female",
+      },
+    };
+
+    const identity = extractCanonicalCharacterIdentity(owlDadaji as any);
+    assert.match(identity.speciesCategory, /owl/i);
+    assert.match(identity.age || "", /elderly|70|80/i);
+    assert.equal(identity.genderPresentation, "male");
+
+    const flowPrompt = GenerationPromptService.buildGoogleFlowCharacterPrompt(
+      { visualStyle: "2D storybook illustration" },
+      owlDadaji as any,
+      "turnaround",
+      { variation: "back-left", isExistingFlowCharacter: true },
+    );
+    assert.match(flowPrompt.prompt, /SPECIES LOCK/i);
+    assert.match(flowPrompt.prompt, /AGE LOCK/i);
+    assert.match(flowPrompt.prompt, /owl/i);
+    assert.match(flowPrompt.prompt, /elderly/i);
+    assert.match(flowPrompt.prompt, /135 degrees/i);
+    assert.match(flowPrompt.negativePrompt, /human face/i);
+    assert.match(flowPrompt.negativePrompt, /childlike proportions/i);
+    assert.equal(flowPrompt.requestedDirection, "back-left");
+  });
+
+  await t.test("1c. Custom prompt overrides cannot remove canonical identity or the requested back angle", () => {
+    const result = GenerationPromptService.buildCharacterPrompt(
+      { visualStyle: "2D storybook cartoon illustration" },
+      SAMPLE_CHARACTER as any,
+      "turnaround",
+      {
+        variation: "back-left",
+        promptOverride: "Add a small brass lantern in the character's left hand.",
+      },
+    );
+
+    assert.ok(result.prompt.includes("IMMUTABLE CHARACTER IDENTITY:"));
+    assert.ok(result.prompt.includes("8 years old"));
+    assert.ok(result.prompt.includes("brown leather sandals"));
+    assert.ok(result.prompt.includes("Back three-quarter left"));
+    assert.ok(result.prompt.includes("small brass lantern"));
+    assert.equal(result.requestedDirection, "back-left");
+    assert.match(result.negativePrompt, /front face/i);
+    assert.match(result.negativePrompt, /both eyes visible/i);
+  });
+
   await t.test("2. Each directional prompt contains exactly one requested camera angle and never mixes angles", () => {
     for (const dir of ALL_8_DIRECTIONS) {
       const result = GenerationPromptService.buildCharacterPrompt(
