@@ -7218,6 +7218,14 @@ export class FlowBrowserWorker {
       existingNameFound = (await existingLocator.count().catch(() => 0)) > 0;
     } catch {}
 
+    if (existingNameFound && typeof page.evaluate !== "function") {
+      const error = new Error(
+        "FLOW_CHARACTER_EXISTING_ID_UNRESOLVED: A character with this name is visible, but the worker cannot inspect its saved ID. Refusing to create a duplicate.",
+      );
+      error.code = "FLOW_CHARACTER_EXISTING_ID_UNRESOLVED";
+      throw error;
+    }
+
     if (existingNameFound && typeof page.evaluate === "function") {
       const existing = await page.evaluate((wantedName) => {
         const normalize = (value) =>
@@ -7252,7 +7260,7 @@ export class FlowBrowserWorker {
           try {
             const parsed = new URL(rawHref, window.location.href);
             const match = parsed.pathname.match(
-              /^\\/project\\/([^/]+)\\/character\\/([^/]+)\\/?$/,
+              /^\/project\/([^/]+)\/character\/([^/]+)\/?$/,
             );
             return match
               ? { projectId: decodeURIComponent(match[1]), characterId: decodeURIComponent(match[2]) }
