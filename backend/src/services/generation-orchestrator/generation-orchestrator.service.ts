@@ -1349,9 +1349,9 @@ export class GenerationOrchestratorService {
         }
       }
 
-      if (provider === "google_flow" && !hasSyncedFlowCharacter && !localCanonicalRefPath) {
+      if (provider === "google_flow" && !hasSyncedFlowCharacter) {
         throw new Error(
-          "FLOW_CHARACTER_MASTER_REFERENCE_REQUIRED: This character has no saved Google Flow Character mapping and its canonical master image is not available as a local file. Sync/create the Flow Character from the master reference before generating directional views.",
+          "FLOW_CHARACTER_NOT_SYNCED: This character does not have a saved Google Flow Character mapping. Sync the canonical master reference to Google Flow once, confirm the saved Flow Character, and then generate directional views. The editor will not create a new Flow character for each angle.",
         );
       }
     }
