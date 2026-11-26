@@ -2073,12 +2073,6 @@ export class FlowBrowserWorker {
       input.requireCanonicalReference === true ||
       (input.assetType !== undefined &&
         !["main", "custom"].includes(assetType));
-      const error = new Error(
-        "FLOW_CHARACTER_MASTER_REFERENCE_REQUIRED: A directional Flow job requires a saved Flow Character ID or an attached canonical master reference. Refusing to create a new unrelated character.",
-      );
-      error.code = "FLOW_CHARACTER_MASTER_REFERENCE_REQUIRED";
-      throw error;
-    }
 
     const job = {
       id: randomUUID(),
