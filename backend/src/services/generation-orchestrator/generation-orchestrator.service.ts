@@ -1323,14 +1323,14 @@ export class GenerationOrchestratorService {
           if (localCanonicalRefPath) {
             canonicalReferenceBuffer = await fs.promises.readFile(localCanonicalRefPath);
             canonicalReferenceMime =
-              /\\.(?:jpe?g)$/i.test(localCanonicalRefPath)
+              /\.(?:jpe?g)$/i.test(localCanonicalRefPath)
                 ? "image/jpeg"
-                : /\\.webp$/i.test(localCanonicalRefPath)
+                : /\.webp$/i.test(localCanonicalRefPath)
                   ? "image/webp"
                   : "image/png";
           } else if (canonicalRefUrl.startsWith("data:image/")) {
             const match = canonicalRefUrl.match(
-              /^data:(image\\/[a-zA-Z0-9.+_-]+);base64,(.+)$/,
+              /^data:(image\/[a-zA-Z0-9.+_-]+);base64,(.+)$/
             );
             if (match) {
               canonicalReferenceMime = match[1];
@@ -1783,12 +1783,11 @@ export class GenerationOrchestratorService {
       existingMapping.flowCharacterUrl &&
       existingMapping.sourceReferenceUrl === referenceUrl
     ) {
-        return {
-          success: true,
-          mapping: existingMapping,
-          message: `Character "${character.name}" is already synchronized with Google Flow project ${flowProjectId}.`,
-        };
-      }
+      return {
+        success: true,
+        mapping: existingMapping,
+        message: `Character "${character.name}" is already synchronized with Google Flow project ${flowProjectId}.`,
+      };
     }
 
     // Submit sync request to Flow worker
