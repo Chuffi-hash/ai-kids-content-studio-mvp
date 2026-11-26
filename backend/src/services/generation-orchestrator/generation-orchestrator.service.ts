@@ -9,6 +9,8 @@ import {
 import {
   GenerationPromptService,
   normalizeCharacterFacingDirection,
+  extractCanonicalCharacterIdentity,
+  formatCanonicalIdentitySection,
 } from "../google-flow/generation-prompt.service.js";
 import { GeminiImageProvider } from "../image-generation/providers/gemini-image.provider.js";
 import {
@@ -1765,17 +1767,22 @@ export class GenerationOrchestratorService {
       null;
 
     const localImagePath = this.resolveLocalReferencePath(referenceUrl);
+    if (!referenceUrl || !localImagePath) {
+      const error = new Error(
+        "CHARACTER_MASTER_REFERENCE_REQUIRED: A readable canonical master image is required before creating a reusable Google Flow Character. Generate or upload the master reference first.",
+      );
+      throw error;
+    }
 
-    // Idempotent: If already synced and reference has not changed
+    // A mapping is only valid when it contains the real saved Flow Character ID.
+    // Legacy rows that only stored a name are deliberately re-synchronized.
     if (
       !options?.force &&
-      existingMapping &&
-      existingMapping.syncStatus === "synced"
+      existingMapping?.syncStatus === "synced" &&
+      existingMapping.flowCharacterId &&
+      existingMapping.flowCharacterUrl &&
+      existingMapping.sourceReferenceUrl === referenceUrl
     ) {
-      if (
-        !referenceUrl ||
-        existingMapping.sourceReferenceUrl === referenceUrl
-      ) {
         return {
           success: true,
           mapping: existingMapping,
@@ -1804,7 +1811,9 @@ export class GenerationOrchestratorService {
       body: JSON.stringify({
         characterId: character.id,
         characterName: character.name,
-        description: character.visualDescription,
+        description: formatCanonicalIdentitySection(
+          extractCanonicalCharacterIdentity(character as any),
+        ),
         referenceImagePath: localImagePath,
         projectUrl,
         storyId,
@@ -1828,14 +1837,37 @@ export class GenerationOrchestratorService {
 
     const syncPayload = (await syncRes.json()) as any;
     const flowCharName = syncPayload.flowCharacterName || character.name;
+    const flowCharacterId = String(syncPayload.flowCharacterId || "").trim();
+    const flowCharacterUrl =
+      syncPayload.flowCharacterUrl ||
+      (flowCharacterId
+        ? `https://flow.google.com/project/${encodeURIComponent(flowProjectId)}/character/${encodeURIComponent(flowCharacterId)}`
+        : null);
+
+    if (syncPayload.success !== true || !flowCharacterId || !flowCharacterUrl) {
+      const errMsg =
+        syncPayload.message ||
+        "Google Flow did not return a saved Character ID. The mapping cannot be marked as synchronized.";
+      await upsertFlowCharacterMapping({
+        storyId,
+        characterId,
+        flowProjectId,
+        flowCharacterName: flowCharName,
+        syncStatus: "failed",
+        lastError: errMsg,
+      });
+      throw new Error(
+        "FLOW_CHARACTER_SAVE_NOT_CONFIRMED: " + errMsg,
+      );
+    }
 
     const savedMapping = await upsertFlowCharacterMapping({
       storyId,
       characterId,
       flowProjectId,
       flowCharacterName: flowCharName,
-      flowCharacterId: syncPayload.flowCharacterId || undefined,
-      flowCharacterUrl: syncPayload.flowCharacterUrl || undefined,
+      flowCharacterId,
+      flowCharacterUrl,
       syncStatus: "synced",
       sourceReferenceUrl: referenceUrl,
       lastSyncedAt: new Date(),
