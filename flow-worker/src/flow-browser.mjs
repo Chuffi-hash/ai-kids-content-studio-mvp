@@ -2066,6 +2066,21 @@ export class FlowBrowserWorker {
         ? [input.projectReferenceAssetId]
         : [];
 
+    // Directional generations must be anchored to either an existing saved
+    // Flow Character editor or an explicitly uploaded canonical master image.
+    if (
+      assetType !== "main" &&
+      !googleFlowCharacterId &&
+      uploadedReferences.length === 0 &&
+      projectReferences.length === 0
+    ) {
+      const error = new Error(
+        "FLOW_CHARACTER_MASTER_REFERENCE_REQUIRED: A directional Flow job requires a saved Flow Character ID or an attached canonical master reference. Refusing to create a new unrelated character.",
+      );
+      error.code = "FLOW_CHARACTER_MASTER_REFERENCE_REQUIRED";
+      throw error;
+    }
+
     const job = {
       id: randomUUID(),
       backendJobId: input.backendJobId || undefined,
@@ -5747,16 +5762,35 @@ export class FlowBrowserWorker {
         }
       }
 
-      if (fileInput && typeof fileInput.setInputFiles === "function") {
-        await fileInput.setInputFiles(uploadedRefs).catch((err) => {
-          throw new Error("FLOW_CHARACTER_REFERENCE_UPLOAD_FAILED: " + err.message);
-        });
-        await new Promise((res) => setTimeout(res, 500));
+      if (!fileInput || typeof fileInput.setInputFiles !== "function") {
+        const error = new Error(
+          "FLOW_CHARACTER_REFERENCE_INPUT_NOT_FOUND: Google Flow did not expose a file input in the active Character editor. The canonical master image was NOT attached; generation has been stopped to prevent identity drift.",
+        );
+        error.code = "FLOW_CHARACTER_REFERENCE_INPUT_NOT_FOUND";
+        throw error;
       }
 
+      await fileInput.setInputFiles(uploadedRefs).catch((err) => {
+        throw new Error("FLOW_CHARACTER_REFERENCE_UPLOAD_FAILED: " + err.message);
+      });
+      const attachedFileCount =
+        typeof fileInput.evaluate === "function"
+          ? await fileInput.evaluate((input) => input.files?.length || 0).catch(() => -1)
+          : -1;
+      if (attachedFileCount >= 0 && attachedFileCount !== uploadedRefs.length) {
+        const error = new Error(
+          `FLOW_CHARACTER_REFERENCE_UPLOAD_UNVERIFIED: Expected ${uploadedRefs.length} reference file(s), but Flow exposes ${attachedFileCount} after upload.`,
+        );
+        error.code = "FLOW_CHARACTER_REFERENCE_UPLOAD_UNVERIFIED";
+        throw error;
+      }
+      await new Promise((res) => setTimeout(res, 700));
+
+      job.referenceAttachmentVerified = true;
       this.emitLifecycleLog("CHARACTER_REFERENCE_UPLOADED", job, {
         referencesCount: uploadedRefs.length,
         references: uploadedRefs,
+        verifiedFileCount: attachedFileCount,
         success: true,
       });
     }
@@ -5791,54 +5825,68 @@ export class FlowBrowserWorker {
         }
       }
 
-      if (addBtn) {
-        await addBtn.click({ timeout: 10000 }).catch(() => {});
-        for (const refId of projectRefs) {
-          const searchInput = page.locator(
-            'input[type="search"], input[placeholder*="Search" i]',
-          ).first();
-          if (await searchInput.isVisible().catch(() => false)) {
-            await searchInput.fill(refId).catch(() => {});
-            await new Promise((res) => setTimeout(res, 300));
-          }
-          const assetTile = page.locator(
-            `[data-asset-id="${refId}"], [aria-label*="${refId}" i], img[src*="${refId}" i]`,
-          ).first();
-          if (await assetTile.isVisible().catch(() => false)) {
-            await assetTile.click().catch(() => {});
-          }
-          const addMediaLoc = page.locator(
-            'button:has-text("Add media"), button:has-text("Add")',
-          );
-          const addMediaBtn =
-            typeof addMediaLoc.last === "function"
-              ? addMediaLoc.last()
-              : typeof addMediaLoc.first === "function"
-                ? addMediaLoc.first()
-                : addMediaLoc;
-          if (await addMediaBtn.isVisible().catch(() => false)) {
-            await addMediaBtn.click().catch(() => {});
-          }
-          this.emitLifecycleLog("CHARACTER_PROJECT_REFERENCE_SELECTED", job, {
-            projectReference: refId,
-            success: true,
-          });
-        }
-      } else {
-        for (const refId of projectRefs) {
-          this.emitLifecycleLog("CHARACTER_PROJECT_REFERENCE_SELECTED", job, {
-            projectReference: refId,
-            success: true,
-          });
-        }
+      if (!addBtn) {
+        const error = new Error(
+          "FLOW_PROJECT_REFERENCE_BUTTON_NOT_FOUND: Google Flow did not expose Add from project. Project reference was not attached.",
+        );
+        error.code = "FLOW_PROJECT_REFERENCE_BUTTON_NOT_FOUND";
+        throw error;
       }
+
+      await addBtn.click({ timeout: 10000 });
+      for (const refId of projectRefs) {
+        const searchInput = page.locator(
+          'input[type="search"], input[placeholder*="Search" i]',
+        ).first();
+        if (!(await searchInput.isVisible().catch(() => false))) {
+          throw new Error("FLOW_PROJECT_REFERENCE_SEARCH_NOT_FOUND: Cannot search project assets.");
+        }
+        await searchInput.fill(refId);
+        await new Promise((res) => setTimeout(res, 500));
+        const assetTile = page.locator(
+          `[data-asset-id="${refId}"], [aria-label*="${refId}" i], img[src*="${refId}" i]`,
+        ).first();
+        if (!(await assetTile.isVisible().catch(() => false))) {
+          throw new Error(`FLOW_PROJECT_REFERENCE_NOT_FOUND: Could not find project asset ${refId}.`);
+        }
+        await assetTile.click({ timeout: 10000 });
+        const addMediaLoc = page.locator(
+          'button:has-text("Add media"), button:has-text("Add")',
+        );
+        const addMediaBtn =
+          typeof addMediaLoc.last === "function"
+            ? addMediaLoc.last()
+            : typeof addMediaLoc.first === "function"
+              ? addMediaLoc.first()
+              : addMediaLoc;
+        if (!(await addMediaBtn.isVisible().catch(() => false))) {
+          throw new Error(`FLOW_PROJECT_REFERENCE_ADD_FAILED: Add media control not found for ${refId}.`);
+        }
+        await addMediaBtn.click({ timeout: 10000 });
+        this.emitLifecycleLog("CHARACTER_PROJECT_REFERENCE_SELECTED", job, {
+          projectReference: refId,
+          success: true,
+        });
+      }
+      job.referenceAttachmentVerified = true;
     }
 
     job.characterReferences = [...uploadedRefs, ...projectRefs];
+    if (job.googleFlowCharacterId) {
+      job.referenceSource = "saved-flow-character";
+      job.referenceAttachmentVerified = true;
+    } else if (job.referenceAttachmentVerified !== true) {
+      const error = new Error(
+        "FLOW_CHARACTER_REFERENCE_NOT_VERIFIED: No canonical reference was attached or matched to a saved Google Flow Character. Generation has been stopped.",
+      );
+      error.code = "FLOW_CHARACTER_REFERENCE_NOT_VERIFIED";
+      throw error;
+    }
     this.emitLifecycleLog("CHARACTER_REFERENCES_VERIFIED", job, {
       uploadedCount: uploadedRefs.length,
       projectCount: projectRefs.length,
       totalCount: job.characterReferences.length,
+      referenceSource: job.referenceSource || "uploaded-canonical-master",
       success: true,
     });
   }
@@ -6017,6 +6065,18 @@ export class FlowBrowserWorker {
         "FLOW_CHARACTER_ROLE_REQUIRED: Character submission cannot run from the Background tab.",
       );
       error.code = "FLOW_CHARACTER_ROLE_REQUIRED";
+      throw error;
+    }
+
+    if (
+      job.assetType !== "main" &&
+      !job.googleFlowCharacterId &&
+      job.referenceAttachmentVerified !== true
+    ) {
+      const error = new Error(
+        "FLOW_CHARACTER_REFERENCE_NOT_VERIFIED: A directional generation cannot be submitted without an attached canonical master image or a saved Flow Character ID.",
+      );
+      error.code = "FLOW_CHARACTER_REFERENCE_NOT_VERIFIED";
       throw error;
     }
 
