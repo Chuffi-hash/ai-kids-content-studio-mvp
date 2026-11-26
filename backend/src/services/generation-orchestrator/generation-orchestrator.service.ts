@@ -1303,6 +1303,58 @@ export class GenerationOrchestratorService {
       null;
     const localCanonicalRefPath =
       this.resolveLocalReferencePath(canonicalRefUrl);
+    const hasSyncedFlowCharacter = Boolean(
+      mapping?.syncStatus === "synced" && mapping.flowCharacterId,
+    );
+
+    let canonicalReferenceBuffer: Buffer | undefined;
+    let canonicalReferenceMime: string | undefined;
+    if (assetType !== "master_reference" && !testMockBuffer) {
+      if (!canonicalRefUrl) {
+        throw new Error(
+          "CHARACTER_MASTER_REFERENCE_REQUIRED: Generate or upload and approve a canonical master reference before creating directional views. The generator will not invent a new character for each angle.",
+        );
+      }
+
+      if (provider === "gemini_api") {
+        try {
+          if (localCanonicalRefPath) {
+            canonicalReferenceBuffer = await fs.promises.readFile(localCanonicalRefPath);
+            canonicalReferenceMime =
+              /\\.(?:jpe?g)$/i.test(localCanonicalRefPath)
+                ? "image/jpeg"
+                : /\\.webp$/i.test(localCanonicalRefPath)
+                  ? "image/webp"
+                  : "image/png";
+          } else if (canonicalRefUrl.startsWith("data:image/")) {
+            const match = canonicalRefUrl.match(
+              /^data:(image\\/[a-zA-Z0-9.+_-]+);base64,(.+)$/,
+            );
+            if (match) {
+              canonicalReferenceMime = match[1];
+              canonicalReferenceBuffer = Buffer.from(match[2], "base64");
+            }
+          }
+        } catch (error) {
+          throw new Error(
+            "CHARACTER_MASTER_REFERENCE_UNREADABLE: Could not read the canonical master image: " +
+              (error instanceof Error ? error.message : String(error)),
+          );
+        }
+
+        if (!canonicalReferenceBuffer || canonicalReferenceBuffer.length < 100) {
+          throw new Error(
+            "CHARACTER_MASTER_REFERENCE_UNAVAILABLE: The saved master reference cannot be opened by the backend. Repair or re-upload the master image before generating directional views. Text-only generation is blocked to prevent character drift.",
+          );
+        }
+      }
+
+      if (provider === "google_flow" && !hasSyncedFlowCharacter && !localCanonicalRefPath) {
+        throw new Error(
+          "FLOW_CHARACTER_MASTER_REFERENCE_REQUIRED: This character has no saved Google Flow Character mapping and its canonical master image is not available as a local file. Sync/create the Flow Character from the master reference before generating directional views.",
+        );
+      }
+    }
 
     const jobId = `job-char-${Date.now()}-${randomUUID().slice(0, 6)}`;
     const jobRecord: GenerationJobRecord & { variation?: string } = {
@@ -1358,42 +1410,14 @@ export class GenerationOrchestratorService {
             );
           }
 
-          let referenceBuffer: Buffer | undefined;
-          let referenceMime: string | undefined;
-
-          if (assetType !== "master_reference" && canonicalRefUrl) {
-            try {
-              if (localCanonicalRefPath) {
-                referenceBuffer = await fs.promises.readFile(
-                  localCanonicalRefPath,
-                );
-                referenceMime =
-                  localCanonicalRefPath.endsWith(".jpg") ||
-                  localCanonicalRefPath.endsWith(".jpeg")
-                    ? "image/jpeg"
-                    : localCanonicalRefPath.endsWith(".webp")
-                      ? "image/webp"
-                      : "image/png";
-              } else if (canonicalRefUrl.startsWith("data:image/")) {
-                const match = canonicalRefUrl.match(
-                  /^data:(image\/[a-zA-Z0-9.+_-]+);base64,(.+)$/,
-                );
-                if (match) {
-                  referenceMime = match[1];
-                  referenceBuffer = Buffer.from(match[2], "base64");
-                }
-              }
-            } catch {}
-          }
-
           const generated = await geminiProvider.generateImage({
             prompt: finalPrompt,
             negativePrompt: promptData.negativePrompt,
             width: promptData.width,
             height: promptData.height,
             aspectRatio: "1:1",
-            referenceImageBuffer: referenceBuffer,
-            referenceImageMimeType: referenceMime,
+            referenceImageBuffer: canonicalReferenceBuffer,
+            referenceImageMimeType: canonicalReferenceMime,
           });
           imageBuffer = generated.imageBuffer;
         }
@@ -1487,8 +1511,13 @@ export class GenerationOrchestratorService {
           assetType: assetType === "master_reference" ? "main" : "turnaround",
           isMasterReference: assetType === "master_reference",
           view: normalizedVariation || "front",
+          // When a mapped Flow Character exists, the saved editor image is the
+          // trusted reference. Otherwise upload the canonical master into the
+          // one-time character creation flow; the worker must verify the upload.
           uploadedReferences:
-            assetType !== "master_reference" && localCanonicalRefPath
+            assetType !== "master_reference" &&
+            !hasSyncedFlowCharacter &&
+            localCanonicalRefPath
               ? [localCanonicalRefPath]
               : undefined,
           sourceCanonicalReferenceId:
