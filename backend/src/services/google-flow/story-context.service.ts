@@ -453,6 +453,10 @@ export class StoryContextService {
         clothing,
         char.canonicalAppearance,
       );
+      const canonicalMasterUrl =
+        char.referenceImageUrl ||
+        resolvedIdentity.canonicalAppearance.references?.mainUrl ||
+        null;
 
       charactersMap.set(char.id, {
         id: char.id,
@@ -463,9 +467,11 @@ export class StoryContextService {
         clothing,
         distinctiveFeatures: char.distinctiveFeatures || '',
         canonicalAppearance: resolvedIdentity.canonicalAppearance,
-        referenceImageUrl: char.referenceImageUrl || null,
+        referenceImageUrl: canonicalMasterUrl,
         referenceImagePrompt: char.referenceImagePrompt || null,
-        hasMasterReference: Boolean(char.referenceImageUrl && char.referenceImageUrl.trim().length > 0),
+        hasMasterReference: Boolean(
+          typeof canonicalMasterUrl === "string" && canonicalMasterUrl.trim().length > 0,
+        ),
         scenesAppearedIn: [],
         scenesCount: 0,
         flowMapping: mapping
@@ -634,6 +640,10 @@ export class StoryContextService {
                   extraChar.distinctiveFeatures,
                   extraChar.canonicalAppearance,
                 );
+                const canonicalMasterUrl =
+                  extraChar.referenceImageUrl ||
+                  resolvedIdentity.canonicalAppearance.references?.mainUrl ||
+                  null;
                 charContext = {
                   id: extraChar.id,
                   name: cleanExtraName,
@@ -643,9 +653,11 @@ export class StoryContextService {
                 clothing: extraChar.distinctiveFeatures || '',
                 distinctiveFeatures: extraChar.distinctiveFeatures || '',
                 canonicalAppearance: resolvedIdentity.canonicalAppearance,
-                referenceImageUrl: extraChar.referenceImageUrl || null,
+                referenceImageUrl: canonicalMasterUrl,
                 referenceImagePrompt: extraChar.referenceImagePrompt || null,
-                hasMasterReference: Boolean(extraChar.referenceImageUrl && extraChar.referenceImageUrl.trim().length > 0),
+                hasMasterReference: Boolean(
+                  typeof canonicalMasterUrl === "string" && canonicalMasterUrl.trim().length > 0,
+                ),
                 scenesAppearedIn: [],
                 scenesCount: 0,
               };
