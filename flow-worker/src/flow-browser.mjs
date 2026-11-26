@@ -5830,17 +5830,25 @@ export class FlowBrowserWorker {
 
       await addBtn.click({ timeout: 10000 });
       for (const refId of projectRefs) {
-        const searchInput = page.locator(
-          'input[type="search"], input[placeholder*="Search" i]',
-        ).first();
-        if (!(await searchInput.isVisible().catch(() => false))) {
-          throw new Error("FLOW_PROJECT_REFERENCE_SEARCH_NOT_FOUND: Cannot search project assets.");
+        const assetSelector =
+          `[data-asset-id="${refId}"], [aria-label*="${refId}" i], img[src*="${refId}" i]`;
+        let assetTile = page.locator(assetSelector).first();
+
+        // Flow may already render the requested asset in the picker. Search is
+        // only needed when the tile is not currently visible (and this also
+        // supports lightweight Playwright locators that expose direct tiles).
+        if (!(await assetTile.isVisible().catch(() => false))) {
+          const searchInput = page.locator(
+            'input[type="search"], input[placeholder*="Search" i]',
+          ).first();
+          if (!(await searchInput.isVisible().catch(() => false))) {
+            throw new Error("FLOW_PROJECT_REFERENCE_SEARCH_NOT_FOUND: Cannot search project assets.");
+          }
+          await searchInput.fill(refId);
+          await new Promise((res) => setTimeout(res, 500));
+          assetTile = page.locator(assetSelector).first();
         }
-        await searchInput.fill(refId);
-        await new Promise((res) => setTimeout(res, 500));
-        const assetTile = page.locator(
-          `[data-asset-id="${refId}"], [aria-label*="${refId}" i], img[src*="${refId}" i]`,
-        ).first();
+
         if (!(await assetTile.isVisible().catch(() => false))) {
           throw new Error(`FLOW_PROJECT_REFERENCE_NOT_FOUND: Could not find project asset ${refId}.`);
         }
