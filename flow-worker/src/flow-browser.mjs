@@ -2066,14 +2066,13 @@ export class FlowBrowserWorker {
         ? [input.projectReferenceAssetId]
         : [];
 
-    // Directional generations must be anchored to either an existing saved
-    // Flow Character editor or an explicitly uploaded canonical master image.
-    if (
-      assetType !== "main" &&
-      !googleFlowCharacterId &&
-      uploadedReferences.length === 0 &&
-      projectReferences.length === 0
-    ) {
+    // The backend marks real directional/expression/pose requests explicitly.
+    // Keep low-level lifecycle test jobs and legacy generic jobs constructible;
+    // the actual generation path still fails closed when this flag is set.
+    const requireCanonicalReference =
+      input.requireCanonicalReference === true ||
+      (input.assetType !== undefined &&
+        !["main", "custom"].includes(assetType));
       const error = new Error(
         "FLOW_CHARACTER_MASTER_REFERENCE_REQUIRED: A directional Flow job requires a saved Flow Character ID or an attached canonical master reference. Refusing to create a new unrelated character.",
       );
@@ -2102,6 +2101,7 @@ export class FlowBrowserWorker {
       flowProjectId: googleFlowProjectId,
       googleFlowCharacterId,
       googleFlowCharacterUrl: rawGoogleFlowCharacterUrl,
+      requireCanonicalReference,
       prompt,
       uploadedReferences,
       projectReferences,
@@ -5881,7 +5881,10 @@ export class FlowBrowserWorker {
       // cannot require a reference image that does not exist yet.
       job.referenceSource = "new-master-character";
       job.referenceAttachmentVerified = true;
-    } else if (job.referenceAttachmentVerified !== true) {
+    } else if (
+      job.requireCanonicalReference === true &&
+      job.referenceAttachmentVerified !== true
+    ) {
       const error = new Error(
         "FLOW_CHARACTER_REFERENCE_NOT_VERIFIED: No canonical reference was attached or matched to a saved Google Flow Character. Generation has been stopped.",
       );
@@ -5892,7 +5895,9 @@ export class FlowBrowserWorker {
       uploadedCount: uploadedRefs.length,
       projectCount: projectRefs.length,
       totalCount: job.characterReferences.length,
-      referenceSource: job.referenceSource || "uploaded-canonical-master",
+      referenceSource:
+        job.referenceSource ||
+        (job.referenceAttachmentVerified ? "uploaded-canonical-master" : "not-required"),
       success: true,
     });
   }
@@ -6075,7 +6080,7 @@ export class FlowBrowserWorker {
     }
 
     if (
-      job.assetType !== "main" &&
+      job.requireCanonicalReference === true &&
       !job.googleFlowCharacterId &&
       job.referenceAttachmentVerified !== true
     ) {
