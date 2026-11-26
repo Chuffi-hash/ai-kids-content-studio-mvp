@@ -181,6 +181,7 @@ export class CharacterReferenceService {
           sourceCanonicalReferenceId: fullAsset.sourceCanonicalReferenceId || null,
           validationStatus: fullAsset.validationStatus || 'needs_review',
           validationDetails: fullAsset.validationDetails || null,
+          prompt: fullAsset.prompt,
           updatedAt: fullAsset.createdAt,
         };
       } else {
@@ -213,6 +214,7 @@ export class CharacterReferenceService {
               sourceCanonicalReferenceId: replacement.sourceCanonicalReferenceId || null,
               validationStatus: replacement.validationStatus || 'needs_review',
               validationDetails: replacement.validationDetails || null,
+              prompt: replacement.prompt,
               updatedAt: replacement.createdAt,
             };
           } else {
