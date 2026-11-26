@@ -164,7 +164,7 @@ export function extractCanonicalCharacterIdentity(
     'elderly, approximately 70–80 years old; clearly an older adult, never childlike';
   const explicitAgeIsElderly =
     explicitAge !== undefined &&
-    /elderly|senior|older adult|\\b(?:6[5-9]|7\\d|8\\d|9\\d)\\b/i.test(String(explicitAge));
+    /elderly|senior|older adult|\b(?:6[5-9]|7\d|8\d|9\d)\b/i.test(String(explicitAge));
   // The story role/name is authoritative for a named grandparent. Do not let
   // stale character-builder metadata such as "8 years old" turn Dadaji into a child.
   const resolvedAge =
