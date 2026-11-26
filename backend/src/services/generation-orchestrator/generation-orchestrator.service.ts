@@ -1512,6 +1512,7 @@ export class GenerationOrchestratorService {
               : undefined,
           assetType: assetType === "master_reference" ? "main" : "turnaround",
           isMasterReference: assetType === "master_reference",
+          requireCanonicalReference: assetType !== "master_reference",
           view: normalizedVariation || "front",
           // When a mapped Flow Character exists, the saved editor image is the
           // trusted reference. Otherwise upload the canonical master into the
