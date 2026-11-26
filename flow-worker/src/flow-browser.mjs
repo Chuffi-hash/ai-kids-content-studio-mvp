@@ -2106,6 +2106,7 @@ export class FlowBrowserWorker {
       uploadedReferences,
       projectReferences,
       characterReferences: [...uploadedReferences, ...projectReferences],
+      syncOnly: input.syncOnly === true,
       status: "created",
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -6486,17 +6487,23 @@ export class FlowBrowserWorker {
 
         if (doneBtn) {
           await doneBtn.click({ timeout: 10000 });
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-          const savedCharacterRef = extractGoogleFlowCharacterReference(
-            typeof page.url === "function" ? page.url() : "",
-          );
+          let savedCharacterRef = null;
+          const saveWaitStartedAt = Date.now();
+          while (Date.now() - saveWaitStartedAt < (job.syncOnly ? 12000 : 3000)) {
+            await new Promise((resolve) => setTimeout(resolve, 300));
+            savedCharacterRef = extractGoogleFlowCharacterReference(
+              typeof page.url === "function" ? page.url() : "",
+            );
+            if (savedCharacterRef?.characterId) break;
+          }
           if (savedCharacterRef?.characterId) {
             job.googleFlowCharacterId = savedCharacterRef.characterId;
+            job.googleFlowCharacterUrl = savedCharacterRef.url;
           }
           this.emitLifecycleLog("FLOW_CHARACTER_DONE_CLICKED", job, {
             currentUrl: typeof page.url === "function" ? page.url() : "",
             googleFlowCharacterId: job.googleFlowCharacterId || null,
-            success: true,
+            success: Boolean(savedCharacterRef?.characterId),
           });
         } else {
           this.emitLifecycleLog("FLOW_CHARACTER_DONE_BUTTON_NOT_FOUND", job, {
@@ -6504,7 +6511,40 @@ export class FlowBrowserWorker {
             success: false,
             warning: "The generated image was captured, but Google Flow did not expose a visible Done button to commit the new Character.",
           });
+          if (job.syncOnly) {
+            const error = new Error(
+              "FLOW_CHARACTER_DONE_BUTTON_NOT_FOUND: Google Flow did not expose the Done button. The master reference was not saved as a reusable Flow Character.",
+            );
+            error.code = "FLOW_CHARACTER_DONE_BUTTON_NOT_FOUND";
+            throw error;
+          }
         }
+      }
+
+      if (job.syncOnly) {
+        const savedCharacterRef = extractGoogleFlowCharacterReference(
+          typeof page.url === "function" ? page.url() : "",
+        );
+        if (!savedCharacterRef?.characterId || !job.googleFlowCharacterId) {
+          const error = new Error(
+            "FLOW_CHARACTER_SAVE_NOT_CONFIRMED: Google Flow did not navigate to a saved /character/{id} route after Done. The mapping will not be marked as synced.",
+          );
+          error.code = "FLOW_CHARACTER_SAVE_NOT_CONFIRMED";
+          throw error;
+        }
+        job.googleFlowCharacterUrl = savedCharacterRef.url;
+        this.emitLifecycleLog("FLOW_CHARACTER_SYNC_CONFIRMED", job, {
+          googleFlowCharacterId: job.googleFlowCharacterId,
+          googleFlowCharacterUrl: job.googleFlowCharacterUrl,
+          success: true,
+        });
+        this.setJobTerminal(
+          job,
+          "completed",
+          undefined,
+          "Canonical master reference was used to create and save a reusable Google Flow Character.",
+        );
+        return;
       }
 
       job.status = "importing";
@@ -7212,7 +7252,7 @@ export class FlowBrowserWorker {
           try {
             const parsed = new URL(rawHref, window.location.href);
             const match = parsed.pathname.match(
-              /^/project/([^/]+)/character/([^/]+)/?$/,
+              /^\\/project\\/([^/]+)\\/character\\/([^/]+)\\/?$/,
             );
             return match
               ? { projectId: decodeURIComponent(match[1]), characterId: decodeURIComponent(match[2]) }
@@ -7253,7 +7293,7 @@ export class FlowBrowserWorker {
       description ? `Canonical character description: ${description}` : "",
       "Do not reinterpret or modernize the subject. Do not make an elderly character young, do not turn an animal character into a human, and do not change clothing or colours.",
       "Create one clean full-body front-facing character reference on a plain neutral background. No text, captions, labels, grid, panels or extra characters.",
-    ].filter(Boolean).join("\\n\\n");
+    ].filter(Boolean).join("\n\n");
 
     const job = this.createJob({
       targetType: "character",
