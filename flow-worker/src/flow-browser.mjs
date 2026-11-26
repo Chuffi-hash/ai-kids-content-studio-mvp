@@ -5820,16 +5820,27 @@ export class FlowBrowserWorker {
         }
       }
 
-      if (!addBtn) {
+      if (!addBtn && job.referenceAttachmentVerified === true) {
+        // A verified uploaded canonical master is already sufficient for
+        // character identity. Project-library references are optional extras.
+        // Do not claim they were attached when Flow did not expose the picker.
+        for (const refId of projectRefs) {
+          this.emitLifecycleLog("CHARACTER_PROJECT_REFERENCE_SELECTED", job, {
+            projectReference: refId,
+            success: false,
+            skipped: true,
+            reason: "Canonical master reference is already attached; Add from project is unavailable.",
+          });
+        }
+      } else if (!addBtn) {
         const error = new Error(
           "FLOW_PROJECT_REFERENCE_BUTTON_NOT_FOUND: Google Flow did not expose Add from project. Project reference was not attached.",
         );
         error.code = "FLOW_PROJECT_REFERENCE_BUTTON_NOT_FOUND";
         throw error;
-      }
-
-      await addBtn.click({ timeout: 10000 });
-      for (const refId of projectRefs) {
+      } else {
+        await addBtn.click({ timeout: 10000 });
+        for (const refId of projectRefs) {
         const assetSelector =
           `[data-asset-id="${refId}"], [aria-label*="${refId}" i], img[src*="${refId}" i]`;
         let assetTile = page.locator(assetSelector).first();
@@ -5866,12 +5877,13 @@ export class FlowBrowserWorker {
           throw new Error(`FLOW_PROJECT_REFERENCE_ADD_FAILED: Add media control not found for ${refId}.`);
         }
         await addMediaBtn.click({ timeout: 10000 });
-        this.emitLifecycleLog("CHARACTER_PROJECT_REFERENCE_SELECTED", job, {
-          projectReference: refId,
-          success: true,
-        });
+          this.emitLifecycleLog("CHARACTER_PROJECT_REFERENCE_SELECTED", job, {
+            projectReference: refId,
+            success: true,
+          });
+        }
+        job.referenceAttachmentVerified = true;
       }
-      job.referenceAttachmentVerified = true;
     }
 
     job.characterReferences = [...uploadedRefs, ...projectRefs];
