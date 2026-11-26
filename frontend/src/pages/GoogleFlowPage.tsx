@@ -1033,8 +1033,33 @@ export default function GoogleFlowPage() {
     if (!selectedStoryId) return;
 
     const requestedDirection = variation?.trim();
+    const targetCharacter = storyContext?.characters?.find(
+      (character) => character.id === characterId,
+    );
     const isSingleDirectionalRegeneration =
       assetType === "turnaround" && Boolean(requestedDirection);
+
+    if (assetType !== "master_reference") {
+      if (!targetCharacter?.hasMasterReference) {
+        setCharErrors((prev) => ({
+          ...prev,
+          [characterId]:
+            "A canonical master reference is required first. Generate or upload the character's approved master image before creating directional, expression or pose views.",
+        }));
+        return;
+      }
+      if (
+        generationProvider === "google_flow" &&
+        targetCharacter.flowMapping?.syncStatus !== "synced"
+      ) {
+        setCharErrors((prev) => ({
+          ...prev,
+          [characterId]:
+            "This character is not yet saved in Google Flow. Click 'Sync to Flow' once to create/link the canonical Flow Character; then generate all eight directions from that same saved character.",
+        }));
+        return;
+      }
+    }
 
     if (
       isSingleDirectionalRegeneration &&
