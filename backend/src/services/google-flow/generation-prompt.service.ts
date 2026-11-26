@@ -425,6 +425,17 @@ export class GenerationPromptService {
         identityDescription,
     ];
 
+    if (identity.age && /elderly|senior|70|80|old adult/i.test(identity.age)) {
+      identityLines.push(
+        'AGE LOCK: This character is elderly and must visibly read as an older adult. Never render a child, toddler, teenager, youthful face or childlike body proportions.'
+      );
+    }
+    if (identity.speciesCategory.toLowerCase().includes('owl')) {
+      identityLines.push(
+        'SPECIES LOCK: Preserve the same owl species and owl anatomy, including beak, feathered head/body, wings/arms and owl feet. Never turn the owl into a human.'
+      );
+    }
+
     const commonRestrictions = [
       'POSE AND COMPOSITION:\nFull body visible from head to feet in the same neutral standing pose.\nAnatomically correct body proportions with arms and legs clearly visible.\nCharacter centred in the frame with comfortable margin around head, hands, and feet.\nConsistent character scale across all references.',
       `VISUAL STYLE:\nPreserve the original illustration style: ${artStyle}.\nClean, polished, professional children's animation character design with consistent shading, line quality, and material details.`,
@@ -456,8 +467,14 @@ export class GenerationPromptService {
         'text, letters, words, names, typography, titles, labels, annotations, watermark, logo, signature',
         'character sheet, turnaround sheet, contact sheet, collage, panels, grid, multiple views, extra characters',
         'complex background, background scenery, cropped body, blurry image, low quality, extra limbs, distorted anatomy',
-        'different age, younger character, childlike body, different species, different face, different outfit, changed colours',
+        'different age, different species, different face, different outfit, changed colours',
       ];
+      if (identity.age && /elderly|senior|70|80|old adult/i.test(identity.age)) {
+        negativeParts.push('younger character, young adult, adolescent, child, toddler, baby, youthful face, childlike body proportions');
+      }
+      if (identity.speciesCategory.toLowerCase().includes('owl')) {
+        negativeParts.push('human, human face, human hair, different animal species');
+      }
       if (requestedDirection && DIRECTIONAL_CAMERA_ORIENTATIONS[requestedDirection].suppressFace) {
         negativeParts.push('front face, both eyes visible, forward-facing face, staring at camera');
       }
@@ -525,6 +542,12 @@ export class GenerationPromptService {
       'cropped head, cropped hands, cropped feet, cropped body, extra limbs, distorted face, deformed anatomy, blurry, low resolution',
     ];
 
+    if (identity.age && /elderly|senior|70|80|old adult/i.test(identity.age)) {
+      negativeParts.push('younger character, young adult, adolescent, child, toddler, baby, youthful face, childlike body proportions');
+    }
+    if (identity.speciesCategory.toLowerCase().includes('owl')) {
+      negativeParts.push('human, human face, human hair, different animal species');
+    }
     if (requestedDirection && DIRECTIONAL_CAMERA_ORIENTATIONS[requestedDirection].suppressFace) {
       negativeParts.push('front face, both eyes visible, forward-facing face, staring at camera');
     }
@@ -629,7 +652,7 @@ export class GenerationPromptService {
     const prompt = promptParts.filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
     const negativePromptParts = [
       'text, writing, letters, labels, captions, watermark, logo, extra characters, contact sheet, collage, multiple views, props, scenery, cropped body, altered outfit, different face, distorted anatomy',
-      'different species, different age, younger character, child, toddler, teenager, changed clothing, changed colours, changed accessories',
+      'different species, different age, changed clothing, changed colours, changed accessories',
     ];
     if (identity.speciesCategory.toLowerCase().includes('owl')) {
       negativePromptParts.push('human, boy, girl, man, woman, human face, human hair');
