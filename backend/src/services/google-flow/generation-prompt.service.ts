@@ -153,16 +153,26 @@ export function extractCanonicalCharacterIdentity(
   ]
     .filter(Boolean)
     .join(' ');
-  const hasOwlIdentity = /(?:\\bowl\\b|उल्लू)/iu.test(identityText);
+  const hasOwlIdentity = /(?:\bowl\b|उल्लू)/iu.test(identityText);
   const isGrandfather =
     /(?:grandfather|grandpa|granddad|dadaji|दादाजी|दादा)/iu.test(identityText);
   const isGrandmother =
     /(?:grandmother|grandma|granny|dadi|दादीजी|दादी)/iu.test(identityText);
   const explicitAge =
     canonical.age || character.age || undefined;
-  const inferredGrandparentAge = isGrandfather || isGrandmother
-    ? 'elderly, approximately 70–80 years old; clearly an older adult, never childlike'
-    : undefined;
+  const inferredGrandparentAge =
+    'elderly, approximately 70–80 years old; clearly an older adult, never childlike';
+  const explicitAgeIsElderly =
+    explicitAge !== undefined &&
+    /elderly|senior|older adult|\\b(?:6[5-9]|7\\d|8\\d|9\\d)\\b/i.test(String(explicitAge));
+  // The story role/name is authoritative for a named grandparent. Do not let
+  // stale character-builder metadata such as "8 years old" turn Dadaji into a child.
+  const resolvedAge =
+    isGrandfather || isGrandmother
+      ? explicitAgeIsElderly
+        ? String(explicitAge)
+        : inferredGrandparentAge
+      : explicitAge;
   const inferredGender = isGrandfather
     ? 'male'
     : isGrandmother
@@ -179,12 +189,16 @@ export function extractCanonicalCharacterIdentity(
     characterId: character.id,
     name: characterName,
     speciesCategory: resolvedSpecies,
-    age: explicitAge ? String(explicitAge).trim() : inferredGrandparentAge,
-    genderPresentation: canonical.gender
-      ? String(canonical.gender).trim()
-      : character.gender
-        ? String(character.gender).trim()
-        : inferredGender,
+    age: resolvedAge ? String(resolvedAge).trim() : undefined,
+    genderPresentation: isGrandfather
+      ? 'male'
+      : isGrandmother
+        ? 'female'
+        : canonical.gender
+          ? String(canonical.gender).trim()
+          : character.gender
+            ? String(character.gender).trim()
+            : inferredGender,
     skinOrFurColour: canonical.skinColor || canonical.furColor || canonical.skinTone
       ? String(canonical.skinColor || canonical.furColor || canonical.skinTone).trim()
       : undefined,
