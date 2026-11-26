@@ -5875,6 +5875,11 @@ export class FlowBrowserWorker {
     if (job.googleFlowCharacterId) {
       job.referenceSource = "saved-flow-character";
       job.referenceAttachmentVerified = true;
+    } else if (job.assetType === "main") {
+      // The first master reference creates the canonical Flow Character; it
+      // cannot require a reference image that does not exist yet.
+      job.referenceSource = "new-master-character";
+      job.referenceAttachmentVerified = true;
     } else if (job.referenceAttachmentVerified !== true) {
       const error = new Error(
         "FLOW_CHARACTER_REFERENCE_NOT_VERIFIED: No canonical reference was attached or matched to a saved Google Flow Character. Generation has been stopped.",
