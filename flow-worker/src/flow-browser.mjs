@@ -7123,183 +7123,200 @@ export class FlowBrowserWorker {
     const projectUrl = input.projectUrl
       ? assertAllowedFlowUrl(input.projectUrl)
       : undefined;
+    const storyId = String(input.storyId || "").trim() || undefined;
 
     if (!characterId) throw new Error("characterId is required.");
     if (!characterName) throw new Error("characterName is required.");
+    if (!referenceImagePath) {
+      const error = new Error(
+        "FLOW_CHARACTER_MASTER_REFERENCE_REQUIRED: Generate or upload a canonical master image before synchronizing this character to Google Flow.",
+      );
+      error.code = "FLOW_CHARACTER_MASTER_REFERENCE_REQUIRED";
+      throw error;
+    }
 
-    const page = input.page || this.getFlowPage(FLOW_TAB_ROLES.CHARACTER) || this.page;
+    const projectId = this.extractProjectId(projectUrl);
+    if (!projectId) {
+      throw new Error("A valid Google Flow project URL is required to synchronize a character.");
+    }
 
+    if (!this.context) {
+      throw new Error(
+        "Open the visible Google Flow browser session before synchronizing a character.",
+      );
+    }
+
+    const navigation = await this.navigateToCharacterTab(projectId);
+    const page = navigation?.page;
     if (
-      !this.context ||
+      !navigation?.success ||
       !page ||
       (typeof page.isClosed === "function" && page.isClosed())
     ) {
       throw new Error(
-        "Open a Google Flow browser session before synchronizing a character.",
+        "FLOW_CHARACTER_TAB_NOT_READY: Could not open the dedicated Google Flow Characters workspace.",
       );
     }
 
-    if (
-      projectUrl &&
-      typeof page.url === "function" &&
-      page.url() !== projectUrl
-    ) {
-      if (typeof page.goto === "function") {
-        await page.goto(projectUrl, {
-          waitUntil: "domcontentloaded",
-          timeout: 60000,
-        });
-      }
-    }
-
-    const currentUrl =
-      typeof page.url === "function" ? page.url() : "";
+    const currentUrl = typeof page.url === "function" ? page.url() : "";
     if (isGoogleLoginUrl(currentUrl)) {
-      return {
-        success: false,
-        status: "awaiting_manual_login",
-        message:
-          "Sign in manually in the visible browser before synchronizing characters.",
-      };
+      const error = new Error(
+        "Sign in manually in the visible browser before synchronizing characters.",
+      );
+      error.code = "FLOW_CHARACTER_LOGIN_REQUIRED";
+      throw error;
     }
 
-    if (!isFlowUrl(currentUrl)) {
-      return {
-        success: false,
-        status: "awaiting_project_selection",
-        message:
-          "Open the intended Google Flow project before synchronizing characters.",
-      };
-    }
-
-    // Check if character already exists in project
+    // First try to reuse an existing exact-name Flow Character. A text match
+    // is not enough: only a real /character/{id} route can be stored as synced.
+    let existingNameFound = false;
     try {
-      if (typeof page.locator === "function") {
-        const existingLocator = page.locator(
-          `text="@${characterName}", text="${characterName}"`,
-        );
-        if ((await existingLocator.count()) > 0) {
-          return {
-            success: true,
-            status: "synced",
-            alreadyExists: true,
-            flowCharacterName: characterName,
-            message: `Character "${characterName}" already exists in the Google Flow project.`,
-          };
-        }
-      }
+      const escapedName = characterName.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+      const existingLocator = page.locator(
+        `text="@${escapedName}", text="${escapedName}"`,
+      );
+      existingNameFound = (await existingLocator.count().catch(() => 0)) > 0;
     } catch {}
 
-    // Navigate to Characters section if available
-    try {
-      if (typeof page.getByRole === "function") {
-        const charTab = getFirstLocator(
-          page
-            .getByRole("tab", { name: /character/i })
-            .or(page.getByRole("button", { name: /character/i }))
-            .or(
-              page.locator(
-                '[data-testid*="character" i], [aria-label*="character" i]',
-              ),
-            ),
+    if (existingNameFound && typeof page.evaluate === "function") {
+      const existing = await page.evaluate((wantedName) => {
+        const normalize = (value) =>
+          String(value || "").replace(/^@/, "").trim().toLocaleLowerCase();
+        const wanted = normalize(wantedName);
+        const candidates = Array.from(
+          document.querySelectorAll(
+            'a[href*="/character/"], [data-character-id], [data-testid*="character" i]',
+          ),
         );
-        if (
-          charTab &&
-          (await charTab.count().catch(() => 0)) > 0 &&
-          (await charTab.isVisible().catch(() => false))
-        ) {
-          await charTab.click({ timeout: 5000 });
-        }
-      }
-    } catch {}
-
-    // Click New Character / Add Character if available
-    try {
-      if (typeof page.getByRole === "function") {
-        const newBtn = getFirstLocator(
-          page
-            .getByRole("button", { name: /(new|create|add).*character/i })
-            .or(
-              page.locator(
-                'button:has-text("New Character"), button:has-text("Add Character")',
-              ),
-            ),
-        );
-        if (
-          newBtn &&
-          (await newBtn.count().catch(() => 0)) > 0 &&
-          (await newBtn.isVisible().catch(() => false))
-        ) {
-          await newBtn.click({ timeout: 5000 });
-        }
-      }
-    } catch {}
-
-    // Fill character name if input field exists
-    try {
-      if (typeof page.getByRole === "function") {
-        const nameInput = getFirstLocator(
-          page
-            .getByRole("textbox", { name: /(name|character name)/i })
-            .or(
-              page.locator(
-                'input[placeholder*="name" i], input[aria-label*="name" i]',
-              ),
-            ),
-        );
-        if (
-          nameInput &&
-          (await nameInput.count().catch(() => 0)) > 0 &&
-          (await nameInput.isVisible().catch(() => false))
-        ) {
-          await nameInput.fill(characterName);
-        }
-      }
-    } catch {}
-
-    // Upload master reference image if path provided
-    if (referenceImagePath) {
-      try {
-        if (typeof page.locator === "function") {
-          const fileInput = getFirstLocator(
-            page.locator('input[type="file"]'),
+        for (const candidate of candidates) {
+          const text = normalize(
+            candidate.innerText ||
+              candidate.getAttribute("aria-label") ||
+              candidate.getAttribute("title"),
           );
-          if (fileInput && (await fileInput.count().catch(() => 0)) > 0) {
-            await fileInput.setInputFiles(referenceImagePath);
+          if (!text || !text.includes(wanted)) continue;
+          const anchor =
+            candidate.closest('a[href*="/character/"]') ||
+            (candidate.matches('a[href*="/character/"]') ? candidate : null);
+          const href = anchor?.href || candidate.getAttribute("href") || "";
+          const route = extractRoute(href);
+          const id =
+            candidate.getAttribute("data-character-id") ||
+            route?.characterId ||
+            null;
+          if (id) return { characterId: id, href };
+        }
+        return null;
+
+        function extractRoute(rawHref) {
+          try {
+            const parsed = new URL(rawHref, window.location.href);
+            const match = parsed.pathname.match(
+              /^/project/([^/]+)/character/([^/]+)/?$/,
+            );
+            return match
+              ? { projectId: decodeURIComponent(match[1]), characterId: decodeURIComponent(match[2]) }
+              : null;
+          } catch {
+            return null;
           }
         }
-      } catch (uploadErr) {
-        console.warn(
-          "[FlowBrowserWorker] Reference image input failed:",
-          uploadErr.message,
-        );
+      }, characterName).catch(() => null);
+
+      if (existing?.characterId) {
+        const flowCharacterUrl =
+          existing.href ||
+          `https://flow.google.com/project/${encodeURIComponent(projectId)}/character/${encodeURIComponent(existing.characterId)}`;
+        return {
+          success: true,
+          status: "synced",
+          alreadyExists: true,
+          flowCharacterName: characterName,
+          flowCharacterId: existing.characterId,
+          flowCharacterUrl,
+          message: `Reused the existing saved Google Flow Character "${characterName}".`,
+        };
       }
+
+      const error = new Error(
+        "FLOW_CHARACTER_EXISTING_ID_UNRESOLVED: Google Flow shows a character with this name, but the worker could not resolve its saved character ID. No duplicate character was created. Open that character in Flow and retry synchronization.",
+      );
+      error.code = "FLOW_CHARACTER_EXISTING_ID_UNRESOLVED";
+      throw error;
     }
 
-    // Click Create / Save button if available
-    try {
-      if (typeof page.getByRole === "function") {
-        const saveBtn = getFirstLocator(
-          page.getByRole("button", {
-            name: /(create|save|confirm|done)/i,
-          }),
-        );
-        if (
-          saveBtn &&
-          (await saveBtn.count().catch(() => 0)) > 0 &&
-          (await saveBtn.isVisible().catch(() => false))
-        ) {
-          await saveBtn.click({ timeout: 5000 });
-        }
-      }
-    } catch {}
+    // Create one Flow Character from the app's canonical master reference.
+    // Subsequent directional generations will edit this saved character ID.
+    const canonicalPrompt = [
+      "Create and save exactly one Google Flow Character from the attached canonical master reference image.",
+      "The attached image is the source of truth, not loose inspiration. Reproduce the same subject, species, apparent age, face/head shape, eyes, colours, body proportions, outfit, clothing details and accessories.",
+      description ? `Canonical character description: ${description}` : "",
+      "Do not reinterpret or modernize the subject. Do not make an elderly character young, do not turn an animal character into a human, and do not change clothing or colours.",
+      "Create one clean full-body front-facing character reference on a plain neutral background. No text, captions, labels, grid, panels or extra characters.",
+    ].filter(Boolean).join("\\n\\n");
 
-    return {
-      success: true,
-      status: "synced",
-      flowCharacterName: characterName,
-      message: `Character "${characterName}" synchronized with Google Flow project.`,
-    };
+    const job = this.createJob({
+      targetType: "character",
+      pageRole: FLOW_TAB_ROLES.CHARACTER,
+      characterId,
+      characterName,
+      storyId,
+      projectUrl,
+      googleFlowProjectId: projectId,
+      assetType: "main",
+      view: "front",
+      isMasterReference: true,
+      uploadedReferences: [referenceImagePath],
+      prompt: canonicalPrompt,
+      syncOnly: true,
+    });
+
+    await this.prepareJob(job.id);
+    await this.requestGeneration(job.id, {
+      confirmGenerate: true,
+      referenceConfirmed: true,
+    });
+
+    const startedAt = Date.now();
+    const timeoutMs = 120000;
+    while (Date.now() - startedAt < timeoutMs) {
+      const latest = this.jobs.get(job.id) || job;
+      if (latest.status === "completed") {
+        const flowCharacterId = latest.googleFlowCharacterId;
+        const flowCharacterUrl =
+          latest.googleFlowCharacterUrl ||
+          (flowCharacterId
+            ? `https://flow.google.com/project/${encodeURIComponent(projectId)}/character/${encodeURIComponent(flowCharacterId)}`
+            : null);
+        if (!flowCharacterId || !flowCharacterUrl) {
+          throw new Error(
+            "FLOW_CHARACTER_SAVE_NOT_CONFIRMED: Generation completed but Google Flow did not return a saved Character ID. The character has not been marked as synchronized.",
+          );
+        }
+        return {
+          success: true,
+          status: "synced",
+          flowCharacterName: characterName,
+          flowCharacterId,
+          flowCharacterUrl,
+          message: `Created and saved "${characterName}" in Google Flow from its canonical master reference.`,
+        };
+      }
+      if (["failed", "cancelled"].includes(latest.status)) {
+        throw new Error(
+          latest.error ||
+            latest.message ||
+            "Google Flow Character synchronization failed.",
+        );
+      }
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    }
+
+    const error = new Error(
+      "FLOW_CHARACTER_SYNC_TIMEOUT: Google Flow did not confirm the saved Character ID within two minutes. Check the visible browser and worker job before retrying; a duplicate will not be created automatically.",
+    );
+    error.code = "FLOW_CHARACTER_SYNC_TIMEOUT";
+    throw error;
   }
 
   async handleDownload(download, originatingPage) {
