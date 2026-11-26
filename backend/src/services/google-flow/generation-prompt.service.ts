@@ -62,13 +62,13 @@ export const DIRECTIONAL_CAMERA_ORIENTATIONS: Record<
   'back-left': {
     label: 'Back three-quarter left',
     orientation:
-      'Rear three-quarter view turned approximately 135 degrees away from the camera toward the character’s left. Show primarily the back of the head, hair, and outfit with at most a slight cheek/ear edge.',
+      'Rear three-quarter view turned approximately 135 degrees away from the camera toward the character’s left. Show the back of the head, shoulders and outfit. The eyes, nose and mouth must not be visible; at most show an ear/feather contour, never a front-facing face.',
     suppressFace: true,
   },
   'back-right': {
     label: 'Back three-quarter right',
     orientation:
-      'Rear three-quarter view turned approximately 135 degrees away from the camera toward the character’s right. Show primarily the back of the head, hair, and outfit with at most a slight cheek/ear edge.',
+      'Rear three-quarter view turned approximately 135 degrees away from the camera toward the character’s right. Show the back of the head, shoulders and outfit. The eyes, nose and mouth must not be visible; at most show an ear/feather contour, never a front-facing face.',
     suppressFace: true,
   },
   back: {
@@ -143,13 +143,48 @@ export function extractCanonicalCharacterIdentity(
   const eyeDetails = [canonical.eyeShape, canonical.eyeColor]
     .filter(Boolean)
     .join(', ');
+  const characterName = String(character.name || 'Character').trim();
+  const identityText = [
+    characterName,
+    character.visualDescription,
+    canonical.visualDescription,
+    character.distinctiveFeatures,
+    canonical.distinctiveFeatures,
+  ]
+    .filter(Boolean)
+    .join(' ');
+  const hasOwlIdentity = /(?:\\bowl\\b|उल्लू)/iu.test(identityText);
+  const isGrandfather =
+    /(?:grandfather|grandpa|granddad|dadaji|दादाजी|दादा)/iu.test(identityText);
+  const isGrandmother =
+    /(?:grandmother|grandma|granny|dadi|दादीजी|दादी)/iu.test(identityText);
+  const explicitAge =
+    canonical.age || character.age || undefined;
+  const inferredGrandparentAge = isGrandfather || isGrandmother
+    ? 'elderly, approximately 70–80 years old; clearly an older adult, never childlike'
+    : undefined;
+  const inferredGender = isGrandfather
+    ? 'male'
+    : isGrandmother
+      ? 'female'
+      : undefined;
+  const storedSpecies = canonical.species || character.species || 'character';
+  // The explicit Hindi/English species word in the character name/description
+  // must win over a generic or stale database category (e.g. "human" for "उल्लू दादाजी").
+  const resolvedSpecies = hasOwlIdentity
+    ? 'owl (anthropomorphic owl character)'
+    : String(storedSpecies).trim();
 
   return {
     characterId: character.id,
-    name: String(character.name || 'Character').trim(),
-    speciesCategory: String(character.species || canonical.species || 'character').trim(),
-    age: canonical.age ? String(canonical.age).trim() : undefined,
-    genderPresentation: canonical.gender ? String(canonical.gender).trim() : undefined,
+    name: characterName,
+    speciesCategory: resolvedSpecies,
+    age: explicitAge ? String(explicitAge).trim() : inferredGrandparentAge,
+    genderPresentation: canonical.gender
+      ? String(canonical.gender).trim()
+      : character.gender
+        ? String(character.gender).trim()
+        : inferredGender,
     skinOrFurColour: canonical.skinColor || canonical.furColor || canonical.skinTone
       ? String(canonical.skinColor || canonical.furColor || canonical.skinTone).trim()
       : undefined,
@@ -383,27 +418,6 @@ export class GenerationPromptService {
       'STRICT RESTRICTIONS:\nCreate exactly ONE image of ONE character.\nThe character name is application metadata only. Never write the name inside the image.\nNo text, letters, numbers, typography, titles, labels, captions, logos, signatures, or watermarks.\nDo not redesign the character, change clothing, add accessories, change hairstyle, or change age or proportions.\nDo not introduce another character or generate multi-angle grids or split panels.',
     ];
 
-    if (options?.promptOverride && options.promptOverride.trim().length > 0) {
-      const prompt = [
-        'CHARACTER IMAGE TASK',
-        options.promptOverride.trim(),
-        ...commonRestrictions,
-      ].join('\n\n');
-      return {
-        prompt,
-        negativePrompt: [
-          'text, letters, words, names, typography, titles, labels, annotations, watermark, logo, signature',
-          'character sheet, turnaround sheet, contact sheet, collage, panels, grid, multiple views, extra characters',
-          'complex background, background scenery, cropped body, blurry image, low quality, extra limbs, distorted anatomy',
-        ].join(', '),
-        aspectRatio: '1:1',
-        width: dimensions.width,
-        height: dimensions.height,
-        referenceImageUrl: identity.canonicalReferenceUrl,
-        canonicalIdentity: identity,
-      };
-    }
-
     const variation = String(options?.variation || '').trim();
     const requestedDirection =
       assetType === 'turnaround'
@@ -411,6 +425,39 @@ export class GenerationPromptService {
         : assetType === 'master_reference'
           ? 'front'
           : undefined;
+
+    // A custom instruction is an extra creative constraint, never a replacement
+    // for the canonical identity or requested camera direction.
+    if (options?.promptOverride && options.promptOverride.trim().length > 0) {
+      const overrideParts = [
+        'CHARACTER IMAGE TASK',
+        identityLines.join('\n'),
+        assetType === 'turnaround' && requestedDirection
+          ? `CAMERA ORIENTATION: Generate ONLY the requested [${DIRECTIONAL_CAMERA_ORIENTATIONS[requestedDirection].label}] view. ${DIRECTIONAL_CAMERA_ORIENTATIONS[requestedDirection].orientation}`
+          : '',
+        `ADDITIONAL CREATIVE DIRECTION (must not change identity): ${options.promptOverride.trim()}`,
+        ...commonRestrictions,
+      ].filter(Boolean);
+      const negativeParts = [
+        'text, letters, words, names, typography, titles, labels, annotations, watermark, logo, signature',
+        'character sheet, turnaround sheet, contact sheet, collage, panels, grid, multiple views, extra characters',
+        'complex background, background scenery, cropped body, blurry image, low quality, extra limbs, distorted anatomy',
+        'different age, younger character, childlike body, different species, different face, different outfit, changed colours',
+      ];
+      if (requestedDirection && DIRECTIONAL_CAMERA_ORIENTATIONS[requestedDirection].suppressFace) {
+        negativeParts.push('front face, both eyes visible, forward-facing face, staring at camera');
+      }
+      return {
+        prompt: overrideParts.join('\n\n'),
+        negativePrompt: negativeParts.join(', '),
+        aspectRatio: '1:1',
+        width: dimensions.width,
+        height: dimensions.height,
+        referenceImageUrl: identity.canonicalReferenceUrl,
+        canonicalIdentity: identity,
+        requestedDirection,
+      };
+    }
 
     const parts: string[] = [
       assetType === 'turnaround' && identity.canonicalReferenceUrl
@@ -509,18 +556,20 @@ export class GenerationPromptService {
     const directionSpec = DIRECTIONAL_CAMERA_ORIENTATIONS[normalizedDirection];
     const flowDirectionInstructions: Record<CharacterFacingDirection, string> = {
       front: 'Front view: the character faces straight toward the viewer; face, chest, hips and feet point forward.',
-      'front-left': 'Front three-quarter LEFT view: rotate the whole character about 45 degrees so the nose and chest point toward the LEFT side of the image. Keep both eyes partly visible.',
-      'front-right': 'Front three-quarter RIGHT view: rotate the whole character about 45 degrees so the nose and chest point toward the RIGHT side of the image. Keep both eyes partly visible.',
-      left: 'LEFT side profile: rotate the whole character 90 degrees so the nose points directly to the LEFT side of the image. Show a true side silhouette, not a three-quarter view.',
-      right: 'RIGHT side profile: rotate the whole character 90 degrees so the nose points directly to the RIGHT side of the image. Show a true side silhouette, not a three-quarter view.',
-      'back-left': 'BACK three-quarter LEFT view: turn the whole character away from the viewer about 135 degrees, toward the LEFT side of the image. Show mostly the back with a small side edge of the face.',
-      'back-right': 'BACK three-quarter RIGHT view: turn the whole character away from the viewer about 135 degrees, toward the RIGHT side of the image. Show mostly the back with a small side edge of the face.',
-      back: 'Direct BACK view: the back of the head, hair and clothing face the viewer. The face must not be visible.',
+      'front-left': 'Front three-quarter LEFT view: rotate the whole character about 45 degrees so the nose and chest point toward the LEFT side of the image. Keep the same face and both eyes visible.',
+      'front-right': 'Front three-quarter RIGHT view: rotate the whole character about 45 degrees so the nose and chest point toward the RIGHT side of the image. Keep the same face and both eyes visible.',
+      left: 'LEFT side profile: rotate the entire character 90 degrees. The nose points directly LEFT; show only the same character’s side silhouette.',
+      right: 'RIGHT side profile: rotate the entire character 90 degrees. The nose points directly RIGHT; show only the same character’s side silhouette.',
+      'back-left': 'BACK three-quarter LEFT view: rotate the entire character about 135 degrees away from the camera. Show mostly the back of the head and outfit. No eyes, nose or mouth may be visible.',
+      'back-right': 'BACK three-quarter RIGHT view: rotate the entire character about 135 degrees away from the camera. Show mostly the back of the head and outfit. No eyes, nose or mouth may be visible.',
+      back: 'Direct BACK view: show the back of the head and the full back of the outfit. No face, eyes, nose or mouth visible.',
     };
 
     const identityInstruction = options?.isExistingFlowCharacter
-      ? 'Use the character in the image currently selected in this Google Flow editor as the ONLY identity reference. Edit that same character; do not invent, replace or redesign the character.'
-      : `Create the character described here: ${appearance}`;
+      ? 'IDENTITY LOCK: Edit the already-saved character open in this Google Flow Character editor. The image already in this editor is the canonical master reference. It is the ONLY visual identity source. Do not create a new character, replace the subject, reinterpret the age, change species or redesign any feature.'
+      : identity.canonicalReferenceUrl
+        ? 'IDENTITY LOCK: Use the attached canonical master reference image as the ONLY visual source of truth. Create a directional view of that exact same character; do not invent a new person/creature or reinterpret the identity.'
+        : `Create the character described here: ${appearance}`;
 
     const customDetail = options?.promptOverride?.trim()
       ? `Additional creative detail: ${options.promptOverride.trim()}.`
@@ -537,6 +586,7 @@ export class GenerationPromptService {
     const fullBody = assetType !== 'expression';
     const promptParts = [
       identityInstruction,
+      `CANONICAL IDENTITY — MUST MATCH EXACTLY:\n${appearance}`,
       assetType === 'master_reference'
         ? 'Create one clean canonical full-body character reference.'
         : isTurnaround
@@ -545,7 +595,13 @@ export class GenerationPromptService {
             ? 'Create one expression variation of the same character.'
             : 'Create one pose variation of the same character.',
       angleInstruction,
-      'Preserve the exact same identity: face shape, age, skin or fur tone, eye shape and colour, hairstyle, hair colour, body proportions, height/build, outfit, clothing patterns and colours, footwear, accessories and distinctive features. Do not add, remove or redesign any identifying feature.',
+      'Preserve the exact same species, age, gender presentation, face/head shape, eyes, feather/fur/skin colour, hairstyle/feather pattern, body proportions, outfit, clothing patterns and colours, footwear, accessories and distinctive features. Do not add, remove or redesign any identifying feature.',
+      identity.age && /elderly|senior|70|80|old adult/i.test(identity.age)
+        ? 'AGE LOCK: The character is elderly and must visibly read as an older adult. Never render a child, toddler, teenager, youthful face or childlike body proportions.'
+        : '',
+      identity.speciesCategory.toLowerCase().includes('owl')
+        ? 'SPECIES LOCK: This is the same owl character in every view. Preserve owl anatomy, beak, feathered head/body, wing/arm structure and owl feet. Never turn the owl into a human child or a different animal.'
+        : '',
       fullBody
         ? 'Keep the same simple neutral standing pose for every turnaround view: arms relaxed slightly away from the body, hands visible, legs natural and both feet fully visible. Show the complete character from head to toe.'
         : 'Keep the same face identity, hairstyle, colours and clothing; change only the facial expression.',
@@ -556,10 +612,23 @@ export class GenerationPromptService {
       'Final image: one character, one view, no text, no name, no labels, no captions, no watermark, no logo, no panels, no grid and no collage.',
     ].filter(Boolean);
 
-    const prompt = promptParts.join(' ').replace(/\s+/g, ' ').trim();
+    const prompt = promptParts.filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+    const negativePromptParts = [
+      'text, writing, letters, labels, captions, watermark, logo, extra characters, contact sheet, collage, multiple views, props, scenery, cropped body, altered outfit, different face, distorted anatomy',
+      'different species, different age, younger character, child, toddler, teenager, changed clothing, changed colours, changed accessories',
+    ];
+    if (identity.speciesCategory.toLowerCase().includes('owl')) {
+      negativePromptParts.push('human, boy, girl, man, woman, human face, human hair');
+    }
+    if (identity.age && /elderly|senior|70|80|old adult/i.test(identity.age)) {
+      negativePromptParts.push('young adult, adolescent, child, toddler, baby, youthful face, childlike proportions');
+    }
+    if (DIRECTIONAL_CAMERA_ORIENTATIONS[normalizedDirection].suppressFace) {
+      negativePromptParts.push('visible eyes, visible nose, visible mouth, front-facing face, looking at the camera');
+    }
     return {
       prompt,
-      negativePrompt: 'text, writing, letters, labels, captions, watermark, logo, extra characters, contact sheet, collage, multiple views, props, scenery, cropped body, altered outfit, different face, distorted anatomy',
+      negativePrompt: negativePromptParts.join(', '),
       aspectRatio: '1:1',
       width: dimensions.width,
       height: dimensions.height,
