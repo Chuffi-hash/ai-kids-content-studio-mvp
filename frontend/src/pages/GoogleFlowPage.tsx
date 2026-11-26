@@ -72,6 +72,7 @@ type CharacterPreviewView = {
   direction: string;
   label: string;
   url: string;
+  prompt?: string;
   isMissing?: boolean;
   assetId?: string;
   jobId?: string | null;
@@ -137,6 +138,7 @@ function getCharacterDirectionalPreviewViews(
         validationDetails:
           meta.validationDetails || savedAsset?.validationDetails || null,
         createdAt: meta.updatedAt || savedAsset?.createdAt || null,
+        prompt: meta.prompt || savedAsset?.prompt || "",
       };
     },
   );
@@ -157,6 +159,21 @@ function getCharacterDirectionalPreviewViews(
     ];
   }
   return [];
+}
+
+function getDisplayCharacterSpecies(character: StoryFlowCharacterItem): string {
+  const canonical = character.canonicalAppearance || {};
+  const identityText = [
+    character.name,
+    character.visualDescription,
+    character.distinctiveFeatures,
+    canonical.species,
+    canonical.visualDescription,
+  ]
+    .filter(Boolean)
+    .join(" ");
+  if (/(?:\\bowl\\b|उल्लू)/iu.test(identityText)) return "owl";
+  return character.species || "Character";
 }
 
 function cleanScriptText(text?: string): string {
@@ -389,6 +406,7 @@ export default function GoogleFlowPage() {
     sceneId?: string;
     characterId?: string;
     type: "background" | "character";
+    prompt?: string;
     images?: CharacterPreviewView[];
     activeIndex?: number;
   }
@@ -3787,8 +3805,9 @@ export default function GoogleFlowPage() {
                           setPreviewAsset({
                             url: activePreviewView.url,
                             title: ch.name,
-                            subtitle: ch.species || "Character",
+                            subtitle: getDisplayCharacterSpecies(ch),
                             characterId: ch.id,
+                            prompt: activePreviewView.prompt || "",
                             type: "character",
                             images: previewViews,
                             activeIndex: previewIndex,
@@ -4394,6 +4413,16 @@ export default function GoogleFlowPage() {
 
               return (
                 <div className="flow-lightbox-footer">
+                  {previewAsset.type === "character" && (
+                    <details className="flow-lightbox-prompt-details">
+                      <summary>Show the exact prompt submitted for this image</summary>
+                      <pre>
+                        {activeLightboxView?.prompt ||
+                          previewAsset.prompt ||
+                          "No generation prompt was saved for this image."}
+                      </pre>
+                    </details>
+                  )}
                   <div className="flow-lightbox-meta">
                     <span
                       className={badgeClass}
