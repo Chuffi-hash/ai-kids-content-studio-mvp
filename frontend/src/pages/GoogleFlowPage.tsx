@@ -172,7 +172,7 @@ function getDisplayCharacterSpecies(character: StoryFlowCharacterItem): string {
   ]
     .filter(Boolean)
     .join(" ");
-  if (/(?:\\bowl\\b|उल्लू)/iu.test(identityText)) return "owl";
+  if (/(?:\bowl\b|उल्लू)/iu.test(identityText)) return "owl";
   return character.species || "Character";
 }
 
